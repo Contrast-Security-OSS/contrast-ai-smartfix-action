@@ -1,0 +1,59 @@
+
+
+name: Create Release (Manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Specify the release type (major, minor, patch)'
+        required: true
+        type: choice
+        options:
+          - major
+          - minor
+          - patch
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # To create releases and tags
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Needed to get all history for conventional-changelog
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+
+      - name: Install semantic-release
+        run: npm install -g semantic-release conventional-changelog-cli
+
+      - name: Analyze commits and create release
+        id: release
+        run: |
+          if [ "${{ github.event.inputs.release_type }}" == "major" ]; then
+            release_command="npx semantic-release --branches main --release-as major"
+          elif [ "${{ github.event.inputs.release_type }}" == "minor" ]; then
+            release_command="npx semantic-release --branches main --release-as minor"
+          elif [ "${{ github.event.inputs.release_type }}" == "patch" ]; then
+            release_command="npx semantic-release --branches main --release-as patch"
+          else
+            echo "Invalid release type specified."
+            exit 1
+          fi
+          echo "Running release command: $release_command"
+          $release_command
+          echo "RELEASE_CREATED=${{ steps.release.outputs.release_created }}" >> $GITHUB_OUTPUT
+          echo "NEW_VERSION=${{ steps.release.outputs.new_release_version }}" >> $GITHUB_OUTPUT
+
+      - name: Output Release Information
+        if: steps.release.outputs.release_created == 'true'
+        run: |
+          echo "Release Created: ${{ steps.release.outputs.release_created }}"
+          echo "New Version: ${{ steps.release.outputs.new_release_version }}"
+          echo "Release URL: ${{ steps.release.outputs.release_url }}"

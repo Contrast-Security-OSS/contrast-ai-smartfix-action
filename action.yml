@@ -1,0 +1,6 @@
+name: Contrast Resolve
+description: An action that creates AI-generated Pull Requests to remediate Contrast Security vulnerability findings.
+
+runs:
+  using: "docker"
+  image: "Dockerfile"
