@@ -1,5 +1,3 @@
-
-
 name: Create Release (Manual)
 
 on:
@@ -18,24 +16,29 @@ jobs:
   release:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # To create releases and tags
+      contents: write # To create releases, tags, and push branches
+      pull-requests: write # To create pull requests
 
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Needed to get all history for conventional-changelog
+          fetch-depth: 0 # Needed for semantic-release and fetching tags
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 'lts/*'
 
-      - name: Install semantic-release
+      - name: Install semantic-release and conventional-changelog-cli
         run: npm install -g semantic-release conventional-changelog-cli
 
-      - name: Analyze commits and create release
-        id: release
+      - name: Create Release and Get New Version
+        id: release_info
         run: |
+          # Determine the release command based on input
+          # Note: '--release-as' is not a standard semantic-release CLI option.
+          # This assumes your setup or a custom script handles this.
+          # The primary goal here is that a new git tag is created by this step.
           if [ "${{ github.event.inputs.release_type }}" == "major" ]; then
             release_command="npx semantic-release --branches main --release-as major"
           elif [ "${{ github.event.inputs.release_type }}" == "minor" ]; then
@@ -46,14 +49,95 @@ jobs:
             echo "Invalid release type specified."
             exit 1
           fi
+          
           echo "Running release command: $release_command"
+          # Execute the release command. semantic-release needs GITHUB_TOKEN.
           $release_command
-          echo "RELEASE_CREATED=${{ steps.release.outputs.release_created }}" >> $GITHUB_OUTPUT
-          echo "NEW_VERSION=${{ steps.release.outputs.new_release_version }}" >> $GITHUB_OUTPUT
+
+          echo "Fetching latest tags from remote to ensure we have the new tag..."
+          # Use --force in case local tags are stale, ensure we get what semantic-release pushed
+          git fetch --tags --force 
+
+          # Get the latest tag created (this should be the new version)
+          LATEST_TAG=$(git describe --tags `git rev-list --tags --max-count=1`)
+          
+          if [ -z "$LATEST_TAG" ]; then
+            echo "Error: Could not determine latest tag after release command."
+            exit 1
+          fi
+          
+          echo "Latest tag found: $LATEST_TAG"
+          echo "new_version=$LATEST_TAG" >> "$GITHUB_OUTPUT"
+          echo "release_created=true" >> "$GITHUB_OUTPUT"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Add any other tokens semantic-release might need, e.g., NPM_TOKEN
+
+      - name: Update VERSION file and Create PR
+        if: steps.release_info.outputs.release_created == 'true'
+        id: create_pr # Add an id to this step
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEW_VERSION: ${{ steps.release_info.outputs.new_version }}
+          REPO_URL: "https://github.com/Contrast-Security-OSS/contrast-resolve-action-dev" # Your repo URL
+        run: |
+          if [ -z "$NEW_VERSION" ]; then
+            echo "Error: NEW_VERSION is empty. Skipping PR creation."
+            exit 1
+          fi
+
+          echo "New version from release step: $NEW_VERSION"
+          
+          BRANCH_NAME="chore/version-update-$NEW_VERSION"
+          COMMIT_MSG="Chore: Update VERSION to $NEW_VERSION"
+          PR_TITLE="Chore: Update VERSION to $NEW_VERSION"
+          PR_BODY="This PR updates the VERSION file to $NEW_VERSION following the release."
+
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Checkout the main branch to ensure we're branching from the latest
+          git checkout main
+          git pull origin main 
+
+          echo "Creating new branch: $BRANCH_NAME"
+          git checkout -b $BRANCH_NAME
+          
+          echo "Updating VERSION file to $NEW_VERSION"
+          echo "$NEW_VERSION" > VERSION
+          
+          git add VERSION
+          git commit -m "$COMMIT_MSG"
+          
+          echo "Pushing branch $BRANCH_NAME to origin"
+          git push origin $BRANCH_NAME # Changed from REPO_URL to origin
+          
+          echo "Creating Pull Request"
+          # Capture the PR URL
+          PR_URL=$(gh pr create --base main --head $BRANCH_NAME \\
+            --title "$PR_TITLE" \\
+            --body "$PR_BODY" \\
+            --repo "$GITHUB_REPOSITORY" \\ # Added --repo flag
+            --json url -q .url) # Get URL directly
+          
+          if [ -z "$PR_URL" ]; then
+            echo "Error: Could not get PR URL."
+            # Optionally, still output that a PR *should* have been created
+            # echo "pr_url=Could not determine PR URL" >> "$GITHUB_OUTPUT"
+            exit 1 # Or handle error as appropriate
+          else
+            echo "Pull Request URL: $PR_URL"
+            echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Output Release Information
-        if: steps.release.outputs.release_created == 'true'
+        if: steps.release_info.outputs.release_created == 'true'
         run: |
-          echo "Release Created: ${{ steps.release.outputs.release_created }}"
-          echo "New Version: ${{ steps.release.outputs.new_release_version }}"
-          echo "Release URL: ${{ steps.release.outputs.release_url }}"
+          echo "Release process initiated for version: ${{ steps.release_info.outputs.new_version }}"
+          echo "A PR to update the VERSION file should have been created."
+          # Check if pr_url was set by the previous step
+          if [ -n "${{ steps.create_pr.outputs.pr_url }}" ] && [ "${{ steps.create_pr.outputs.pr_url }}" != "Could not determine PR URL" ]; then
+            echo "Link to the VERSION update PR: ${{ steps.create_pr.outputs.pr_url }}"
+          else
+            echo "Could not automatically determine the PR URL. Please check the repository."
+          fi
