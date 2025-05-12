@@ -4,3 +4,59 @@ description: An action that creates AI-generated Pull Requests to remediate Cont
 runs:
   using: "docker"
   image: "Dockerfile"
+
+inputs:
+  BUILD_COMMAND:
+    description: 'The command the Quality Agent will run to try to resolve any issues with the fix. Omit to skip Quality Agent iterations.'
+    required: false
+  FORMATTING_COMMAND:
+    description: 'The command the Quality Agent will run to format the code. Ignored if no build command. Omit if skipping Quality Agent iterations.'
+    required: false
+  MAX_BUILD_ATTEMPTS:
+    description: 'Number of iterations for the Quality Agent to build and resolve issues.'
+    required: false
+    default: '6'
+  MAX_OPEN_PRS:
+    description: 'Maximum number of open PRs the action should maintain.'
+    required: false
+    default: '5'
+  BASE_BRANCH:
+    description: 'Base branch for creating feature branches for PRs.'
+    required: true
+  VERBOSE_LOGGING:
+    description: 'Enable verbose logging for the action.'
+    required: false
+    default: 'false'
+  GITHUB_TOKEN:
+    description: 'GitHub token for opening PRs.'
+    required: true
+  CONTRAST_HOST:
+    description: 'Host URL for your Contrast SaaS environment (e.g., app.contrastsecurity.com).'
+    required: true
+  CONTRAST_ORG_ID:
+    description: 'UUID of your Contrast organization.'
+    required: true
+  CONTRAST_APP_ID:
+    description: 'UUID of your Contrast application.'
+    required: true
+  CONTRAST_AUTHORIZATION_KEY:
+    description: 'Authorization header value for the Contrast API.'
+    required: true
+  CONTRAST_API_KEY:
+    description: 'API key for the Contrast API.'
+    required: true
+  AGENT_MODEL:
+    description: 'Name of the LLM model for LiteLLM (e.g., bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0).'
+    required: true
+  AWS_ACCESS_KEY_ID:
+    description: 'AWS access key ID.'
+    required: true
+  AWS_SECRET_ACCESS_KEY:
+    description: 'AWS secret access key.'
+    required: true
+  AWS_REGION:
+    description: 'AWS region for the Bedrock LLM model (e.g., us-east-1).'
+    required: true
+  AWS_SESSION_TOKEN:
+    description: 'AWS session token for temporary credentials (if applicable).'
+    required: false

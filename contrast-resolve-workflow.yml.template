@@ -9,3 +9,21 @@ jobs:
       - uses: actions/checkout@v4
       - name: Run Contrast Resolve Action
         uses: Contrast-Security-OSS/contrast-resolve-action-dev@v1.0.0
+        with:
+          BUILD_COMMAND: '' # Optional: e.g., 'npm run build' or './mvnw clean install'
+          FORMATTING_COMMAND: '' # Optional: e.g., 'npm run format' or './mvnw spotless:apply'
+          MAX_BUILD_ATTEMPTS: '6' # Optional, uses default if not specified
+          MAX_OPEN_PRS: '5' # Optional, uses default if not specified
+          BASE_BRANCH: '' # Required: e.g., 'main' or 'develop'
+          VERBOSE_LOGGING: 'false' # Optional, uses default if not specified
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CONTRAST_HOST: '' # Required: e.g., 'app.contrastsecurity.com'
+          CONTRAST_ORG_ID: '' # Required: e.g., '181944af-42ee-4293-b06b-8c2426e9a4a0'
+          CONTRAST_APP_ID: '' # Required: e.g., 'c86b1b0f-6e94-2194-2932-84244aeea4a0'
+          CONTRAST_AUTHORIZATION_KEY: ${{ secrets.CONTRAST_AUTHORIZATION_KEY }}
+          CONTRAST_API_KEY: ${{ secrets.CONTRAST_API_KEY }}
+          AGENT_MODEL: '' # Required: e.g., 'bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0'
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: '' # Required: e.g., 'us-east-1'
+          AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }} # Optional, if using temporary credentials

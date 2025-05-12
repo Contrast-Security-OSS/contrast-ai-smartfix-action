@@ -1,6 +1,7 @@
 import os
 import requests
 from packaging.version import parse as parse_version
+from message_prefixes import MessagePrefix # Added import
 
 def get_latest_repo_version(repo_url: str):
     """Fetches the latest release tag from a GitHub repository."""
@@ -33,10 +34,10 @@ def get_latest_repo_version(repo_url: str):
         valid_tags.sort(key=lambda v: parse_version(v.lstrip('v')), reverse=True)
         return valid_tags[0]
     except requests.exceptions.RequestException as e:
-        print(f"Error fetching tags: {e}")
+        print(f"{MessagePrefix.WARNING.value}Error fetching tags: {e}")
         return None
     except Exception as e:
-        print(f"An unexpected error occurred while fetching tags: {e}")
+        print(f"{MessagePrefix.WARNING.value}An unexpected error occurred while fetching tags: {e}")
         return None
 
 def check_for_newer_version(current_version_str: str, latest_version_str: str):
@@ -62,7 +63,8 @@ def check_for_newer_version(current_version_str: str, latest_version_str: str):
             return original_latest_version_str # Return the original string
         return None
     except Exception as e:
-        print(f"Error parsing versions for comparison: {current_version_str}, {latest_version_str} - {e}")
+        # Updated prefix
+        print(f"{MessagePrefix.WARNING.value}Error parsing versions for comparison: {current_version_str}, {latest_version_str} - {e}")
         return None
 
 ACTION_REPO_URL = "https://github.com/Contrast-Security-OSS/contrast-resolve-action-dev"
@@ -77,7 +79,7 @@ def do_version_check():
     current_action_ref = os.environ.get("GITHUB_ACTION_REF")
 
     if not current_action_ref:
-        print("Warning: GITHUB_ACTION_REF is not set. Skipping version check.")
+        print(f"{MessagePrefix.WARNING.value}GITHUB_ACTION_REF is not set. Skipping version check.")
         return
 
     current_action_version = current_action_ref
@@ -85,7 +87,8 @@ def do_version_check():
         current_action_version = current_action_ref.split('/')[-1]
     
     if len(current_action_version) == 40 and all(c in '0123456789abcdef' for c in current_action_version.lower()):
-        print(f"Running action from SHA: {current_action_version}. Skipping version comparison against tags.")
+        # Updated prefix
+        print(f"{MessagePrefix.INFO.value}Running action from SHA: {current_action_version}. Skipping version comparison against tags.")
         return
     
     try:
@@ -95,19 +98,22 @@ def do_version_check():
             temp_version_to_parse = temp_version_to_parse[1:]
         parse_version(temp_version_to_parse)
     except Exception:
-        print(f"Warning: Could not parse current action version '{current_action_version}' from GITHUB_ACTION_REF '{current_action_ref}'. Skipping version check.")
+        # Updated prefix
+        print(f"{MessagePrefix.WARNING.value}Could not parse current action version '{current_action_version}' from GITHUB_ACTION_REF '{current_action_ref}'. Skipping version check.")
         return
 
-    print(f"Current action version (from GITHUB_ACTION_REF '{current_action_ref}'): {parsed_version_str_for_logging}")
+    # Updated prefix
+    print(f"{MessagePrefix.INFO.value}Current action version (from GITHUB_ACTION_REF '{current_action_ref}'): {parsed_version_str_for_logging}")
 
     latest_repo_version = get_latest_repo_version(ACTION_REPO_URL)
 
     if latest_repo_version:
-        print(f"Latest version available in repo: {latest_repo_version}")
+        print(f"{MessagePrefix.INFO.value}Latest version available in repo: {latest_repo_version}") # Updated prefix
         newer_version = check_for_newer_version(parsed_version_str_for_logging, latest_repo_version)
         if newer_version:
-            print(f"INFO: A newer version of this action is available ({newer_version}).")
-            print(f"INFO: You are running version {parsed_version_str_for_logging}.")
-            print(f"INFO: Please update your workflow to use the latest version of the action like this: Contrast-Security-OSS/contrast-resolve-action-dev@{newer_version}")
+            # Updated prefixes
+            print(f"{MessagePrefix.INFO.value}A newer version of this action is available ({newer_version}).")
+            print(f"{MessagePrefix.INFO.value}You are running version {parsed_version_str_for_logging}.")
+            print(f"{MessagePrefix.INFO.value}Please update your workflow to use the latest version of the action like this: Contrast-Security-OSS/contrast-resolve-action-dev@{newer_version}")
     else:
-        print("Could not determine the latest version from the repository.")
+        print(f"{MessagePrefix.WARNING.value}Could not determine the latest version from the repository.") # Updated prefix
