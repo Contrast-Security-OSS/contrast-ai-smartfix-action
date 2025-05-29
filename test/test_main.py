@@ -3,10 +3,7 @@ import contextlib
 import unittest
 from unittest.mock import patch, MagicMock
 import os
-# main.py now imports from version_check, so tests for main might need to mock those imported functions
-from main import main 
-# No longer directly testing get_latest_repo_version, check_for_newer_version from main
-# Those are now in version_check.py and tested in test_version_check.py
+from src.main import main
 
 class TestMainFunctionality(unittest.TestCase):
 
@@ -34,7 +31,7 @@ class TestMainFunctionality(unittest.TestCase):
         for msg in expected_info_messages:
             self.assertIn(msg, output)
         
-        from version_check import ACTION_REPO_URL 
+        from src.version_check import ACTION_REPO_URL 
         mock_get_latest.assert_called_once_with(ACTION_REPO_URL)
         mock_check_newer.assert_called_once_with(current_version_for_test, "v1.1.0")
 
@@ -52,7 +49,7 @@ class TestMainFunctionality(unittest.TestCase):
         self.assertIn("Current action version (from GITHUB_ACTION_REF 'v1.1.0'): v1.1.0", output)
         self.assertIn("Latest version available in repo: v1.1.0", output)
         self.assertNotIn("INFO: A newer version of this action is available", output)
-        from version_check import ACTION_REPO_URL
+        from src.version_check import ACTION_REPO_URL
         mock_get_latest.assert_called_once_with(ACTION_REPO_URL)
         mock_check_newer.assert_called_once_with("v1.1.0", "v1.1.0")
 
@@ -70,7 +67,7 @@ class TestMainFunctionality(unittest.TestCase):
         self.assertIn("Could not determine the latest version from the repository.", output)
         mock_check_newer.assert_not_called()
         self.assertNotIn("INFO: A newer version of this action is available", output)
-        from version_check import ACTION_REPO_URL
+        from src.version_check import ACTION_REPO_URL
         mock_get_latest.assert_called_once_with(ACTION_REPO_URL)
 
     @patch.dict(os.environ, {}, clear=True) 

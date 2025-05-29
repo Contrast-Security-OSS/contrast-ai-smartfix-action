@@ -1,6 +1,9 @@
-name: Contrast Resolve
+name: Contrast AI SmartFix
 description: An action that creates AI-generated Pull Requests to remediate Contrast Security vulnerability findings.
 
 runs:
-  using: "docker"
-  image: "Dockerfile"
+  using: "composite"
+  steps:
+    - name: Run Python script
+      run: python ${{ github.action_path }}/src/main.py
+      shell: bash

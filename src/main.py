@@ -1,6 +1,6 @@
 import os
 # Import the function from version_check.py
-from version_check import do_version_check
+from src.version_check import do_version_check
 
 def main():
     print("Hello, World!")

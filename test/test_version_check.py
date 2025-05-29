@@ -5,7 +5,7 @@ import requests # Import requests for requests.exceptions.HTTPError
 from packaging.version import parse as parse_version # Import for type hinting if needed, or direct use
 
 # Assuming version_check.py is in the same directory or accessible via PYTHONPATH
-from version_check import get_latest_repo_version, check_for_newer_version, do_version_check, ACTION_REPO_URL
+from src.version_check import get_latest_repo_version, check_for_newer_version, do_version_check, ACTION_REPO_URL
 
 class TestVersionCheckFunctions(unittest.TestCase): # Renamed for clarity
 
