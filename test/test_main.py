@@ -19,7 +19,6 @@ class TestMainFunctionality(unittest.TestCase):
             main() 
             output = stdout.getvalue()
 
-        self.assertIn("Hello, World!", output)
         # Check for the correct, new output format from do_version_check()
         expected_info_messages = [
             f"Current action version (from GITHUB_ACTION_REF 'refs/tags/{current_version_for_test}'): {current_version_for_test}",
@@ -45,7 +44,7 @@ class TestMainFunctionality(unittest.TestCase):
         with io.StringIO() as stdout, contextlib.redirect_stdout(stdout):
             main()
             output = stdout.getvalue()
-        self.assertIn("Hello, World!", output)
+
         self.assertIn("Current action version (from GITHUB_ACTION_REF 'v1.1.0'): v1.1.0", output)
         self.assertIn("Latest version available in repo: v1.1.0", output)
         self.assertNotIn("INFO: A newer version of this action is available", output)
@@ -62,7 +61,7 @@ class TestMainFunctionality(unittest.TestCase):
         with io.StringIO() as stdout, contextlib.redirect_stdout(stdout):
             main()
             output = stdout.getvalue()
-        self.assertIn("Hello, World!", output)
+
         self.assertIn("Current action version (from GITHUB_ACTION_REF 'refs/tags/v1.0.0'): v1.0.0", output)
         self.assertIn("Could not determine the latest version from the repository.", output)
         mock_check_newer.assert_not_called()
@@ -77,7 +76,7 @@ class TestMainFunctionality(unittest.TestCase):
         with io.StringIO() as stdout, contextlib.redirect_stdout(stdout):
             main()
             output = stdout.getvalue()
-        self.assertIn("Hello, World!", output)
+
         self.assertIn("Warning: GITHUB_ACTION_REF is not set. Skipping version check.", output)
         mock_get_latest.assert_not_called()
         mock_check_newer.assert_not_called()
@@ -89,7 +88,6 @@ class TestMainFunctionality(unittest.TestCase):
         with io.StringIO() as stdout, contextlib.redirect_stdout(stdout):
             main()
             output = stdout.getvalue()
-        self.assertIn("Hello, World!", output)
         self.assertIn("Running action from SHA: abcdef1234567890abcdef1234567890abcdef12. Skipping version comparison against tags.", output)
         mock_get_latest.assert_not_called()
         mock_check_newer.assert_not_called()
@@ -101,21 +99,9 @@ class TestMainFunctionality(unittest.TestCase):
         with io.StringIO() as stdout, contextlib.redirect_stdout(stdout):
             main()
             output = stdout.getvalue()
-        self.assertIn("Hello, World!", output)
         self.assertIn("Warning: Could not parse current action version 'refs/heads/main' from GITHUB_ACTION_REF 'refs/heads/main'. Skipping version check.", output)
         mock_get_latest.assert_not_called()
         mock_check_newer.assert_not_called()
-
-    # Original test, ensuring Hello World still works if version check is skipped for any reason
-    def test_hello_world_output_if_version_check_skipped(self):
-        with patch.dict(os.environ, {}, clear=True):
-            with io.StringIO() as stdout, contextlib.redirect_stdout(stdout):
-                main()
-                output = stdout.getvalue()
-            self.assertIn("Hello, World!", output)
-            self.assertIn("Warning: GITHUB_ACTION_REF is not set. Skipping version check.", output)
-            self.assertNotIn("Current action version", output) 
-            self.assertNotIn("Latest version available", output) 
 
 if __name__ == '__main__':
     unittest.main()

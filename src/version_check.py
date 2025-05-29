@@ -2,6 +2,8 @@ import os
 import requests
 from packaging.version import parse as parse_version
 
+HEX_CHARS = "0123456789abcdef"
+
 def get_latest_repo_version(repo_url: str):
     """Fetches the latest release tag from a GitHub repository."""
     try:
@@ -77,14 +79,14 @@ def do_version_check():
     current_action_ref = os.environ.get("GITHUB_ACTION_REF")
 
     if not current_action_ref:
-        print("Warning: GITHUB_ACTION_REF is not set. Skipping version check.")
+        print("Warning: GITHUB_ACTION_REF environment variable is not set. Version checking is skipped. This variable is automatically set by GitHub Actions. To enable version checking, ensure this script is running as part of a GitHub Action workflow.")
         return
 
     current_action_version = current_action_ref
     if current_action_ref.startswith('refs/tags/'):
         current_action_version = current_action_ref.split('/')[-1]
     
-    if len(current_action_version) == 40 and all(c in '0123456789abcdef' for c in current_action_version.lower()):
+    if len(current_action_version) == 40 and all(c in HEX_CHARS for c in current_action_version.lower()):
         print(f"Running action from SHA: {current_action_version}. Skipping version comparison against tags.")
         return
     

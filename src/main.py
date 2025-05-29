@@ -3,7 +3,6 @@ import os
 from src.version_check import do_version_check
 
 def main():
-    print("Hello, World!")
     do_version_check()
 
 if __name__ == "__main__":
