@@ -8,8 +8,8 @@ from src.main import main
 class TestMainFunctionality(unittest.TestCase):
 
     @patch.dict(os.environ, {'GITHUB_ACTION_REF': 'refs/tags/v1.0.0'})
-    @patch('version_check.get_latest_repo_version') # Corrected target
-    @patch('version_check.check_for_newer_version') # Corrected target
+    @patch('src.version_check.get_latest_repo_version') # Corrected target
+    @patch('src.version_check.check_for_newer_version') # Corrected target
     def test_main_newer_version_available(self, mock_check_newer, mock_get_latest):
         mock_get_latest.return_value = "v1.1.0"
         mock_check_newer.return_value = "v1.1.0"
@@ -36,8 +36,8 @@ class TestMainFunctionality(unittest.TestCase):
         mock_check_newer.assert_called_once_with(current_version_for_test, "v1.1.0")
 
     @patch.dict(os.environ, {'GITHUB_ACTION_REF': 'v1.1.0'}) 
-    @patch('version_check.get_latest_repo_version') # Corrected target
-    @patch('version_check.check_for_newer_version') # Corrected target
+    @patch('src.version_check.get_latest_repo_version') # Corrected target
+    @patch('src.version_check.check_for_newer_version') # Corrected target
     def test_main_already_latest_version(self, mock_check_newer, mock_get_latest):
         mock_get_latest.return_value = "v1.1.0"
         mock_check_newer.return_value = None
@@ -54,8 +54,8 @@ class TestMainFunctionality(unittest.TestCase):
         mock_check_newer.assert_called_once_with("v1.1.0", "v1.1.0")
 
     @patch.dict(os.environ, {'GITHUB_ACTION_REF': 'refs/tags/v1.0.0'})
-    @patch('version_check.get_latest_repo_version') # Corrected target
-    @patch('version_check.check_for_newer_version') # Corrected target
+    @patch('src.version_check.get_latest_repo_version') # Corrected target
+    @patch('src.version_check.check_for_newer_version') # Corrected target
     def test_main_no_latest_version_found(self, mock_check_newer, mock_get_latest):
         mock_get_latest.return_value = None
 
@@ -71,8 +71,8 @@ class TestMainFunctionality(unittest.TestCase):
         mock_get_latest.assert_called_once_with(ACTION_REPO_URL)
 
     @patch.dict(os.environ, {}, clear=True) 
-    @patch('version_check.get_latest_repo_version') # Corrected target
-    @patch('version_check.check_for_newer_version') # Corrected target
+    @patch('src.version_check.get_latest_repo_version') # Corrected target
+    @patch('src.version_check.check_for_newer_version') # Corrected target
     def test_main_no_action_ref_env(self, mock_check_newer, mock_get_latest):
         with io.StringIO() as stdout, contextlib.redirect_stdout(stdout):
             main()
@@ -83,8 +83,8 @@ class TestMainFunctionality(unittest.TestCase):
         mock_check_newer.assert_not_called()
 
     @patch.dict(os.environ, {'GITHUB_ACTION_REF': 'abcdef1234567890abcdef1234567890abcdef12'}) 
-    @patch('version_check.get_latest_repo_version') # Corrected target
-    @patch('version_check.check_for_newer_version') # Corrected target
+    @patch('src.version_check.get_latest_repo_version') # Corrected target
+    @patch('src.version_check.check_for_newer_version') # Corrected target
     def test_main_with_sha_ref(self, mock_check_newer, mock_get_latest):
         with io.StringIO() as stdout, contextlib.redirect_stdout(stdout):
             main()
@@ -95,8 +95,8 @@ class TestMainFunctionality(unittest.TestCase):
         mock_check_newer.assert_not_called()
 
     @patch.dict(os.environ, {'GITHUB_ACTION_REF': 'refs/heads/main'}) 
-    @patch('version_check.get_latest_repo_version') # Corrected target
-    @patch('version_check.check_for_newer_version') # Corrected target
+    @patch('src.version_check.get_latest_repo_version') # Corrected target
+    @patch('src.version_check.check_for_newer_version') # Corrected target
     def test_main_with_branch_ref_unparsable_version(self, mock_check_newer, mock_get_latest):
         with io.StringIO() as stdout, contextlib.redirect_stdout(stdout):
             main()
