@@ -5,5 +5,5 @@ runs:
   using: "composite"
   steps:
     - name: Run Python script
-      run: python ${{ github.action_path }}/main.py
+      run: python ${{ github.action_path }}/src/main.py
       shell: bash
