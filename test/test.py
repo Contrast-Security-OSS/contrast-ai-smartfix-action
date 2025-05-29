@@ -1,7 +1,7 @@
 import io
 import contextlib
 import unittest
-from main import main
+from src.main import main
 
 class TestHelloWorldAction(unittest.TestCase):
 
