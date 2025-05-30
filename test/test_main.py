@@ -77,7 +77,7 @@ class TestMainFunctionality(unittest.TestCase):
             main()
             output = stdout.getvalue()
 
-        self.assertIn("Warning: GITHUB_ACTION_REF is not set. Skipping version check.", output)
+        self.assertIn("Warning: GITHUB_ACTION_REF environment variable is not set. Version checking is skipped. This variable is automatically set by GitHub Actions. To enable version checking, ensure this script is running as part of a GitHub Action workflow.", output)
         mock_get_latest.assert_not_called()
         mock_check_newer.assert_not_called()
 

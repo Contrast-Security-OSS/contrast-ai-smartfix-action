@@ -168,7 +168,7 @@ class TestDoVersionCheck(unittest.TestCase):
         do_version_check()
         mock_get_latest.assert_not_called()
         mock_check_newer.assert_not_called()
-        self.assertIn(unittest.mock.call("Warning: GITHUB_ACTION_REF is not set. Skipping version check."), mock_print.call_args_list)
+        self.assertIn(unittest.mock.call("Warning: GITHUB_ACTION_REF environment variable is not set. Version checking is skipped. This variable is automatically set by GitHub Actions. To enable version checking, ensure this script is running as part of a GitHub Action workflow."), mock_print.call_args_list)
 
     @patch.dict(os.environ, {'GITHUB_ACTION_REF': 'abcdef1234567890abcdef1234567890abcdef12'})
     @patch('src.version_check.get_latest_repo_version')
