@@ -3,13 +3,13 @@ import contextlib
 import unittest
 from src.main import main
 
-class TestHelloWorldAction(unittest.TestCase):
+class TestSmartFixAction(unittest.TestCase):
 
-    def test_hello_world_output(self):
+    def test_main_output(self):
         with io.StringIO() as stdout, contextlib.redirect_stdout(stdout):
             main()
             output = stdout.getvalue().strip()
-        self.assertEqual(output, "Hello, World!")
+        self.assertIn("--- Starting Contrast AI SmartFix Script ---", output)
 
 if __name__ == '__main__':
     unittest.main()
