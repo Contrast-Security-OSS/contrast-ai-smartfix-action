@@ -1,29 +1,85 @@
-name: Contrast Resolve Workflow
+name: Contrast AI SmartFix
 
-on: [push]
+on:
+  pull_request:
+    types:
+      - closed
+  schedule:
+     - cron: '0 0 * * *' # <-- Customer configured schedule
+  workflow_dispatch: # Allows manual triggering
+
+permissions:
+  contents: write
+  pull-requests: write
 
 jobs:
-  resolve_job:
+  generate_fixes:
+    name: Generate Fixes
     runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     steps:
-      - uses: actions/checkout@v4
-      - name: Run Contrast Resolve Action
-        uses: Contrast-Security-OSS/contrast-resolve-action-dev@v1.0.0
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
-          BUILD_COMMAND: '' # Optional: e.g., 'npm run build' or './mvnw clean install'
-          FORMATTING_COMMAND: '' # Optional: e.g., 'npm run format' or './mvnw spotless:apply'
-          MAX_BUILD_ATTEMPTS: '6' # Optional, uses default if not specified
-          MAX_OPEN_PRS: '5' # Optional, uses default if not specified
-          BASE_BRANCH: '' # Required: e.g., 'main' or 'develop'
-          VERBOSE_LOGGING: 'false' # Optional, uses default if not specified
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CONTRAST_HOST: '' # Required: e.g., 'app.contrastsecurity.com'
-          CONTRAST_ORG_ID: '' # Required: e.g., '181944af-42ee-4293-b06b-8c2426e9a4a0'
-          CONTRAST_APP_ID: '' # Required: e.g., 'c86b1b0f-6e94-2194-2932-84244aeea4a0'
-          CONTRAST_AUTHORIZATION_KEY: ${{ secrets.CONTRAST_AUTHORIZATION_KEY }}
-          CONTRAST_API_KEY: ${{ secrets.CONTRAST_API_KEY }}
-          AGENT_MODEL: '' # Required: e.g., 'bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0'
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_REGION: '' # Required: e.g., 'us-east-1'
-          AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }} # Optional, if using temporary credentials
+          fetch-depth: 0
+          
+      - name: Run Contrast AI SmartFix - Generate Fixes Action
+        uses: ./.github/actions/contrast-ai-smartfix
+        with:
+          # --- Max Open PRs ---
+          max_open_prs: 5
+          # --- Base Branch ---
+          base_branch: main
+          # --- Build Command ---
+          build_command: 'mvn clean test'
+          max_build_attempts: 6
+          # --- Vulnerability Configuration ---
+          vulnerability_severities: '["CRITICAL", "HIGH"]'
+          # --- Formatting Command ---
+          formatting_command: 'mvn spotless:apply'
+          # --- GitHub Token ---
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          # --- Contrast API Credentials ---
+          contrast_host: ${{ secrets.CONTRAST_HOST }}
+          contrast_org_id: ${{ secrets.CONTRAST_ORG_ID }}
+          contrast_app_id: ${{ secrets.CONTRAST_APP_ID }}
+          contrast_authorization_key: ${{ secrets.CONTRAST_AUTHORIZATION_KEY }}
+          contrast_api_key: ${{ secrets.CONTRAST_API_KEY }}
+          # --- AWS Credentials for LiteLLM/Bedrock ---
+          aws_access_key_id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws_region: ${{ secrets.AWS_REGION || 'us-east-1' }}
+          aws_session_token: ${{ secrets.AWS_SESSION_TOKEN }}
+          # --- Agent Configuration ---
+          agent_model: ${{ secrets.AGENT_MODEL || 'bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0' }}
+          # --- Security Test Options ---
+          attempt_writing_security_test: true
+          # --- Skip Comments ---
+          skip_comments: ${{ vars.SKIP_COMMENTS || 'false' }}
+
+  handle_pr_merge:
+    name: Handle PR Merge
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.merged == true && contains(join(github.event.pull_request.labels.*.name), 'contrast-vuln-id:VULN-')
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Notify Contrast on PR Merge
+        uses: ./.github/actions/contrast-ai-smartfix
+        with:
+          run_task: merge 
+          # --- GitHub Token ---
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          # --- Contrast API Credentials ---
+          contrast_host: ${{ secrets.CONTRAST_HOST }}
+          contrast_org_id: ${{ secrets.CONTRAST_ORG_ID }}
+          contrast_app_id: ${{ secrets.CONTRAST_APP_ID }}
+          contrast_authorization_key: ${{ secrets.CONTRAST_AUTHORIZATION_KEY }}
+          contrast_api_key: ${{ secrets.CONTRAST_API_KEY }}
+          # --- Skip Comments ---
+          skip_comments: ${{ vars.SKIP_COMMENTS || 'false' }}
+        env: 
+          GITHUB_EVENT_PATH: ${{ github.event_path }}

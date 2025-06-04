@@ -1,7 +1,28 @@
+#-
+# #%L
+# Contrast AI SmartFix
+# %%
+# Copyright (C) 2025 Contrast Security, Inc.
+# %%
+# Contact: support@contrastsecurity.com
+# License: Commercial
+# NOTICE: This Software and the patented inventions embodied within may only be
+# used as part of Contrast Security’s commercial offerings. Even though it is
+# made available through public repositories, use of this Software is subject to
+# the applicable End User Licensing Agreement found at
+# https://www.contrastsecurity.com/enduser-terms-0317a or as otherwise agreed
+# between Contrast Security and the End User. The Software may not be reverse
+# engineered, modified, repackaged, sold, redistributed or otherwise used in a
+# way not consistent with the End User License Agreement.
+# #L%
+#
+
 import os
 import requests
 from packaging.version import parse as parse_version
-from message_prefixes import MessagePrefix # Added import
+from src.message_prefixes import MessagePrefix # Added import
+
+HEX_CHARS = "0123456789abcdef"
 
 def get_latest_repo_version(repo_url: str):
     """Fetches the latest release tag from a GitHub repository."""
@@ -67,7 +88,7 @@ def check_for_newer_version(current_version_str: str, latest_version_str: str):
         print(f"{MessagePrefix.WARNING.value}Error parsing versions for comparison: {current_version_str}, {latest_version_str} - {e}")
         return None
 
-ACTION_REPO_URL = "https://github.com/Contrast-Security-OSS/contrast-resolve-action-dev"
+ACTION_REPO_URL = "https://github.com/Contrast-Security-OSS/contrast-ai-smartfix-action"
 
 def do_version_check():
     """
@@ -79,14 +100,14 @@ def do_version_check():
     current_action_ref = os.environ.get("GITHUB_ACTION_REF")
 
     if not current_action_ref:
-        print(f"{MessagePrefix.WARNING.value}GITHUB_ACTION_REF is not set. Skipping version check.")
+        print(f"{MessagePrefix.WARNING.value}GITHUB_ACTION_REF environment variable is not set. Version checking is skipped. This variable is automatically set by GitHub Actions. To enable version checking, ensure this script is running as part of a GitHub Action workflow.")
         return
 
     current_action_version = current_action_ref
     if current_action_ref.startswith('refs/tags/'):
         current_action_version = current_action_ref.split('/')[-1]
     
-    if len(current_action_version) == 40 and all(c in '0123456789abcdef' for c in current_action_version.lower()):
+    if len(current_action_version) == 40 and all(c in HEX_CHARS for c in current_action_version.lower()):
         # Updated prefix
         print(f"{MessagePrefix.INFO.value}Running action from SHA: {current_action_version}. Skipping version comparison against tags.")
         return
@@ -114,6 +135,6 @@ def do_version_check():
             # Updated prefixes
             print(f"{MessagePrefix.INFO.value}A newer version of this action is available ({newer_version}).")
             print(f"{MessagePrefix.INFO.value}You are running version {parsed_version_str_for_logging}.")
-            print(f"{MessagePrefix.INFO.value}Please update your workflow to use the latest version of the action like this: Contrast-Security-OSS/contrast-resolve-action-dev@{newer_version}")
+            print(f"{MessagePrefix.INFO.value}Please update your workflow to use the latest version of the action like this: Contrast-Security-OSS/contrast-ai-smartfix-action@{newer_version}")
     else:
         print(f"{MessagePrefix.WARNING.value}Could not determine the latest version from the repository.") # Updated prefix

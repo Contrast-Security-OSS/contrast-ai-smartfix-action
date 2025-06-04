@@ -1,62 +1,230 @@
-name: Contrast Resolve
-description: An action that creates AI-generated Pull Requests to remediate Contrast Security vulnerability findings.
+name: 'Contrast AI SmartFix'
+description: 'Automatically generate fixes for vulnerabilities detected by Contrast Security'
+author: 'Contrast Security'
 
-runs:
-  using: "docker"
-  image: "Dockerfile"
+branding:
+  icon: 'shield'
+  color: 'green'
 
 inputs:
-  BUILD_COMMAND:
-    description: 'The command the Quality Agent will run to try to resolve any issues with the fix. Omit to skip Quality Agent iterations.'
+  build_command:
+    description: 'Command to build the application'
     required: false
-  FORMATTING_COMMAND:
-    description: 'The command the Quality Agent will run to format the code. Ignored if no build command. Omit if skipping Quality Agent iterations.'
-    required: false
-  MAX_BUILD_ATTEMPTS:
-    description: 'Number of iterations for the Quality Agent to build and resolve issues.'
+    default: 'mvn clean install'
+  max_build_attempts:
+    description: 'Maximum number of build attempts'
     required: false
     default: '6'
-  MAX_OPEN_PRS:
-    description: 'Maximum number of open PRs the action should maintain.'
+  formatting_command:
+    description: 'Command to format code'
+    required: false
+    default: 'mvn spotless:apply'
+  max_open_prs:
+    description: 'Maximum number of open PRs'
     required: false
     default: '5'
-  BASE_BRANCH:
-    description: 'Base branch for creating feature branches for PRs.'
+  github_token:
+    description: 'GitHub token for PR operations'
     required: true
-  VERBOSE_LOGGING:
-    description: 'Enable verbose logging for the action.'
+  base_branch:
+    description: 'Base branch for PRs'
+    required: false
+    default: 'main'
+  contrast_host:
+    description: 'Contrast Security API host'
+    required: true
+  contrast_org_id:
+    description: 'Contrast Organization ID'
+    required: true
+  contrast_app_id:
+    description: 'Contrast Application ID'
+    required: true
+  contrast_authorization_key:
+    description: 'Contrast Authorization Key'
+    required: true
+  contrast_api_key:
+    description: 'Contrast API Key'
+    required: true
+  aws_access_key_id:
+    description: 'AWS Access Key ID for Bedrock'
+    required: false
+  aws_secret_access_key:
+    description: 'AWS Secret Access Key for Bedrock'
+    required: false
+  aws_region:
+    description: 'AWS Region'
+    required: false
+    default: 'us-east-1'
+  aws_session_token:
+    description: 'AWS Session Token'
+    required: false
+    default: ''
+  agent_model:
+    description: 'LLM model path to use for the agent'
+    required: false
+    default: 'bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0'
+  attempt_writing_security_test:
+    description: 'Whether to attempt writing security tests'
+    required: false
+    default: 'true'
+  skip_qa_review:
+    description: 'Whether to skip QA review'
     required: false
     default: 'false'
-  GITHUB_TOKEN:
-    description: 'GitHub token for opening PRs.'
-    required: true
-  CONTRAST_HOST:
-    description: 'Host URL for your Contrast SaaS environment (e.g., app.contrastsecurity.com).'
-    required: true
-  CONTRAST_ORG_ID:
-    description: 'UUID of your Contrast organization.'
-    required: true
-  CONTRAST_APP_ID:
-    description: 'UUID of your Contrast application.'
-    required: true
-  CONTRAST_AUTHORIZATION_KEY:
-    description: 'Authorization header value for the Contrast API.'
-    required: true
-  CONTRAST_API_KEY:
-    description: 'API key for the Contrast API.'
-    required: true
-  AGENT_MODEL:
-    description: 'Name of the LLM model for LiteLLM (e.g., bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0).'
-    required: true
-  AWS_ACCESS_KEY_ID:
-    description: 'AWS access key ID.'
-    required: true
-  AWS_SECRET_ACCESS_KEY:
-    description: 'AWS secret access key.'
-    required: true
-  AWS_REGION:
-    description: 'AWS region for the Bedrock LLM model (e.g., us-east-1).'
-    required: true
-  AWS_SESSION_TOKEN:
-    description: 'AWS session token for temporary credentials (if applicable).'
+  debug_mode:
+    description: 'Enable debug mode for verbose logging'
     required: false
+    default: 'false'
+  vulnerability_severities:
+    description: 'Array of vulnerability severity levels to process (allowed: CRITICAL, HIGH, MEDIUM, LOW, NOTE)'
+    required: false
+    default: '["CRITICAL", "HIGH"]'
+  skip_comments:
+    description: 'Skip adding comments to Contrast and setting status to Remediated'
+    required: false
+    default: 'false'
+  run_task:
+    description: 'Specifies the task for the action to perform. "generate_fix" (default) runs main.py, "merge" runs merge_handler.py.'
+    required: false
+    default: 'generate_fix'
+
+runs:
+  using: 'composite'
+  steps:
+    # Main header to clearly mark the beginning of the action
+    - name: Begin SmartFix Process
+      run: |
+        echo ""
+        echo "================================================================"
+        echo "🛡️  CONTRAST AI SMARTFIX PROCESS STARTED"
+        echo "================================================================"
+        echo ""
+      shell: bash
+
+    # Checkout with reduced verbosity
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    # Setup tools section with cleaner output
+    - name: Environment setup header
+      run: |
+        echo ""
+        echo "================================================================"
+        echo "🔧 ENVIRONMENT SETUP"
+        echo "================================================================"
+        echo ""
+      shell: bash
+
+    # Reduce Python setup verbosity
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        cache: 'pip' # Re-enabled after testing
+        
+    # Install dependencies with reduced verbosity
+    - name: Install dependencies
+      run: |
+        echo ""
+        echo "📦 Installing Python packages..."
+        pip install -r ${{ github.action_path }}/requirements.txt > /tmp/pip-output.log || (cat /tmp/pip-output.log && exit 1)
+        echo "✅ Python dependencies installed successfully"
+      shell: bash
+      
+    # Reduce Node.js setup verbosity  
+    - name: Set up Node.js
+      run: |
+        echo ""
+        echo "➡️ Setting up Node.js 22..."
+      shell: bash
+      
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        check-latest: false
+
+    # Install GitHub CLI
+    - name: Install GitHub CLI
+      run: |
+        echo ""
+        echo "📦 Installing GitHub CLI..."
+        sudo apt-get update -qq > /dev/null
+        sudo apt-get install -y -qq gh > /dev/null
+        echo "✅ GitHub CLI installed successfully"
+      shell: bash
+      
+    # Install Git
+    - name: Install Git
+      run: |
+        echo ""
+        echo "📦 Installing Git..."
+        sudo apt-get update -qq > /dev/null
+        sudo apt-get install -y -qq git > /dev/null
+        echo "✅ Git installed successfully"
+      shell: bash
+      
+    - name: Setup complete
+      run: |
+        echo ""
+        echo "✅ Environment setup complete"
+        echo ""
+      shell: bash
+
+    # Run the main SmartFix analysis script with clear start/end markers
+    - name: Run Contrast AI SmartFix
+      run: |
+        echo ""
+        echo "================================================================"
+        if [ "${{ inputs.run_task }}" = "merge" ]; then
+          echo "🚀 STARTING CONTRAST AI SMARTFIX (Task: merge)"
+          echo "================================================================"
+          python ${{ github.action_path }}/merge_handler.py
+        else
+          echo "🚀 STARTING CONTRAST AI SMARTFIX (Task: generate_fix)"
+          echo "================================================================"
+          python ${{ github.action_path }}/main.py
+        fi
+        echo ""
+        
+        echo ""
+        echo "================================================================"
+        echo "✨ CONTRAST AI SMARTFIX PROCESS COMPLETE"
+        echo "================================================================"
+      shell: bash
+      env:
+        # --- Build Command ---
+        BUILD_COMMAND: ${{ inputs.build_command }}
+        MAX_BUILD_ATTEMPTS: ${{ inputs.max_build_attempts }}
+        # --- Formatting Command ---
+        FORMATTING_COMMAND: ${{ inputs.formatting_command }}
+        # --- Max Open PRs ---
+        MAX_OPEN_PRS: ${{ inputs.max_open_prs }}
+        # --- GitHub Token ---
+        GITHUB_TOKEN: ${{ inputs.github_token }}
+        # --- Base Branch ---
+        BASE_BRANCH: ${{ inputs.base_branch }}
+        # --- Contrast API Credentials ---
+        CONTRAST_HOST: ${{ inputs.contrast_host }}
+        CONTRAST_ORG_ID: ${{ inputs.contrast_org_id }}
+        CONTRAST_APP_ID: ${{ inputs.contrast_app_id }}
+        CONTRAST_AUTHORIZATION_KEY: ${{ inputs.contrast_authorization_key }}
+        CONTRAST_API_KEY: ${{ inputs.contrast_api_key }}
+        # --- AWS Credentials for LiteLLM/Bedrock ---
+        AWS_ACCESS_KEY_ID: ${{ inputs.aws_access_key_id }}
+        AWS_SECRET_ACCESS_KEY: ${{ inputs.aws_secret_access_key }}
+        AWS_REGION: ${{ inputs.aws_region }}
+        AWS_SESSION_TOKEN: ${{ inputs.aws_session_token }}
+        # --- Agent Configuration ---
+        AGENT_MODEL: ${{ inputs.agent_model }}
+        # --- Test Writing Configuration ---
+        ATTEMPT_WRITING_SECURITY_TEST: ${{ inputs.attempt_writing_security_test }}
+        # --- QA Configuration ---
+        SKIP_QA_REVIEW: ${{ inputs.skip_qa_review }}
+        # --- Debug Mode ---
+        DEBUG_MODE: ${{ inputs.debug_mode }}
+        # --- Vulnerability Configuration ---
+        VULNERABILITY_SEVERITIES: ${{ inputs.vulnerability_severities }}
+        # --- Skip Comments ---
+        SKIP_COMMENTS: ${{ inputs.skip_comments }}

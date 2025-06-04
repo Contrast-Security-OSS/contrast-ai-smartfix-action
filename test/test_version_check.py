@@ -1,16 +1,35 @@
+#-
+# #%L
+# Contrast AI SmartFix
+# %%
+# Copyright (C) 2025 Contrast Security, Inc.
+# %%
+# Contact: support@contrastsecurity.com
+# License: Commercial
+# NOTICE: This Software and the patented inventions embodied within may only be
+# used as part of Contrast Security’s commercial offerings. Even though it is
+# made available through public repositories, use of this Software is subject to
+# the applicable End User Licensing Agreement found at
+# https://www.contrastsecurity.com/enduser-terms-0317a or as otherwise agreed
+# between Contrast Security and the End User. The Software may not be reverse
+# engineered, modified, repackaged, sold, redistributed or otherwise used in a
+# way not consistent with the End User License Agreement.
+# #L%
+#
+
 import os
 import unittest
 from unittest.mock import patch, MagicMock
-import requests # Import requests for requests.exceptions.HTTPError
-from packaging.version import parse as parse_version # Import for type hinting if needed, or direct use
+import requests
+from packaging.version import parse as parse_version
 
 # Assuming version_check.py is in the same directory or accessible via PYTHONPATH
-from version_check import get_latest_repo_version, check_for_newer_version, do_version_check, ACTION_REPO_URL
-from message_prefixes import MessagePrefix # Added import
+from src.version_check import get_latest_repo_version, check_for_newer_version, do_version_check, ACTION_REPO_URL
+from src.message_prefixes import MessagePrefix
 
 class TestVersionCheckFunctions(unittest.TestCase): # Renamed for clarity
 
-    @patch('version_check.requests.get')
+    @patch('src.version_check.requests.get')
     def test_get_latest_repo_version_success(self, mock_get):
         mock_response = MagicMock()
         mock_response.json.return_value = [{'name': 'v1.0.0'}, {'name': 'v1.1.0'}, {'name': '0.9.0'}]
@@ -18,7 +37,7 @@ class TestVersionCheckFunctions(unittest.TestCase): # Renamed for clarity
         mock_get.return_value = mock_response
         self.assertEqual(get_latest_repo_version("https://github.com/user/repo"), "v1.1.0")
 
-    @patch('version_check.requests.get')
+    @patch('src.version_check.requests.get')
     def test_get_latest_repo_version_handles_non_v_prefix(self, mock_get):
         mock_response = MagicMock()
         mock_response.json.return_value = [{'name': '1.0.0'}, {'name': '1.1.0'}, {'name': '0.9.0'}]
@@ -26,7 +45,7 @@ class TestVersionCheckFunctions(unittest.TestCase): # Renamed for clarity
         mock_get.return_value = mock_response
         self.assertEqual(get_latest_repo_version("https://github.com/user/repo"), "1.1.0")
 
-    @patch('version_check.requests.get')
+    @patch('src.version_check.requests.get')
     def test_get_latest_repo_version_mixed_tags(self, mock_get):
         mock_response = MagicMock()
         mock_response.json.return_value = [
@@ -38,7 +57,7 @@ class TestVersionCheckFunctions(unittest.TestCase): # Renamed for clarity
         self.assertEqual(get_latest_repo_version("https://github.com/user/repo"), "2.0.1")
 
 
-    @patch('version_check.requests.get')
+    @patch('src.version_check.requests.get')
     def test_get_latest_repo_version_only_invalid_tags(self, mock_get):
         mock_response = MagicMock()
         mock_response.json.return_value = [{'name': 'latest'}, {'name': 'beta-feature'}]
@@ -46,7 +65,7 @@ class TestVersionCheckFunctions(unittest.TestCase): # Renamed for clarity
         mock_get.return_value = mock_response
         self.assertIsNone(get_latest_repo_version("https://github.com/user/repo"))
 
-    @patch('version_check.requests.get')
+    @patch('src.version_check.requests.get')
     def test_get_latest_repo_version_no_tags(self, mock_get):
         mock_response = MagicMock()
         mock_response.json.return_value = []
@@ -54,7 +73,7 @@ class TestVersionCheckFunctions(unittest.TestCase): # Renamed for clarity
         mock_get.return_value = mock_response
         self.assertIsNone(get_latest_repo_version("https://github.com/user/repo"))
 
-    @patch('version_check.requests.get')
+    @patch('src.version_check.requests.get')
     @patch('builtins.print') # Mock print to check warning
     def test_get_latest_repo_version_http_error(self, mock_print, mock_get):
         mock_response = MagicMock()
@@ -64,7 +83,7 @@ class TestVersionCheckFunctions(unittest.TestCase): # Renamed for clarity
         self.assertIsNone(get_latest_repo_version("https://github.com/user/repo"))
         mock_print.assert_called_once_with(f"{MessagePrefix.WARNING.value}Error fetching tags: {http_error_message}")
 
-    @patch('version_check.requests.get')
+    @patch('src.version_check.requests.get')
     @patch('builtins.print') # Mock print to check warning
     def test_get_latest_repo_version_unexpected_error(self, mock_print, mock_get):
         unexpected_error_message = "Unexpected error"
@@ -116,8 +135,8 @@ class TestDoVersionCheck(unittest.TestCase):
     # ACTION_REPO_URL is imported from version_check, so it will be the correct one.
 
     @patch.dict(os.environ, {'GITHUB_ACTION_REF': 'refs/tags/v1.0.0'})
-    @patch('version_check.get_latest_repo_version')
-    @patch('version_check.check_for_newer_version')
+    @patch('src.version_check.get_latest_repo_version')
+    @patch('src.version_check.check_for_newer_version')
     @patch('builtins.print')
     def test_do_version_check_newer_available(self, mock_print, mock_check_newer, mock_get_latest):
         mock_get_latest.return_value = "v1.1.0"
@@ -135,13 +154,13 @@ class TestDoVersionCheck(unittest.TestCase):
             unittest.mock.call(f"{MessagePrefix.INFO.value}Latest version available in repo: v1.1.0"),
             unittest.mock.call(f"{MessagePrefix.INFO.value}A newer version of this action is available (v1.1.0)."),
             unittest.mock.call(f"{MessagePrefix.INFO.value}You are running version {current_version_for_test}."),
-            unittest.mock.call(f"{MessagePrefix.INFO.value}Please update your workflow to use the latest version of the action like this: Contrast-Security-OSS/contrast-resolve-action-dev@v1.1.0")
+            unittest.mock.call(f"{MessagePrefix.INFO.value}Please update your workflow to use the latest version of the action like this: Contrast-Security-OSS/contrast-ai-smartfix-action@v1.1.0")
         ]
         mock_print.assert_has_calls(expected_calls, any_order=False)
 
     @patch.dict(os.environ, {'GITHUB_ACTION_REF': 'v1.1.0'})
-    @patch('version_check.get_latest_repo_version')
-    @patch('version_check.check_for_newer_version')
+    @patch('src.version_check.get_latest_repo_version')
+    @patch('src.version_check.check_for_newer_version')
     @patch('builtins.print')
     def test_do_version_check_already_latest(self, mock_print, mock_check_newer, mock_get_latest):
         mock_get_latest.return_value = "v1.1.0"
@@ -158,8 +177,8 @@ class TestDoVersionCheck(unittest.TestCase):
         self.assertNotIn(f"{MessagePrefix.INFO.value}A newer version of this action is available", printed_messages)
 
     @patch.dict(os.environ, {'GITHUB_ACTION_REF': 'refs/tags/v1.0.0'})
-    @patch('version_check.get_latest_repo_version')
-    @patch('version_check.check_for_newer_version')
+    @patch('src.version_check.get_latest_repo_version')
+    @patch('src.version_check.check_for_newer_version')
     @patch('builtins.print')
     def test_do_version_check_no_latest_found(self, mock_print, mock_check_newer, mock_get_latest):
         mock_get_latest.return_value = None
@@ -171,18 +190,18 @@ class TestDoVersionCheck(unittest.TestCase):
         self.assertIn(f"{MessagePrefix.WARNING.value}Could not determine the latest version from the repository.", printed_messages)
 
     @patch.dict(os.environ, {}, clear=True)
-    @patch('version_check.get_latest_repo_version')
-    @patch('version_check.check_for_newer_version')
+    @patch('src.version_check.get_latest_repo_version')
+    @patch('src.version_check.check_for_newer_version')
     @patch('builtins.print')
     def test_do_version_check_no_action_ref(self, mock_print, mock_check_newer, mock_get_latest):
         do_version_check()
         mock_get_latest.assert_not_called()
         mock_check_newer.assert_not_called()
-        self.assertIn(unittest.mock.call(f"{MessagePrefix.WARNING.value}GITHUB_ACTION_REF is not set. Skipping version check."), mock_print.call_args_list)
+        self.assertIn(unittest.mock.call(f"{MessagePrefix.WARNING.value}GITHUB_ACTION_REF environment variable is not set. Version checking is skipped. This variable is automatically set by GitHub Actions. To enable version checking, ensure this script is running as part of a GitHub Action workflow."), mock_print.call_args_list)
 
     @patch.dict(os.environ, {'GITHUB_ACTION_REF': 'abcdef1234567890abcdef1234567890abcdef12'})
-    @patch('version_check.get_latest_repo_version')
-    @patch('version_check.check_for_newer_version')
+    @patch('src.version_check.get_latest_repo_version')
+    @patch('src.version_check.check_for_newer_version')
     @patch('builtins.print')
     def test_do_version_check_sha_ref(self, mock_print, mock_check_newer, mock_get_latest):
         do_version_check()
@@ -191,8 +210,8 @@ class TestDoVersionCheck(unittest.TestCase):
         self.assertIn(unittest.mock.call(f"{MessagePrefix.INFO.value}Running action from SHA: abcdef1234567890abcdef1234567890abcdef12. Skipping version comparison against tags."), mock_print.call_args_list)
 
     @patch.dict(os.environ, {'GITHUB_ACTION_REF': 'refs/heads/main'})
-    @patch('version_check.get_latest_repo_version')
-    @patch('version_check.check_for_newer_version')
+    @patch('src.version_check.get_latest_repo_version')
+    @patch('src.version_check.check_for_newer_version')
     @patch('builtins.print')
     def test_do_version_check_unparsable_ref(self, mock_print, mock_check_newer, mock_get_latest):
         do_version_check()
