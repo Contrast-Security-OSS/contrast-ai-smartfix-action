@@ -23,7 +23,7 @@ from datetime import datetime, timedelta
 
 # Import configurations and utilities
 import config
-from utils import debug_print, ensure_gitignore_ignores_script_dir, run_command
+from utils import debug_print, run_command
 from qa_handler import run_build_command
 
 # Import domain-specific handlers
@@ -84,8 +84,6 @@ def main():
     # END Reading Max Open PRs
 
     # --- Initial Setup ---
-    script_dir_relative = config.SCRIPT_DIR.relative_to(config.REPO_ROOT)
-    ensure_gitignore_ignores_script_dir(config.REPO_ROOT, str(script_dir_relative))
     git_handler.configure_git_user()
 
     # Check Open PR Limit
@@ -146,8 +144,6 @@ def main():
         qa_system_prompt = vulnerability_data['qaSystemPrompt']
         qa_user_prompt = vulnerability_data['qaUserPrompt']
         
-        ensure_gitignore_ignores_script_dir(config.REPO_ROOT, str(script_dir_relative))
-
         print(f"\n::group::--- Considering Vulnerability: {vuln_title} (UUID: {vuln_uuid}) ---")
 
         # --- Check for Existing PRs ---
