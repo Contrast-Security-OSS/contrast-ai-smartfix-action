@@ -55,6 +55,11 @@ def run_command(command, env=None, check=True):
         debug_print(f"::group::Running command: {' '.join(command)}")
         debug_print(f"  {options_text}")
         
+        # Merge with current environment to preserve essential variables like PATH
+        full_env = os.environ.copy()
+        if env:
+            full_env.update(env)
+            
         # Set encoding and error handling for better robustness
         process = subprocess.run(
             command, 
@@ -63,7 +68,7 @@ def run_command(command, env=None, check=True):
             encoding='utf-8',
             errors='replace',
             check=False,  # We'll handle errors ourselves
-            env=env
+            env=full_env
         )
 
         debug_print(f"  Return Code: {process.returncode}")
