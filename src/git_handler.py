@@ -276,6 +276,9 @@ def create_pr(title: str, body: str, head_branch: str, base_branch: str, label: 
     if len(body) > MAX_PR_BODY_SIZE:
         print(f"Warning: PR body is too large ({len(body)} chars). Truncating to {MAX_PR_BODY_SIZE} chars.")
         body = body[:MAX_PR_BODY_SIZE] + "\n\n...[Content truncated due to size limits]..."
+
+    # Add disclaimer to PR body
+    body += "\n\nContrast AI SmartFix is powered by AI, so mistakes are possible.  Review before merging.\n\n"
     
     # Create a temporary file to store the PR body
     with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.md') as temp_file:
@@ -337,3 +340,5 @@ def create_pr(title: str, body: str, head_branch: str, base_branch: str, label: 
                 debug_print(f"Temporary PR body file {temp_file_path} removed.")
             except OSError as e:
                 print(f"Warning: Could not remove temporary file {temp_file_path}: {e}", file=sys.stderr)
+
+# %%
