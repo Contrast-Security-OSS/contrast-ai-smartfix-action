@@ -295,11 +295,11 @@ def run_qa_agent(build_output: str, changed_files: List[str], build_command: str
 
     try:
         # Run the agent internally, using API prompts if available
-        qa_summary_str = asyncio.run(_run_agent_internal_with_prompts('qa', repo_root, qa_query, qa_system_prompt))
+        qa_summary = asyncio.run(_run_agent_internal_with_prompts('qa', repo_root, qa_query, qa_system_prompt))
         
         print("--- QA Agent Fix Attempt Completed ---")
         debug_print("\n--- Raw QA Agent Summary ---")
-        debug_print(qa_summary_str)
+        debug_print(qa_summary)
         debug_print("--------------------------")
 
         return qa_summary
