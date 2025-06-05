@@ -236,15 +236,13 @@ def main():
                 # Skip PR creation if QA was run and the build is failing
                 # or if the QA agent encountered an error (detected by checking qa_summary_log entries)
                 if (used_build_command and not build_success) or any(s.startswith("Error during QA agent execution:") for s in qa_summary_log):
-                    print("\n--- Skipping PR creation as QA Agent failed to fix build issues or encountered an error ---")
+                    if any(s.startswith("Error during QA agent execution:") for s in qa_summary_log):
+                        print("\n--- Skipping PR creation as QA Agent encountered an error ---")
+                    else:
+                        print("\n--- Skipping PR creation as QA Agent failed to fix build issues ---")
+                    
                     print(f"Cleaning up branch: {new_branch_name}")
-                    agent_handler.cleanup_branch(new_branch_name)
-                    continue # Move to the next vulnerability
-
-                # Skip PR creation if QA was run and the build is failing
-                if used_build_command and not build_success:
-                    print("\n--- Skipping PR creation as QA Agent failed to fix build issues ---")
-                    print(f"Cleaning up branch: {new_branch_name}")
+                    # Use the more robust cleanup method
                     run_command(["git", "checkout", config.BASE_BRANCH], check=False)
                     run_command(["git", "branch", "-D", new_branch_name], check=False)
                     continue # Move to the next vulnerability
