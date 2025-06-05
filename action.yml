@@ -115,56 +115,25 @@ runs:
         echo ""
       shell: bash
 
-    # Reduce Python setup verbosity
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
-        cache: 'pip' # Re-enabled after testing
-        
-    # Install dependencies with reduced verbosity
+    # Just install Python dependencies - Python 3.11 is already available
     - name: Install dependencies
       run: |
         echo ""
         echo "📦 Installing Python packages..."
-        pip install -r ${{ github.action_path }}/src/requirements.txt > /tmp/pip-output.log || (cat /tmp/pip-output.log && exit 1)
+        # Use Python 3.11 that's already available on the runner
+        python3.11 -m pip install -r ${{ github.action_path }}/src/requirements.txt > /tmp/pip-output.log || (cat /tmp/pip-output.log && exit 1)
         echo "✅ Python dependencies installed successfully"
       shell: bash
       
-    # Reduce Node.js setup verbosity  
-    - name: Set up Node.js
+    # Print versions of pre-installed tools
+    - name: Confirm tool versions
       run: |
         echo ""
-        echo "➡️ Setting up Node.js 22..."
-      shell: bash
-      
-    - uses: actions/setup-node@v4
-      with:
-        node-version: '22'
-        check-latest: false
-
-    # Install GitHub CLI
-    - name: Install GitHub CLI
-      run: |
-        echo ""
-        echo "📦 Installing GitHub CLI..."
-        sudo apt-get update -qq > /dev/null
-        sudo apt-get install -y -qq gh > /dev/null
-        echo "✅ GitHub CLI installed successfully"
-      shell: bash
-      
-    # Install Git
-    - name: Install Git
-      run: |
-        echo ""
-        echo "📦 Installing Git..."
-        sudo apt-get update -qq > /dev/null
-        sudo apt-get install -y -qq git > /dev/null
-        echo "✅ Git installed successfully"
-      shell: bash
-      
-    - name: Setup complete
-      run: |
+        echo "🔍 Checking pre-installed tools:"
+        echo "Python: $(python3.11 --version)"
+        echo "Node.js: $(node --version)"
+        echo "GitHub CLI: $(gh --version | head -1)"
+        echo "Git: $(git --version)"
         echo ""
         echo "✅ Environment setup complete"
         echo ""
