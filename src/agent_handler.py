@@ -93,9 +93,9 @@ async def get_mcp_tools(target_folder: Path) -> Tuple[List, AsyncExitStack]:
             else:
                 debug_print(f"  - Filesystem Tool: (Name attribute missing)")
     except NameError as ne:
-         print(f"FATAL: Error initializing MCP Filesystem server (likely ADK setup issue): {ne}", file=sys.stderr)
-         print("No filesystem tools available - cannot make code changes.", file=sys.stderr)
-         sys.exit(1)
+        print(f"FATAL: Error initializing MCP Filesystem server (likely ADK setup issue): {ne}", file=sys.stderr)
+        print("No filesystem tools available - cannot make code changes.", file=sys.stderr)
+        sys.exit(1)
     except Exception as e:
         print(f"FATAL: Failed to connect to Filesystem MCP server: {e}", file=sys.stderr)
         print("No filesystem tools available - cannot make code changes.", file=sys.stderr)
