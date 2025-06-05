@@ -251,7 +251,7 @@ def get_vulnerability_with_prompts(contrast_host, contrast_org_id, contrast_app_
             debug_print(f"Response keys: {list(response_json.keys())}")
             
             # Validate that we have all required components
-            required_keys = ['remediationId', 'vulnerabilityUuid', 'vulnerabilityTitle', 'vulnerabilityRuleName', 'vulnerabilitySeverity', 'vulnerabilityStatus', 'vulnerabilitySeverity', 'fixSystemPrompt', 'fixUserPrompt', 'qaSystemPrompt', 'qaUserPrompt']
+            required_keys = ['remediationId', 'vulnerabilityUuid', 'vulnerabilityTitle', 'vulnerabilityRuleName', 'vulnerabilityStatus', 'vulnerabilitySeverity', 'fixSystemPrompt', 'fixUserPrompt', 'qaSystemPrompt', 'qaUserPrompt']
             missing_keys = [key for key in required_keys if key not in response_json]
             
             if missing_keys:
