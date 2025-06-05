@@ -20,7 +20,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r src/requirements.txt
       - name: Run tests
-        run: cd ${{ github.workspace }} && PYTHONPATH=${{ github.workspace }}/src python -m unittest discover -s test -p "test*.py"
+        run: PYTHONPATH=${{ github.workspace }}/src python -m unittest discover -s test -p "test*.py"
         env:
           BUILD_COMMAND: "echo 'Mock build command for testing'"
           FORMATTING_COMMAND: "echo 'Mock formatting command for testing'"
