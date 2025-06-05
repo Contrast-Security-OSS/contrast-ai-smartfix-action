@@ -1,7 +1,7 @@
 import io
 import contextlib
 import unittest
-from src.main import main
+from main import main
 
 class TestSmartFixAction(unittest.TestCase):
 

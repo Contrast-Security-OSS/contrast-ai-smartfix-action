@@ -22,15 +22,28 @@ import os
 from datetime import datetime, timedelta
 
 # Import configurations and utilities
-import config
-from utils import debug_print, run_command
-from qa_handler import run_build_command
+try:
+    import config
+    from utils import debug_print, run_command
+    from qa_handler import run_build_command
 
-# Import domain-specific handlers
-import contrast_api
-import agent_handler
-import git_handler
-import qa_handler
+    # Import domain-specific handlers
+    import contrast_api
+    import agent_handler
+except ModuleNotFoundError:
+    # Handle case when running from outside src directory (e.g., in tests)
+    from src import config
+    from src.utils import debug_print, run_command
+    from src.qa_handler import run_build_command
+
+    # Import domain-specific handlers
+    from src import contrast_api
+    from src import agent_handler
+    from src import git_handler
+    from src import qa_handler
+else:
+    import git_handler
+    import qa_handler
 
 def main():
     """Main orchestration logic."""
