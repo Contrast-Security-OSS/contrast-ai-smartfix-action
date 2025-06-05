@@ -358,7 +358,7 @@ def process_fix_user_prompt(fix_user_prompt: str, vuln_uuid: str) -> str:
 
         if start_index == -1 or end_index == -1:
             debug_print(f"Error: SecurityTest substring not found.")
-            return
+            return processed_prompt
 
         processed_prompt = (
             processed_prompt[:start_index] + replacement_text + processed_prompt[end_index:]
