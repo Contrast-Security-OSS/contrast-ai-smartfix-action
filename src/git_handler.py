@@ -278,7 +278,7 @@ def create_pr(title: str, body: str, head_branch: str, base_branch: str, label: 
         body = body[:MAX_PR_BODY_SIZE] + "\n\n...[Content truncated due to size limits]..."
 
     # Add disclaimer to PR body
-    body += "\n\n_Contrast AI SmartFix is powered by AI, so mistakes are possible.  Review before merging._\n\n"
+    body += "\n\n*Contrast AI SmartFix is powered by AI, so mistakes are possible.  Review before merging.*\n\n"
     
     # Create a temporary file to store the PR body
     with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.md') as temp_file:
