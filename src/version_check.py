@@ -73,7 +73,7 @@ def check_for_newer_version(current_version_str: str, latest_version_str: str):
         print(f"Error parsing versions for comparison: {current_version_str}, {latest_version_str} - {e}")
         return None
 
-ACTION_REPO_URL = "https://github.com/Contrast-Security-OSS/contrast-resolve-action-dev"
+ACTION_REPO_URL = "https://github.com/Contrast-Security-OSS/contrast-ai-smartfix-action"
 
 def do_version_check():
     """
