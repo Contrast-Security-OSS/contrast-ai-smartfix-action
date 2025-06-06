@@ -7,6 +7,16 @@ from packaging.version import Version
 
 # Add src directory to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+# Mock the config and utils modules before importing version_check
+mock_config = MagicMock()
+mock_config.DEBUG_MODE = True
+sys.modules['config'] = mock_config
+# Mock utils.debug_print to capture output for testing
+mock_utils = MagicMock()
+mock_debug_print = MagicMock()
+mock_utils.debug_print = mock_debug_print
+sys.modules['utils'] = mock_utils
+
 from src.version_check import get_latest_repo_version, check_for_newer_version, do_version_check, normalize_version, safe_parse_version
 
 class TestVersionCheck(unittest.TestCase):
@@ -34,6 +44,9 @@ class TestVersionCheck(unittest.TestCase):
         # Mock the environment
         self.env_patcher = patch.dict('os.environ', clear=True)
         self.env_patcher.start()
+        
+        # Reset debug_print mock before each test
+        mock_debug_print.reset_mock()
     
     def tearDown(self):
         # Clean up after each test
@@ -113,21 +126,19 @@ class TestVersionCheck(unittest.TestCase):
         result = check_for_newer_version(version_obj, "v1.1.0")
         self.assertEqual(result, "v1.1.0")
 
-    @patch('sys.stdout', new_callable=io.StringIO)
-    def test_do_version_check_no_refs(self, mock_stdout):
+    def test_do_version_check_no_refs(self):
         """Test do_version_check when no reference environment variables are set."""
         # No environment variables set
         do_version_check()
-        output = mock_stdout.getvalue()
-        self.assertIn("Warning: Neither GITHUB_ACTION_REF nor GITHUB_REF environment variables are set", output)
+        # Check that the appropriate debug_print message was called
+        mock_debug_print.assert_any_call("Warning: Neither GITHUB_ACTION_REF nor GITHUB_REF environment variables are set. Version checking is skipped.")
 
-    @patch('sys.stdout', new_callable=io.StringIO)
-    def test_do_version_check_with_sha_only(self, mock_stdout):
+    def test_do_version_check_with_sha_only(self):
         """Test do_version_check when only GITHUB_SHA is available."""
         os.environ["GITHUB_SHA"] = "abcdef1234567890abcdef1234567890abcdef12"
         do_version_check()
-        output = mock_stdout.getvalue()
-        self.assertIn("Running from SHA", output)
+        # Check that the appropriate debug_print message was called
+        mock_debug_print.assert_any_call("Running from SHA: abcdef1234567890abcdef1234567890abcdef12. No ref found for version check, using SHA.")
 
     @patch('sys.stdout', new_callable=io.StringIO)
     @patch('src.version_check.get_latest_repo_version')
@@ -139,14 +150,16 @@ class TestVersionCheck(unittest.TestCase):
         
         do_version_check()
         
+        # Check debug print calls for messages that use debug_print
+        mock_debug_print.assert_any_call("Current action version: v1.0.0")
+        mock_debug_print.assert_any_call("Latest version available in repo: v2.0.0")
+        
+        # Check stdout for regular print calls (newer version messages)
         output = mock_stdout.getvalue()
-        self.assertIn("Current action version: v1.0.0", output)
-        self.assertIn("Latest version available in repo: v2.0.0", output)
         self.assertIn("INFO: A newer version of this action is available", output)
 
-    @patch('sys.stdout', new_callable=io.StringIO)
     @patch('src.version_check.get_latest_repo_version')
-    def test_do_version_check_prefers_action_ref(self, mock_get_latest, mock_stdout):
+    def test_do_version_check_prefers_action_ref(self, mock_get_latest):
         """Test that GITHUB_ACTION_REF is preferred over GITHUB_REF."""
         # Setup environment with both variables
         os.environ["GITHUB_ACTION_REF"] = "refs/tags/v2.0.0"
@@ -155,31 +168,29 @@ class TestVersionCheck(unittest.TestCase):
         
         do_version_check()
         
-        output = mock_stdout.getvalue()
-        self.assertIn("Current action version: v2.0.0", output)
+        # Check that the debug_print was called with the correct version from GITHUB_ACTION_REF
+        mock_debug_print.assert_any_call("Current action version: v2.0.0")
 
-    @patch('sys.stdout', new_callable=io.StringIO)
     @patch('src.version_check.get_latest_repo_version')
-    def test_do_version_check_sha_ref(self, mock_get_latest, mock_stdout):
+    def test_do_version_check_sha_ref(self, mock_get_latest):
         """Test with a SHA reference instead of a version tag."""
         os.environ["GITHUB_ACTION_REF"] = "abcdef1234567890abcdef1234567890abcdef12"
         
         do_version_check()
         
-        output = mock_stdout.getvalue()
-        self.assertIn("Running action from SHA", output)
+        # Check debug_print calls
+        mock_debug_print.assert_any_call("Running action from SHA: abcdef1234567890abcdef1234567890abcdef12. Skipping version comparison against tags.")
         mock_get_latest.assert_not_called()
 
-    @patch('sys.stdout', new_callable=io.StringIO)
     @patch('src.version_check.get_latest_repo_version')
-    def test_do_version_check_unparseable_version(self, mock_get_latest, mock_stdout):
+    def test_do_version_check_unparseable_version(self, mock_get_latest):
         """Test with a reference that can't be parsed as a version."""
         os.environ["GITHUB_REF"] = "refs/heads/main"
         
         do_version_check()
         
-        output = mock_stdout.getvalue()
-        self.assertIn("Warning: Could not parse current action version", output)
+        # Check debug_print calls
+        mock_debug_print.assert_any_call("Running from branch 'main'. Version checking is only meaningful when using release tags.")
         mock_get_latest.assert_not_called()
 
 if __name__ == '__main__':
