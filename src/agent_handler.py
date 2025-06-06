@@ -208,7 +208,7 @@ def run_ai_fix_agent(vuln_uuid: str, repo_root: Path, fix_system_prompt: str, fi
     """Synchronously runs the AI agent to analyze and apply a fix using API-provided prompts."""
 
     # Process the fix user prompt to handle placeholders and optional SecurityTest removal
-    processed_user_prompt = process_fix_user_prompt(fix_user_prompt, vuln_uuid)
+    processed_user_prompt = process_fix_user_prompt(fix_user_prompt)
     
     # Use the API-provided prompts instead of hardcoded template
     debug_print("Using API-provided fix prompts")
@@ -331,9 +331,9 @@ def process_qa_user_prompt(qa_user_prompt: str, changed_files: List[str], build_
     
     return processed_prompt
 
-def process_fix_user_prompt(fix_user_prompt: str, vuln_uuid: str) -> str:
+def process_fix_user_prompt(fix_user_prompt: str) -> str:
     """
-    Process the fix user prompt by replacing placeholders and handling SecurityTest removal.
+    Process the fix user prompt by handling SecurityTest removal.
     
     Args:
         fix_user_prompt: The raw fix user prompt from API
@@ -343,8 +343,7 @@ def process_fix_user_prompt(fix_user_prompt: str, vuln_uuid: str) -> str:
         Processed fix user prompt
     """
     # Replace {vuln_uuid} placeholder
-    processed_prompt = fix_user_prompt.replace("{vuln_uuid}", vuln_uuid)
-    
+    processed_prompt = fix_user_prompt
     if config.SKIP_WRITING_SECURITY_TEST:
         start_str = "4. Where feasible,"
         end_str = "   - **CRITICAL: When mocking"
