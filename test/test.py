@@ -24,7 +24,7 @@ class TestSmartFixAction(unittest.TestCase):
             'FORMATTING_COMMAND': 'echo "Mock formatting command"',
             'GITHUB_TOKEN': 'mock-github-token',
             'GITHUB_REPOSITORY': 'mock/repository',
-            'CONTRAST_HOST': 'mock.contrastsecurity.com',  # Removed https:// prefix
+            'CONTRAST_HOST': 'mock.contrastsecurity.com',
             'CONTRAST_ORG_ID': 'mock-org-id',
             'CONTRAST_APP_ID': 'mock-app-id',
             'CONTRAST_AUTHORIZATION_KEY': 'mock-auth-key',
@@ -54,19 +54,13 @@ class TestSmartFixAction(unittest.TestCase):
         self.mock_api = self.api_patcher.start()
         self.mock_api.return_value = None  # No vulnerabilities by default
 
-        # Create a proper mock for requests with consistent behavior
-        self.requests_module_patcher = patch('src.version_check.requests')
-        self.mock_requests_module = self.requests_module_patcher.start()
-        
-        # Create a mock response that can be reused
-        self.mock_response = MagicMock()
-        self.mock_response.json.return_value = [{'name': 'v1.0.0'}]  # Provide a default response
-        self.mock_response.raise_for_status.return_value = None
-        self.mock_requests_module.get.return_value = self.mock_response
-        
-        # Ensure exceptions are properly mocked
-        self.mock_requests_module.exceptions = MagicMock()
-        self.mock_requests_module.exceptions.RequestException = Exception
+        # Mock version check requests more directly
+        self.requests_patcher = patch('src.version_check.requests.get')
+        self.mock_requests_get = self.requests_patcher.start()
+        mock_response = MagicMock()
+        mock_response.json.return_value = [{'name': 'v1.0.0'}]
+        mock_response.raise_for_status.return_value = None
+        self.mock_requests_get.return_value = mock_response
 
         # Mock sys.exit to prevent test termination
         self.exit_patcher = patch('sys.exit')
@@ -78,7 +72,7 @@ class TestSmartFixAction(unittest.TestCase):
         self.subprocess_patcher.stop()
         self.git_config_patcher.stop()
         self.api_patcher.stop()
-        self.requests_module_patcher.stop()
+        self.requests_patcher.stop()
         self.exit_patcher.stop()
         
         # Clean up temp directory if it exists
