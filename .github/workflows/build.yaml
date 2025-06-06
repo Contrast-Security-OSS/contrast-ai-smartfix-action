@@ -16,10 +16,26 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.9'
+          python-version: '3.11'
+          cache: 'pip' # Enable built-in pip caching
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('src/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r src/requirements.txt
       - name: Run tests
-        run: python -m unittest discover -s test
+        run: PYTHONPATH=${{ github.workspace }}/src python -m unittest discover -s test -p "test*.py"
         env:
-          PYTHONPATH: ${{ github.workspace }}
+          BUILD_COMMAND: "echo 'Mock build command for testing'"
+          FORMATTING_COMMAND: "echo 'Mock formatting command for testing'"
+          GITHUB_TOKEN: ${{ github.token }}
+          CONTRAST_HOST: "https://mock.contrastsecurity.com"
+          CONTRAST_ORG_ID: "mock-org-id"
+          CONTRAST_APP_ID: "mock-app-id"
+          CONTRAST_AUTHORIZATION_KEY: "mock-auth-key"
+          CONTRAST_API_KEY: "mock-api-key"
+          DEBUG_MODE: "true"
