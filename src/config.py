@@ -67,10 +67,18 @@ def get_max_open_prs():
 # --- Core Settings ---
 DEBUG_MODE = get_env_var("DEBUG_MODE", required=False, default="false").lower() == "true"
 BASE_BRANCH = get_env_var("BASE_BRANCH", required=False, default="main")
+RUN_TASK = get_env_var("RUN_TASK", required=False, default="generate_fix")
 
 # --- Build and Formatting Configuration ---
-BUILD_COMMAND = get_env_var("BUILD_COMMAND", required=True, default=None)
-FORMATTING_COMMAND = get_env_var("FORMATTING_COMMAND", required=True, default=None)
+# Only require BUILD_COMMAND and FORMATTING_COMMAND if RUN_TASK is generate_fix
+is_generate_fix_task = RUN_TASK == "generate_fix"
+if is_generate_fix_task:
+    debug_print("Running in generate_fix mode - BUILD_COMMAND and FORMATTING_COMMAND are required")
+else:
+    debug_print(f"Running in {RUN_TASK} mode - BUILD_COMMAND and FORMATTING_COMMAND are not required")
+
+BUILD_COMMAND = get_env_var("BUILD_COMMAND", required=is_generate_fix_task, default=None)
+FORMATTING_COMMAND = get_env_var("FORMATTING_COMMAND", required=is_generate_fix_task, default=None)
 
 # Validated and normalized settings
 MAX_QA_ATTEMPTS = get_max_qa_attempts()
@@ -159,6 +167,7 @@ debug_print(f"Repository Root: {REPO_ROOT}")
 debug_print(f"Script Directory: {SCRIPT_DIR}")
 debug_print(f"Debug Mode: {DEBUG_MODE}")
 debug_print(f"Base Branch: {BASE_BRANCH}")
+debug_print(f"Run Task: {RUN_TASK}")
 debug_print(f"Agent Model: {AGENT_MODEL}")
 debug_print(f"Skip Writing Security Test: {SKIP_WRITING_SECURITY_TEST}")
 debug_print(f"Skip QA Review: {SKIP_QA_REVIEW}") # Added debug print

@@ -9,14 +9,14 @@ branding:
 inputs:
   build_command:
     description: 'Command to build the application'
-    required: true
+    required: false
   max_qa_attempts:
     description: 'Maximum number of QA intervention attempts'
     required: false
     default: '6'
   formatting_command:
     description: 'Command to format code'
-    required: true
+    required: false
   max_open_prs:
     description: 'Maximum number of open PRs'
     required: false
@@ -228,3 +228,5 @@ runs:
         VULNERABILITY_SEVERITIES: ${{ inputs.vulnerability_severities }}
         # --- Skip Comments ---
         SKIP_COMMENTS: ${{ inputs.skip_comments }}
+        # --- Run Task ---
+        RUN_TASK: ${{ inputs.run_task }}
