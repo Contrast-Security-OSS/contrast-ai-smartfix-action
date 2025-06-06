@@ -4,3 +4,4 @@ google-generativeai==0.8.5
 litellm==1.70.0
 boto3==1.38.19
 deprecated==1.2.14
+packaging==25.0

@@ -25,6 +25,7 @@ from datetime import datetime, timedelta
 import config
 from utils import debug_print, run_command
 from qa_handler import run_build_command
+from version_check import do_version_check
 
 # Import domain-specific handlers
 import contrast_api
@@ -38,6 +39,9 @@ def main():
     start_time = datetime.now()
     print("--- Starting Contrast AI SmartFix Script ---")
     debug_print(f"Start time: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
+
+    # --- Version Check ---
+    do_version_check()
 
     # --- Use Build Command and Max Attempts/PRs from Config ---
     build_command = config.BUILD_COMMAND

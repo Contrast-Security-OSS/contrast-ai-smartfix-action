@@ -4,9 +4,6 @@ on:
   push:
     branches:
       - '*' # Run on all branches
-  pull_request:
-    branches:
-      - '*' # Run on all branches
 
 jobs:
   test:

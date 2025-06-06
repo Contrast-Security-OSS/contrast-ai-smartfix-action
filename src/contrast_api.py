@@ -24,6 +24,10 @@ from typing import Optional
 import config
 from utils import debug_print
 
+def normalize_host(host: str) -> str:
+    """Remove any protocol prefix from host to prevent double prefixing when constructing URLs."""
+    return host.replace('https://', '').replace('http://', '')
+
 def add_note_to_vulnerability(vuln_uuid: str, note_content: str, contrast_host: str, contrast_org_id: str, contrast_app_id: str, contrast_auth_key: str, contrast_api_key: str) -> bool:
     """Adds a note to a specific vulnerability in Contrast.
 
@@ -41,7 +45,7 @@ def add_note_to_vulnerability(vuln_uuid: str, note_content: str, contrast_host: 
     """
     debug_print(f"--- Adding note to vulnerability {vuln_uuid} ---")
     # The app_id is in the URL structure for notes, ensure it's available
-    api_url = f"https://{contrast_host}/Contrast/api/ng/{contrast_org_id}/applications/{contrast_app_id}/traces/{vuln_uuid}/notes?expand=skip_links"
+    api_url = f"https://{normalize_host(contrast_host)}/Contrast/api/ng/{contrast_org_id}/applications/{contrast_app_id}/traces/{vuln_uuid}/notes?expand=skip_links"
 
     headers = {
         "Authorization": contrast_auth_key,
@@ -82,7 +86,7 @@ def add_note_to_vulnerability(vuln_uuid: str, note_content: str, contrast_host: 
 
 def set_vulnerability_status(vuln_uuid: str, status: str, contrast_host: str, contrast_org_id: str, contrast_auth_key: str, contrast_api_key: str, pr_url: str) -> bool:
     """Sets the status of a specific vulnerability in Contrast."""
-    api_url = f"https://{contrast_host}/Contrast/api/ng/{contrast_org_id}/orgtraces/mark"
+    api_url = f"https://{normalize_host(contrast_host)}/Contrast/api/ng/{contrast_org_id}/orgtraces/mark"
     headers = {
         "Authorization": contrast_auth_key,
         "API-Key": contrast_api_key,
@@ -112,7 +116,7 @@ def set_vulnerability_status(vuln_uuid: str, status: str, contrast_host: str, co
 
 def get_vulnerability_tags(vuln_uuid: str, contrast_host: str, contrast_org_id: str, contrast_auth_key: str, contrast_api_key: str) -> Optional[list[str]]:
     """Gets the existing tags for a specific vulnerability in Contrast."""
-    api_url = f"https://{contrast_host}/Contrast/api/ng/{contrast_org_id}/tags/traces/bulk?expand=skip_links"
+    api_url = f"https://{normalize_host(contrast_host)}/Contrast/api/ng/{contrast_org_id}/tags/traces/bulk?expand=skip_links"
     headers = {
         "Authorization": contrast_auth_key,
         "API-Key": contrast_api_key,
@@ -148,7 +152,7 @@ def get_vulnerability_tags(vuln_uuid: str, contrast_host: str, contrast_org_id: 
 
 def add_vulnerability_tags(vuln_uuid: str, tags_to_set: list[str], contrast_host: str, contrast_org_id: str, contrast_auth_key: str, contrast_api_key: str) -> bool:
     """Adds tags to a specific vulnerability in Contrast. This will overwrite existing tags if not included in tags_to_set."""
-    api_url = f"https://{contrast_host}/Contrast/api/ng/{contrast_org_id}/tags/traces/bulk?expand=skip_links"
+    api_url = f"https://{normalize_host(contrast_host)}/Contrast/api/ng/{contrast_org_id}/tags/traces/bulk?expand=skip_links"
     headers = {
         "Authorization": contrast_auth_key,
         "API-Key": contrast_api_key,
@@ -209,7 +213,7 @@ def get_vulnerability_with_prompts(contrast_host, contrast_org_id, contrast_app_
     """
     debug_print("\n--- Fetching vulnerability and prompts from prompt-details API ---")
     
-    api_url = f"https://{contrast_host}/api/v4/aiml-remediation/organizations/{contrast_org_id}/applications/{contrast_app_id}/prompt-details"
+    api_url = f"https://{normalize_host(contrast_host)}/api/v4/aiml-remediation/organizations/{contrast_org_id}/applications/{contrast_app_id}/prompt-details"
     debug_print(f"API URL: {api_url}")
     
     headers = {
@@ -221,7 +225,7 @@ def get_vulnerability_with_prompts(contrast_host, contrast_org_id, contrast_app_
     
     # Replace placeholder values with actual config values
     payload = {
-        "teamserverHost": f"https://{contrast_host}",
+        "teamserverHost": f"https://{normalize_host(contrast_host)}",
         "repoRootDir": str(config.REPO_ROOT),
         "repoUrl": github_repo_url,
         "maxPullRequests": max_open_prs,
