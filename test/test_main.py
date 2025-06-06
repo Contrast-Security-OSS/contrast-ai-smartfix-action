@@ -85,26 +85,27 @@ class TestMain(unittest.TestCase):
             import shutil
             shutil.rmtree(self.temp_dir)
     
-    @patch('src.version_check.get_latest_repo_version')
-    def test_main_with_version_check(self, mock_get_latest):
+    def test_main_with_version_check(self):
         """Test main function with version check."""
-        # Setup version check mocks
-        mock_get_latest.return_value = "v1.0.0"  
-        
         # Add version ref to environment
         updated_env = self.env_vars.copy()
         updated_env['GITHUB_ACTION_REF'] = 'refs/tags/v1.0.0'
         
-        with patch.dict('os.environ', updated_env, clear=True):
-            # Run main and capture output
-            with io.StringIO() as buf, contextlib.redirect_stdout(buf):
-                main()
-                output = buf.getvalue()
+        # Create a proper patch for the specific function
+        with patch('src.version_check.get_latest_repo_version') as mock_get_latest:
+            # Setup version check mocks
+            mock_get_latest.return_value = "v1.0.0"
             
-            # Verify main function and version check ran
-            self.assertIn("--- Starting Contrast AI SmartFix Script ---", output)
-            self.assertIn("Current action version", output)
-            mock_get_latest.assert_called_once()
+            with patch.dict('os.environ', updated_env, clear=True):
+                # Run main and capture output
+                with io.StringIO() as buf, contextlib.redirect_stdout(buf):
+                    main()
+                    output = buf.getvalue()
+                
+                # Verify main function and version check ran
+                self.assertIn("--- Starting Contrast AI SmartFix Script ---", output)
+                self.assertIn("Current action version", output)
+                mock_get_latest.assert_called_once()
 
     def test_main_without_action_ref(self):
         """Test main function without GITHUB_ACTION_REF."""

@@ -60,7 +60,9 @@ class TestVersionCheck(unittest.TestCase):
 
     def test_get_latest_repo_version_request_error(self):
         """Test handling of request exceptions."""
-        self.mock_requests.get.side_effect = Exception("Connection error")
+        # Create a proper RequestException instance
+        request_exception = self.mock_requests.exceptions.RequestException("Connection error")
+        self.mock_requests.get.side_effect = request_exception
         result = get_latest_repo_version("https://github.com/user/repo")
         self.assertIsNone(result)
 
