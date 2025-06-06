@@ -128,7 +128,8 @@ runs:
       run: |
         echo ""
         echo "📦 Installing Python packages..."
-        pip install -r ${{ github.action_path }}/src/requirements.txt > /tmp/pip-output.log || (cat /tmp/pip-output.log && exit 1)        echo "✅ Python dependencies installed successfully"
+        pip install -r ${{ github.action_path }}/src/requirements.txt > /tmp/pip-output.log || (cat /tmp/pip-output.log && exit 1)
+        echo "✅ Python dependencies installed successfully"
       shell: bash
 
     # Reduce Node.js setup verbosity  
