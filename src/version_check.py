@@ -1,8 +1,22 @@
 import os
 import requests
-from packaging.version import parse as parse_version
+from packaging.version import parse as parse_version, Version
 
 HEX_CHARS = "0123456789abcdef"
+ACTION_REPO_URL = "https://github.com/Contrast-Security-OSS/contrast-ai-smartfix-action"
+
+def normalize_version(version_str: str) -> str:
+    """Normalize a version string for comparison by removing 'v' prefix."""
+    if version_str and version_str.startswith('v'):
+        return version_str[1:]
+    return version_str
+
+def safe_parse_version(version_str: str) -> Version:
+    """Safely parse a version string, handling exceptions."""
+    try:
+        return parse_version(normalize_version(version_str))
+    except Exception:
+        return None
 
 def get_latest_repo_version(repo_url: str):
     """Fetches the latest release tag from a GitHub repository."""
@@ -47,75 +61,100 @@ def get_latest_repo_version(repo_url: str):
         print(f"An unexpected error occurred while fetching tags: {e}")
         return None
 
-def check_for_newer_version(current_version_str: str, latest_version_str: str):
+def check_for_newer_version(current_version, latest_version_str: str):
     """Compares the current version with the latest version.
     Returns the latest_version_str if it's newer, otherwise None.
+    
+    Args:
+        current_version: Either a string version or a Version object
+        latest_version_str: String representation of the latest version
+        
+    Returns:
+        The latest_version_str if newer, otherwise None
     """
     original_latest_version_str = latest_version_str # Store the original
 
-    # Normalize versions for comparison by removing 'v' prefix
-    current_comp_ver = current_version_str
-    if current_comp_ver.startswith('v'):
-        current_comp_ver = current_comp_ver[1:]
-
-    latest_comp_ver = latest_version_str
-    if latest_comp_ver.startswith('v'):
-        latest_comp_ver = latest_comp_ver[1:]
-
     try:
-        current_v = parse_version(current_comp_ver)
-        latest_v = parse_version(latest_comp_ver)
+        # Handle the case where current_version is already a Version object
+        if hasattr(current_version, 'release'):
+            current_v = current_version
+        else:
+            # Handle string version
+            current_v = parse_version(normalize_version(current_version))
+            
+        latest_v = parse_version(normalize_version(latest_version_str))
 
         if latest_v > current_v:
             return original_latest_version_str # Return the original string
         return None
     except Exception as e:
-        print(f"Error parsing versions for comparison: {current_version_str}, {latest_version_str} - {e}")
+        print(f"Error parsing versions for comparison: {current_version}, {latest_version_str} - {e}")
         return None
-
-ACTION_REPO_URL = "https://github.com/Contrast-Security-OSS/contrast-ai-smartfix-action"
 
 def do_version_check():
     """
     Orchestrates the version check:
-    1. Gets the current action version from GITHUB_ACTION_REF.
+    1. Gets the current action version from GitHub environment variables.
     2. Fetches the latest version from the repository.
     3. Compares versions and prints a message if a newer version is available.
     """
-    current_action_ref = os.environ.get("GITHUB_ACTION_REF")
-
+    # Try several GitHub environment variables that might contain version info
+    github_ref = os.environ.get("GITHUB_REF")
+    github_action_ref = os.environ.get("GITHUB_ACTION_REF")
+    github_sha = os.environ.get("GITHUB_SHA")
+    
+    # Log which environment variables are available
+    print("Available GitHub environment variables for version checking:")
+    if github_ref:
+        print(f"  GITHUB_REF: {github_ref}")
+    if github_action_ref:
+        print(f"  GITHUB_ACTION_REF: {github_action_ref}")
+    if github_sha:
+        print(f"  GITHUB_SHA: {github_sha}")
+    
+    # Determine which reference to use (prefer GITHUB_ACTION_REF, fall back to GITHUB_REF)
+    current_action_ref = github_action_ref or github_ref
+    
     if not current_action_ref:
-        print("Warning: GITHUB_ACTION_REF environment variable is not set. Version checking is skipped. This variable is automatically set by GitHub Actions. To enable version checking, ensure this script is running as part of a GitHub Action workflow.")
-        return
+        if github_sha:
+            print(f"Running from SHA: {github_sha}. No ref found for version check, using SHA.")
+            current_action_ref = github_sha
+        else:
+            print("Warning: Neither GITHUB_ACTION_REF nor GITHUB_REF environment variables are set. Version checking is skipped.")
+            return
 
     current_action_version = current_action_ref
-    if current_action_ref.startswith('refs/tags/'):
-        current_action_version = current_action_ref.split('/')[-1]
     
+    # Extract the version/tag name from refs/tags/v1.2.3 format
+    if current_action_ref.startswith('refs/'):
+        parts = current_action_ref.split('/')
+        if len(parts) >= 3:
+            current_action_version = parts[-1]
+    
+    # If we have a SHA (40 hex chars), skip version comparison
     if len(current_action_version) == 40 and all(c in HEX_CHARS for c in current_action_version.lower()):
         print(f"Running action from SHA: {current_action_version}. Skipping version comparison against tags.")
         return
     
-    try:
-        parsed_version_str_for_logging = current_action_version
-        temp_version_to_parse = current_action_version
-        if temp_version_to_parse.startswith('v'):
-            temp_version_to_parse = temp_version_to_parse[1:]
-        parse_version(temp_version_to_parse)
-    except Exception:
-        print(f"Warning: Could not parse current action version '{current_action_version}' from GITHUB_ACTION_REF '{current_action_ref}'. Skipping version check.")
+    # Try to parse the version
+    parsed_version = safe_parse_version(current_action_version)
+    if not parsed_version:
+        print(f"Warning: Could not parse current action version '{current_action_version}' as a semantic version. Skipping version check.")
         return
 
-    print(f"Current action version (from GITHUB_ACTION_REF '{current_action_ref}'): {parsed_version_str_for_logging}")
+    # Use original version string for display
+    parsed_version_str_for_logging = current_action_version
+    print(f"Current action version: {parsed_version_str_for_logging}")
 
+    # Fetch the latest version from the repository
     latest_repo_version = get_latest_repo_version(ACTION_REPO_URL)
 
     if latest_repo_version:
         print(f"Latest version available in repo: {latest_repo_version}")
-        newer_version = check_for_newer_version(parsed_version_str_for_logging, latest_repo_version)
+        newer_version = check_for_newer_version(parsed_version, latest_repo_version)
         if newer_version:
             print(f"INFO: A newer version of this action is available ({newer_version}).")
             print(f"INFO: You are running version {parsed_version_str_for_logging}.")
-            print(f"INFO: Please update your workflow to use the latest version of the action like this: Contrast-Security-OSS/contrast-resolve-action-dev@{newer_version}")
+            print(f"INFO: Please update your workflow to use the latest version of the action like this: Contrast-Security-OSS/contrast-ai-smartfix-action@{newer_version}")
     else:
         print("Could not determine the latest version from the repository.")

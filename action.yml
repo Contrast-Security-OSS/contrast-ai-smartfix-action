@@ -230,3 +230,5 @@ runs:
         SKIP_COMMENTS: ${{ inputs.skip_comments }}
         # --- Run Task ---
         RUN_TASK: ${{ inputs.run_task }}
+        # --- Set GITHUB_ACTION_REF for version checking ---
+        GITHUB_ACTION_REF: ${{ github.ref }}

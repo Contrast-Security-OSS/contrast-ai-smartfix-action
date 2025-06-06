@@ -3,10 +3,11 @@ import os
 import sys
 import io
 from unittest.mock import patch, MagicMock
+from packaging.version import Version
 
 # Add src directory to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from src.version_check import get_latest_repo_version, check_for_newer_version, do_version_check
+from src.version_check import get_latest_repo_version, check_for_newer_version, do_version_check, normalize_version, safe_parse_version
 
 class TestVersionCheck(unittest.TestCase):
     """Test the version checking functionality."""
@@ -38,6 +39,21 @@ class TestVersionCheck(unittest.TestCase):
         # Clean up after each test
         self.requests_patcher.stop()
         self.env_patcher.stop()
+
+    def test_normalize_version(self):
+        """Test the normalize_version function."""
+        self.assertEqual(normalize_version("v1.0.0"), "1.0.0")
+        self.assertEqual(normalize_version("1.0.0"), "1.0.0")
+        self.assertEqual(normalize_version(""), "")
+        self.assertEqual(normalize_version(None), None)
+
+    def test_safe_parse_version(self):
+        """Test the safe_parse_version function."""
+        self.assertIsInstance(safe_parse_version("1.0.0"), Version)
+        self.assertIsInstance(safe_parse_version("v1.0.0"), Version)
+        self.assertIsNone(safe_parse_version("invalid"))
+        self.assertIsNone(safe_parse_version(""))
+        self.assertIsNone(safe_parse_version(None))
 
     def test_get_latest_repo_version_success(self):
         """Test getting the latest version from a repo with valid tags."""
@@ -89,28 +105,58 @@ class TestVersionCheck(unittest.TestCase):
         """Test version comparison with mixed format (with/without v prefix)."""
         result = check_for_newer_version("1.0.0", "v1.1.0")
         self.assertEqual(result, "v1.1.0")
+        
+    def test_check_for_newer_version_with_version_object(self):
+        """Test check_for_newer_version with a Version object as first parameter."""
+        from packaging.version import parse
+        version_obj = parse("1.0.0")
+        result = check_for_newer_version(version_obj, "v1.1.0")
+        self.assertEqual(result, "v1.1.0")
 
     @patch('sys.stdout', new_callable=io.StringIO)
-    def test_do_version_check_no_ref(self, mock_stdout):
-        """Test do_version_check when GITHUB_ACTION_REF is not set."""
+    def test_do_version_check_no_refs(self, mock_stdout):
+        """Test do_version_check when no reference environment variables are set."""
+        # No environment variables set
         do_version_check()
         output = mock_stdout.getvalue()
-        self.assertIn("Warning: GITHUB_ACTION_REF environment variable is not set", output)
+        self.assertIn("Warning: Neither GITHUB_ACTION_REF nor GITHUB_REF environment variables are set", output)
+
+    @patch('sys.stdout', new_callable=io.StringIO)
+    def test_do_version_check_with_sha_only(self, mock_stdout):
+        """Test do_version_check when only GITHUB_SHA is available."""
+        os.environ["GITHUB_SHA"] = "abcdef1234567890abcdef1234567890abcdef12"
+        do_version_check()
+        output = mock_stdout.getvalue()
+        self.assertIn("Running from SHA", output)
 
     @patch('sys.stdout', new_callable=io.StringIO)
     @patch('src.version_check.get_latest_repo_version')
-    def test_do_version_check_newer_available(self, mock_get_latest, mock_stdout):
-        """Test when a newer version is available."""
+    def test_do_version_check_with_github_ref(self, mock_get_latest, mock_stdout):
+        """Test when GITHUB_REF is set but not GITHUB_ACTION_REF."""
         # Setup environment and mocks
-        os.environ["GITHUB_ACTION_REF"] = "refs/tags/v1.0.0"
+        os.environ["GITHUB_REF"] = "refs/tags/v1.0.0"
         mock_get_latest.return_value = "v2.0.0"
         
         do_version_check()
         
         output = mock_stdout.getvalue()
-        self.assertIn("Current action version", output)
+        self.assertIn("Current action version: v1.0.0", output)
         self.assertIn("Latest version available in repo: v2.0.0", output)
         self.assertIn("INFO: A newer version of this action is available", output)
+
+    @patch('sys.stdout', new_callable=io.StringIO)
+    @patch('src.version_check.get_latest_repo_version')
+    def test_do_version_check_prefers_action_ref(self, mock_get_latest, mock_stdout):
+        """Test that GITHUB_ACTION_REF is preferred over GITHUB_REF."""
+        # Setup environment with both variables
+        os.environ["GITHUB_ACTION_REF"] = "refs/tags/v2.0.0"
+        os.environ["GITHUB_REF"] = "refs/tags/v1.0.0"  # This should be ignored
+        mock_get_latest.return_value = "v2.0.0"
+        
+        do_version_check()
+        
+        output = mock_stdout.getvalue()
+        self.assertIn("Current action version: v2.0.0", output)
 
     @patch('sys.stdout', new_callable=io.StringIO)
     @patch('src.version_check.get_latest_repo_version')
@@ -122,6 +168,18 @@ class TestVersionCheck(unittest.TestCase):
         
         output = mock_stdout.getvalue()
         self.assertIn("Running action from SHA", output)
+        mock_get_latest.assert_not_called()
+
+    @patch('sys.stdout', new_callable=io.StringIO)
+    @patch('src.version_check.get_latest_repo_version')
+    def test_do_version_check_unparseable_version(self, mock_get_latest, mock_stdout):
+        """Test with a reference that can't be parsed as a version."""
+        os.environ["GITHUB_REF"] = "refs/heads/main"
+        
+        do_version_check()
+        
+        output = mock_stdout.getvalue()
+        self.assertIn("Warning: Could not parse current action version", output)
         mock_get_latest.assert_not_called()
 
 if __name__ == '__main__':
