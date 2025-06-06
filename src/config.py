@@ -37,9 +37,45 @@ BASE_BRANCH = get_env_var("BASE_BRANCH", required=False, default="main")
 
 # --- Build and Formatting Configuration ---
 BUILD_COMMAND = get_env_var("BUILD_COMMAND", required=True, default=None)
-MAX_QA_ATTEMPTS = get_env_var("MAX_QA_ATTEMPTS", required=False, default="6")
+MAX_QA_ATTEMPTS_RAW = get_env_var("MAX_QA_ATTEMPTS", required=False, default="6")
 FORMATTING_COMMAND = get_env_var("FORMATTING_COMMAND", required=True, default=None)
-MAX_OPEN_PRS = get_env_var("MAX_OPEN_PRS", required=False, default="5")
+MAX_OPEN_PRS_RAW = get_env_var("MAX_OPEN_PRS", required=False, default="5")
+
+def get_max_qa_attempts():
+    """Validates and normalizes the MAX_QA_ATTEMPTS setting."""
+    default_max_attempts = 6
+    hard_cap_attempts = 10
+    try:
+        max_attempts_from_env = int(MAX_QA_ATTEMPTS_RAW)
+        # Apply the hard cap
+        max_qa_attempts = min(max_attempts_from_env, hard_cap_attempts)
+        if max_attempts_from_env > hard_cap_attempts:
+            debug_print(f"MAX_QA_ATTEMPTS ({max_attempts_from_env}) exceeded hard cap ({hard_cap_attempts}). Using {hard_cap_attempts}.")
+        else:
+            debug_print(f"Using MAX_QA_ATTEMPTS from config: {max_qa_attempts}")
+        return max_qa_attempts
+    except (ValueError, TypeError):
+        debug_print(f"Invalid MAX_QA_ATTEMPTS value. Using default: {default_max_attempts}")
+        return default_max_attempts
+
+def get_max_open_prs():
+    """Validates and normalizes the MAX_OPEN_PRS setting."""
+    default_max_open_prs = 5
+    try:
+        max_open_prs = int(MAX_OPEN_PRS_RAW)
+        if max_open_prs < 0:  # Ensure non-negative
+            max_open_prs = default_max_open_prs
+            debug_print(f"MAX_OPEN_PRS was negative, using default: {default_max_open_prs}")
+        else:
+            debug_print(f"Using MAX_OPEN_PRS from environment: {max_open_prs}")
+        return max_open_prs
+    except (ValueError, TypeError):
+        debug_print(f"Invalid or missing MAX_OPEN_PRS environment variable. Using default: {default_max_open_prs}")
+        return default_max_open_prs
+
+# Validated and normalized settings
+MAX_QA_ATTEMPTS = get_max_qa_attempts()
+MAX_OPEN_PRS = get_max_open_prs()
 
 # --- GitHub Configuration ---
 GITHUB_TOKEN = get_env_var("GITHUB_TOKEN")
