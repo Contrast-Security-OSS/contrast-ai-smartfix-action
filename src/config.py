@@ -21,10 +21,23 @@ import os
 import sys
 import json
 from pathlib import Path
+from typing import Optional, Any
 from utils import debug_print # Import debug_print
 
-def get_env_var(var_name, required=True, default=None):
-    """Gets an environment variable or exits if required and not found."""
+def get_env_var(var_name: str, required: bool = True, default: Optional[Any] = None) -> Optional[str]:
+    """Gets an environment variable or exits if required and not found.
+    
+    Args:
+        var_name: Name of the environment variable to retrieve
+        required: Whether the variable is required (exits if True and not found)
+        default: Default value to return if variable is not found and not required
+    
+    Returns:
+        Value of the environment variable or default if not found and not required
+        
+    Exits:
+        If required=True and variable not found
+    """
     value = os.environ.get(var_name)
     if required and not value:
         print(f"Error: Required environment variable {var_name} is not set.", file=sys.stderr)
@@ -32,8 +45,12 @@ def get_env_var(var_name, required=True, default=None):
     return value if value else default
 
 
-def get_max_qa_attempts():
-    """Validates and normalizes the MAX_QA_ATTEMPTS setting."""
+def get_max_qa_attempts() -> int:
+    """Validates and normalizes the MAX_QA_ATTEMPTS setting.
+    
+    Returns:
+        The validated and normalized maximum number of QA attempts
+    """
     default_max_attempts = 6
     hard_cap_attempts = 10
     try:
@@ -49,8 +66,12 @@ def get_max_qa_attempts():
         debug_print(f"Invalid MAX_QA_ATTEMPTS value. Using default: {default_max_attempts}")
         return default_max_attempts
 
-def get_max_open_prs():
-    """Validates and normalizes the MAX_OPEN_PRS setting."""
+def get_max_open_prs() -> int:
+    """Validates and normalizes the MAX_OPEN_PRS setting.
+    
+    Returns:
+        The validated and normalized maximum number of open PRs
+    """
     default_max_open_prs = 5
     try:
         max_open_prs = int(get_env_var("MAX_OPEN_PRS", required=False, default="5"))
@@ -115,7 +136,15 @@ SKIP_COMMENTS = get_env_var("SKIP_COMMENTS", required=False, default="false").lo
 VALID_SEVERITIES = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "NOTE"]
 
 # Parse the severity levels from the environment variable or use default
-def _parse_and_validate_severities(json_str):
+def _parse_and_validate_severities(json_str: Optional[str]) -> list[str]:
+    """Parse and validate vulnerability severity levels from a JSON string.
+    
+    Args:
+        json_str: JSON string containing a list of severity levels
+        
+    Returns:
+        List of validated severity levels, or default if invalid
+    """
     default_severities = ["CRITICAL", "HIGH"]
     try:
         if not json_str:
