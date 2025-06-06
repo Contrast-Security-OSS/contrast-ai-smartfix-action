@@ -116,7 +116,7 @@ def set_vulnerability_status(vuln_uuid: str, status: str, contrast_host: str, co
 
 def get_vulnerability_tags(vuln_uuid: str, contrast_host: str, contrast_org_id: str, contrast_auth_key: str, contrast_api_key: str) -> Optional[list[str]]:
     """Gets the existing tags for a specific vulnerability in Contrast."""
-    api_url = f"https://{contrast_host}/Contrast/api/ng/{contrast_org_id}/tags/traces/bulk?expand=skip_links"
+    api_url = f"https://{normalize_host(contrast_host)}/Contrast/api/ng/{contrast_org_id}/tags/traces/bulk?expand=skip_links"
     headers = {
         "Authorization": contrast_auth_key,
         "API-Key": contrast_api_key,
@@ -152,7 +152,7 @@ def get_vulnerability_tags(vuln_uuid: str, contrast_host: str, contrast_org_id: 
 
 def add_vulnerability_tags(vuln_uuid: str, tags_to_set: list[str], contrast_host: str, contrast_org_id: str, contrast_auth_key: str, contrast_api_key: str) -> bool:
     """Adds tags to a specific vulnerability in Contrast. This will overwrite existing tags if not included in tags_to_set."""
-    api_url = f"https://{contrast_host}/Contrast/api/ng/{contrast_org_id}/tags/traces/bulk?expand=skip_links"
+    api_url = f"https://{normalize_host(contrast_host)}/Contrast/api/ng/{contrast_org_id}/tags/traces/bulk?expand=skip_links"
     headers = {
         "Authorization": contrast_auth_key,
         "API-Key": contrast_api_key,

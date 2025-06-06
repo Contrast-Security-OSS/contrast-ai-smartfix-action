@@ -91,8 +91,9 @@ class TestMain(unittest.TestCase):
         updated_env = self.env_vars.copy()
         updated_env['GITHUB_ACTION_REF'] = 'refs/tags/v1.0.0'
         
-        # Create a proper patch for the specific function
-        with patch('src.version_check.get_latest_repo_version') as mock_get_latest:
+        # Create a proper patch for the function as imported in main.py
+        # Note: main.py imports from version_check directly, not src.version_check
+        with patch('version_check.get_latest_repo_version') as mock_get_latest:
             # Setup version check mocks
             mock_get_latest.return_value = "v1.0.0"
             

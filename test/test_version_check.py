@@ -16,6 +16,10 @@ class TestVersionCheck(unittest.TestCase):
         self.requests_patcher = patch('src.version_check.requests')
         self.mock_requests = self.requests_patcher.start()
         
+        # Set up mock exceptions
+        self.mock_requests.exceptions = MagicMock()
+        self.mock_requests.exceptions.RequestException = Exception
+        
         # Set up a default mock response
         self.mock_response = MagicMock()
         self.mock_response.json.return_value = [

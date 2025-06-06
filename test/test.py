@@ -53,10 +53,17 @@ class TestSmartFixAction(unittest.TestCase):
         self.api_patcher = patch('src.contrast_api.get_vulnerability_with_prompts')
         self.mock_api = self.api_patcher.start()
         self.mock_api.return_value = None  # No vulnerabilities by default
+        
+        # Mock all HTTP requests
+        self.requests_patcher = patch('requests.post')
+        self.mock_requests_post = self.requests_patcher.start()
+        mock_post_response = MagicMock()
+        mock_post_response.status_code = 404  # Not found, to avoid further processing
+        self.mock_requests_post.return_value = mock_post_response
 
-        # Mock version check requests more directly
-        self.requests_patcher = patch('src.version_check.requests.get')
-        self.mock_requests_get = self.requests_patcher.start()
+        # Mock version check requests
+        self.version_requests_patcher = patch('src.version_check.requests.get')
+        self.mock_requests_get = self.version_requests_patcher.start()
         mock_response = MagicMock()
         mock_response.json.return_value = [{'name': 'v1.0.0'}]
         mock_response.raise_for_status.return_value = None
@@ -73,6 +80,7 @@ class TestSmartFixAction(unittest.TestCase):
         self.git_config_patcher.stop()
         self.api_patcher.stop()
         self.requests_patcher.stop()
+        self.version_requests_patcher.stop()
         self.exit_patcher.stop()
         
         # Clean up temp directory if it exists
