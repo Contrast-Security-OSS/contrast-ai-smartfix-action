@@ -204,7 +204,7 @@ async def process_agent_run(runner, session, exit_stack, user_query: str, full_m
     # Return the final response
     return final_response
 
-def run_ai_fix_agent(vuln_uuid: str, repo_root: Path, fix_system_prompt: str, fix_user_prompt: str) -> str:
+def run_ai_fix_agent(repo_root: Path, fix_system_prompt: str, fix_user_prompt: str) -> str:
     """Synchronously runs the AI agent to analyze and apply a fix using API-provided prompts."""
 
     # Process the fix user prompt to handle placeholders and optional SecurityTest removal
