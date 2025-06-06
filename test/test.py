@@ -54,13 +54,19 @@ class TestSmartFixAction(unittest.TestCase):
         self.mock_api = self.api_patcher.start()
         self.mock_api.return_value = None  # No vulnerabilities by default
 
-        # Create a proper mock for requests
+        # Create a proper mock for requests with consistent behavior
         self.requests_module_patcher = patch('src.version_check.requests')
         self.mock_requests_module = self.requests_module_patcher.start()
-        mock_response = MagicMock()
-        mock_response.json.return_value = []
-        mock_response.raise_for_status.return_value = None
-        self.mock_requests_module.get.return_value = mock_response
+        
+        # Create a mock response that can be reused
+        self.mock_response = MagicMock()
+        self.mock_response.json.return_value = [{'name': 'v1.0.0'}]  # Provide a default response
+        self.mock_response.raise_for_status.return_value = None
+        self.mock_requests_module.get.return_value = self.mock_response
+        
+        # Ensure exceptions are properly mocked
+        self.mock_requests_module.exceptions = MagicMock()
+        self.mock_requests_module.exceptions.RequestException = Exception
 
         # Mock sys.exit to prevent test termination
         self.exit_patcher = patch('sys.exit')

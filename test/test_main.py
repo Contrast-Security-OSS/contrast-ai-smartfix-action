@@ -52,13 +52,18 @@ class TestMainFunctionality(unittest.TestCase):
         self.mock_api = self.api_patcher.start()
         self.mock_api.return_value = None  # No vulnerabilities by default
 
-        # Create a proper mock for requests
+        # Create a proper mock for requests with consistent behavior
         self.requests_module_patcher = patch('src.version_check.requests')
         self.mock_requests_module = self.requests_module_patcher.start()
-        mock_response = MagicMock()
-        mock_response.json.return_value = []
-        mock_response.raise_for_status.return_value = None
-        self.mock_requests_module.get.return_value = mock_response
+        
+        # Create a mock response that can be configured by different tests
+        self.mock_response = MagicMock()
+        self.mock_response.json.return_value = []
+        self.mock_response.raise_for_status.return_value = None
+        self.mock_requests_module.get.return_value = self.mock_response
+        
+        # Keep a reference to all important patched modules
+        self.mock_requests_get = self.mock_requests_module.get
 
         # Mock sys.exit to prevent test termination
         self.exit_patcher = patch('sys.exit')
@@ -80,73 +85,82 @@ class TestMainFunctionality(unittest.TestCase):
             except:
                 pass
 
-    @patch('src.version_check.get_latest_repo_version')
     @patch('src.version_check.check_for_newer_version')
-    def test_main_newer_version_available(self, mock_check_newer, mock_get_latest):
+    @patch('src.version_check.get_latest_repo_version')
+    def test_main_newer_version_available(self, mock_get_latest, mock_check_newer):
+        # Setup environment with a known version
         test_env = self.base_env.copy()
         test_env['GITHUB_ACTION_REF'] = 'refs/tags/v1.0.0'
+        
+        # Configure mocks for this test
+        mock_get_latest.return_value = "v1.1.0"
+        mock_check_newer.return_value = "v1.1.0"
+        
         with patch.dict(os.environ, test_env, clear=True):
-            mock_get_latest.return_value = "v1.1.0"
-            mock_check_newer.return_value = "v1.1.0"
-            current_version_for_test = "v1.0.0"
-            
             with io.StringIO() as stdout, contextlib.redirect_stdout(stdout):
                 main() 
                 output = stdout.getvalue()
 
             # Check for expected messages
             self.assertIn("Current action version", output)
-            self.assertIn("Latest version available in repo", output)
+            self.assertIn("Latest version available in repo: v1.1.0", output)
+            self.assertIn("INFO: A newer version of this action is available", output)
             
-            # Verify function calls
-            mock_get_latest.assert_called_once()
-            mock_check_newer.assert_called_once()
+            # Verify function calls - important to check exact parameters
+            mock_get_latest.assert_called_once_with("https://github.com/Contrast-Security-OSS/contrast-resolve-action-dev")
+            mock_check_newer.assert_called_once_with("v1.0.0", "v1.1.0")
 
-    @patch('src.version_check.get_latest_repo_version')
     @patch('src.version_check.check_for_newer_version')
-    def test_main_already_latest_version(self, mock_check_newer, mock_get_latest):
+    @patch('src.version_check.get_latest_repo_version')
+    def test_main_already_latest_version(self, mock_get_latest, mock_check_newer):
+        # Setup environment with same version as "latest"
         test_env = self.base_env.copy()
         test_env['GITHUB_ACTION_REF'] = 'v1.1.0'
+        
+        # Setup mocks for this test case
+        mock_get_latest.return_value = "v1.1.0"
+        mock_check_newer.return_value = None
+        
         with patch.dict(os.environ, test_env, clear=True):
-            mock_get_latest.return_value = "v1.1.0"
-            mock_check_newer.return_value = None
-
             with io.StringIO() as stdout, contextlib.redirect_stdout(stdout):
                 main()
                 output = stdout.getvalue()
 
             # Check for expected messages
             self.assertIn("Current action version", output)
-            self.assertIn("Latest version available in repo", output)
+            self.assertIn("Latest version available in repo: v1.1.0", output)
+            self.assertNotIn("INFO: A newer version of this action is available", output)
             
-            # Verify function calls
-            mock_get_latest.assert_called_once()
-            mock_check_newer.assert_called_once()
+            # Verify function calls with exact parameters
+            mock_get_latest.assert_called_once_with("https://github.com/Contrast-Security-OSS/contrast-resolve-action-dev")
+            mock_check_newer.assert_called_once_with("v1.1.0", "v1.1.0")
 
-    @patch('src.version_check.get_latest_repo_version')
     @patch('src.version_check.check_for_newer_version')
-    def test_main_no_latest_version_found(self, mock_check_newer, mock_get_latest):
+    @patch('src.version_check.get_latest_repo_version')
+    def test_main_no_latest_version_found(self, mock_get_latest, mock_check_newer):
         test_env = self.base_env.copy()
         test_env['GITHUB_ACTION_REF'] = 'refs/tags/v1.0.0'
+        
+        # Setup mock to simulate no latest version found
+        mock_get_latest.return_value = None
+        
         with patch.dict(os.environ, test_env, clear=True):
-            mock_get_latest.return_value = None
-
             with io.StringIO() as stdout, contextlib.redirect_stdout(stdout):
                 main()
                 output = stdout.getvalue()
 
             # Check for expected messages
             self.assertIn("Current action version", output)
-            self.assertIn("Could not determine the latest version", output)
+            self.assertIn("Could not determine the latest version from the repository", output)
             
-            # Verify function calls
-            mock_get_latest.assert_called_once()
+            # Verify function calls with exact parameters
+            mock_get_latest.assert_called_once_with("https://github.com/Contrast-Security-OSS/contrast-resolve-action-dev")
             mock_check_newer.assert_not_called()
 
-    @patch('src.version_check.get_latest_repo_version')
     @patch('src.version_check.check_for_newer_version')
-    def test_main_no_action_ref_env(self, mock_check_newer, mock_get_latest):
-        # Don't add GITHUB_ACTION_REF to this test
+    @patch('src.version_check.get_latest_repo_version')
+    def test_main_no_action_ref_env(self, mock_get_latest, mock_check_newer):
+        # Explicitly remove GITHUB_ACTION_REF from environment
         env_without_action_ref = self.base_env.copy()
         if 'GITHUB_ACTION_REF' in env_without_action_ref:
             del env_without_action_ref['GITHUB_ACTION_REF']
@@ -156,44 +170,51 @@ class TestMainFunctionality(unittest.TestCase):
                 main()
                 output = stdout.getvalue()
 
-            # Check for expected messages
+            # Check for expected messages with exact wording
             self.assertIn("Warning: GITHUB_ACTION_REF environment variable is not set", output)
             
-            # Verify function calls
+            # Verify neither function is called when GITHUB_ACTION_REF is missing
             mock_get_latest.assert_not_called()
             mock_check_newer.assert_not_called()
 
-    @patch('src.version_check.get_latest_repo_version')
     @patch('src.version_check.check_for_newer_version')
-    def test_main_with_sha_ref(self, mock_check_newer, mock_get_latest):
+    @patch('src.version_check.get_latest_repo_version')
+    def test_main_with_sha_ref(self, mock_get_latest, mock_check_newer):
+        # Use SHA reference instead of tag
         test_env = self.base_env.copy()
         test_env['GITHUB_ACTION_REF'] = 'abcdef1234567890abcdef1234567890abcdef12'
+        
         with patch.dict(os.environ, test_env, clear=True):
             with io.StringIO() as stdout, contextlib.redirect_stdout(stdout):
                 main()
                 output = stdout.getvalue()
                 
-            # Check for expected messages
+            # Check for expected messages with exact wording
             self.assertIn("Running action from SHA", output)
+            self.assertIn("Skipping version comparison against tags", output)
             
-            # Verify function calls
+            # Verify function calls - should not be called for SHA refs
             mock_get_latest.assert_not_called()
             mock_check_newer.assert_not_called()
 
-    @patch('src.version_check.get_latest_repo_version')
     @patch('src.version_check.check_for_newer_version')
-    def test_main_with_branch_ref_unparsable_version(self, mock_check_newer, mock_get_latest):
+    @patch('src.version_check.get_latest_repo_version')
+    def test_main_with_branch_ref_unparsable_version(self, mock_get_latest, mock_check_newer):
+        # Use a branch reference which can't be parsed as a version
         test_env = self.base_env.copy()
         test_env['GITHUB_ACTION_REF'] = 'refs/heads/main'
+        
         with patch.dict(os.environ, test_env, clear=True):
             with io.StringIO() as stdout, contextlib.redirect_stdout(stdout):
                 main()
                 output = stdout.getvalue()
                 
-            # Check for expected messages
-            self.assertIn("Warning: Could not parse current action version", output)
+            # Check for expected messages with exact text match
+            expected_warning = "Warning: Could not parse current action version 'refs/heads/main' from GITHUB_ACTION_REF 'refs/heads/main'"
+            self.assertIn(expected_warning, output)
+            self.assertIn("Skipping version check", output)
             
-            # Verify function calls
+            # Verify function calls - should not be called for unparsable refs
             mock_get_latest.assert_not_called()
             mock_check_newer.assert_not_called()
 

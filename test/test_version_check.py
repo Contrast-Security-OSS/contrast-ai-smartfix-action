@@ -8,10 +8,7 @@ from unittest.mock import patch, MagicMock, Mock
 # Add src directory to Python path for proper imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-# Import the actual requests module for proper exception types
-import requests
-
-# Define a custom MockHTTPError for testing
+# Create a MockResponse class to use instead of importing requests directly
 class MockHTTPError(Exception):
     """Mock HTTP Error for testing exception handling."""
     def __init__(self, *args, **kwargs):
@@ -45,7 +42,13 @@ class TestVersionCheckFunctions(unittest.TestCase):
         mock_response.json.return_value = [{'name': 'v1.0.0'}, {'name': 'v1.1.0'}, {'name': '0.9.0'}]
         mock_response.raise_for_status.return_value = None
         mock_get.return_value = mock_response
-        self.assertEqual(get_latest_repo_version("https://github.com/user/repo"), "v1.1.0")
+        
+        # Make sure the expected API URL is constructed correctly
+        expected_url = "https://api.github.com/repos/user/repo/tags"
+        result = get_latest_repo_version("https://github.com/user/repo")
+        
+        mock_get.assert_called_once_with(expected_url)
+        self.assertEqual(result, "v1.1.0")
 
     @patch('src.version_check.requests.get')
     def test_get_latest_repo_version_handles_non_v_prefix(self, mock_get):
@@ -156,7 +159,11 @@ class TestVersionCheckFunctions(unittest.TestCase):
         output = mock_stdout.getvalue()
         self.assertIn("Current action version", output)
         self.assertIn("Latest version available in repo: v1.1.0", output)
-        self.assertIn("A newer version of this action is available", output)
+        self.assertIn("INFO: A newer version of this action is available", output)
+        
+        # Verify mock calls
+        mock_get_latest.assert_called_once_with("https://github.com/Contrast-Security-OSS/contrast-resolve-action-dev")
+        mock_check_newer.assert_called_once_with("v1.0.0", "v1.1.0")
         
     @patch('sys.stdout', new_callable=io.StringIO)
     @patch('src.version_check.check_for_newer_version')
@@ -173,7 +180,11 @@ class TestVersionCheckFunctions(unittest.TestCase):
         output = mock_stdout.getvalue()
         self.assertIn("Current action version", output)
         self.assertIn("Latest version available in repo: v1.0.0", output)
-        self.assertNotIn("A newer version of this action is available", output)
+        self.assertNotIn("INFO: A newer version of this action is available", output)
+        
+        # Verify mock calls
+        mock_get_latest.assert_called_once_with("https://github.com/Contrast-Security-OSS/contrast-resolve-action-dev")
+        mock_check_newer.assert_called_once_with("v1.0.0", "v1.0.0")
         
     @patch('sys.stdout', new_callable=io.StringIO)
     @patch('src.version_check.check_for_newer_version')

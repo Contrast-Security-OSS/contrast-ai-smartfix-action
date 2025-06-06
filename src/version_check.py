@@ -7,8 +7,14 @@ HEX_CHARS = "0123456789abcdef"
 def get_latest_repo_version(repo_url: str):
     """Fetches the latest release tag from a GitHub repository."""
     try:
+        # Clean the repo URL to avoid double https:// issues
+        cleaned_repo_path = repo_url.replace('https://github.com/', '')
+        if cleaned_repo_path == repo_url:
+            # If no substitution happened, ensure we're using the correct format
+            cleaned_repo_path = repo_url.replace('github.com/', '')
+        
         # Construct the API URL for tags
-        api_url = f"https://api.github.com/repos/{repo_url.replace('https://github.com/', '')}/tags"
+        api_url = f"https://api.github.com/repos/{cleaned_repo_path}/tags"
         response = requests.get(api_url)
         response.raise_for_status()  # Raise an exception for HTTP errors
         tags = response.json()
