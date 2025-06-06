@@ -52,12 +52,13 @@ class TestMainFunctionality(unittest.TestCase):
         self.mock_api = self.api_patcher.start()
         self.mock_api.return_value = None  # No vulnerabilities by default
 
-        # Mock requests to prevent actual HTTP calls
-        self.requests_patcher = patch('requests.get')
-        self.mock_requests = self.requests_patcher.start()
+        # Create a proper mock for requests
+        self.requests_module_patcher = patch('src.version_check.requests')
+        self.mock_requests_module = self.requests_module_patcher.start()
         mock_response = MagicMock()
         mock_response.json.return_value = []
-        self.mock_requests.return_value = mock_response
+        mock_response.raise_for_status.return_value = None
+        self.mock_requests_module.get.return_value = mock_response
 
         # Mock sys.exit to prevent test termination
         self.exit_patcher = patch('sys.exit')
@@ -68,7 +69,7 @@ class TestMainFunctionality(unittest.TestCase):
         self.subprocess_patcher.stop()
         self.git_config_patcher.stop()
         self.api_patcher.stop()
-        self.requests_patcher.stop()
+        self.requests_module_patcher.stop()
         self.exit_patcher.stop()
         
         # Clean up temp directory if it exists

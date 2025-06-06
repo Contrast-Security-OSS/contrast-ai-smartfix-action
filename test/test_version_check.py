@@ -8,18 +8,17 @@ from unittest.mock import patch, MagicMock, Mock
 # Add src directory to Python path for proper imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-# Create a mock for requests.exceptions.HTTPError
+# Import the actual requests module for proper exception types
+import requests
+
+# Define a custom MockHTTPError for testing
 class MockHTTPError(Exception):
-    pass
-
-# Create a mock for requests module
-class MockRequests:
-    def __init__(self):
-        self.exceptions = Mock()
-        self.exceptions.HTTPError = MockHTTPError
-
-# Create mock imports
-sys.modules['requests'] = MockRequests()
+    """Mock HTTP Error for testing exception handling."""
+    def __init__(self, *args, **kwargs):
+        self.response = Mock()
+        self.response.status_code = 404
+        self.response.text = "Not Found"
+        super().__init__(*args, **kwargs)
 
 # Import the functions to test after mocking
 from src.version_check import get_latest_repo_version, check_for_newer_version, do_version_check, ACTION_REPO_URL
