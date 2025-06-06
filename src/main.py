@@ -147,7 +147,7 @@ def main():
 
         # --- Run AI Fix Agent ---
         ai_fix_summary_full = agent_handler.run_ai_fix_agent(
-            vuln_uuid, config.REPO_ROOT, fix_system_prompt, fix_user_prompt
+            config.REPO_ROOT, fix_system_prompt, fix_user_prompt
         )
         
         # Check if the fix agent encountered an error

@@ -100,7 +100,7 @@ AGENT_MODEL = get_env_var("AGENT_MODEL", required=False, default="bedrock/anthro
 # --- Test Writing Configuration ---
 SKIP_WRITING_SECURITY_TEST = get_env_var("SKIP_WRITING_SECURITY_TEST", required=False, default="false").lower() == "true"
 # --- QA Configuration ---
-SKIP_QA_REVIEW = get_env_var("SKIP_QA_REVIEW", required=False, default="true").lower() == "true"
+SKIP_QA_REVIEW = get_env_var("SKIP_QA_REVIEW", required=False, default="false").lower() == "true"
 SKIP_COMMENTS = get_env_var("SKIP_COMMENTS", required=False, default="false").lower() == "true"
 
 # --- Vulnerability Configuration ---
