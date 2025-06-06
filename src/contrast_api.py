@@ -213,9 +213,7 @@ def get_vulnerability_with_prompts(contrast_host, contrast_org_id, contrast_app_
     """
     debug_print("\n--- Fetching vulnerability and prompts from prompt-details API ---")
     
-    # Ensure contrast_host doesn't already have https:// prefix to avoid double prefixing
-    host = normalize_host(contrast_host)
-    api_url = f"https://{host}/api/v4/aiml-remediation/organizations/{contrast_org_id}/applications/{contrast_app_id}/prompt-details"
+    api_url = f"https://{normalize_host(contrast_host)}/api/v4/aiml-remediation/organizations/{contrast_org_id}/applications/{contrast_app_id}/prompt-details"
     debug_print(f"API URL: {api_url}")
     
     headers = {
@@ -227,7 +225,7 @@ def get_vulnerability_with_prompts(contrast_host, contrast_org_id, contrast_app_
     
     # Replace placeholder values with actual config values
     payload = {
-        "teamserverHost": f"https://{host}",
+        "teamserverHost": f"https://{normalize_host(contrast_host)}",
         "repoRootDir": str(config.REPO_ROOT),
         "repoUrl": github_repo_url,
         "maxPullRequests": max_open_prs,

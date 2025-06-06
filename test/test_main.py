@@ -119,8 +119,8 @@ class TestMain(unittest.TestCase):
             main()
             output = buf.getvalue()
         
-        # Verify warning is present
-        self.assertIn("Warning: GITHUB_ACTION_REF environment variable is not set", output)
+        # Verify warning about missing environment variables is present (updated for new message format)
+        self.assertIn("Warning: Neither GITHUB_ACTION_REF nor GITHUB_REF environment variables are set", output)
 
 if __name__ == '__main__':
     unittest.main()
