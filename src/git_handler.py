@@ -25,6 +25,18 @@ from typing import List # <<< ADDED
 from utils import run_command, debug_print # Import debug_print
 import config
 
+def get_gh_env():
+    """
+    Returns an environment dictionary with the GitHub token set.
+    Used for GitHub CLI commands that require authentication.
+    
+    Returns:
+        dict: Environment variables dictionary with GitHub token
+    """
+    gh_env = os.environ.copy()
+    gh_env["GITHUB_TOKEN"] = config.GITHUB_TOKEN
+    return gh_env
+
 def configure_git_user():
     """Configures git user email and name."""
     print("Configuring Git user...")
@@ -109,8 +121,7 @@ def ensure_label(label_name: str, description: str, color: str) -> bool:
         print(f"Warning: Label name '{label_name}' exceeds GitHub's 50-character limit.", file=sys.stderr)
         return False
         
-    gh_env = os.environ.copy()
-    gh_env["GITHUB_TOKEN"] = config.GITHUB_TOKEN
+    gh_env = get_gh_env()
     
     # First try to list labels to see if it already exists
     try:
@@ -174,8 +185,7 @@ def check_pr_status_for_label(label_name: str) -> str:
         str: 'OPEN', 'MERGED', or 'NONE'
     """
     print(f"Checking GitHub PR status for label: {label_name}")
-    gh_env = os.environ.copy()
-    gh_env["GITHUB_TOKEN"] = config.GITHUB_TOKEN
+    gh_env = get_gh_env()
 
     # Check for OPEN PRs
     open_pr_command = [
@@ -218,8 +228,7 @@ def check_pr_status_for_label(label_name: str) -> str:
 def count_open_prs_with_prefix(label_prefix: str) -> int:
     """Counts the number of open GitHub PRs with at least one label starting with the given prefix."""
     print(f"Counting open PRs with label prefix: '{label_prefix}'")
-    gh_env = os.environ.copy()
-    gh_env["GITHUB_TOKEN"] = config.GITHUB_TOKEN
+    gh_env = get_gh_env()
 
     # Fetch labels of open PRs in JSON format. Limit might need adjustment if > 100 open PRs.
     # Using --search to filter by label prefix might be more efficient if supported, but --json gives flexibility.
@@ -295,8 +304,7 @@ def create_pr(title: str, body: str, head_branch: str, base_branch: str, label: 
             print(f"Error: Temporary file {temp_file_path} does not exist", file=sys.stderr)
             return
             
-        gh_env = os.environ.copy()
-        gh_env["GITHUB_TOKEN"] = config.GITHUB_TOKEN
+        gh_env = get_gh_env()
         
         # First check if gh is available
         try:

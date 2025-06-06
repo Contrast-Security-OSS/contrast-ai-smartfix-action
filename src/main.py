@@ -58,34 +58,10 @@ def main():
         print("FORMATTING_COMMAND not set or empty.")
         sys.exit(1)
 
-    # Process MAX_QA_ATTEMPTS
-    default_max_attempts = 6
-    hard_cap_attempts = 10
-    try:
-        max_attempts_from_env = int(config.MAX_QA_ATTEMPTS)
-        # Apply the hard cap
-        max_qa_attempts_setting = min(max_attempts_from_env, hard_cap_attempts)
-        if max_attempts_from_env > hard_cap_attempts:
-             debug_print(f"MAX_QA_ATTEMPTS ({max_attempts_from_env}) exceeded hard cap ({hard_cap_attempts}). Using {hard_cap_attempts}.")
-        else:
-             debug_print(f"Using MAX_QA_ATTEMPTS from config: {max_qa_attempts_setting}")
-    except (ValueError, TypeError):
-        debug_print(f"Invalid MAX_QA_ATTEMPTS value. Using default: {default_max_attempts}")
-        max_qa_attempts_setting = default_max_attempts
-
-    # Process MAX_OPEN_PRS
-    default_max_open_prs = 5
-    try:
-        max_open_prs_setting = int(config.MAX_OPEN_PRS)
-        if max_open_prs_setting < 0: # Ensure non-negative
-             max_open_prs_setting = default_max_open_prs
-             debug_print(f"MAX_OPEN_PRS was negative, using default: {default_max_open_prs}")
-        else:
-             debug_print(f"Using MAX_OPEN_PRS from environment: {max_open_prs_setting}")
-    except (ValueError, TypeError):
-        debug_print(f"Invalid or missing MAX_OPEN_PRS environment variable. Using default: {default_max_open_prs}")
-        max_open_prs_setting = default_max_open_prs
-    # END Reading Max Open PRs
+    # Use the validated and normalized settings from config module
+    # These values are already processed in config.py with appropriate validation and defaults
+    max_qa_attempts_setting = config.MAX_QA_ATTEMPTS
+    max_open_prs_setting = config.MAX_OPEN_PRS
 
     # --- Initial Setup ---
     git_handler.configure_git_user()
@@ -175,7 +151,7 @@ def main():
 
         # --- Run AI Fix Agent ---
         ai_fix_summary_full = agent_handler.run_ai_fix_agent(
-            vuln_uuid, config.REPO_ROOT, fix_system_prompt, fix_user_prompt
+            config.REPO_ROOT, fix_system_prompt, fix_user_prompt
         )
         
         # Check if the fix agent encountered an error
