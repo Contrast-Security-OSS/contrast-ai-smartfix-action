@@ -65,13 +65,13 @@ jobs:
           contrast_app_id: ${{ vars.CONTRAST_APP_ID }}
           contrast_authorization_key: ${{ secrets.CONTRAST_AUTHORIZATION_KEY }}
           contrast_api_key: ${{ secrets.CONTRAST_API_KEY }}
-          # --- Google Gemini API Credentials (LiteLLM) ---
+          # --- Google Gemini API Credentials ---
           gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
-          # --- Azure Open API Credentials (LiteLLM) ---
+          # --- Azure Open API Credentials ---
           azure_api_key: ${{ secrets.AZURE_API_KEY }}
           azure_api_base: ${{ secrets.AZURE_API_BASE }}
           azure_api_version: ${{ secrets.AZURE_API_VERSION }}
-          # --- AWS Credentials for LiteLLM/Bedrock ---
+          # --- AWS Credentials for Bedrock ---
           aws_access_key_id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws_region_name: ${{ vars.AWS_REGION_NAME || 'us-east-1' }}
