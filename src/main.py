@@ -268,24 +268,36 @@ def main():
                 
                 if pr_url:
                     pr_creation_success = True
-
+                    
+                    # Extract PR number from PR URL
+                    # PR URL format is like: https://github.com/org/repo/pull/123
+                    pr_number = None
+                    try:
+                        pr_number = int(pr_url.split("/")[-1])
+                    except (ValueError, IndexError):
+                        print(f"Warning: Could not extract PR number from URL: {pr_url}")
+                    
                     if not config.SKIP_COMMENTS:
-                        note_content = f"Contrast AI SmartFix opened remediation PR: {pr_url}"
-                        note_added = contrast_api.add_note_to_vulnerability(
-                            vuln_uuid=vuln_uuid,
-                            note_content=note_content,
+                        # Notify the Remediation backend service about the PR
+                        if pr_number is not None:
+                            pr_number = "0";
+
+                        remediation_notified = contrast_api.notify_remediation_pr_opened(
+                            remediation_id=remediation_id,
+                            pr_number=pr_number,
+                            pr_url=pr_url,
                             contrast_host=config.CONTRAST_HOST,
                             contrast_org_id=config.CONTRAST_ORG_ID,
-                            contrast_app_id=config.CONTRAST_APP_ID, # Ensure CONTRAST_APP_ID is available in config
+                            contrast_app_id=config.CONTRAST_APP_ID,
                             contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
                             contrast_api_key=config.CONTRAST_API_KEY
                         )
-                        if note_added:
-                            print(f"Successfully added note to Contrast for vulnerability {vuln_uuid}.")
+                        if remediation_notified:
+                            print(f"Successfully notified Remediation service about PR for remediation {remediation_id}.")
                         else:
-                            print(f"Warning: Failed to add note to Contrast for vulnerability {vuln_uuid}.")
+                            print(f"Warning: Failed to notify Remediation service about PR for remediation {remediation_id}.")
                     else:
-                        print(f"Skipping adding note to Contrast due to SKIP_COMMENTS setting.")
+                        print(f"Skipping notifications to Contrast due to SKIP_COMMENTS setting.")
                 else:
                     # This case should ideally be handled by create_pr exiting or returning empty
                     # and then the logic below for SKIP_PR_ON_FAILURE would trigger.
