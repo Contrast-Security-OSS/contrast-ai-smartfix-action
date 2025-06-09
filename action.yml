@@ -49,7 +49,7 @@ inputs:
   aws_secret_access_key:
     description: 'AWS Secret Access Key for Bedrock'
     required: false
-  aws_region:
+  aws_region_name:
     description: 'AWS Region'
     required: false
     default: 'us-east-1'
@@ -214,7 +214,7 @@ runs:
         # --- AWS Credentials for LiteLLM/Bedrock ---
         AWS_ACCESS_KEY_ID: ${{ inputs.aws_access_key_id }}
         AWS_SECRET_ACCESS_KEY: ${{ inputs.aws_secret_access_key }}
-        AWS_REGION: ${{ inputs.aws_region }}
+        AWS_REGION_NAME: ${{ inputs.aws_region_name }}
         AWS_SESSION_TOKEN: ${{ inputs.aws_session_token }}
         # --- Agent Configuration ---
         AGENT_MODEL: ${{ inputs.agent_model }}

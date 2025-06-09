@@ -68,7 +68,7 @@ jobs:
           # --- AWS Credentials for LiteLLM/Bedrock ---
           aws_access_key_id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}
+          aws_region_name: ${{ vars.AWS_REGION_NAME || 'us-east-1' }}
           aws_session_token: ${{ secrets.AWS_SESSION_TOKEN }}
           # --- Agent Configuration ---
           agent_model: ${{ vars.AGENT_MODEL || 'bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0' }}

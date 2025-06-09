@@ -118,7 +118,7 @@ CONTRAST_AUTHORIZATION_KEY = get_env_var("CONTRAST_AUTHORIZATION_KEY", required=
 CONTRAST_API_KEY = get_env_var("CONTRAST_API_KEY", required=True)
 
 # --- AWS Bedrock Configuration ---
-AWS_REGION = get_env_var("AWS_REGION", required=False)
+AWS_REGION_NAME = get_env_var("AWS_REGION_NAME", required=False)
 AWS_ACCESS_KEY_ID = get_env_var("AWS_ACCESS_KEY_ID", required=False)
 AWS_SECRET_ACCESS_KEY = get_env_var("AWS_SECRET_ACCESS_KEY", required=False)
 AWS_SESSION_TOKEN = get_env_var("AWS_SESSION_TOKEN", required=False) # Optional
@@ -201,7 +201,7 @@ debug_print(f"Agent Model: {AGENT_MODEL}")
 debug_print(f"Skip Writing Security Test: {SKIP_WRITING_SECURITY_TEST}")
 debug_print(f"Skip QA Review: {SKIP_QA_REVIEW}") # Added debug print
 debug_print(f"Skip Comments: {SKIP_COMMENTS}")
-debug_print(f"AWS Region: {AWS_REGION}")
+debug_print(f"AWS Region Name: {AWS_REGION_NAME}")
 debug_print(f"Vulnerability Severities: {VULNERABILITY_SEVERITIES}")
 if AWS_SESSION_TOKEN:
     debug_print("AWS Session Token found.")
