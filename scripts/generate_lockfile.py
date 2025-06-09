@@ -34,7 +34,7 @@ def generate_lockfile():
         subprocess.run(
             ["python3.9", "-m", "uv", "pip", "compile", 
              requirements_txt, "--output-file", requirements_lock,
-             "--native-tls"],  # Add native-tls flag to use system certificates
+             "--native-tls", "--system"],  # Add native-tls and system flags
             check=True
         )
         print(f"Lockfile generated successfully at {requirements_lock}")
@@ -72,7 +72,7 @@ def generate_lockfile():
             subprocess.run(
                 [venv_python, "-m", "uv", "pip", "compile", 
                  requirements_txt, "--output-file", requirements_lock,
-                 "--native-tls"],  # Add native-tls flag to use system certificates
+                 "--native-tls", "--system"],  # Add native-tls and system flags
                 check=True
             )
             
