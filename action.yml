@@ -154,13 +154,23 @@ runs:
       with:
         python-version: '3.11'
         cache: 'pip' # Re-enabled after testing
-
-    # Install dependencies with reduced verbosity
-    - name: Install dependencies
+        
+    # Install uv tool for dependency management
+    - name: Install uv
       run: |
         echo ""
-        echo "📦 Installing Python packages..."
-        pip install -r ${{ github.action_path }}/src/requirements.txt > /tmp/pip-output.log || (cat /tmp/pip-output.log && exit 1)
+        echo "📦 Installing uv package manager..."
+        pip install uv==0.7.12 > /tmp/uv-install.log || (cat /tmp/uv-install.log && exit 1)
+        echo "✅ uv installed successfully"
+      shell: bash
+
+    # Install dependencies using uv
+    - name: Install dependencies with uv
+      run: |
+        echo ""
+        echo "📦 Installing Python packages using uv..."
+        echo "📎 Using lockfile for deterministic installation"
+        uv pip sync --system ${{ github.action_path }}/src/requirements.lock > /tmp/uv-output.log || (cat /tmp/uv-output.log && exit 1)
         echo "✅ Python dependencies installed successfully"
       shell: bash
 
