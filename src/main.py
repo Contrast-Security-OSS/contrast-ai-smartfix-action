@@ -119,6 +119,7 @@ def main():
         # Extract vulnerability details and prompts from the response
         vuln_uuid = vulnerability_data['vulnerabilityUuid']
         vuln_title = vulnerability_data['vulnerabilityTitle']
+        remediation_id = vulnerability_data['remediationId']
         fix_system_prompt = vulnerability_data['fixSystemPrompt']
         fix_user_prompt = vulnerability_data['fixUserPrompt']
         qa_system_prompt = vulnerability_data['qaSystemPrompt']
@@ -169,7 +170,7 @@ def main():
         print("\n--- Proceeding with Git & GitHub Operations ---", flush=True)
         # Note: Git user config moved to the start of main
 
-        new_branch_name = git_handler.generate_branch_name(vuln_uuid)
+        new_branch_name = git_handler.generate_branch_name(remediation_id)
         try:
             git_handler.create_branch(new_branch_name)
         except SystemExit:
