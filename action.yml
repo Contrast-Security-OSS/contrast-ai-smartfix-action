@@ -128,7 +128,7 @@ runs:
       run: |
         echo ""
         echo "📦 Installing uv package manager..."
-        pip install uv==1.0.0 > /tmp/uv-install.log || (cat /tmp/uv-install.log && exit 1)
+        pip install uv==0.7.12 > /tmp/uv-install.log || (cat /tmp/uv-install.log && exit 1)
         echo "✅ uv installed successfully"
       shell: bash
 
