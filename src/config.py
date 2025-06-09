@@ -117,11 +117,24 @@ CONTRAST_APP_ID = get_env_var("CONTRAST_APP_ID", required=True)
 CONTRAST_AUTHORIZATION_KEY = get_env_var("CONTRAST_AUTHORIZATION_KEY", required=True)
 CONTRAST_API_KEY = get_env_var("CONTRAST_API_KEY", required=True)
 
+# --- Google Gemini Credentials (LiteLLM) ---
+GEMINI_API_KEY = get_env_var("GEMINI_API_KEY", required=False)
+
+# --- Azure Credentials for Azure OpenAI (LiteLLM) ---
+AZURE_API_KEY = get_env_var("AZURE_API_KEY", required=False)
+AZURE_API_BASE = get_env_var("AZURE_API_BASE", required=False)
+AZURE_API_VERSION = get_env_var("AZURE_API_VERSION", required=False)
+
 # --- AWS Bedrock Configuration ---
 AWS_REGION_NAME = get_env_var("AWS_REGION_NAME", required=False)
 AWS_ACCESS_KEY_ID = get_env_var("AWS_ACCESS_KEY_ID", required=False)
 AWS_SECRET_ACCESS_KEY = get_env_var("AWS_SECRET_ACCESS_KEY", required=False)
-AWS_SESSION_TOKEN = get_env_var("AWS_SESSION_TOKEN", required=False) # Optional
+AWS_SESSION_TOKEN = get_env_var("AWS_SESSION_TOKEN", required=False)
+AWS_PROFILE_NAME = get_env_var("AWS_PROFILE_NAME", required=False)
+AWS_ROLE_NAME = get_env_var("AWS_ROLE_NAME", required=False)
+AWS_SESSION_NAME = get_env_var("AWS_SESSION_NAME", required=False)
+AWS_WEB_IDENTITY_TOKEN = get_env_var("AWS_WEB_IDENTITY_TOKEN", required=False)
+AWS_BEDROCK_RUNTIME_ENDPOINT = get_env_var("AWS_BEDROCK_RUNTIME_ENDPOINT", required=False)
 
 # --- AI Agent Configuration ---
 AGENT_MODEL = get_env_var("AGENT_MODEL", required=False, default="bedrock/anthropic.claude-3-7-sonnet-20250219-v1:0")

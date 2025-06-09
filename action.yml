@@ -43,18 +43,50 @@ inputs:
   contrast_api_key:
     description: 'Contrast API Key'
     required: true
+  gemini_api_key:
+    description: 'Gemini API key for Google AI Studio'
+    required: false
+  azure_api_key:
+    description: 'Azure API Key for Azure OpenAI'
+    required: false
+  azure_api_base:
+    description: 'Azure API Base URL'
+    required: false
+  azure_api_version:
+    description: 'Azure API Version'
+    required: false
   aws_access_key_id:
     description: 'AWS Access Key ID for Bedrock'
     required: false
   aws_secret_access_key:
     description: 'AWS Secret Access Key for Bedrock'
     required: false
-  aws_region_name:
-    description: 'AWS Region'
-    required: false
-    default: 'us-east-1'
   aws_session_token:
     description: 'AWS Session Token'
+    required: false
+    default: ''
+  aws_region_name:
+    description: 'AWS Region Name'
+    required: false
+    default: 'us-east-1'
+  aws_profile_name:
+    description: 'AWS Profile Name'
+    required: false
+    default: ''
+  aws_role_name:
+    description: 'AWS Role Name'
+    required: false
+    default: ''
+  aws_session_name:
+    description: 'AWS Session Name'
+    required: false
+    default: ''
+  aws_web_identity_token:
+    description: 'AWS Web Identity Token'
+    required: false
+    default: ''
+  aws_bedrock_runtime_endpoint:
+    description: 'AWS Bedrock Runtime Endpoint'
     required: false
     default: ''
   agent_model:
@@ -211,11 +243,22 @@ runs:
         CONTRAST_APP_ID: ${{ inputs.contrast_app_id }}
         CONTRAST_AUTHORIZATION_KEY: ${{ inputs.contrast_authorization_key }}
         CONTRAST_API_KEY: ${{ inputs.contrast_api_key }}
+        # --- Google Gemini Credentials (LiteLLM) ---
+        GEMINI_API_KEY: ${{ inputs.gemini_api_key }}
+        # --- Azure Credentials for Azure OpenAI (LiteLLM) ---
+        AZURE_API_KEY: ${{ inputs.azure_api_key }}
+        AZURE_API_BASE: ${{ inputs.azure_api_base }}
+        AZURE_API_VERSION: ${{ inputs.azure_api_version }}
         # --- AWS Credentials for LiteLLM/Bedrock ---
         AWS_ACCESS_KEY_ID: ${{ inputs.aws_access_key_id }}
         AWS_SECRET_ACCESS_KEY: ${{ inputs.aws_secret_access_key }}
         AWS_REGION_NAME: ${{ inputs.aws_region_name }}
         AWS_SESSION_TOKEN: ${{ inputs.aws_session_token }}
+        AWS_PROFILE_NAME: ${{ inputs.aws_profile_name }}
+        AWS_ROLE_NAME: ${{ inputs.aws_role_name }}
+        AWS_SESSION_NAME: ${{ inputs.aws_session_name }}
+        AWS_WEB_IDENTITY_TOKEN: ${{ inputs.aws_web_identity_token }}
+        AWS_BEDROCK_RUNTIME_ENDPOINT: ${{ inputs.aws_bedrock_runtime_endpoint }}
         # --- Agent Configuration ---
         AGENT_MODEL: ${{ inputs.agent_model }}
         # --- Test Writing Configuration ---
