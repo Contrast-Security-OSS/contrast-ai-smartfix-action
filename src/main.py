@@ -19,6 +19,7 @@
 
 import sys
 import os
+import re
 from datetime import datetime, timedelta
 
 # Import configurations and utilities
@@ -273,14 +274,20 @@ def main():
                     # PR URL format is like: https://github.com/org/repo/pull/123
                     pr_number = None
                     try:
-                        pr_number = int(pr_url.split("/")[-1])
-                    except (ValueError, IndexError):
-                        print(f"Warning: Could not extract PR number from URL: {pr_url}")
+                        # Use a more robust method to extract the PR number
+                        
+                        pr_match = re.search(r'/pull/(\d+)', pr_url)
+                        if pr_match:
+                            pr_number = int(pr_match.group(1))
+                        else:
+                            print(f"Warning: Could not find PR number pattern in URL: {pr_url}", flush=True)
+                    except (ValueError, IndexError, AttributeError) as e:
+                        print(f"Warning: Could not extract PR number from URL: {pr_url} - Error: {str(e)}", flush=True)
                     
                     if not config.SKIP_COMMENTS:
                         # Notify the Remediation backend service about the PR
                         if pr_number is not None:
-                            pr_number = "0";
+                            pr_number = 0;
 
                         remediation_notified = contrast_api.notify_remediation_pr_opened(
                             remediation_id=remediation_id,
@@ -293,22 +300,22 @@ def main():
                             contrast_api_key=config.CONTRAST_API_KEY
                         )
                         if remediation_notified:
-                            print(f"Successfully notified Remediation service about PR for remediation {remediation_id}.")
+                            print(f"Successfully notified Remediation service about PR for remediation {remediation_id}.", flush=True)
                         else:
-                            print(f"Warning: Failed to notify Remediation service about PR for remediation {remediation_id}.")
+                            print(f"Warning: Failed to notify Remediation service about PR for remediation {remediation_id}.", flush=True)
                     else:
-                        print(f"Skipping notifications to Contrast due to SKIP_COMMENTS setting.")
+                        print(f"Skipping notifications to Contrast due to SKIP_COMMENTS setting.", flush=True)
                 else:
                     # This case should ideally be handled by create_pr exiting or returning empty
                     # and then the logic below for SKIP_PR_ON_FAILURE would trigger.
                     # However, if create_pr somehow returns without a URL but doesn't cause an exit:
-                    print("PR creation did not return a URL. Assuming failure.")
+                    print("PR creation did not return a URL. Assuming failure.", flush=True)
                     pr_creation_success = False
                 
                 if not pr_creation_success:
-                    print("\n--- PR creation failed, but changes were pushed to branch ---")
-                    print(f"Branch name: {new_branch_name}")
-                    print("Changes can be manually viewed and merged if needed.")
+                    print("\n--- PR creation failed, but changes were pushed to branch ---", flush=True)
+                    print(f"Branch name: {new_branch_name}", flush=True)
+                    print("Changes can be manually viewed and merged if needed.", flush=True)
                     break;
                 
                 processed_one = True # Mark that we successfully processed one
