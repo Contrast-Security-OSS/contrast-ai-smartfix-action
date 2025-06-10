@@ -216,7 +216,7 @@ def notify_remediation_pr_merged(remediation_id: str, contrast_host: str, contra
         debug_print(f"Remediation merged notification API response status code: {response.status_code}")
         
         if response.status_code in (200, 201, 204):
-            print(f"Successfully notified Remediation service about merged PR for remediation {remediation_id}")
+            debug_print(f"Successfully notified Remediation service about merged PR for remediation {remediation_id}")
             return True
         else:
             error_message = "Unknown error"
@@ -273,7 +273,7 @@ def notify_remediation_pr_closed(remediation_id: str, contrast_host: str, contra
         debug_print(f"Remediation closed notification API response status code: {response.status_code}")
         
         if response.status_code in (200, 201, 204):
-            print(f"Successfully notified Remediation service about closed PR for remediation {remediation_id}")
+            debug_print(f"Successfully notified Remediation service about closed PR for remediation {remediation_id}")
             return True
         else:
             error_message = "Unknown error"

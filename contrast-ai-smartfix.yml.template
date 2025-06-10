@@ -108,7 +108,7 @@ jobs:
           GITHUB_EVENT_PATH: ${{ github.event_path }}
   
   handle_pr_closed:
-    name: Handle PR Closed
+    name: Handle PR Close
     runs-on: ubuntu-latest
     if: github.event.pull_request.merged == false && contains(github.event.pull_request.head.ref, 'smartfix/remediation-')
     steps:
