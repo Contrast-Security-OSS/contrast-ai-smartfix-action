@@ -143,7 +143,6 @@ runs:
         echo ""
       shell: bash
 
-
     # Reduce Python setup verbosity
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -218,6 +217,10 @@ runs:
           echo "🚀 STARTING CONTRAST AI SMARTFIX (Task: merge)"
           echo "================================================================"
           python ${{ github.action_path }}/src/merge_handler.py
+        elif [ "${{ inputs.run_task }}" = "closed" ]; then
+          echo "🚀 STARTING CONTRAST AI SMARTFIX (Task: closed)"
+          echo "================================================================"
+          python ${{ github.action_path }}/src/closed_handler.py
         else
           echo "🚀 STARTING CONTRAST AI SMARTFIX (Task: generate_fix)"
           echo "================================================================"

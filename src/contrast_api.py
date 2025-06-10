@@ -239,3 +239,60 @@ def notify_remediation_pr_merged(remediation_id: str, contrast_host: str, contra
     except json.JSONDecodeError:
         print(f"Error decoding JSON response when notifying Remediation service about merged PR for remediation {remediation_id}.", file=sys.stderr)
         return False
+
+def notify_remediation_pr_closed(remediation_id: str, contrast_host: str, contrast_org_id: str, contrast_app_id: str, contrast_auth_key: str, contrast_api_key: str) -> bool:
+    """Notifies the Remediation backend service that a PR has been closed without merging for a remediation.
+
+    Args:
+        remediation_id: The ID of the remediation.
+        contrast_host: The Contrast Security host URL.
+        contrast_org_id: The organization ID.
+        contrast_app_id: The application ID.
+        contrast_auth_key: The Contrast authorization key.
+        contrast_api_key: The Contrast API key.
+
+    Returns:
+        bool: True if the notification was successful, False otherwise.
+    """
+    debug_print(f"--- Notifying Remediation service about closed PR for remediation {remediation_id} ---")
+    api_url = f"https://{normalize_host(contrast_host)}/api/v4/aiml-remediation/organizations/{contrast_org_id}/applications/{contrast_app_id}/remediations/{remediation_id}/closed"
+
+    headers = {
+        "Authorization": contrast_auth_key,
+        "API-Key": contrast_api_key,
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": "contrast-smart-fix 0.0.1"
+    }
+
+    try:
+        debug_print(f"Making PUT request to: {api_url}")
+        response = requests.put(api_url, headers=headers)
+        response.raise_for_status()  # Raises an HTTPError for bad responses (4xx or 5xx)
+
+        debug_print(f"Remediation closed notification API response status code: {response.status_code}")
+        
+        if response.status_code in (200, 201, 204):
+            print(f"Successfully notified Remediation service about closed PR for remediation {remediation_id}")
+            return True
+        else:
+            error_message = "Unknown error"
+            try:
+                response_json = response.json()
+                if "messages" in response_json and response_json["messages"]:
+                    error_message = response_json["messages"][0]
+            except:
+                error_message = response.text
+                
+            print(f"Failed to notify Remediation service about closed PR for remediation {remediation_id}. Error: {error_message}", file=sys.stderr)
+            return False
+
+    except requests.exceptions.HTTPError as e:
+        print(f"HTTP error notifying Remediation service about closed PR for remediation {remediation_id}: {e.response.status_code} - {e.response.text}", file=sys.stderr)
+        return False
+    except requests.exceptions.RequestException as e:
+        print(f"Request error notifying Remediation service about closed PR for remediation {remediation_id}: {e}", file=sys.stderr)
+        return False
+    except json.JSONDecodeError:
+        print(f"Error decoding JSON response when notifying Remediation service about closed PR for remediation {remediation_id}.", file=sys.stderr)
+        return False

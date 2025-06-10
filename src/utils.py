@@ -20,13 +20,30 @@
 import os
 import subprocess
 import sys
+import re
 from pathlib import Path
+from typing import Optional
 import config # Import config to access DEBUG_MODE
 
 def debug_print(*args, **kwargs):
     """Prints only if DEBUG_MODE is True."""
     if config.DEBUG_MODE:
         print(*args, **kwargs)
+
+def extract_remediation_id_from_branch(branch_name: str) -> Optional[str]:
+    """Extracts the remediation ID from a branch name.
+    
+    Args:
+        branch_name: Branch name in format 'smartfix/remediation-{remediation_id}'
+        
+    Returns:
+        str: The remediation ID if found, or None if not found
+    """
+    # Match smartfix/remediation-{id} format
+    match = re.search(r'smartfix/remediation-([^/]+)', branch_name)
+    if match:
+        return match.group(1)
+    return None
 
 def run_command(command, env=None, check=True):
     """

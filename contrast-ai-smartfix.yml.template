@@ -43,7 +43,7 @@ jobs:
           fetch-depth: 0
           
       - name: Run Contrast AI SmartFix - Generate Fixes Action
-        uses: Contrast-Security-OSS/contrast-ai-smartfix-action@TS-38968_update_for_api_prompts
+        uses: Contrast-Security-OSS/contrast-ai-smartfix-action
         with:
           # --- Max Open PRs ---
           max_open_prs: 5
@@ -85,7 +85,7 @@ jobs:
   handle_pr_merge:
     name: Handle PR Merge
     runs-on: ubuntu-latest
-    if: github.event.pull_request.merged == true && contains(join(github.event.pull_request.labels.*.name), 'contrast-vuln-id:VULN-')
+    if: github.event.pull_request.merged == true && contains(github.event.pull_request.head.ref, 'smartfix/remediation-')
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -93,9 +93,34 @@ jobs:
           fetch-depth: 0
 
       - name: Notify Contrast on PR Merge
-        uses: Contrast-Security-OSS/contrast-ai-smartfix-action@TS-38968_update_for_api_prompts
+        uses: Contrast-Security-OSS/contrast-ai-smartfix-action
         with:
           run_task: merge 
+          # --- GitHub Token ---
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          # --- Contrast API Credentials ---
+          contrast_host: ${{ vars.CONTRAST_HOST }}
+          contrast_org_id: ${{ vars.CONTRAST_ORG_ID }}
+          contrast_app_id: ${{ vars.CONTRAST_APP_ID }}
+          contrast_authorization_key: ${{ secrets.CONTRAST_AUTHORIZATION_KEY }}
+          contrast_api_key: ${{ secrets.CONTRAST_API_KEY }}
+        env: 
+          GITHUB_EVENT_PATH: ${{ github.event_path }}
+  
+  handle_pr_closed:
+    name: Handle PR Closed
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.merged == false && contains(github.event.pull_request.head.ref, 'smartfix/remediation-')
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Notify Contrast on PR Closed
+        uses: Contrast-Security-OSS/contrast-ai-smartfix-action
+        with:
+          run_task: closed
           # --- GitHub Token ---
           github_token: ${{ secrets.GITHUB_TOKEN }}
           # --- Contrast API Credentials ---
