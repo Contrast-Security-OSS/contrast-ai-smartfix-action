@@ -277,8 +277,10 @@ def main():
                         # Use a more robust method to extract the PR number
                         
                         pr_match = re.search(r'/pull/(\d+)', pr_url)
+                        debug_print(f"Extracting PR number from URL '{pr_url}', match object: {pr_match}")
                         if pr_match:
                             pr_number = int(pr_match.group(1))
+                            debug_print(f"Successfully extracted PR number: {pr_number}")
                         else:
                             print(f"Warning: Could not find PR number pattern in URL: {pr_url}", flush=True)
                     except (ValueError, IndexError, AttributeError) as e:
@@ -286,7 +288,7 @@ def main():
                     
                     if not config.SKIP_COMMENTS:
                         # Notify the Remediation backend service about the PR
-                        if pr_number is not None:
+                        if pr_number is None:
                             pr_number = 0;
 
                         remediation_notified = contrast_api.notify_remediation_pr_opened(
