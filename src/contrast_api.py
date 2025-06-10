@@ -28,166 +28,6 @@ def normalize_host(host: str) -> str:
     """Remove any protocol prefix from host to prevent double prefixing when constructing URLs."""
     return host.replace('https://', '').replace('http://', '')
 
-def add_note_to_vulnerability(vuln_uuid: str, note_content: str, contrast_host: str, contrast_org_id: str, contrast_app_id: str, contrast_auth_key: str, contrast_api_key: str) -> bool:
-    """Adds a note to a specific vulnerability in Contrast.
-
-    Args:
-        vuln_uuid: The UUID of the vulnerability.
-        note_content: The content of the note to add.
-        contrast_host: The Contrast Security host URL.
-        contrast_org_id: The organization ID.
-        contrast_app_id: The application ID.
-        contrast_auth_key: The Contrast authorization key.
-        contrast_api_key: The Contrast API key.
-
-    Returns:
-        bool: True if the note was added successfully, False otherwise.
-    """
-    debug_print(f"--- Adding note to vulnerability {vuln_uuid} ---")
-    # The app_id is in the URL structure for notes, ensure it's available
-    api_url = f"https://{normalize_host(contrast_host)}/Contrast/api/ng/{contrast_org_id}/applications/{contrast_app_id}/traces/{vuln_uuid}/notes?expand=skip_links"
-
-    headers = {
-        "Authorization": contrast_auth_key,
-        "API-Key": contrast_api_key,
-        "Content-Type": "application/json",
-        "Accept": "application/json"
-    }
-    payload = {
-        "note": note_content
-    }
-
-    try:
-        debug_print(f"Making POST request to: {api_url}")
-        debug_print(f"Payload: {json.dumps(payload)}") # Log the payload for debugging
-        response = requests.post(api_url, headers=headers, json=payload)
-        response.raise_for_status()  # Raises an HTTPError for bad responses (4xx or 5xx)
-
-        debug_print(f"Add note API Response Status Code: {response.status_code}")
-        response_json = response.json()
-
-        if response_json.get("success"):
-            print(f"Successfully added note to vulnerability {vuln_uuid}.")
-            return True
-        else:
-            error_message = response_json.get("messages", ["Unknown error"])[0]
-            print(f"Failed to add note to vulnerability {vuln_uuid}. Error: {error_message}", file=sys.stderr)
-            return False
-
-    except requests.exceptions.HTTPError as e:
-        print(f"HTTP error adding note to vulnerability {vuln_uuid}: {e.response.status_code} - {e.response.text}", file=sys.stderr)
-        sys.exit(1)
-    except requests.exceptions.RequestException as e:
-        print(f"Request error adding note to vulnerability {vuln_uuid}: {e}", file=sys.stderr)
-        sys.exit(1)
-    except json.JSONDecodeError:
-        print(f"Error decoding JSON response when adding note to vulnerability {vuln_uuid}.", file=sys.stderr)
-        sys.exit(1)
-
-def set_vulnerability_status(vuln_uuid: str, status: str, contrast_host: str, contrast_org_id: str, contrast_auth_key: str, contrast_api_key: str, pr_url: str) -> bool:
-    """Sets the status of a specific vulnerability in Contrast."""
-    api_url = f"https://{normalize_host(contrast_host)}/Contrast/api/ng/{contrast_org_id}/orgtraces/mark"
-    headers = {
-        "Authorization": contrast_auth_key,
-        "API-Key": contrast_api_key,
-        "Content-Type": "application/json",
-        "Accept": "application/json"
-    }
-    payload = {
-        "note": f"Contrast AI SmartFix remediated ({pr_url if pr_url else 'Unknown URL'})",
-        "traces": [vuln_uuid],
-        "status": status
-    }
-
-    debug_print(f"Setting status for {vuln_uuid} to {status} via URL: {api_url}")
-    debug_print(f"Payload for set status: {json.dumps(payload)}")
-
-    try:
-        response = requests.put(api_url, headers=headers, json=payload, timeout=30)
-        if response.status_code == 200: # Or other success codes like 204
-            debug_print(f"Successfully set status for vulnerability {vuln_uuid} to {status}.")
-            return True
-        else:
-            print(f"Error setting status for vulnerability {vuln_uuid}: {response.status_code} - {response.text}", file=sys.stderr)
-            return False
-    except requests.exceptions.RequestException as e:
-        print(f"Request failed while setting status for vulnerability {vuln_uuid}: {e}", file=sys.stderr)
-        sys.exit(1)
-
-def get_vulnerability_tags(vuln_uuid: str, contrast_host: str, contrast_org_id: str, contrast_auth_key: str, contrast_api_key: str) -> Optional[list[str]]:
-    """Gets the existing tags for a specific vulnerability in Contrast."""
-    api_url = f"https://{normalize_host(contrast_host)}/Contrast/api/ng/{contrast_org_id}/tags/traces/bulk?expand=skip_links"
-    headers = {
-        "Authorization": contrast_auth_key,
-        "API-Key": contrast_api_key,
-        "Content-Type": "application/json",
-        "Accept": "application/json"
-    }
-    payload = {"traces_uuid": [vuln_uuid]}
-
-    debug_print(f"Getting tags for {vuln_uuid} via URL: {api_url}")
-    debug_print(f"Payload for get tags: {json.dumps(payload)}")
-
-    try:
-        response = requests.post(api_url, headers=headers, json=payload, timeout=30)
-        if response.status_code == 200:
-            response_data = response.json()
-            if response_data.get("success"):
-                tags = response_data.get("tags", [])
-                debug_print(f"Successfully retrieved tags for vulnerability {vuln_uuid}: {tags}")
-                return tags
-            else:
-                print(f"API indicated failure while getting tags for {vuln_uuid}: {response_data.get('messages')}", file=sys.stderr)
-                sys.exit(1)
-        else:
-            print(f"Error getting tags for vulnerability {vuln_uuid}: {response.status_code} - {response.text}", file=sys.stderr)
-            sys.exit(1)
-    except requests.exceptions.RequestException as e:
-        print(f"Request failed while getting tags for vulnerability {vuln_uuid}: {e}", file=sys.stderr)
-        sys.exit(1)
-    except json.JSONDecodeError as e:
-        print(f"Failed to decode JSON response while getting tags for {vuln_uuid}: {e}", file=sys.stderr)
-        sys.exit(1)
-
-
-def add_vulnerability_tags(vuln_uuid: str, tags_to_set: list[str], contrast_host: str, contrast_org_id: str, contrast_auth_key: str, contrast_api_key: str) -> bool:
-    """Adds tags to a specific vulnerability in Contrast. This will overwrite existing tags if not included in tags_to_set."""
-    api_url = f"https://{normalize_host(contrast_host)}/Contrast/api/ng/{contrast_org_id}/tags/traces/bulk?expand=skip_links"
-    headers = {
-        "Authorization": contrast_auth_key,
-        "API-Key": contrast_api_key,
-        "Content-Type": "application/json",
-        "Accept": "application/json"
-    }
-    payload = {
-        "traces_uuid": [vuln_uuid],
-        "tags": tags_to_set,
-        "tags_remove": []  # Assuming we don't want to explicitly remove any tags not in the new set this way
-    }
-
-    debug_print(f"Setting tags for {vuln_uuid} to {tags_to_set} via URL: {api_url}")
-    debug_print(f"Payload for set tags: {json.dumps(payload)}")
-
-    try:
-        response = requests.put(api_url, headers=headers, json=payload, timeout=30)
-        if response.status_code == 200:
-            response_data = response.json()
-            if response_data.get("success"):
-                debug_print(f"Successfully set tags for vulnerability {vuln_uuid}.")
-                return True
-            else:
-                print(f"API indicated failure while setting tags for {vuln_uuid}: {response_data.get('messages')}", file=sys.stderr)
-                sys.exit(1)
-        else:
-            print(f"Error setting tags for vulnerability {vuln_uuid}: {response.status_code} - {response.text}", file=sys.stderr)
-            sys.exit(1)
-    except requests.exceptions.RequestException as e:
-        print(f"Request failed while setting tags for vulnerability {vuln_uuid}: {e}", file=sys.stderr)
-        sys.exit(1)
-    except json.JSONDecodeError as e:
-        print(f"Failed to decode JSON response while setting tags for {vuln_uuid}: {e}", file=sys.stderr)
-        sys.exit(1)
-
 def get_vulnerability_with_prompts(contrast_host, contrast_org_id, contrast_app_id, contrast_auth_key, contrast_api_key, max_open_prs, github_repo_url, vulnerability_severities):
     """Fetches a vulnerability to process along with pre-populated prompt templates from the new prompt-details endpoint.
     
@@ -341,4 +181,61 @@ def notify_remediation_pr_opened(remediation_id: str, pr_number: int, pr_url: st
         return False
     except json.JSONDecodeError:
         print(f"Error decoding JSON response when notifying Remediation service about PR for remediation {remediation_id}.", file=sys.stderr)
+        return False
+
+def notify_remediation_pr_merged(remediation_id: str, contrast_host: str, contrast_org_id: str, contrast_app_id: str, contrast_auth_key: str, contrast_api_key: str) -> bool:
+    """Notifies the Remediation backend service that a PR has been merged for a remediation.
+
+    Args:
+        remediation_id: The ID of the remediation.
+        contrast_host: The Contrast Security host URL.
+        contrast_org_id: The organization ID.
+        contrast_app_id: The application ID.
+        contrast_auth_key: The Contrast authorization key.
+        contrast_api_key: The Contrast API key.
+
+    Returns:
+        bool: True if the notification was successful, False otherwise.
+    """
+    debug_print(f"--- Notifying Remediation service about merged PR for remediation {remediation_id} ---")
+    api_url = f"https://{normalize_host(contrast_host)}/api/v4/aiml-remediation/organizations/{contrast_org_id}/applications/{contrast_app_id}/remediations/{remediation_id}/merged"
+
+    headers = {
+        "Authorization": contrast_auth_key,
+        "API-Key": contrast_api_key,
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": "contrast-smart-fix 0.0.1"
+    }
+
+    try:
+        debug_print(f"Making PUT request to: {api_url}")
+        response = requests.put(api_url, headers=headers)
+        response.raise_for_status()  # Raises an HTTPError for bad responses (4xx or 5xx)
+
+        debug_print(f"Remediation merged notification API response status code: {response.status_code}")
+        
+        if response.status_code in (200, 201, 204):
+            print(f"Successfully notified Remediation service about merged PR for remediation {remediation_id}")
+            return True
+        else:
+            error_message = "Unknown error"
+            try:
+                response_json = response.json()
+                if "messages" in response_json and response_json["messages"]:
+                    error_message = response_json["messages"][0]
+            except:
+                error_message = response.text
+                
+            print(f"Failed to notify Remediation service about merged PR for remediation {remediation_id}. Error: {error_message}", file=sys.stderr)
+            return False
+
+    except requests.exceptions.HTTPError as e:
+        print(f"HTTP error notifying Remediation service about merged PR for remediation {remediation_id}: {e.response.status_code} - {e.response.text}", file=sys.stderr)
+        return False
+    except requests.exceptions.RequestException as e:
+        print(f"Request error notifying Remediation service about merged PR for remediation {remediation_id}: {e}", file=sys.stderr)
+        return False
+    except json.JSONDecodeError:
+        print(f"Error decoding JSON response when notifying Remediation service about merged PR for remediation {remediation_id}.", file=sys.stderr)
         return False

@@ -20,6 +20,7 @@
 import os
 import json
 import sys
+import re
 from typing import Optional
 
 # Assuming contrast_api.py is in the same directory or PYTHONPATH is set up
@@ -27,6 +28,22 @@ import contrast_api
 import config # To access Contrast API credentials and other configs
 from utils import debug_print
 
+def extract_remediation_id_from_branch(branch_name: str) -> Optional[str]:
+    """Extracts the remediation ID from a branch name.
+    
+    Args:
+        branch_name: Branch name in format 'smartfix/remediation-{remediation_id}'
+        
+    Returns:
+        str: The remediation ID if found, or None if not found
+    """
+    # Match smartfix/remediation-{id} format
+    match = re.search(r'smartfix/remediation-([^/]+)', branch_name)
+    if match:
+        return match.group(1)
+    return None
+
+# Keep this function for backward compatibility with existing PRs
 def get_vuln_uuid_from_labels(labels_json_str: str) -> Optional[str]:
     """Extracts the vulnerability UUID from a JSON string of PR labels."""
     try:
@@ -70,104 +87,44 @@ def handle_merged_pr():
 
     debug_print("Pull request was merged.")
 
-    pr_url = pull_request.get("html_url")
-    if not pr_url:
-        print("Error: Could not determine PR URL.", file=sys.stderr)
-        # Continue if possible, as we might still get the UUID
-        # sys.exit(1) # Or decide to exit if PR URL is critical
-
-    # Labels are part of the pull_request object in the event payload
-    labels = pull_request.get("labels", [])
-    labels_json_str = json.dumps(labels) # Convert list of label objects to JSON string for existing function
+    # Get the branch name from the PR
+    branch_name = pull_request.get("head", {}).get("ref")
+    if not branch_name:
+        print("Error: Could not determine branch name from PR.", file=sys.stderr)
+        sys.exit(1)
     
-    vuln_uuid = get_vuln_uuid_from_labels(labels_json_str)
+    debug_print(f"Branch name: {branch_name}")
 
-    if not vuln_uuid:
-        print("Error: Could not extract vulnerability UUID from PR labels. Cannot send note to Contrast.", file=sys.stderr)
-        sys.exit(1) # Exit if we can't identify the vulnerability
-
-    debug_print(f"Extracted Vulnerability UUID: {vuln_uuid}")
+    # Extract remediation ID from branch name
+    remediation_id = extract_remediation_id_from_branch(branch_name)
     
-    if not config.SKIP_COMMENTS:
-        note_content = f"Contrast AI SmartFix merged remediation PR: {pr_url if pr_url else 'Unknown URL'}"
-        
-        # Ensure all necessary config values are loaded/available
-        # These would typically be set as environment variables in the GitHub Actions workflow
-        # and loaded by the config.py module.
-        
-        # Check for essential Contrast configuration
-        if not all([config.CONTRAST_HOST, config.CONTRAST_ORG_ID, config.CONTRAST_APP_ID, config.CONTRAST_AUTHORIZATION_KEY, config.CONTRAST_API_KEY]):
-            print("Error: Missing one or more Contrast API configuration variables (HOST, ORG_ID, APP_ID, AUTH_KEY, API_KEY).", file=sys.stderr)
-            sys.exit(1)
+    if not remediation_id:
+        print(f"Error: Could not extract remediation ID from branch name: {branch_name}", file=sys.stderr)
+        # If we can't find the remediation ID, we can't proceed with the new approach
+        sys.exit(1)
+    
+    debug_print(f"Extracted Remediation ID: {remediation_id}")
 
-        print(f"Sending note to Contrast for vulnerability {vuln_uuid}...")
-        note_added = contrast_api.add_note_to_vulnerability(
-            vuln_uuid=vuln_uuid,
-            note_content=note_content,
-            contrast_host=config.CONTRAST_HOST,
-            contrast_org_id=config.CONTRAST_ORG_ID,
-            contrast_app_id=config.CONTRAST_APP_ID,
-            contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
-            contrast_api_key=config.CONTRAST_API_KEY
-        )
-
-        if note_added:
-            debug_print(f"Successfully added 'merged' note to Contrast for vulnerability {vuln_uuid}.")
-        else:
-            print(f"Warning: Failed to add 'merged' note to Contrast for vulnerability {vuln_uuid}.")
-            # Decide if this should be a failing condition for the action
-
-        # Set vulnerability status to Remediated
-        print(f"Setting status to 'Remediated' for vulnerability {vuln_uuid}...")
-        status_set = contrast_api.set_vulnerability_status(
-            vuln_uuid=vuln_uuid,
-            status="Remediated",
-            contrast_host=config.CONTRAST_HOST,
-            contrast_org_id=config.CONTRAST_ORG_ID,
-            contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
-            contrast_api_key=config.CONTRAST_API_KEY,
-            pr_url=pr_url
-        )
-
-        if status_set:
-            debug_print(f"Successfully set status to 'Remediated' for vulnerability {vuln_uuid}.")
-        else:
-            print(f"Warning: Failed to set status to 'Remediated' for vulnerability {vuln_uuid}.", file=sys.stderr)
-            # Optionally, decide if this should be a failing condition for the action
-            # sys.exit(1)
-    else:
-        print("Skipping adding comment and setting status to 'Remediated' due to SKIP_COMMENTS setting.")
-
-    # Tag vulnerability as "SmartFix Remediated"
-    tag_to_add = "SmartFix Remediated"
-    print(f"Attempting to tag vulnerability {vuln_uuid} with '{tag_to_add}'...")
-    existing_tags = contrast_api.get_vulnerability_tags(
-        vuln_uuid=vuln_uuid,
+    # Check for essential Contrast configuration
+    if not all([config.CONTRAST_HOST, config.CONTRAST_ORG_ID, config.CONTRAST_APP_ID, config.CONTRAST_AUTHORIZATION_KEY, config.CONTRAST_API_KEY]):
+        print("Error: Missing one or more Contrast API configuration variables (HOST, ORG_ID, APP_ID, AUTH_KEY, API_KEY).", file=sys.stderr)
+        sys.exit(1)
+    
+    # Notify the Remediation backend service about the merged PR
+    print(f"Notifying Remediation service about merged PR for remediation {remediation_id}...")
+    remediation_notified = contrast_api.notify_remediation_pr_merged(
+        remediation_id=remediation_id,
         contrast_host=config.CONTRAST_HOST,
         contrast_org_id=config.CONTRAST_ORG_ID,
+        contrast_app_id=config.CONTRAST_APP_ID,
         contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
         contrast_api_key=config.CONTRAST_API_KEY
     )
-
-    if existing_tags is not None:
-        if tag_to_add not in existing_tags:  # Covers empty list or list without the specific tag
-            new_tags_list = existing_tags + [tag_to_add]
-            tags_updated = contrast_api.add_vulnerability_tags(
-                vuln_uuid=vuln_uuid,
-                tags_to_set=new_tags_list,
-                contrast_host=config.CONTRAST_HOST,
-                contrast_org_id=config.CONTRAST_ORG_ID,
-                contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
-                contrast_api_key=config.CONTRAST_API_KEY
-            )
-            if tags_updated:
-                debug_print(f"Successfully added tag '{tag_to_add}' to vulnerability {vuln_uuid}.")
-            else:
-                print(f"Warning: Failed to add tag '{tag_to_add}' to vulnerability {vuln_uuid}.", file=sys.stderr)
-        else:  # Tag already exists
-            debug_print(f"Tag '{tag_to_add}' already exists for vulnerability {vuln_uuid}.")
+    
+    if remediation_notified:
+        print(f"Successfully notified Remediation service about merged PR for remediation {remediation_id}.")
     else:
-        print(f"Warning: Could not retrieve existing tags for vulnerability {vuln_uuid}. Skipping tagging.", file=sys.stderr)
+        print(f"Warning: Failed to notify Remediation service about merged PR for remediation {remediation_id}.", file=sys.stderr)
 
     print("--- Merged Contrast AI SmartFix Pull Request Handling Complete ---")
 

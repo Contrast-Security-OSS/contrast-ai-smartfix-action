@@ -109,10 +109,6 @@ inputs:
     description: 'Array of vulnerability severity levels to process (allowed: CRITICAL, HIGH, MEDIUM, LOW, NOTE)'
     required: false
     default: '["CRITICAL", "HIGH"]'
-  skip_comments:
-    description: 'Skip adding comments to Contrast and setting status to Remediated'
-    required: false
-    default: 'false'
   run_task:
     description: 'Specifies the task for the action to perform. "generate_fix" (default) runs main.py, "merge" runs merge_handler.py.'
     required: false
@@ -269,8 +265,6 @@ runs:
         DEBUG_MODE: ${{ inputs.debug_mode }}
         # --- Vulnerability Configuration ---
         VULNERABILITY_SEVERITIES: ${{ inputs.vulnerability_severities }}
-        # --- Skip Comments ---
-        SKIP_COMMENTS: ${{ inputs.skip_comments }}
         # --- Run Task ---
         RUN_TASK: ${{ inputs.run_task }}
         # --- Set GITHUB_ACTION_REF for version checking ---

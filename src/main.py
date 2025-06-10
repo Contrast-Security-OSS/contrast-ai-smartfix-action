@@ -286,27 +286,24 @@ def main():
                     except (ValueError, IndexError, AttributeError) as e:
                         print(f"Warning: Could not extract PR number from URL: {pr_url} - Error: {str(e)}", flush=True)
                     
-                    if not config.SKIP_COMMENTS:
-                        # Notify the Remediation backend service about the PR
-                        if pr_number is None:
-                            pr_number = 0;
+                    # Notify the Remediation backend service about the PR
+                    if pr_number is None:
+                        pr_number = 1;
 
-                        remediation_notified = contrast_api.notify_remediation_pr_opened(
-                            remediation_id=remediation_id,
-                            pr_number=pr_number,
-                            pr_url=pr_url,
-                            contrast_host=config.CONTRAST_HOST,
-                            contrast_org_id=config.CONTRAST_ORG_ID,
-                            contrast_app_id=config.CONTRAST_APP_ID,
-                            contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
-                            contrast_api_key=config.CONTRAST_API_KEY
-                        )
-                        if remediation_notified:
-                            print(f"Successfully notified Remediation service about PR for remediation {remediation_id}.", flush=True)
-                        else:
-                            print(f"Warning: Failed to notify Remediation service about PR for remediation {remediation_id}.", flush=True)
+                    remediation_notified = contrast_api.notify_remediation_pr_opened(
+                        remediation_id=remediation_id,
+                        pr_number=pr_number,
+                        pr_url=pr_url,
+                        contrast_host=config.CONTRAST_HOST,
+                        contrast_org_id=config.CONTRAST_ORG_ID,
+                        contrast_app_id=config.CONTRAST_APP_ID,
+                        contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
+                        contrast_api_key=config.CONTRAST_API_KEY
+                    )
+                    if remediation_notified:
+                        print(f"Successfully notified Remediation service about PR for remediation {remediation_id}.", flush=True)
                     else:
-                        print(f"Skipping notifications to Contrast due to SKIP_COMMENTS setting.", flush=True)
+                        print(f"Warning: Failed to notify Remediation service about PR for remediation {remediation_id}.", flush=True)
                 else:
                     # This case should ideally be handled by create_pr exiting or returning empty
                     # and then the logic below for SKIP_PR_ON_FAILURE would trigger.
