@@ -147,7 +147,7 @@ jobs:
 
 **Important:**
 
-* Store all sensitive values (API keys, tokens) as GitHub Secrets in your repository settings.  
+* Store all sensitive values (API keys, tokens) as GitHub Secrets in your repository or Github organization settings.  
 * Replace `vX.Y.Z` with the specific version of the SmartFix GitHub Action you intend to use.  
 * The `contrast_app_id` must correspond to the Contrast Application ID for the code in the repository where this action runs.  
 * **Suggestion:** Setup an API-only service user named “Contrast AI SmartFix” in your Organization Settings in your Contrast SaaS instance.  At a minimum, it should have the “View Organization” permission and “Edit Application” permission for this application.  This service user’s `contrast_authorization_key` value and the Organization’s `contrast_api_key` value should be used in the workflow.
