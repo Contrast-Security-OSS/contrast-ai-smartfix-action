@@ -24,6 +24,12 @@ from pathlib import Path
 from typing import Optional, Any
 from utils import debug_print # Import debug_print
 
+def check_contrast_config_values_exist():
+    # Check for essential Contrast configuration
+    if not all([CONTRAST_HOST, CONTRAST_ORG_ID, CONTRAST_APP_ID, CONTRAST_AUTHORIZATION_KEY, CONTRAST_API_KEY]):
+        print("Error: Missing one or more Contrast API configuration variables (HOST, ORG_ID, APP_ID, AUTH_KEY, API_KEY).", file=sys.stderr)
+        sys.exit(1)
+
 def get_env_var(var_name: str, required: bool = True, default: Optional[Any] = None) -> Optional[str]:
     """Gets an environment variable or exits if required and not found.
     
@@ -84,6 +90,9 @@ def get_max_open_prs() -> int:
     except (ValueError, TypeError):
         debug_print(f"Invalid or missing MAX_OPEN_PRS environment variable. Using default: {default_max_open_prs}")
         return default_max_open_prs
+
+# --- Preset ---
+USER_AGENT = "contrast-smart-fix 0.0.1"
 
 # --- Core Settings ---
 DEBUG_MODE = get_env_var("DEBUG_MODE", required=False, default="false").lower() == "true"

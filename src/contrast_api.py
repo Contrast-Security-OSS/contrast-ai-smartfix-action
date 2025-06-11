@@ -61,7 +61,7 @@ def get_vulnerability_with_prompts(contrast_host, contrast_org_id, contrast_app_
         "API-Key": contrast_api_key,
         "Content-Type": "application/json",
         "Accept": "application/json",
-        "User-Agent": "contrast-smart-fix 0.0.1"
+        "User-Agent": config.USER_AGENT
     }
     
     # Replace placeholder values with actual config values
@@ -142,7 +142,7 @@ def notify_remediation_pr_opened(remediation_id: str, pr_number: int, pr_url: st
         "API-Key": contrast_api_key,
         "Content-Type": "application/json",
         "Accept": "application/json",
-        "User-Agent": "contrast-smart-fix 0.0.1"
+        "User-Agent": config.USER_AGENT
     }
     
     payload = {
@@ -158,7 +158,7 @@ def notify_remediation_pr_opened(remediation_id: str, pr_number: int, pr_url: st
 
         debug_print(f"Remediation notification API response status code: {response.status_code}")
         
-        if response.status_code in (200, 201, 204):
+        if response.status_code == 204:
             print(f"Successfully notified Remediation service about PR for remediation {remediation_id}")
             return True
         else:
@@ -205,7 +205,7 @@ def notify_remediation_pr_merged(remediation_id: str, contrast_host: str, contra
         "API-Key": contrast_api_key,
         "Content-Type": "application/json",
         "Accept": "application/json",
-        "User-Agent": "contrast-smart-fix 0.0.1"
+        "User-Agent": config.USER_AGENT
     }
 
     try:
@@ -215,8 +215,8 @@ def notify_remediation_pr_merged(remediation_id: str, contrast_host: str, contra
 
         debug_print(f"Remediation merged notification API response status code: {response.status_code}")
         
-        if response.status_code in (200, 201, 204):
-            debug_print(f"Successfully notified Remediation service about merged PR for remediation {remediation_id}")
+        if response.status_code == 204:
+            debug_print(f"Successfully notified Remediation service API about merged PR for remediation {remediation_id}")
             return True
         else:
             error_message = "Unknown error"
@@ -262,7 +262,7 @@ def notify_remediation_pr_closed(remediation_id: str, contrast_host: str, contra
         "API-Key": contrast_api_key,
         "Content-Type": "application/json",
         "Accept": "application/json",
-        "User-Agent": "contrast-smart-fix 0.0.1"
+        "User-Agent": config.USER_AGENT
     }
 
     try:
@@ -272,8 +272,8 @@ def notify_remediation_pr_closed(remediation_id: str, contrast_host: str, contra
 
         debug_print(f"Remediation closed notification API response status code: {response.status_code}")
         
-        if response.status_code in (200, 201, 204):
-            debug_print(f"Successfully notified Remediation service about closed PR for remediation {remediation_id}")
+        if response.status_code == 204:
+            debug_print(f"Successfully notified Remediation service API about closed PR for remediation {remediation_id}")
             return True
         else:
             error_message = "Unknown error"

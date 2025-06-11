@@ -74,10 +74,7 @@ def handle_closed_pr():
     
     debug_print(f"Extracted Remediation ID: {remediation_id}")
 
-    # Check for essential Contrast configuration
-    if not all([config.CONTRAST_HOST, config.CONTRAST_ORG_ID, config.CONTRAST_APP_ID, config.CONTRAST_AUTHORIZATION_KEY, config.CONTRAST_API_KEY]):
-        print("Error: Missing one or more Contrast API configuration variables (HOST, ORG_ID, APP_ID, AUTH_KEY, API_KEY).", file=sys.stderr)
-        sys.exit(1)
+    config.check_contrast_config_values_exist()
     
     # Notify the Remediation backend service about the closed PR
     print(f"Notifying Remediation service about closed PR for remediation {remediation_id}...")

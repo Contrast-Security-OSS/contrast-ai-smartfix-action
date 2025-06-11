@@ -43,7 +43,7 @@ jobs:
           fetch-depth: 0
           
       - name: Run Contrast AI SmartFix - Generate Fixes Action
-        uses: Contrast-Security-OSS/contrast-ai-smartfix-action
+        uses: Contrast-Security-OSS/contrast-ai-smartfix-action@v1
         with:
           # --- Max Open PRs ---
           max_open_prs: 5
@@ -93,7 +93,7 @@ jobs:
           fetch-depth: 0
 
       - name: Notify Contrast on PR Merge
-        uses: Contrast-Security-OSS/contrast-ai-smartfix-action
+        uses: Contrast-Security-OSS/contrast-ai-smartfix-action@v1
         with:
           run_task: merge 
           # --- GitHub Token ---
@@ -118,7 +118,7 @@ jobs:
           fetch-depth: 0
 
       - name: Notify Contrast on PR Closed
-        uses: Contrast-Security-OSS/contrast-ai-smartfix-action
+        uses: Contrast-Security-OSS/contrast-ai-smartfix-action@v1
         with:
           run_task: closed
           # --- GitHub Token ---
