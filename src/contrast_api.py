@@ -159,7 +159,7 @@ def notify_remediation_pr_opened(remediation_id: str, pr_number: int, pr_url: st
         debug_print(f"Remediation notification API response status code: {response.status_code}")
         
         if response.status_code == 204:
-            print(f"Successfully notified Remediation service about PR for remediation {remediation_id}")
+            debug_print(f"Successfully notified Remediation service API about PR for remediation {remediation_id}")
             return True
         else:
             error_message = "Unknown error"
