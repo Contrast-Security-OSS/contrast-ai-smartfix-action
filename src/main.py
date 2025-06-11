@@ -19,6 +19,7 @@
 
 import sys
 import os
+import re
 from datetime import datetime, timedelta
 
 # Import configurations and utilities
@@ -119,6 +120,7 @@ def main():
         # Extract vulnerability details and prompts from the response
         vuln_uuid = vulnerability_data['vulnerabilityUuid']
         vuln_title = vulnerability_data['vulnerabilityTitle']
+        remediation_id = vulnerability_data['remediationId']
         fix_system_prompt = vulnerability_data['fixSystemPrompt']
         fix_user_prompt = vulnerability_data['fixUserPrompt']
         qa_system_prompt = vulnerability_data['qaSystemPrompt']
@@ -169,7 +171,7 @@ def main():
         print("\n--- Proceeding with Git & GitHub Operations ---", flush=True)
         # Note: Git user config moved to the start of main
 
-        new_branch_name = git_handler.generate_branch_name(vuln_uuid)
+        new_branch_name = git_handler.generate_branch_name(remediation_id)
         try:
             git_handler.create_branch(new_branch_name)
         except SystemExit:
@@ -267,35 +269,52 @@ def main():
                 
                 if pr_url:
                     pr_creation_success = True
-
-                    if not config.SKIP_COMMENTS:
-                        note_content = f"Contrast AI SmartFix opened remediation PR: {pr_url}"
-                        note_added = contrast_api.add_note_to_vulnerability(
-                            vuln_uuid=vuln_uuid,
-                            note_content=note_content,
-                            contrast_host=config.CONTRAST_HOST,
-                            contrast_org_id=config.CONTRAST_ORG_ID,
-                            contrast_app_id=config.CONTRAST_APP_ID, # Ensure CONTRAST_APP_ID is available in config
-                            contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
-                            contrast_api_key=config.CONTRAST_API_KEY
-                        )
-                        if note_added:
-                            print(f"Successfully added note to Contrast for vulnerability {vuln_uuid}.")
+                    
+                    # Extract PR number from PR URL
+                    # PR URL format is like: https://github.com/org/repo/pull/123
+                    pr_number = None
+                    try:
+                        # Use a more robust method to extract the PR number
+                        
+                        pr_match = re.search(r'/pull/(\d+)', pr_url)
+                        debug_print(f"Extracting PR number from URL '{pr_url}', match object: {pr_match}")
+                        if pr_match:
+                            pr_number = int(pr_match.group(1))
+                            debug_print(f"Successfully extracted PR number: {pr_number}")
                         else:
-                            print(f"Warning: Failed to add note to Contrast for vulnerability {vuln_uuid}.")
+                            print(f"Warning: Could not find PR number pattern in URL: {pr_url}", flush=True)
+                    except (ValueError, IndexError, AttributeError) as e:
+                        print(f"Warning: Could not extract PR number from URL: {pr_url} - Error: {str(e)}", flush=True)
+                    
+                    # Notify the Remediation backend service about the PR
+                    if pr_number is None:
+                        pr_number = 1;
+
+                    remediation_notified = contrast_api.notify_remediation_pr_opened(
+                        remediation_id=remediation_id,
+                        pr_number=pr_number,
+                        pr_url=pr_url,
+                        contrast_host=config.CONTRAST_HOST,
+                        contrast_org_id=config.CONTRAST_ORG_ID,
+                        contrast_app_id=config.CONTRAST_APP_ID,
+                        contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
+                        contrast_api_key=config.CONTRAST_API_KEY
+                    )
+                    if remediation_notified:
+                        print(f"Successfully notified Remediation service about PR for remediation {remediation_id}.", flush=True)
                     else:
-                        print(f"Skipping adding note to Contrast due to SKIP_COMMENTS setting.")
+                        print(f"Warning: Failed to notify Remediation service about PR for remediation {remediation_id}.", flush=True)
                 else:
                     # This case should ideally be handled by create_pr exiting or returning empty
                     # and then the logic below for SKIP_PR_ON_FAILURE would trigger.
                     # However, if create_pr somehow returns without a URL but doesn't cause an exit:
-                    print("PR creation did not return a URL. Assuming failure.")
+                    print("PR creation did not return a URL. Assuming failure.", flush=True)
                     pr_creation_success = False
                 
                 if not pr_creation_success:
-                    print("\n--- PR creation failed, but changes were pushed to branch ---")
-                    print(f"Branch name: {new_branch_name}")
-                    print("Changes can be manually viewed and merged if needed.")
+                    print("\n--- PR creation failed, but changes were pushed to branch ---", flush=True)
+                    print(f"Branch name: {new_branch_name}", flush=True)
+                    print("Changes can be manually viewed and merged if needed.", flush=True)
                     break;
                 
                 processed_one = True # Mark that we successfully processed one

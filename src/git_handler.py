@@ -19,7 +19,6 @@
 
 import os
 import sys
-import datetime
 import json # Added for parsing gh output
 from typing import List # <<< ADDED
 from utils import run_command, debug_print # Import debug_print
@@ -43,10 +42,9 @@ def configure_git_user():
     run_command(["git", "config", "--global", "user.email", "action@github.com"])
     run_command(["git", "config", "--global", "user.name", "GitHub Action"])
 
-def generate_branch_name(vuln_uuid: str) -> str:
-    """Generates a unique branch name based on vulnerability UUID and timestamp."""
-    now = datetime.datetime.now()
-    return f"contrast-fix/VULN-{vuln_uuid}-{now.strftime('%Y%m%d%H%M%S')}"
+def generate_branch_name(remediation_id: str) -> str:
+    """Generates a unique branch name based on remediation ID"""
+    return f"smartfix/remediation-{remediation_id}"
 
 def create_branch(branch_name: str):
     """Creates and checks out a new git branch."""

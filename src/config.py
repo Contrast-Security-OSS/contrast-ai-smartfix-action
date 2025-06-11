@@ -24,6 +24,12 @@ from pathlib import Path
 from typing import Optional, Any
 from utils import debug_print # Import debug_print
 
+def check_contrast_config_values_exist():
+    # Check for essential Contrast configuration
+    if not all([CONTRAST_HOST, CONTRAST_ORG_ID, CONTRAST_APP_ID, CONTRAST_AUTHORIZATION_KEY, CONTRAST_API_KEY]):
+        print("Error: Missing one or more Contrast API configuration variables (HOST, ORG_ID, APP_ID, AUTH_KEY, API_KEY).", file=sys.stderr)
+        sys.exit(1)
+
 def get_env_var(var_name: str, required: bool = True, default: Optional[Any] = None) -> Optional[str]:
     """Gets an environment variable or exits if required and not found.
     
@@ -85,6 +91,9 @@ def get_max_open_prs() -> int:
         debug_print(f"Invalid or missing MAX_OPEN_PRS environment variable. Using default: {default_max_open_prs}")
         return default_max_open_prs
 
+# --- Preset ---
+USER_AGENT = "contrast-smart-fix 0.0.1"
+
 # --- Core Settings ---
 DEBUG_MODE = get_env_var("DEBUG_MODE", required=False, default="false").lower() == "true"
 BASE_BRANCH = get_env_var("BASE_BRANCH", required=False, default="main")
@@ -142,7 +151,6 @@ AGENT_MODEL = get_env_var("AGENT_MODEL", required=False, default="bedrock/anthro
 SKIP_WRITING_SECURITY_TEST = get_env_var("SKIP_WRITING_SECURITY_TEST", required=False, default="false").lower() == "true"
 # --- QA Configuration ---
 SKIP_QA_REVIEW = get_env_var("SKIP_QA_REVIEW", required=False, default="false").lower() == "true"
-SKIP_COMMENTS = get_env_var("SKIP_COMMENTS", required=False, default="false").lower() == "true"
 
 # --- Vulnerability Configuration ---
 # Define the allowlist of valid severity levels
@@ -213,7 +221,6 @@ debug_print(f"Run Task: {RUN_TASK}")
 debug_print(f"Agent Model: {AGENT_MODEL}")
 debug_print(f"Skip Writing Security Test: {SKIP_WRITING_SECURITY_TEST}")
 debug_print(f"Skip QA Review: {SKIP_QA_REVIEW}") # Added debug print
-debug_print(f"Skip Comments: {SKIP_COMMENTS}")
 debug_print(f"AWS Region Name: {AWS_REGION_NAME}")
 debug_print(f"Vulnerability Severities: {VULNERABILITY_SEVERITIES}")
 if AWS_SESSION_TOKEN:

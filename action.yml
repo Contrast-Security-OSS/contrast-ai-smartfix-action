@@ -109,10 +109,6 @@ inputs:
     description: 'Array of vulnerability severity levels to process (allowed: CRITICAL, HIGH, MEDIUM, LOW, NOTE)'
     required: false
     default: '["CRITICAL", "HIGH"]'
-  skip_comments:
-    description: 'Skip adding comments to Contrast and setting status to Remediated'
-    required: false
-    default: 'false'
   run_task:
     description: 'Specifies the task for the action to perform. "generate_fix" (default) runs main.py, "merge" runs merge_handler.py.'
     required: false
@@ -147,13 +143,12 @@ runs:
         echo ""
       shell: bash
 
-
     # Reduce Python setup verbosity
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
         python-version: '3.11'
-        cache: 'pip' # Re-enabled after testing
+        cache: 'pip'
         
     # Install uv tool for dependency management
     - name: Install uv
@@ -222,6 +217,10 @@ runs:
           echo "🚀 STARTING CONTRAST AI SMARTFIX (Task: merge)"
           echo "================================================================"
           python ${{ github.action_path }}/src/merge_handler.py
+        elif [ "${{ inputs.run_task }}" = "closed" ]; then
+          echo "🚀 STARTING CONTRAST AI SMARTFIX (Task: closed)"
+          echo "================================================================"
+          python ${{ github.action_path }}/src/closed_handler.py
         else
           echo "🚀 STARTING CONTRAST AI SMARTFIX (Task: generate_fix)"
           echo "================================================================"
@@ -279,8 +278,6 @@ runs:
         DEBUG_MODE: ${{ inputs.debug_mode }}
         # --- Vulnerability Configuration ---
         VULNERABILITY_SEVERITIES: ${{ inputs.vulnerability_severities }}
-        # --- Skip Comments ---
-        SKIP_COMMENTS: ${{ inputs.skip_comments }}
         # --- Run Task ---
         RUN_TASK: ${{ inputs.run_task }}
         # --- Set GITHUB_ACTION_REF for version checking ---

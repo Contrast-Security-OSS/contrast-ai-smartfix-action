@@ -7,7 +7,7 @@
 # Contact: support@contrastsecurity.com
 # License: Commercial
 # NOTICE: This Software and the patented inventions embodied within may only be
-# used as part of Contrast Security’s commercial offerings. Even though it is
+# used as part of Contrast Security's commercial offerings. Even though it is
 # made available through public repositories, use of this Software is subject to
 # the applicable End User Licensing Agreement found at
 # https://www.contrastsecurity.com/enduser-terms-0317a or as otherwise agreed
@@ -25,28 +25,12 @@ from typing import Optional
 
 # Assuming contrast_api.py is in the same directory or PYTHONPATH is set up
 import contrast_api
-import config # To access Contrast API credentials and other configs
+import config  # To access Contrast API credentials and other configs
 from utils import debug_print, extract_remediation_id_from_branch
 
-# Keep this function for backward compatibility with existing PRs
-def get_vuln_uuid_from_labels(labels_json_str: str) -> Optional[str]:
-    """Extracts the vulnerability UUID from a JSON string of PR labels."""
-    try:
-        labels = json.loads(labels_json_str)
-        for label in labels:
-            if isinstance(label, dict) and label.get("name", "").startswith("contrast-vuln-id:VULN-"):
-                return label["name"].split("contrast-vuln-id:VULN-", 1)[1]
-    except json.JSONDecodeError:
-        print(f"Error: Could not decode labels JSON: {labels_json_str}", file=sys.stderr)
-        sys.exit(1)
-    except Exception as e:
-        print(f"Error processing labels: {e}", file=sys.stderr)
-        sys.exit(1)
-    return None
-
-def handle_merged_pr():
-    """Handles the logic when a pull request is merged."""
-    print("--- Handling Merged Contrast AI SmartFix Pull Request ---")
+def handle_closed_pr():
+    """Handles the logic when a pull request is closed without merging."""
+    print("--- Handling Closed (Unmerged) Contrast AI SmartFix Pull Request ---")
 
     # Get PR event details from environment variables set by GitHub Actions
     event_path = os.getenv("GITHUB_EVENT_PATH")
@@ -66,11 +50,11 @@ def handle_merged_pr():
         sys.exit(0)
 
     pull_request = event_data.get("pull_request", {})
-    if not pull_request.get("merged"):
-        print("PR was closed but not merged. Skipping.")
+    if pull_request.get("merged"):
+        print("PR was merged. Should be handled by merge_handler.py. Skipping.")
         sys.exit(0)
 
-    debug_print("Pull request was merged.")
+    debug_print("Pull request was closed without merging.")
 
     # Get the branch name from the PR
     branch_name = pull_request.get("head", {}).get("ref")
@@ -85,16 +69,16 @@ def handle_merged_pr():
     
     if not remediation_id:
         print(f"Error: Could not extract remediation ID from branch name: {branch_name}", file=sys.stderr)
-        # If we can't find the remediation ID, we can't proceed with the new approach
+        # If we can't find the remediation ID, we can't proceed
         sys.exit(1)
     
     debug_print(f"Extracted Remediation ID: {remediation_id}")
 
     config.check_contrast_config_values_exist()
     
-    # Notify the Remediation backend service about the merged PR
-    print(f"Notifying Remediation service about merged PR for remediation {remediation_id}...")
-    remediation_notified = contrast_api.notify_remediation_pr_merged(
+    # Notify the Remediation backend service about the closed PR
+    print(f"Notifying Remediation service about closed PR for remediation {remediation_id}...")
+    remediation_notified = contrast_api.notify_remediation_pr_closed(
         remediation_id=remediation_id,
         contrast_host=config.CONTRAST_HOST,
         contrast_org_id=config.CONTRAST_ORG_ID,
@@ -104,11 +88,11 @@ def handle_merged_pr():
     )
     
     if remediation_notified:
-        print(f"Successfully notified Remediation service about merged PR for remediation {remediation_id}.")
+        print(f"Successfully notified Remediation service about closed PR for remediation {remediation_id}.")
     else:
-        print(f"Warning: Failed to notify Remediation service about merged PR for remediation {remediation_id}.", file=sys.stderr)
+        print(f"Warning: Failed to notify Remediation service about closed PR for remediation {remediation_id}.", file=sys.stderr)
 
-    print("--- Merged Contrast AI SmartFix Pull Request Handling Complete ---")
+    print("--- Closed Contrast AI SmartFix Pull Request Handling Complete ---")
 
 if __name__ == "__main__":
-    handle_merged_pr()
+    handle_closed_pr()
