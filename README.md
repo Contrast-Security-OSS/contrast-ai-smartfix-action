@@ -32,7 +32,9 @@ name: Contrast AI SmartFix
 
 on:
   pull_request:
-    types:	- closed  schedule:
+    types:
+      - closed
+  schedule:
     - cron: '0 0 * * *' # Runs daily at midnight UTC, adjust as needed
   workflow_dispatch: # Allows manual triggering
 
