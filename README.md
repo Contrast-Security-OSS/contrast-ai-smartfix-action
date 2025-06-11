@@ -78,7 +78,7 @@ jobs:
           # supported possible AWS connection values
           aws_access_key_id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws_region_name: 'us-east-1' # Or your AWS region
+          aws_region_name: ${{ vars.AWS_REGION_NAME }} # Or your AWS region, e.g. 'us-east-1'
           aws_session_token: ${{ secrets.AWS_SESSION_TOKEN }}
           aws_profile_name: ${{ vars.AWS_PROFILE_NAME }}
           aws_role_name: ${{ vars.AWS_ROLE_NAME }}
@@ -92,7 +92,7 @@ jobs:
 
           # Other Optional Inputs (see action.yml for defaults and more options)
           # formatting_command: 'mvn spotless:apply' #Or the command appropriate for your project to correct the formatting of SmartFix's changes.  This ensures that SmartFix follows your coding standards.
-          # max_open_prs: 5
+          # max_open_prs: 5 # This is the maximum limit for the number of PRs that SmartFix will have open at single time
 
   handle_pr_merge:
     name: Handle PR Merge
