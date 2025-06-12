@@ -156,8 +156,8 @@ def main():
             # Pull latest changes to ensure we're working with the most up-to-date code
             run_command(["git", "pull"], check=True)
             print(f"Successfully cleaned workspace and checked out latest {config.BASE_BRANCH}", flush=True)
-        except (SystemExit, subprocess.CalledProcessError, Exception) as e:
-            print(f"ERROR: Failed to prepare clean workspace: {str(e)}. Skipping to next vulnerability.", file=sys.stderr)
+        except subprocess.CalledProcessError as e:
+            print(f"ERROR: Failed to prepare clean workspace due to a subprocess error: {str(e)}. Skipping to next vulnerability.", file=sys.stderr)
             # Skip to the next vulnerability if we can't properly prepare the workspace
             continue
 
