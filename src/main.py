@@ -154,7 +154,7 @@ def main():
             run_command(["git", "clean", "-fd"], check=True)  # Force removal of untracked files and directories
             run_command(["git", "checkout", config.BASE_BRANCH], check=True)
             # Pull latest changes to ensure we're working with the most up-to-date code
-            run_command(["git", "pull"], check=True)
+            run_command(["git", "pull", "--ff-only"], check=True)
             print(f"Successfully cleaned workspace and checked out latest {config.BASE_BRANCH}", flush=True)
         except subprocess.CalledProcessError as e:
             print(f"ERROR: Failed to prepare clean workspace due to a subprocess error: {str(e)}. Skipping to next vulnerability.", file=sys.stderr)
