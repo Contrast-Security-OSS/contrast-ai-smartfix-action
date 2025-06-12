@@ -144,6 +144,10 @@ def main():
 
         print(f"\n\033[0;33m Selected vuln to fix: {vuln_title} \033[0m")
 
+        # Switch back to base branch to ensure a clean state before fixing this vulnerability
+        print("\n--- Switching to base branch for clean state ---", flush=True)
+        run_command(["git", "checkout", config.BASE_BRANCH])
+
         # Ensure the build is not broken before running the fix agent
         print("\n--- Running Build Before Fix ---", flush=True)
         prefix_build_success, prefix_build_output = run_build_command(build_command, config.REPO_ROOT)
