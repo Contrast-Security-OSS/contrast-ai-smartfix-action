@@ -20,6 +20,7 @@
 import sys
 import os
 import re
+import subprocess
 from datetime import datetime, timedelta
 
 # Import configurations and utilities
@@ -152,9 +153,11 @@ def main():
             run_command(["git", "reset", "--hard"], check=True)
             run_command(["git", "clean", "-fd"], check=True)  # Force removal of untracked files and directories
             run_command(["git", "checkout", config.BASE_BRANCH], check=True)
-            print(f"Successfully cleaned workspace and checked out {config.BASE_BRANCH}", flush=True)
-        except SystemExit:
-            print(f"ERROR: Failed to prepare clean workspace. Skipping to next vulnerability.", file=sys.stderr)
+            # Pull latest changes to ensure we're working with the most up-to-date code
+            run_command(["git", "pull"], check=True)
+            print(f"Successfully cleaned workspace and checked out latest {config.BASE_BRANCH}", flush=True)
+        except (SystemExit, subprocess.CalledProcessError, Exception) as e:
+            print(f"ERROR: Failed to prepare clean workspace: {str(e)}. Skipping to next vulnerability.", file=sys.stderr)
             # Skip to the next vulnerability if we can't properly prepare the workspace
             continue
 
