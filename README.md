@@ -92,7 +92,7 @@ jobs:
 
           # Other Optional Inputs (see action.yml for defaults and more options)
           # formatting_command: 'mvn spotless:apply' #Or the command appropriate for your project to correct the formatting of SmartFix's changes.  This ensures that SmartFix follows your coding standards.
-          # max_open_prs: 5 # This is the maximum limit for the number of PRs that SmartFix will have open at single time
+          # max_open_prs: 1 # (SET TO 1 TEMPORARILY TILL WE FIX [TS-39574](https://contrast.atlassian.net/browse/TS-39574)) This is the maximum limit for the number of PRs that SmartFix will have open at single time
 
   handle_pr_merge:
     name: Handle PR Merge
