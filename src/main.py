@@ -144,8 +144,11 @@ def main():
 
         print(f"\n\033[0;33m Selected vuln to fix: {vuln_title} \033[0m")
 
-        # Switch back to base branch to ensure a clean state before fixing this vulnerability
-        print("\n--- Switching to base branch for clean state ---", flush=True)
+        # Switch back to base branch and ensure a truly clean state before fixing this vulnerability
+        print("\n--- Cleaning workspace and switching to base branch for clean state ---", flush=True)
+        # Reset any changes and remove all untracked files to ensure a pristine state
+        run_command(["git", "reset", "--hard"])
+        run_command(["git", "clean", "-fd"])  # Force removal of untracked files and directories
         run_command(["git", "checkout", config.BASE_BRANCH])
 
         # Ensure the build is not broken before running the fix agent
