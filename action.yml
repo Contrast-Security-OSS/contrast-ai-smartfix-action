@@ -15,7 +15,7 @@ inputs:
     required: false
     default: '6'
   formatting_command:
-    description: 'Command to format code'
+    description: 'Command to format code (optional)'
     required: false
   max_open_prs:
     description: 'Maximum number of open PRs'
@@ -279,5 +279,3 @@ runs:
         VULNERABILITY_SEVERITIES: ${{ inputs.vulnerability_severities }}
         # --- Run Task ---
         RUN_TASK: ${{ inputs.run_task }}
-        # --- Set GITHUB_ACTION_REF for version checking ---
-        GITHUB_ACTION_REF: ${{ github.ref }}

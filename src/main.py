@@ -56,8 +56,7 @@ def main():
     if formatting_command:
         debug_print(f"Formatting command specified: {formatting_command}")
     else:
-        print("FORMATTING_COMMAND not set or empty.")
-        sys.exit(1)
+        debug_print("FORMATTING_COMMAND not set or empty, formatting will be skipped.")
 
     # Use the validated and normalized settings from config module
     # These values are already processed in config.py with appropriate validation and defaults

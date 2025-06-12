@@ -100,15 +100,16 @@ BASE_BRANCH = get_env_var("BASE_BRANCH", required=False, default="main")
 RUN_TASK = get_env_var("RUN_TASK", required=False, default="generate_fix")
 
 # --- Build and Formatting Configuration ---
-# Only require BUILD_COMMAND and FORMATTING_COMMAND if RUN_TASK is generate_fix
+# Only require BUILD_COMMAND if RUN_TASK is generate_fix
 is_generate_fix_task = RUN_TASK == "generate_fix"
 if is_generate_fix_task:
-    debug_print("Running in generate_fix mode - BUILD_COMMAND and FORMATTING_COMMAND are required")
+    debug_print("Running in generate_fix mode - BUILD_COMMAND is required")
 else:
     debug_print(f"Running in {RUN_TASK} mode - BUILD_COMMAND and FORMATTING_COMMAND are not required")
 
 BUILD_COMMAND = get_env_var("BUILD_COMMAND", required=is_generate_fix_task, default=None)
-FORMATTING_COMMAND = get_env_var("FORMATTING_COMMAND", required=is_generate_fix_task, default=None)
+# FORMATTING_COMMAND is optional even in generate_fix mode
+FORMATTING_COMMAND = get_env_var("FORMATTING_COMMAND", required=False, default=None)
 
 # Validated and normalized settings
 MAX_QA_ATTEMPTS = get_max_qa_attempts()
