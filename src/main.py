@@ -18,13 +18,12 @@
 #
 
 import sys
-import os
 import re
 from datetime import datetime, timedelta
 
 # Import configurations and utilities
 import config
-from utils import debug_print, run_command
+from utils import debug_print
 from qa_handler import run_build_command
 from version_check import do_version_check
 
@@ -175,8 +174,7 @@ def main():
             git_handler.create_branch(new_branch_name)
         except SystemExit:
              print(f"Error creating branch {new_branch_name}. Switching back to base branch and cleaning up.")
-             run_command(["git", "checkout", config.BASE_BRANCH], check=False)
-             run_command(["git", "branch", "-D", new_branch_name], check=False)
+             git_handler.cleanup_branch(new_branch_name)
              continue # Try next vulnerability
 
         git_handler.stage_changes()
@@ -221,11 +219,7 @@ def main():
                         print("\n--- Skipping PR creation as QA Agent encountered an error ---")
                     else:
                         print("\n--- Skipping PR creation as QA Agent failed to fix build issues ---")
-                    
-                    print(f"Cleaning up branch: {new_branch_name}")
-                    # Use the more robust cleanup method
-                    run_command(["git", "checkout", config.BASE_BRANCH], check=False)
-                    run_command(["git", "branch", "-D", new_branch_name], check=False)
+                    git_handler.cleanup_branch(new_branch_name)
                     continue # Move to the next vulnerability
 
             else: # QA is skipped
@@ -312,8 +306,9 @@ def main():
                 
                 if not pr_creation_success:
                     print("\n--- PR creation failed, but changes were pushed to branch ---", flush=True)
-                    print(f"Branch name: {new_branch_name}", flush=True)
-                    print("Changes can be manually viewed and merged if needed.", flush=True)
+                    debug_print(f"Branch name: {new_branch_name}", flush=True)
+                    # Always clean up the branch when PR creation fails
+                    git_handler.cleanup_branch(new_branch_name)
                     break;
                 
                 processed_one = True # Mark that we successfully processed one
@@ -321,15 +316,15 @@ def main():
             except Exception as e:
                 print(f"Error creating PR: {e}")
                 print("\n--- PR creation failed, but changes were pushed to branch ---")
-                print(f"Branch name: {new_branch_name}")
-                print("Changes can be manually viewed and merged if needed.")
+                debug_print(f"Branch name: {new_branch_name}")
+                
+                # Always clean up the branch when PR creation fails
+                git_handler.cleanup_branch(new_branch_name)
                 break;
         else:
             print("Skipping commit, push, and PR creation as no changes were detected by the agent.")
             # Clean up the branch if no changes were made
-            print(f"Cleaning up unused branch: {new_branch_name}")
-            run_command(["git", "checkout", config.BASE_BRANCH], check=False)
-            run_command(["git", "branch", "-D", new_branch_name], check=False)
+            git_handler.cleanup_branch(new_branch_name)
             continue # Try the next vulnerability
 
     # Calculate total runtime

@@ -347,4 +347,17 @@ def create_pr(title: str, body: str, head_branch: str, base_branch: str, label: 
             except OSError as e:
                 print(f"Warning: Could not remove temporary file {temp_file_path}: {e}", file=sys.stderr)
 
+def cleanup_branch(branch_name: str):
+    """
+    Cleans up a git branch by switching back to the base branch and deleting the specified branch.
+    This function is designed to be safe to use even if errors occur (using check=False).
+    
+    Args:
+        branch_name: Name of the branch to delete
+    """
+    debug_print(f"Cleaning up branch: {branch_name}")
+    run_command(["git", "checkout", config.BASE_BRANCH], check=False)
+    run_command(["git", "branch", "-D", branch_name], check=False)
+    print("Branch cleanup completed.")
+
 # %%
