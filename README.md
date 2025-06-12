@@ -87,7 +87,7 @@ jobs:
           aws_bedrock_runtime_endpoint: ${{ vars.AWS_BEDROCK_RUNTIME_ENDPOINT }}
 
           # Experimental: Google Gemini Pro
-          # agent_model: 'gemini/gemini-1.5-pro-latest' # Check LiteLLM docs for exact model string
+          # agent_model: 'gemini/gemini-2.5-pro-latest' # Check LiteLLM docs for exact model string
           # gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
 
           # Other Optional Inputs (see action.yml for defaults and more options)
