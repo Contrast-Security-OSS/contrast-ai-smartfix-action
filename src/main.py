@@ -146,10 +146,17 @@ def main():
 
         # Switch back to base branch and ensure a truly clean state before fixing this vulnerability
         print("\n--- Cleaning workspace and switching to base branch for clean state ---", flush=True)
-        # Reset any changes and remove all untracked files to ensure a pristine state
-        run_command(["git", "reset", "--hard"])
-        run_command(["git", "clean", "-fd"])  # Force removal of untracked files and directories
-        run_command(["git", "checkout", config.BASE_BRANCH])
+        try:
+            # Reset any changes and remove all untracked files to ensure a pristine state
+            # All commands must succeed or we skip this vulnerability - crucial for clean state
+            run_command(["git", "reset", "--hard"], check=True)
+            run_command(["git", "clean", "-fd"], check=True)  # Force removal of untracked files and directories
+            run_command(["git", "checkout", config.BASE_BRANCH], check=True)
+            print(f"Successfully cleaned workspace and checked out {config.BASE_BRANCH}", flush=True)
+        except SystemExit:
+            print(f"ERROR: Failed to prepare clean workspace. Skipping to next vulnerability.", file=sys.stderr)
+            # Skip to the next vulnerability if we can't properly prepare the workspace
+            continue
 
         # Ensure the build is not broken before running the fix agent
         print("\n--- Running Build Before Fix ---", flush=True)
