@@ -46,7 +46,7 @@ jobs:
         uses: Contrast-Security-OSS/contrast-ai-smartfix-action@v1
         with:
           # --- Max Open PRs ---
-          max_open_prs: 5
+          max_open_prs: 1 # (SET TO 1 TEMPORARILY TILL WE FIX [TS-39574](https://contrast.atlassian.net/browse/TS-39574). SET BACK TO 5 AFTER MERGE)
           # --- Base Branch ---
           base_branch: main
           # --- Build Command ---
