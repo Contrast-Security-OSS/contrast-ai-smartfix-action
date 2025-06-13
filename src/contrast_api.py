@@ -21,8 +21,21 @@ import requests
 import json
 import sys
 from typing import Optional
+from enum import Enum
 import config
 from utils import debug_print
+
+# Define failure categories as an enum to ensure consistency
+class FailureCategory(Enum):
+    INITIAL_BUILD_FAILURE = "INITIAL_BUILD_FAILURE"
+    EXCEEDED_QA_ATTEMPTS = "EXCEEDED_QA_ATTEMPTS"
+    QA_AGENT_FAILURE = "QA_AGENT_FAILURE"
+    GIT_COMMAND_FAILURE = "GIT_COMMAND_FAILURE"
+    AGENT_FAILURE = "AGENT_FAILURE"
+    GENERATE_PR_FAILURE = "GENERATE_PR_FAILURE"
+    HANDLE_PR_MERGE_FAILURE = "HANDLE_PR_MERGE_FAILURE"
+    HANDLE_PR_CLOSE_FAILURE = "HANDLE_PR_CLOSE_FAILURE"
+    GENERAL_FAILURE = "GENERAL_FAILURE"
 
 def normalize_host(host: str) -> str:
     """Remove any protocol prefix from host to prevent double prefixing when constructing URLs."""

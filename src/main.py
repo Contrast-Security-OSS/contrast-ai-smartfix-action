@@ -164,7 +164,7 @@ def main():
             # Notify the Remediation service about the failed build
             remediation_notified = contrast_api.notify_remediation_failed(
                 remediation_id=remediation_id,
-                failure_category="INITIAL_BUILD_FAILURE",
+                failure_category=contrast_api.FailureCategory.INITIAL_BUILD_FAILURE.value,
                 contrast_host=config.CONTRAST_HOST,
                 contrast_org_id=config.CONTRAST_ORG_ID,
                 contrast_app_id=config.CONTRAST_APP_ID,
@@ -242,12 +242,12 @@ def main():
                     
                     if any(s.startswith("Error during QA agent execution:") for s in qa_summary_log):
                         print("\n--- Skipping PR creation as QA Agent encountered an error ---")
-                        failure_category = "QA_AGENT_FAILURE"
+                        failure_category = contrast_api.FailureCategory.QA_AGENT_FAILURE.value
                     else:
                         print("\n--- Skipping PR creation as QA Agent failed to fix build issues ---")
                         # Check if we've exhausted all retry attempts
                         if len(qa_summary_log) >= max_qa_attempts_setting:
-                            failure_category = "EXCEEDED_QA_ATTEMPTS"
+                            failure_category = contrast_api.FailureCategory.EXCEEDED_QA_ATTEMPTS.value
                     
                     # Notify the Remediation service about the failed remediation if we have a failure category
                     if failure_category:
