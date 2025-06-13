@@ -29,6 +29,7 @@ import config
 from utils import debug_print, run_command
 import agent_handler
 import git_handler
+from build_output_analyzer import extract_build_errors
 
 def run_build_command(command: str, repo_root: Path) -> Tuple[bool, str]:
     """
@@ -179,6 +180,12 @@ def run_qa_loop(
 
     # If initial build failed, enter the QA loop
     print("\n\u274c Initial build failed. Starting QA agent intervention loop.", flush=True)
+    
+    # Analyze build failure and show error summary
+    error_analysis = extract_build_errors(initial_build_output)
+    print("\n--- BUILD FAILURE ANALYSIS ---")
+    print(error_analysis)
+    print("--- END BUILD FAILURE ANALYSIS ---\n")
     while qa_attempts < max_qa_attempts:
         qa_attempts += 1
         print(f"\n::group::---- QA Attempt #{qa_attempts}/{max_qa_attempts} ---")
