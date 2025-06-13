@@ -176,7 +176,7 @@ For the Early Access release, SmartFix uses a "Bring Your Own LLM" (BYOLLM) mode
   * Provide your `gemini_api_key`.  
 * **Not Recommended:** OpenAI GPT models (e.g., gpt-4, gpt-4.1, o1, o3, etc) are **not recommended** at this time, as they have shown issues following instructions within the SmartFix agent.
 
-Refer to the `action.yml` file within the SmartFix GitHub Action repository and LiteLLM documentation for specific `agent_model` strings and required credentials for other models/providers.  The LiteLLM documenation can be found at https://docs.litellm.ai/docs/providers/.
+Refer to the `action.yml` file within the SmartFix GitHub Action repository and LiteLLM documentation for specific `agent_model` strings and required credentials for other models/providers.  The LiteLLM documentation can be found at https://docs.litellm.ai/docs/providers/.
 
 ### Supported Languages
 

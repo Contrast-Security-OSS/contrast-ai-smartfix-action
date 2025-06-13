@@ -89,7 +89,7 @@ def main():
     debug_print(f"GitHub repository URL: {github_repo_url}")
 
     # Ensure the build is not broken before requesting vulnerabilities
-    print("\n--- Running Build Before Vulns ---", flush=True)
+    print("\n--- Running Build Before Vulns Requests ---", flush=True)
     prevuln_build_success, prevuln_build_output = run_build_command(build_command, config.REPO_ROOT)
     if not prevuln_build_success:
         print("\n❌ Build is broken ❌ -- No vulnerabilities requested.")
