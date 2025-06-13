@@ -27,6 +27,7 @@ import config
 from utils import debug_print
 from qa_handler import run_build_command
 from version_check import do_version_check
+from build_output_analyzer import extract_build_errors
 
 # Import domain-specific handlers
 import contrast_api
@@ -155,8 +156,10 @@ def main():
         print("\n--- Running Build Before Fix ---", flush=True)
         prefix_build_success, prefix_build_output = run_build_command(build_command, config.REPO_ROOT)
         if not prefix_build_success:
+            # Analyze build failure and show error summary
+            error_analysis = extract_build_errors(prefix_build_output)
             print("\n❌ Build is broken ❌ -- No fix attempted.")
-            print(f"Build output:\n{prefix_build_output}")
+            print(f"Build output:\n{error_analysis}")
             git_handler.cleanup_branch(new_branch_name)
             sys.exit(1) # Exit if the build is broken, no point in proceeding
 
