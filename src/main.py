@@ -145,28 +145,23 @@ def main():
 
         print(f"\n\033[0;33m Selected vuln to fix: {vuln_title} \033[0m")
 
-        # Switch back to base branch and ensure a truly clean state before fixing this vulnerability
-        print("\n--- Cleaning workspace and switching to base branch for clean state ---", flush=True)
+        # Prepare a clean repository state and branch for the fix
+        new_branch_name = git_handler.generate_branch_name(remediation_id)
         try:
-            # Reset any changes and remove all untracked files to ensure a pristine state
-            # All commands must succeed or we skip this vulnerability - crucial for clean state
-            run_command(["git", "reset", "--hard"], check=True)
-            run_command(["git", "clean", "-fd"], check=True)  # Force removal of untracked files and directories
-            run_command(["git", "checkout", config.BASE_BRANCH], check=True)
-            # Pull latest changes to ensure we're working with the most up-to-date code
-            run_command(["git", "pull", "--ff-only"], check=True)
-            print(f"Successfully cleaned workspace and checked out latest {config.BASE_BRANCH}", flush=True)
-        except subprocess.CalledProcessError as e:
-            print(f"ERROR: Failed to prepare clean workspace due to a subprocess error: {str(e)}. Skipping to next vulnerability.", file=sys.stderr)
-            # Skip to the next vulnerability if we can't properly prepare the workspace
-            continue
-
+            git_handler.prepare_feature_branch(new_branch_name)
+        except SystemExit:
+            print(f"Error preparing feature branch {new_branch_name}. Skipping to next vulnerability.")
+            continue # Try next vulnerability
+        
         # Ensure the build is not broken before running the fix agent
         print("\n--- Running Build Before Fix ---", flush=True)
         prefix_build_success, prefix_build_output = run_build_command(build_command, config.REPO_ROOT)
         if not prefix_build_success:
-                print("\n❌ Build is broken ❌ -- No fix attempted.")
-                sys.exit(1) # Exit if the build is broken, no point in proceeding
+            print("\n❌ Build is broken ❌ -- No fix attempted.")
+            print(f"Cleaning up branch: {new_branch_name}")
+            run_command(["git", "checkout", config.BASE_BRANCH], check=False)
+            run_command(["git", "branch", "-D", new_branch_name], check=False)
+            continue # Try next vulnerability instead of exiting
 
         # --- Run AI Fix Agent ---
         ai_fix_summary_full = agent_handler.run_ai_fix_agent(
@@ -187,15 +182,7 @@ def main():
         # --- Git and GitHub Operations ---
         print("\n--- Proceeding with Git & GitHub Operations ---", flush=True)
         # Note: Git user config moved to the start of main
-
-        new_branch_name = git_handler.generate_branch_name(remediation_id)
-        try:
-            git_handler.create_branch(new_branch_name)
-        except SystemExit:
-             print(f"Error creating branch {new_branch_name}. Switching back to base branch and cleaning up.")
-             run_command(["git", "checkout", config.BASE_BRANCH], check=False)
-             run_command(["git", "branch", "-D", new_branch_name], check=False)
-             continue # Try next vulnerability
+        # Branch creation moved before the initial build
 
         git_handler.stage_changes()
 
