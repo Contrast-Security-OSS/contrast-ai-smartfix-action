@@ -47,7 +47,9 @@ def generate_branch_name(remediation_id: str) -> str:
     return f"smartfix/remediation-{remediation_id}"
 
 def create_branch(branch_name: str):
-    """Creates and checks out a new git branch."""
+    """Creates and checks out a new git branch from the configured base branch."""
+    print(f"Ensuring we're on the base branch ({config.BASE_BRANCH}) first...")
+    run_command(["git", "checkout", config.BASE_BRANCH]) # Ensure we're on the base branch
     print(f"Creating and checking out new branch: {branch_name}")
     run_command(["git", "checkout", "-b", branch_name]) # run_command exits on failure
 

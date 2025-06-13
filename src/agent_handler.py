@@ -156,19 +156,31 @@ async def process_agent_run(runner, session, exit_stack, user_query: str, full_m
         print("AI Agent execution skipped: Session object is invalid or missing required attributes (id, user_id).")
         sys.exit(1)
 
+    event_count = 0
+    final_response = "AI agent did not provide a final summary."
+    max_events_limit = config.MAX_EVENTS_PER_AGENT
+
+    # Create the async generator
     events_async = runner.run_async(
         session_id=session_id,
         user_id=user_id,
         new_message=content
     )
 
-    event_count = 0
-    final_response = "AI agent did not provide a final summary."
-
     try:
         async for event in events_async:
             event_count += 1
             debug_print(f"\n\nAGENT EVENT #{event_count}:", flush=True)
+            
+            # Check if we've exceeded the event limit
+            if event_count > max_events_limit:
+                print(f"\n⚠️ Reached maximum event limit of {max_events_limit}. Stopping agent execution early.")
+                # Add a note to the final response
+                final_response += f"\n\n⚠️ Note: Agent execution was terminated early after reaching the maximum limit of {max_events_limit} events. The solution may be incomplete."
+                # Properly close the async generator to stop processing
+                await events_async.aclose()
+                # Throw exception to fully abort processing
+                raise RuntimeError(f"Maximum event limit of {max_events_limit} exceeded. Agent execution aborted.")
 
             if event.content:
                 message_text = ""

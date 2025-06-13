@@ -91,6 +91,25 @@ def get_max_open_prs() -> int:
         debug_print(f"Invalid or missing MAX_OPEN_PRS environment variable. Using default: {default_max_open_prs}")
         return default_max_open_prs
 
+def get_max_events_per_agent() -> int:
+    """Validates and normalizes the MAX_EVENTS_PER_AGENT setting.
+    
+    Returns:
+        The validated and normalized maximum number of events per agent run
+    """
+    default_max_events = 120
+    try:
+        max_events = int(get_env_var("MAX_EVENTS_PER_AGENT", required=False, default="120"))
+        if max_events < 10:  # Ensure it's at least 10 to allow for minimal agent operation
+            debug_print(f"MAX_EVENTS_PER_AGENT ({max_events}) is too low. Using minimum value: 10")
+            return 10
+        else:
+            debug_print(f"Using MAX_EVENTS_PER_AGENT from environment: {max_events}")
+            return max_events
+    except (ValueError, TypeError):
+        debug_print(f"Invalid or missing MAX_EVENTS_PER_AGENT environment variable. Using default: {default_max_events}")
+        return default_max_events
+
 # --- Preset ---
 USER_AGENT = "contrast-smart-fix 0.0.1"
 
@@ -114,6 +133,7 @@ FORMATTING_COMMAND = get_env_var("FORMATTING_COMMAND", required=False, default=N
 # Validated and normalized settings
 MAX_QA_ATTEMPTS = get_max_qa_attempts()
 MAX_OPEN_PRS = get_max_open_prs()
+MAX_EVENTS_PER_AGENT = get_max_events_per_agent()
 
 # --- GitHub Configuration ---
 GITHUB_TOKEN = get_env_var("GITHUB_TOKEN", required=True)
@@ -224,6 +244,7 @@ debug_print(f"Skip Writing Security Test: {SKIP_WRITING_SECURITY_TEST}")
 debug_print(f"Skip QA Review: {SKIP_QA_REVIEW}") # Added debug print
 debug_print(f"AWS Region Name: {AWS_REGION_NAME}")
 debug_print(f"Vulnerability Severities: {VULNERABILITY_SEVERITIES}")
+debug_print(f"Max Events Per Agent: {MAX_EVENTS_PER_AGENT}")
 if AWS_SESSION_TOKEN:
     debug_print("AWS Session Token found.")
 

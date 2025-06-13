@@ -86,6 +86,14 @@ def main():
     # Construct GitHub repository URL (used for each API call)
     github_repo_url = f"https://github.com/{config.GITHUB_REPOSITORY}"
     debug_print(f"GitHub repository URL: {github_repo_url}")
+
+    # Ensure the build is not broken before running the fix agent
+    print("\n--- Running Build Before Fix ---", flush=True)
+    prevuln_build_success, prevuln_build_output = run_build_command(build_command, config.REPO_ROOT)
+    if not prevuln_build_success:
+        print("\n❌ Build is broken ❌ -- No fix attempted.")
+        print(f"Build output:\n{prevuln_build_output}")
+        sys.exit(1) # Exit if the build is broken, no point in proceeding
     
     while True:
         # Check if we've exceeded the maximum runtime
@@ -142,12 +150,14 @@ def main():
 
         print(f"\n\033[0;33m Selected vuln to fix: {vuln_title} \033[0m")
 
-        # Ensure the build is not broken before running the fix agent
-        print("\n--- Running Build Before Fix ---", flush=True)
-        prefix_build_success, prefix_build_output = run_build_command(build_command, config.REPO_ROOT)
-        if not prefix_build_success:
-                print("\n❌ Build is broken ❌ -- No fix attempted.")
-                sys.exit(1) # Exit if the build is broken, no point in proceeding
+        # --- Git Branch Setup ---
+        new_branch_name = git_handler.generate_branch_name(remediation_id)
+        try:
+            git_handler.create_branch(new_branch_name)
+        except SystemExit:
+             print(f"Error creating branch {new_branch_name}. Switching back to base branch and cleaning up.")
+             git_handler.cleanup_branch(new_branch_name)
+             continue # Try next vulnerability
 
         # --- Run AI Fix Agent ---
         ai_fix_summary_full = agent_handler.run_ai_fix_agent(
@@ -168,14 +178,6 @@ def main():
         # --- Git and GitHub Operations ---
         print("\n--- Proceeding with Git & GitHub Operations ---", flush=True)
         # Note: Git user config moved to the start of main
-
-        new_branch_name = git_handler.generate_branch_name(remediation_id)
-        try:
-            git_handler.create_branch(new_branch_name)
-        except SystemExit:
-             print(f"Error creating branch {new_branch_name}. Switching back to base branch and cleaning up.")
-             git_handler.cleanup_branch(new_branch_name)
-             continue # Try next vulnerability
 
         git_handler.stage_changes()
 
