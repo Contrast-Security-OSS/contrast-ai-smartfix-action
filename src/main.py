@@ -18,16 +18,16 @@
 #
 
 import sys
-import os
 import re
 import subprocess
 from datetime import datetime, timedelta
 
 # Import configurations and utilities
 import config
-from utils import debug_print, run_command
+from utils import debug_print
 from qa_handler import run_build_command
 from version_check import do_version_check
+from build_output_analyzer import extract_build_errors
 
 # Import domain-specific handlers
 import contrast_api
@@ -57,8 +57,7 @@ def main():
     if formatting_command:
         debug_print(f"Formatting command specified: {formatting_command}")
     else:
-        print("FORMATTING_COMMAND not set or empty.")
-        sys.exit(1)
+        debug_print("FORMATTING_COMMAND not set or empty, formatting will be skipped.")
 
     # Use the validated and normalized settings from config module
     # These values are already processed in config.py with appropriate validation and defaults
@@ -157,11 +156,12 @@ def main():
         print("\n--- Running Build Before Fix ---", flush=True)
         prefix_build_success, prefix_build_output = run_build_command(build_command, config.REPO_ROOT)
         if not prefix_build_success:
+            # Analyze build failure and show error summary
+            error_analysis = extract_build_errors(prefix_build_output)
             print("\n❌ Build is broken ❌ -- No fix attempted.")
-            print(f"Cleaning up branch: {new_branch_name}")
-            run_command(["git", "checkout", config.BASE_BRANCH], check=False)
-            run_command(["git", "branch", "-D", new_branch_name], check=False)
-            continue # Try next vulnerability instead of exiting
+            print(f"Build output:\n{error_analysis}")
+            git_handler.cleanup_branch(new_branch_name)
+            sys.exit(1) # Exit if the build is broken, no point in proceeding
 
         # --- Run AI Fix Agent ---
         ai_fix_summary_full = agent_handler.run_ai_fix_agent(
@@ -182,7 +182,6 @@ def main():
         # --- Git and GitHub Operations ---
         print("\n--- Proceeding with Git & GitHub Operations ---", flush=True)
         # Note: Git user config moved to the start of main
-        # Branch creation moved before the initial build
 
         git_handler.stage_changes()
 
@@ -226,11 +225,7 @@ def main():
                         print("\n--- Skipping PR creation as QA Agent encountered an error ---")
                     else:
                         print("\n--- Skipping PR creation as QA Agent failed to fix build issues ---")
-                    
-                    print(f"Cleaning up branch: {new_branch_name}")
-                    # Use the more robust cleanup method
-                    run_command(["git", "checkout", config.BASE_BRANCH], check=False)
-                    run_command(["git", "branch", "-D", new_branch_name], check=False)
+                    git_handler.cleanup_branch(new_branch_name)
                     continue # Move to the next vulnerability
 
             else: # QA is skipped
@@ -317,8 +312,9 @@ def main():
                 
                 if not pr_creation_success:
                     print("\n--- PR creation failed, but changes were pushed to branch ---", flush=True)
-                    print(f"Branch name: {new_branch_name}", flush=True)
-                    print("Changes can be manually viewed and merged if needed.", flush=True)
+                    debug_print(f"Branch name: {new_branch_name}", flush=True)
+                    # Always clean up the branch when PR creation fails
+                    git_handler.cleanup_branch(new_branch_name)
                     break;
                 
                 processed_one = True # Mark that we successfully processed one
@@ -326,15 +322,15 @@ def main():
             except Exception as e:
                 print(f"Error creating PR: {e}")
                 print("\n--- PR creation failed, but changes were pushed to branch ---")
-                print(f"Branch name: {new_branch_name}")
-                print("Changes can be manually viewed and merged if needed.")
+                debug_print(f"Branch name: {new_branch_name}")
+                
+                # Always clean up the branch when PR creation fails
+                git_handler.cleanup_branch(new_branch_name)
                 break;
         else:
             print("Skipping commit, push, and PR creation as no changes were detected by the agent.")
             # Clean up the branch if no changes were made
-            print(f"Cleaning up unused branch: {new_branch_name}")
-            run_command(["git", "checkout", config.BASE_BRANCH], check=False)
-            run_command(["git", "branch", "-D", new_branch_name], check=False)
+            git_handler.cleanup_branch(new_branch_name)
             continue # Try the next vulnerability
 
     # Calculate total runtime

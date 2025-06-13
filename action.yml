@@ -15,12 +15,16 @@ inputs:
     required: false
     default: '6'
   formatting_command:
-    description: 'Command to format code'
+    description: 'Command to format code (optional)'
     required: false
   max_open_prs:
     description: 'Maximum number of open PRs'
     required: false
     default: '5'
+  max_events_per_agent:
+    description: 'Maximum number of events per agent run before terminating (default: 120)'
+    required: false
+    default: '120'
   github_token:
     description: 'GitHub token for PR operations'
     required: true
@@ -274,6 +278,7 @@ runs:
         AWS_BEDROCK_RUNTIME_ENDPOINT: ${{ inputs.aws_bedrock_runtime_endpoint }}
         # --- Agent Configuration ---
         AGENT_MODEL: ${{ inputs.agent_model }}
+        MAX_EVENTS_PER_AGENT: ${{ inputs.max_events_per_agent }}
         # --- Test Writing Configuration ---
         SKIP_WRITING_SECURITY_TEST: ${{ inputs.skip_writing_security_test }}
         # --- QA Configuration ---
@@ -284,5 +289,3 @@ runs:
         VULNERABILITY_SEVERITIES: ${{ inputs.vulnerability_severities }}
         # --- Run Task ---
         RUN_TASK: ${{ inputs.run_task }}
-        # --- Set GITHUB_ACTION_REF for version checking ---
-        GITHUB_ACTION_REF: ${{ github.ref }}

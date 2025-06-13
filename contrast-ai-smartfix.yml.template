@@ -46,7 +46,7 @@ jobs:
         uses: Contrast-Security-OSS/contrast-ai-smartfix-action@v1
         with:
           # --- Max Open PRs ---
-          max_open_prs: 1 # (SET TO 1 TEMPORARILY TILL WE FIX [TS-39574](https://contrast.atlassian.net/browse/TS-39574). SET BACK TO 5 AFTER MERGE)
+          max_open_prs: 5
           # --- Base Branch ---
           base_branch: main
           # --- Build Command ---
@@ -68,9 +68,9 @@ jobs:
           # --- Anthropic API Credentials ---
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           # --- Azure Open API Credentials ---
-          azure_api_key: ${{ secrets.AZURE_API_KEY }}
-          azure_api_base: ${{ secrets.AZURE_API_BASE }}
-          azure_api_version: ${{ secrets.AZURE_API_VERSION }}
+          # azure_api_key: ${{ secrets.AZURE_API_KEY }}
+          # azure_api_base: ${{ secrets.AZURE_API_BASE }}
+          # azure_api_version: ${{ secrets.AZURE_API_VERSION }}
           # --- AWS Credentials for Bedrock ---
           aws_access_key_id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
