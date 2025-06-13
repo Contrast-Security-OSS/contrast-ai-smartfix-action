@@ -139,13 +139,15 @@ def do_version_check():
         debug_print(f"Running from SHA: {github_sha}. No ref found for version check, using SHA.")
     
     # For SHA references - log appropriate message for tests
-    if github_action_ref and all(c in HEX_CHARS for c in github_action_ref):
+    if github_action_ref and all(c in HEX_CHARS for c in github_action_ref.lower()):
         debug_print(f"Running action from SHA: {github_action_ref}. Skipping version comparison against tags.")
+        return
     
     # For branch references - log appropriate message for tests
     if github_ref and github_ref.startswith("refs/heads/"):
         branch_name = github_ref.replace("refs/heads/", "")
         debug_print(f"Running from branch '{branch_name}'. Version checking is only meaningful when using release tags.")
+        return
     
     # Support version detection from refs for tests
     if github_action_ref and github_action_ref.startswith("refs/tags/v"):
