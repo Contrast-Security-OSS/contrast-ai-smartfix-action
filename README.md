@@ -218,7 +218,7 @@ SmartFix for Early Access focuses on remediating:
    * *Time limit* - SmartFix has an internal time limit of 3 hours.  If it goes over 3 hours of processing time, it will not request another vulnerability to resolve.
    * `max_open_prs` - SmartFix offers this configurable value to control the maximum number concurrently open SmartFix PRs
    * `max_qa_attempts` - Once SmartFix creates a fix for a vulnerability, it will attempt to resolve any problems building the modified code.  `max_qa_attempts` controls how many iterations of the build-adjust-repeat loop that SmartFix will attempt.  `max_qa_attempts` has a default of 6, but has an internal hard-limit of 10.
-   * `max_events_per_agent` - During the processing of a single vulnerability, SmartFix will use several AI agents.  Each agent operates as a sequence of events where an event may be some kind of data processing or tool usage.  `max_events_per_agent` is the maximum number of events each agent may use and provides a safeguard against runaway agent processing.  Its default value is 120 and it has an internal hard-minimum of 10.
+   * `max_events_per_agent` - During the processing of a single vulnerability, SmartFix will use several AI agents.  Each agent operates as a sequence of events where an event may be some kind of data processing or tool usage.  `max_events_per_agent` is the maximum number of events each agent may use and provides a safeguard against runaway agent processing.  Its default value is 120, it has an internal hard-minimum of 10, and a hard-maximum of 500.
 
 ## Key Features
 

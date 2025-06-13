@@ -103,6 +103,8 @@ def get_max_events_per_agent() -> int:
         if max_events < 10:  # Ensure it's at least 10 to allow for minimal agent operation
             debug_print(f"MAX_EVENTS_PER_AGENT ({max_events}) is too low. Using minimum value: 10")
             return 10
+        elif max_events > 500:
+            return 500
         else:
             debug_print(f"Using MAX_EVENTS_PER_AGENT from environment: {max_events}")
             return max_events
