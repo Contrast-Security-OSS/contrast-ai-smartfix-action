@@ -160,6 +160,23 @@ def main():
             error_analysis = extract_build_errors(prefix_build_output)
             print("\n❌ Build is broken ❌ -- No fix attempted.")
             print(f"Build output:\n{error_analysis}")
+            
+            # Notify the Remediation service about the failed build
+            remediation_notified = contrast_api.notify_remediation_failed(
+                remediation_id=remediation_id,
+                failure_category="INITIAL_BUILD_FAILURE",
+                contrast_host=config.CONTRAST_HOST,
+                contrast_org_id=config.CONTRAST_ORG_ID,
+                contrast_app_id=config.CONTRAST_APP_ID,
+                contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
+                contrast_api_key=config.CONTRAST_API_KEY
+            )
+            
+            if remediation_notified:
+                print(f"Successfully notified Remediation service about failed build for remediation {remediation_id}.", flush=True)
+            else:
+                print(f"Warning: Failed to notify Remediation service about failed build for remediation {remediation_id}.", flush=True)
+                
             git_handler.cleanup_branch(new_branch_name)
             sys.exit(1) # Exit if the build is broken, no point in proceeding
 
@@ -221,10 +238,34 @@ def main():
                 # Skip PR creation if QA was run and the build is failing
                 # or if the QA agent encountered an error (detected by checking qa_summary_log entries)
                 if (used_build_command and not build_success) or any(s.startswith("Error during QA agent execution:") for s in qa_summary_log):
+                    failure_category = ""
+                    
                     if any(s.startswith("Error during QA agent execution:") for s in qa_summary_log):
                         print("\n--- Skipping PR creation as QA Agent encountered an error ---")
+                        failure_category = "QA_AGENT_FAILURE"
                     else:
                         print("\n--- Skipping PR creation as QA Agent failed to fix build issues ---")
+                        # Check if we've exhausted all retry attempts
+                        if len(qa_summary_log) >= max_qa_attempts_setting:
+                            failure_category = "EXCEEDED_QA_ATTEMPTS"
+                    
+                    # Notify the Remediation service about the failed remediation if we have a failure category
+                    if failure_category:
+                        remediation_notified = contrast_api.notify_remediation_failed(
+                            remediation_id=remediation_id,
+                            failure_category=failure_category,
+                            contrast_host=config.CONTRAST_HOST,
+                            contrast_org_id=config.CONTRAST_ORG_ID,
+                            contrast_app_id=config.CONTRAST_APP_ID,
+                            contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
+                            contrast_api_key=config.CONTRAST_API_KEY
+                        )
+                        
+                        if remediation_notified:
+                            print(f"Successfully notified Remediation service about {failure_category} for remediation {remediation_id}.", flush=True)
+                        else:
+                            print(f"Warning: Failed to notify Remediation service about {failure_category} for remediation {remediation_id}.", flush=True)
+                    
                     git_handler.cleanup_branch(new_branch_name)
                     continue # Move to the next vulnerability
 
