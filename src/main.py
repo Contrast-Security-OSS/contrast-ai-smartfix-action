@@ -20,6 +20,7 @@
 import sys
 import os
 import re
+import subprocess
 from datetime import datetime, timedelta
 
 # Import configurations and utilities
@@ -144,12 +145,23 @@ def main():
 
         print(f"\n\033[0;33m Selected vuln to fix: {vuln_title} \033[0m")
 
+        # Prepare a clean repository state and branch for the fix
+        new_branch_name = git_handler.generate_branch_name(remediation_id)
+        try:
+            git_handler.prepare_feature_branch(new_branch_name)
+        except SystemExit:
+            print(f"Error preparing feature branch {new_branch_name}. Skipping to next vulnerability.")
+            continue # Try next vulnerability
+        
         # Ensure the build is not broken before running the fix agent
         print("\n--- Running Build Before Fix ---", flush=True)
         prefix_build_success, prefix_build_output = run_build_command(build_command, config.REPO_ROOT)
         if not prefix_build_success:
-                print("\n❌ Build is broken ❌ -- No fix attempted.")
-                sys.exit(1) # Exit if the build is broken, no point in proceeding
+            print("\n❌ Build is broken ❌ -- No fix attempted.")
+            print(f"Cleaning up branch: {new_branch_name}")
+            run_command(["git", "checkout", config.BASE_BRANCH], check=False)
+            run_command(["git", "branch", "-D", new_branch_name], check=False)
+            continue # Try next vulnerability instead of exiting
 
         # --- Run AI Fix Agent ---
         ai_fix_summary_full = agent_handler.run_ai_fix_agent(
@@ -170,15 +182,7 @@ def main():
         # --- Git and GitHub Operations ---
         print("\n--- Proceeding with Git & GitHub Operations ---", flush=True)
         # Note: Git user config moved to the start of main
-
-        new_branch_name = git_handler.generate_branch_name(remediation_id)
-        try:
-            git_handler.create_branch(new_branch_name)
-        except SystemExit:
-             print(f"Error creating branch {new_branch_name}. Switching back to base branch and cleaning up.")
-             run_command(["git", "checkout", config.BASE_BRANCH], check=False)
-             run_command(["git", "branch", "-D", new_branch_name], check=False)
-             continue # Try next vulnerability
+        # Branch creation moved before the initial build
 
         git_handler.stage_changes()
 
