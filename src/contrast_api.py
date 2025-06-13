@@ -21,8 +21,21 @@ import requests
 import json
 import sys
 from typing import Optional
+from enum import Enum
 import config
 from utils import debug_print
+
+# Define failure categories as an enum to ensure consistency
+class FailureCategory(Enum):
+    INITIAL_BUILD_FAILURE = "INITIAL_BUILD_FAILURE"
+    EXCEEDED_QA_ATTEMPTS = "EXCEEDED_QA_ATTEMPTS"
+    QA_AGENT_FAILURE = "QA_AGENT_FAILURE"
+    GIT_COMMAND_FAILURE = "GIT_COMMAND_FAILURE"
+    AGENT_FAILURE = "AGENT_FAILURE"
+    GENERATE_PR_FAILURE = "GENERATE_PR_FAILURE"
+    HANDLE_PR_MERGE_FAILURE = "HANDLE_PR_MERGE_FAILURE"
+    HANDLE_PR_CLOSE_FAILURE = "HANDLE_PR_CLOSE_FAILURE"
+    GENERAL_FAILURE = "GENERAL_FAILURE"
 
 def normalize_host(host: str) -> str:
     """Remove any protocol prefix from host to prevent double prefixing when constructing URLs."""
@@ -302,4 +315,67 @@ def notify_remediation_pr_closed(remediation_id: str, contrast_host: str, contra
         return False
     except json.JSONDecodeError:
         print(f"Error decoding JSON response when notifying Remediation service about closed PR for remediation {remediation_id}.", file=sys.stderr)
+        return False
+        
+def notify_remediation_failed(remediation_id: str, failure_category: str, contrast_host: str, contrast_org_id: str, contrast_app_id: str, contrast_auth_key: str, contrast_api_key: str) -> bool:
+    """Notifies the Remediation backend service that a remediation has failed.
+
+    Args:
+        remediation_id: The ID of the remediation.
+        failure_category: The category of failure (e.g., "INITIAL_BUILD_FAILURE").
+        contrast_host: The Contrast Security host URL.
+        contrast_org_id: The organization ID.
+        contrast_app_id: The application ID.
+        contrast_auth_key: The Contrast authorization key.
+        contrast_api_key: The Contrast API key.
+
+    Returns:
+        bool: True if the notification was successful, False otherwise.
+    """
+    debug_print(f"--- Notifying Remediation service about failed remediation {remediation_id} with category {failure_category} ---")
+    api_url = f"https://{normalize_host(contrast_host)}/api/v4/aiml-remediation/organizations/{contrast_org_id}/applications/{contrast_app_id}/remediations/{remediation_id}/failed"
+
+    headers = {
+        "Authorization": contrast_auth_key,
+        "API-Key": contrast_api_key,
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": config.USER_AGENT
+    }
+    
+    payload = {
+        "failureCategory": failure_category
+    }
+
+    try:
+        debug_print(f"Making PUT request to: {api_url}")
+        debug_print(f"Payload: {json.dumps(payload)}") 
+        response = requests.put(api_url, headers=headers, json=payload)
+        response.raise_for_status()  # Raises an HTTPError for bad responses (4xx or 5xx)
+
+        debug_print(f"Remediation failed notification API response status code: {response.status_code}")
+        
+        if response.status_code == 204:
+            debug_print(f"Successfully notified Remediation service API about failed remediation {remediation_id}")
+            return True
+        else:
+            error_message = "Unknown error"
+            try:
+                response_json = response.json()
+                if "messages" in response_json and response_json["messages"]:
+                    error_message = response_json["messages"][0]
+            except:
+                error_message = response.text
+                
+            print(f"Failed to notify Remediation service about failed remediation {remediation_id}. Error: {error_message}", file=sys.stderr)
+            return False
+
+    except requests.exceptions.HTTPError as e:
+        print(f"HTTP error notifying Remediation service about failed remediation {remediation_id}: {e.response.status_code} - {e.response.text}", file=sys.stderr)
+        return False
+    except requests.exceptions.RequestException as e:
+        print(f"Request error notifying Remediation service about failed remediation {remediation_id}: {e}", file=sys.stderr)
+        return False
+    except json.JSONDecodeError:
+        print(f"Error decoding JSON response when notifying Remediation service about failed remediation {remediation_id}.", file=sys.stderr)
         return False
