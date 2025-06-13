@@ -213,7 +213,7 @@ SmartFix for Early Access focuses on remediating:
    * If SmartFix sees that it has reached the configured `max_open_prs` number of concurrently open SmartFix PRs, it will end its workflow run.
    * If SmartFix has reached its internal time limit of 3 hours of processing time for some reason, it will stop the workflow run instead of requesting a new vulnerability to resolve.
    * If SmartFix encounters an exception of some kind, it will stop the workflow run.
-11. **Exceptions:** Sometimes things go wrong.  When SmartFix cannot generate a fix for the vulnerability, it will log the reason why, try to clean up the Github feature branches that has been made for that vulnerability, and exit the workflow early.
+11. **Exceptions:** Sometimes things go wrong.  When SmartFix cannot generate a fix for the vulnerability, it will log the reason why, try to clean up the Github feature branches that have been made for that vulnerability, and exit the workflow early.
 12. **Guardrails:** SmartFix has several configurable and internal guardrails:
    * *Time limit* - SmartFix has an internal time limit of 3 hours.  If it goes over 3 hours of processing time, it will not request another vulnerability to resolve.
    * `max_open_prs` - SmartFix offers this configurable value to control the maximum number concurrently open SmartFix PRs
