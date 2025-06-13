@@ -73,9 +73,14 @@ jobs:
           # LLM Configuration (Bring Your Own LLM)
           # Choose ONE LLM provider and configure its credentials
           # Recommended: Anthropic Claude Sonnet
+
+          # Claude Via Direct Anthropic API
+          # agent_model: 'anthropic/claude-3-7-sonnet-20250219' # Check LiteLLM docs for exact model string
+          # anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+
+          # Claude Via AWS Bedrock
           agent_model: 'bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0' # Example for Claude Sonnet on Bedrock
-          
-          # Supported possible AWS connection values
+          # supported possible AWS connection values
           aws_access_key_id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws_region_name: ${{ vars.AWS_REGION_NAME }} # Or your AWS region, e.g. 'us-east-1'
@@ -87,11 +92,11 @@ jobs:
           aws_bedrock_runtime_endpoint: ${{ vars.AWS_BEDROCK_RUNTIME_ENDPOINT }}
 
           # Experimental: Google Gemini Pro
-          # agent_model: 'gemini/gemini-1.5-pro-latest' # Check LiteLLM docs for exact model string
+          # agent_model: 'gemini/gemini-2.5-pro-latest' # Check LiteLLM docs for exact model string
           # gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
 
           # Other Optional Inputs (see action.yml for defaults and more options)
-          # formatting_command: 'mvn spotless:apply' #Or the command appropriate for your project to correct the formatting of SmartFix's changes.  This ensures that SmartFix follows your coding standards.
+          # formatting_command: 'mvn spotless:apply' # Or the command appropriate for your project to correct the formatting of SmartFix's changes.  This ensures that SmartFix follows your coding standards.
           # max_open_prs: 5 # This is the maximum limit for the number of PRs that SmartFix will have open at single time
 
   handle_pr_merge:
@@ -158,10 +163,14 @@ jobs:
 
 For the Early Access release, SmartFix uses a "Bring Your Own LLM" (BYOLLM) model. You provide the credentials for your preferred LLM provider.
 
-* **Recommended:** **Anthropic Claude Sonnet (e.g., Claude 3.7 Sonnet via AWS Bedrock)**. This model has been extensively tested.  
-  * Set `agent_model` to the appropriate model string (e.g., `bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0`).  
-  * Provide AWS credentials (`aws_access_key_id`, `aws_secret_access_key`, `aws_region_name`). 
-  * Or, if using the Anthropic API, provide the `anthropic_api_key` and set the `agent_model` to have the appropriate value (e.g. `anthropic/claude-3-7-sonnet-20250219`). 
+* **Recommended:** **Anthropic Claude Sonnet (e.g., Claude 3.7 Sonnet via AWS Bedrock or direct Anthropic API)**. This model has been extensively tested.  
+  * Option 1 - Direct Anthropic API:
+    * Set `agent_model` to the appropriate model string for Anthropic (e.g. `anthropic/claude-3-7-sonnet-20250219`).
+    * Provide your `anthropic_api_key`.
+  * Option 2 - AWS Bedrock:
+    * Set `agent_model` to the appropriate model string (e.g., `bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0`).  
+    * Provide AWS credentials (`aws_access_key_id`, `aws_secret_access_key`, `aws_region_name`).  
+
 * **Experimental:** **Google Gemini Pro (e.g., Gemini 2.5 Pro)**. Preliminary testing shows good results, but it has not been fully tested for this release.  
   * Set `agent_model` to the appropriate model string (e.g., `gemini/gemini-1.5-pro-latest`).  
   * Provide your `gemini_api_key`.  
@@ -233,6 +242,7 @@ The following are key inputs for the GitHub Action. Refer to the `action.yml` in
 | `contrast_authorization_key` | Contrast Authorization Key. | Yes |  |
 | `contrast_api_key` | Contrast API Key. | Yes |  |
 | `agent_model` | LLM model to use (e.g., `bedrock/anthropic.claude-3-sonnet-20240229-v1:0`). | No | `bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0` |
+| `anthropic_api_key` | Anthropic API key (if using direct Anthropic API). | No |  |
 | `gemini_api_key` | Gemini API key (if using Gemini). | No |  |
 | `aws_access_key_id` | AWS Access Key ID (if using Bedrock). | No |  |
 | `aws_secret_access_key` | AWS Secret Access Key (if using Bedrock). | No |  |

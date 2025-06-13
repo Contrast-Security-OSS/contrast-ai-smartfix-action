@@ -19,6 +19,7 @@
 
 import sys
 import re
+import subprocess
 from datetime import datetime, timedelta
 
 # Import configurations and utilities
@@ -87,11 +88,11 @@ def main():
     github_repo_url = f"https://github.com/{config.GITHUB_REPOSITORY}"
     debug_print(f"GitHub repository URL: {github_repo_url}")
 
-    # Ensure the build is not broken before running the fix agent
-    print("\n--- Running Build Before Fix ---", flush=True)
+    # Ensure the build is not broken before requesting vulnerabilities
+    print("\n--- Running Build Before Vulns ---", flush=True)
     prevuln_build_success, prevuln_build_output = run_build_command(build_command, config.REPO_ROOT)
     if not prevuln_build_success:
-        print("\n❌ Build is broken ❌ -- No fix attempted.")
+        print("\n❌ Build is broken ❌ -- No vulnerabilities requested.")
         print(f"Build output:\n{prevuln_build_output}")
         sys.exit(1) # Exit if the build is broken, no point in proceeding
     
@@ -150,14 +151,22 @@ def main():
 
         print(f"\n\033[0;33m Selected vuln to fix: {vuln_title} \033[0m")
 
-        # --- Git Branch Setup ---
+        # Prepare a clean repository state and branch for the fix
         new_branch_name = git_handler.generate_branch_name(remediation_id)
         try:
-            git_handler.create_branch(new_branch_name)
+            git_handler.prepare_feature_branch(new_branch_name)
         except SystemExit:
-             print(f"Error creating branch {new_branch_name}. Switching back to base branch and cleaning up.")
-             git_handler.cleanup_branch(new_branch_name)
-             continue # Try next vulnerability
+            print(f"Error preparing feature branch {new_branch_name}. Skipping to next vulnerability.")
+            continue # Try next vulnerability
+        
+        # Ensure the build is not broken before running the fix agent
+        print("\n--- Running Build Before Fix ---", flush=True)
+        prefix_build_success, prefix_build_output = run_build_command(build_command, config.REPO_ROOT)
+        if not prefix_build_success:
+            print("\n❌ Build is broken ❌ -- No fix attempted.")
+            print(f"Build output:\n{prefix_build_output}")
+            git_handler.cleanup_branch(new_branch_name)
+            sys.exit(1) # Exit if the build is broken, no point in proceeding
 
         # --- Run AI Fix Agent ---
         ai_fix_summary_full = agent_handler.run_ai_fix_agent(

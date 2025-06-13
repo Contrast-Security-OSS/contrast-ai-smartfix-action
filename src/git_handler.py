@@ -20,6 +20,7 @@
 import os
 import sys
 import json # Added for parsing gh output
+import subprocess
 from typing import List # <<< ADDED
 from utils import run_command, debug_print # Import debug_print
 import config
@@ -46,12 +47,25 @@ def generate_branch_name(remediation_id: str) -> str:
     """Generates a unique branch name based on remediation ID"""
     return f"smartfix/remediation-{remediation_id}"
 
-def create_branch(branch_name: str):
-    """Creates and checks out a new git branch from the configured base branch."""
-    print(f"Ensuring we're on the base branch ({config.BASE_BRANCH}) first...")
-    run_command(["git", "checkout", config.BASE_BRANCH]) # Ensure we're on the base branch
-    print(f"Creating and checking out new branch: {branch_name}")
-    run_command(["git", "checkout", "-b", branch_name]) # run_command exits on failure
+def prepare_feature_branch(branch_name: str):
+    """Prepares a clean repository state and creates a new feature branch."""
+    print("Cleaning workspace and creating new feature branch...")
+    
+    try:
+        # Reset any changes and remove all untracked files to ensure a pristine state
+        run_command(["git", "reset", "--hard"], check=True)
+        run_command(["git", "clean", "-fd"], check=True)  # Force removal of untracked files and directories
+        run_command(["git", "checkout", config.BASE_BRANCH], check=True)
+        # Pull latest changes to ensure we're working with the most up-to-date code
+        run_command(["git", "pull", "--ff-only"], check=True)
+        print(f"Successfully cleaned workspace and checked out latest {config.BASE_BRANCH}")
+        
+        # Now create the new branch
+        print(f"Creating and checking out new branch: {branch_name}")
+        run_command(["git", "checkout", "-b", branch_name]) # run_command exits on failure
+    except subprocess.CalledProcessError as e:
+        print(f"ERROR: Failed to prepare clean workspace due to a subprocess error: {str(e)}", file=sys.stderr)
+        sys.exit(1)  # Exit if we can't properly prepare the workspace
 
 def stage_changes():
     """Stages all changes in the repository."""

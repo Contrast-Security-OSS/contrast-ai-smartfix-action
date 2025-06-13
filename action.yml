@@ -53,6 +53,9 @@ inputs:
   gemini_api_key:
     description: 'Gemini API key for Google AI Studio'
     required: false
+  anthropic_api_key:
+    description: 'Anthropic API key'
+    required: false
   azure_api_key:
     description: 'Azure API Key for Azure OpenAI'
     required: false
@@ -260,6 +263,8 @@ runs:
         CONTRAST_API_KEY: ${{ inputs.contrast_api_key }}
         # --- Google Gemini Credentials (LiteLLM) ---
         GEMINI_API_KEY: ${{ inputs.gemini_api_key }}
+        # --- Anthropic Credentials (LiteLLM) ---
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
         # --- Azure Credentials for Azure OpenAI (LiteLLM) ---
         AZURE_API_KEY: ${{ inputs.azure_api_key }}
         AZURE_API_BASE: ${{ inputs.azure_api_base }}
