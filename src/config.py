@@ -175,6 +175,9 @@ SKIP_WRITING_SECURITY_TEST = get_env_var("SKIP_WRITING_SECURITY_TEST", required=
 # --- QA Configuration ---
 SKIP_QA_REVIEW = get_env_var("SKIP_QA_REVIEW", required=False, default="false").lower() == "true"
 
+# --- Telemetry Configuration ---
+ENABLE_FULL_TELEMETRY = get_env_var("ENABLE_FULL_TELEMETRY", required=False, default="true").lower() == "true"
+
 # --- Vulnerability Configuration ---
 # Define the allowlist of valid severity levels
 VALID_SEVERITIES = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "NOTE"]
@@ -247,6 +250,7 @@ debug_print(f"Skip QA Review: {SKIP_QA_REVIEW}") # Added debug print
 debug_print(f"AWS Region Name: {AWS_REGION_NAME}")
 debug_print(f"Vulnerability Severities: {VULNERABILITY_SEVERITIES}")
 debug_print(f"Max Events Per Agent: {MAX_EVENTS_PER_AGENT}")
+debug_print(f"Enable Full Telemetry: {ENABLE_FULL_TELEMETRY}")
 if AWS_SESSION_TOKEN:
     debug_print("AWS Session Token found.")
 

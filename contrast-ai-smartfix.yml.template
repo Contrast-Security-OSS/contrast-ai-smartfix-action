@@ -83,6 +83,10 @@ jobs:
           aws_bedrock_runtime_endpoint: ${{ vars.AWS_BEDROCK_RUNTIME_ENDPOINT }}
           # --- Agent Configuration ---
           agent_model: ${{ vars.AGENT_MODEL || 'bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0' }}
+          # Other Optional Inputs (see action.yml for defaults and more options)
+          # formatting_command: 'mvn spotless:apply' # Or the command appropriate for your project to correct the formatting of SmartFix\'s changes.  This ensures that SmartFix follows your coding standards.
+          # max_open_prs: 5 # This is the maximum limit for the number of PRs that SmartFix will have open at single time
+          # enable_full_telemetry: 'false' # Set to false to disable full telemetry
 
   handle_pr_merge:
     name: Handle PR Merge
