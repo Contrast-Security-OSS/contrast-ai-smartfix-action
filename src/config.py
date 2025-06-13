@@ -169,7 +169,7 @@ AWS_WEB_IDENTITY_TOKEN = get_env_var("AWS_WEB_IDENTITY_TOKEN", required=False)
 AWS_BEDROCK_RUNTIME_ENDPOINT = get_env_var("AWS_BEDROCK_RUNTIME_ENDPOINT", required=False)
 
 # --- AI Agent Configuration ---
-AGENT_MODEL = get_env_var("AGENT_MODEL", required=False, default="bedrock/anthropic.claude-3-7-sonnet-20250219-v1:0")
+AGENT_MODEL = get_env_var("AGENT_MODEL", required=False, default="bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0")
 # --- Test Writing Configuration ---
 SKIP_WRITING_SECURITY_TEST = get_env_var("SKIP_WRITING_SECURITY_TEST", required=False, default="false").lower() == "true"
 # --- QA Configuration ---
