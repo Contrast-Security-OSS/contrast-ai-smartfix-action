@@ -47,9 +47,6 @@ inputs:
   contrast_api_key:
     description: 'Contrast API Key'
     required: true
-  anthropic_api_key:
-    description: 'Anthropic API key for Anthropic Claude models'
-    required: false
   gemini_api_key:
     description: 'Gemini API key for Google AI Studio'
     required: false
