@@ -73,8 +73,13 @@ jobs:
           # LLM Configuration (Bring Your Own LLM)
           # Choose ONE LLM provider and configure its credentials
           # Recommended: Anthropic Claude Sonnet
-          agent_model: 'bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0' # Example for Claude Sonnet on Bedrock
-          
+
+          # Claude Via Direct Anthropic API
+          # agent_model: 'claude-3-7-sonnet-20250219' # Check LiteLLM docs for exact model string
+          # anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+
+          # Claude Via AWS Bedrock
+          agent_model: 'bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0' # Example for Claude Sonnet on Bedrock          
           # supported possible AWS connection values
           aws_access_key_id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -156,9 +161,13 @@ jobs:
 
 For the Early Access release, SmartFix uses a "Bring Your Own LLM" (BYOLLM) model. You provide the credentials for your preferred LLM provider.
 
-* **Recommended:** **Anthropic Claude Sonnet (e.g., Claude 3.7 Sonnet via AWS Bedrock)**. This model has been extensively tested.  
-  * Set `agent_model` to the appropriate model string (e.g., `bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0`).  
-  * Provide AWS credentials (`aws_access_key_id`, `aws_secret_access_key`, `aws_region_name`).  
+* **Recommended:** **Anthropic Claude Sonnet (e.g., Claude 3.7 Sonnet via AWS Bedrock or direct Anthropic API)**. This model has been extensively tested.  
+  * Option 1 - Direct Anthropic API:
+    * Set `agent_model` to the appropriate model string for Anthropic.
+    * Provide your `anthropic_api_key`.
+  * Option 2 - AWS Bedrock:
+    * Set `agent_model` to the appropriate model string (e.g., `bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0`).  
+    * Provide AWS credentials (`aws_access_key_id`, `aws_secret_access_key`, `aws_region_name`).  
 * **Experimental:** **Google Gemini Pro (e.g., Gemini 2.5 Pro)**. Preliminary testing shows good results, but it has not been fully tested for this release.  
   * Set `agent_model` to the appropriate model string (e.g., `gemini/gemini-1.5-pro-latest`).  
   * Provide your `gemini_api_key`.  
@@ -218,6 +227,7 @@ The following are key inputs for the GitHub Action. Refer to the `action.yml` in
 | `contrast_authorization_key` | Contrast Authorization Key. | Yes |  |
 | `contrast_api_key` | Contrast API Key. | Yes |  |
 | `agent_model` | LLM model to use (e.g., `bedrock/anthropic.claude-3-sonnet-20240229-v1:0`). | No | `bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0` |
+| `anthropic_api_key` | Anthropic API key (if using direct Anthropic API). | No |  |
 | `gemini_api_key` | Gemini API key (if using Gemini). | No |  |
 | `aws_access_key_id` | AWS Access Key ID (if using Bedrock). | No |  |
 | `aws_secret_access_key` | AWS Secret Access Key (if using Bedrock). | No |  |
