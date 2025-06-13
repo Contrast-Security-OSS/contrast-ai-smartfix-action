@@ -90,8 +90,15 @@ def get_vulnerability_with_prompts(contrast_host, contrast_org_id, contrast_app_
             return None
         elif response.status_code == 200:
             response_json = response.json()
-            debug_print(f"Full response_json: {json.dumps(response_json, indent=2)}")
             
+            # Create a redacted copy of the response for debug logging
+            redacted_response = response_json.copy()
+            # Redact sensitive prompt data
+            for key in ['fixSystemPrompt', 'fixUserPrompt', 'qaSystemPrompt', 'qaUserPrompt']:
+                if key in redacted_response:
+                    redacted_response[key] = f"[REDACTED - {len(redacted_response[key])} chars]"
+            
+            debug_print(f"Response with redacted prompts: {json.dumps(redacted_response, indent=2)}")
             debug_print("Successfully received vulnerability and prompts from API")
             debug_print(f"Response keys: {list(response_json.keys())}")
             
