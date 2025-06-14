@@ -20,9 +20,9 @@
 import requests
 import json
 import sys
-from typing import Optional
 import config
-from utils import debug_print
+from utils import debug_log, log # Updated import
+import telemetry_handler
 
 def normalize_host(host: str) -> str:
     """Remove any protocol prefix from host to prevent double prefixing when constructing URLs."""
@@ -51,10 +51,10 @@ def get_vulnerability_with_prompts(contrast_host, contrast_org_id, contrast_app_
             'qaUserPrompt': '...'
         }
     """
-    debug_print("\n--- Fetching vulnerability and prompts from prompt-details API ---")
+    debug_log("\n--- Fetching vulnerability and prompts from prompt-details API ---")
     
     api_url = f"https://{normalize_host(contrast_host)}/api/v4/aiml-remediation/organizations/{contrast_org_id}/applications/{contrast_app_id}/prompt-details"
-    debug_print(f"API URL: {api_url}")
+    debug_log(f"API URL: {api_url}")
     
     headers = {
         "Authorization": contrast_auth_key,
@@ -73,20 +73,20 @@ def get_vulnerability_with_prompts(contrast_host, contrast_org_id, contrast_app_
         "severities": vulnerability_severities
     }
     
-    debug_print(f"Request payload: {json.dumps(payload, indent=2)}")
+    debug_log(f"Request payload: {json.dumps(payload, indent=2)}")
     
     try:
-        debug_print(f"Making POST request to: {api_url}")
+        debug_log(f"Making POST request to: {api_url}")
         response = requests.post(api_url, headers=headers, json=payload, timeout=30)
         
-        debug_print(f"Prompt-details API Response Status Code: {response.status_code}")
+        debug_log(f"Prompt-details API Response Status Code: {response.status_code}")
         
         # Handle different status codes
         if response.status_code == 204:
-            print("No vulnerabilities found that need remediation (204 No Content).")
+            log("No vulnerabilities found that need remediation (204 No Content).")
             return None
         elif response.status_code == 409:
-            print("At or over the maximum PR limit (409 Conflict).")
+            log("At or over the maximum PR limit (409 Conflict).")
             return None
         elif response.status_code == 200:
             response_json = response.json()
@@ -98,31 +98,31 @@ def get_vulnerability_with_prompts(contrast_host, contrast_org_id, contrast_app_
                 if key in redacted_response:
                     redacted_response[key] = f"[REDACTED - {len(redacted_response[key])} chars]"
             
-            debug_print(f"Response with redacted prompts: {json.dumps(redacted_response, indent=2)}")
-            debug_print("Successfully received vulnerability and prompts from API")
-            debug_print(f"Response keys: {list(response_json.keys())}")
+            debug_log(f"Response with redacted prompts: {json.dumps(redacted_response, indent=2)}")
+            debug_log("Successfully received vulnerability and prompts from API")
+            debug_log(f"Response keys: {list(response_json.keys())}")
             
             # Validate that we have all required components
             required_keys = ['remediationId', 'vulnerabilityUuid', 'vulnerabilityTitle', 'vulnerabilityRuleName', 'vulnerabilityStatus', 'vulnerabilitySeverity', 'fixSystemPrompt', 'fixUserPrompt', 'qaSystemPrompt', 'qaUserPrompt']
             missing_keys = [key for key in required_keys if key not in response_json]
             
             if missing_keys:
-                print(f"Error: Missing required keys in API response: {missing_keys}", file=sys.stderr)
+                log(f"Error: Missing required keys in API response: {missing_keys}", is_error=True)
                 sys.exit(1)
             
             return response_json
         else:
-            print(f"Unexpected status code {response.status_code} from prompt-details API: {response.text}", file=sys.stderr)
+            log(f"Unexpected status code {response.status_code} from prompt-details API: {response.text}", is_error=True)
             sys.exit(1)
             
     except requests.exceptions.RequestException as e:
-        print(f"Error fetching vulnerability and prompts: {e}", file=sys.stderr)
+        log(f"Error fetching vulnerability and prompts: {e}", is_error=True)
         sys.exit(1)
     except json.JSONDecodeError:
-        print("Error decoding JSON response from prompt-details API.", file=sys.stderr)
+        log("Error decoding JSON response from prompt-details API.", is_error=True)
         sys.exit(1)
     except Exception as e:
-        print(f"Unexpected error calling prompt-details API: {e}", file=sys.stderr)
+        log(f"Unexpected error calling prompt-details API: {e}", is_error=True)
         sys.exit(1)
 
 def notify_remediation_pr_opened(remediation_id: str, pr_number: int, pr_url: str, contrast_host: str, contrast_org_id: str, contrast_app_id: str, contrast_auth_key: str, contrast_api_key: str) -> bool:
@@ -141,7 +141,7 @@ def notify_remediation_pr_opened(remediation_id: str, pr_number: int, pr_url: st
     Returns:
         bool: True if the notification was successful, False otherwise.
     """
-    debug_print(f"--- Notifying Remediation service about PR for remediation {remediation_id} ---")
+    debug_log(f"--- Notifying Remediation service about PR for remediation {remediation_id} ---")
     api_url = f"https://{normalize_host(contrast_host)}/api/v4/aiml-remediation/organizations/{contrast_org_id}/applications/{contrast_app_id}/remediations/{remediation_id}/open"
 
     headers = {
@@ -158,15 +158,15 @@ def notify_remediation_pr_opened(remediation_id: str, pr_number: int, pr_url: st
     }
 
     try:
-        debug_print(f"Making PUT request to: {api_url}")
-        debug_print(f"Payload: {json.dumps(payload)}") # Log the payload for debugging
+        debug_log(f"Making PUT request to: {api_url}")
+        debug_log(f"Payload: {json.dumps(payload)}") # Log the payload for debugging
         response = requests.put(api_url, headers=headers, json=payload)
         response.raise_for_status()  # Raises an HTTPError for bad responses (4xx or 5xx)
 
-        debug_print(f"Remediation notification API response status code: {response.status_code}")
+        debug_log(f"Remediation notification API response status code: {response.status_code}")
         
         if response.status_code == 204:
-            debug_print(f"Successfully notified Remediation service API about PR for remediation {remediation_id}")
+            debug_log(f"Successfully notified Remediation service API about PR for remediation {remediation_id}")
             return True
         else:
             error_message = "Unknown error"
@@ -177,17 +177,17 @@ def notify_remediation_pr_opened(remediation_id: str, pr_number: int, pr_url: st
             except:
                 error_message = response.text
                 
-            print(f"Failed to notify Remediation service about PR for remediation {remediation_id}. Error: {error_message}", file=sys.stderr)
+            log(f"Failed to notify Remediation service about PR for remediation {remediation_id}. Error: {error_message}", is_error=True)
             return False
 
     except requests.exceptions.HTTPError as e:
-        print(f"HTTP error notifying Remediation service about PR for remediation {remediation_id}: {e.response.status_code} - {e.response.text}", file=sys.stderr)
+        log(f"HTTP error notifying Remediation service about PR for remediation {remediation_id}: {e.response.status_code} - {e.response.text}", is_error=True)
         return False
     except requests.exceptions.RequestException as e:
-        print(f"Request error notifying Remediation service about PR for remediation {remediation_id}: {e}", file=sys.stderr)
+        log(f"Request error notifying Remediation service about PR for remediation {remediation_id}: {e}", is_error=True)
         return False
     except json.JSONDecodeError:
-        print(f"Error decoding JSON response when notifying Remediation service about PR for remediation {remediation_id}.", file=sys.stderr)
+        log(f"Error decoding JSON response when notifying Remediation service about PR for remediation {remediation_id}.", is_error=True)
         return False
 
 def notify_remediation_pr_merged(remediation_id: str, contrast_host: str, contrast_org_id: str, contrast_app_id: str, contrast_auth_key: str, contrast_api_key: str) -> bool:
@@ -204,7 +204,7 @@ def notify_remediation_pr_merged(remediation_id: str, contrast_host: str, contra
     Returns:
         bool: True if the notification was successful, False otherwise.
     """
-    debug_print(f"--- Notifying Remediation service about merged PR for remediation {remediation_id} ---")
+    debug_log(f"--- Notifying Remediation service about merged PR for remediation {remediation_id} ---")
     api_url = f"https://{normalize_host(contrast_host)}/api/v4/aiml-remediation/organizations/{contrast_org_id}/applications/{contrast_app_id}/remediations/{remediation_id}/merged"
 
     headers = {
@@ -216,14 +216,14 @@ def notify_remediation_pr_merged(remediation_id: str, contrast_host: str, contra
     }
 
     try:
-        debug_print(f"Making PUT request to: {api_url}")
+        debug_log(f"Making PUT request to: {api_url}")
         response = requests.put(api_url, headers=headers)
         response.raise_for_status()  # Raises an HTTPError for bad responses (4xx or 5xx)
 
-        debug_print(f"Remediation merged notification API response status code: {response.status_code}")
+        debug_log(f"Remediation merged notification API response status code: {response.status_code}")
         
         if response.status_code == 204:
-            debug_print(f"Successfully notified Remediation service API about merged PR for remediation {remediation_id}")
+            debug_log(f"Successfully notified Remediation service API about merged PR for remediation {remediation_id}")
             return True
         else:
             error_message = "Unknown error"
@@ -234,17 +234,17 @@ def notify_remediation_pr_merged(remediation_id: str, contrast_host: str, contra
             except:
                 error_message = response.text
                 
-            print(f"Failed to notify Remediation service about merged PR for remediation {remediation_id}. Error: {error_message}", file=sys.stderr)
+            log(f"Failed to notify Remediation service about merged PR for remediation {remediation_id}. Error: {error_message}", is_error=True)
             return False
 
     except requests.exceptions.HTTPError as e:
-        print(f"HTTP error notifying Remediation service about merged PR for remediation {remediation_id}: {e.response.status_code} - {e.response.text}", file=sys.stderr)
+        log(f"HTTP error notifying Remediation service about merged PR for remediation {remediation_id}: {e.response.status_code} - {e.response.text}", is_error=True)
         return False
     except requests.exceptions.RequestException as e:
-        print(f"Request error notifying Remediation service about merged PR for remediation {remediation_id}: {e}", file=sys.stderr)
+        log(f"Request error notifying Remediation service about merged PR for remediation {remediation_id}: {e}", is_error=True)
         return False
     except json.JSONDecodeError:
-        print(f"Error decoding JSON response when notifying Remediation service about merged PR for remediation {remediation_id}.", file=sys.stderr)
+        log(f"Error decoding JSON response when notifying Remediation service about merged PR for remediation {remediation_id}.", is_error=True)
         return False
 
 def notify_remediation_pr_closed(remediation_id: str, contrast_host: str, contrast_org_id: str, contrast_app_id: str, contrast_auth_key: str, contrast_api_key: str) -> bool:
@@ -261,7 +261,7 @@ def notify_remediation_pr_closed(remediation_id: str, contrast_host: str, contra
     Returns:
         bool: True if the notification was successful, False otherwise.
     """
-    debug_print(f"--- Notifying Remediation service about closed PR for remediation {remediation_id} ---")
+    debug_log(f"--- Notifying Remediation service about closed PR for remediation {remediation_id} ---")
     api_url = f"https://{normalize_host(contrast_host)}/api/v4/aiml-remediation/organizations/{contrast_org_id}/applications/{contrast_app_id}/remediations/{remediation_id}/closed"
 
     headers = {
@@ -273,14 +273,14 @@ def notify_remediation_pr_closed(remediation_id: str, contrast_host: str, contra
     }
 
     try:
-        debug_print(f"Making PUT request to: {api_url}")
+        debug_log(f"Making PUT request to: {api_url}")
         response = requests.put(api_url, headers=headers)
         response.raise_for_status()  # Raises an HTTPError for bad responses (4xx or 5xx)
 
-        debug_print(f"Remediation closed notification API response status code: {response.status_code}")
+        debug_log(f"Remediation closed notification API response status code: {response.status_code}")
         
         if response.status_code == 204:
-            debug_print(f"Successfully notified Remediation service API about closed PR for remediation {remediation_id}")
+            debug_log(f"Successfully notified Remediation service API about closed PR for remediation {remediation_id}")
             return True
         else:
             error_message = "Unknown error"
@@ -291,15 +291,71 @@ def notify_remediation_pr_closed(remediation_id: str, contrast_host: str, contra
             except:
                 error_message = response.text
                 
-            print(f"Failed to notify Remediation service about closed PR for remediation {remediation_id}. Error: {error_message}", file=sys.stderr)
+            log(f"Failed to notify Remediation service about closed PR for remediation {remediation_id}. Error: {error_message}", is_error=True)
             return False
 
     except requests.exceptions.HTTPError as e:
-        print(f"HTTP error notifying Remediation service about closed PR for remediation {remediation_id}: {e.response.status_code} - {e.response.text}", file=sys.stderr)
+        log(f"HTTP error notifying Remediation service about closed PR for remediation {remediation_id}: {e.response.status_code} - {e.response.text}", is_error=True)
         return False
     except requests.exceptions.RequestException as e:
-        print(f"Request error notifying Remediation service about closed PR for remediation {remediation_id}: {e}", file=sys.stderr)
+        log(f"Request error notifying Remediation service about closed PR for remediation {remediation_id}: {e}", is_error=True)
         return False
     except json.JSONDecodeError:
-        print(f"Error decoding JSON response when notifying Remediation service about closed PR for remediation {remediation_id}.", file=sys.stderr)
+        log(f"Error decoding JSON response when notifying Remediation service about closed PR for remediation {remediation_id}.", is_error=True)
         return False
+
+def send_telemetry_data(telemetry_data: dict) -> bool:
+    """Sends the collected telemetry data to the backend.
+
+    Args:
+        telemetry_data: The telemetry data dictionary.
+
+    Returns:
+        bool: True if sending was successful, False otherwise.
+    """
+    telemetry_data = telemetry_handler.get_telemetry_data()
+
+    if not config.CONTRAST_HOST or not config.CONTRAST_ORG_ID or not config.CONTRAST_APP_ID or not config.CONTRAST_AUTHORIZATION_KEY or not config.CONTRAST_API_KEY:
+        log("Telemetry endpoint configuration is incomplete. Skipping telemetry send.", is_warning=True)
+        return False
+
+    # Get remediationId from telemetry_data.additionalAttributes.remediationId
+    remediation_id_for_url = telemetry_data.get("additionalAttributes", {}).get("remediationId", None)
+
+    if not remediation_id_for_url:
+        log("remediationId not found in telemetry_data.additionalAttributes. Telemetry data not sent.", is_warning=True)
+        # Decide if we should use a placeholder or fail. For now, let's use "unknown"
+        # as the original code did, but this should ideally be a hard failure or a different endpoint if remediationId is truly unknown.
+        return
+
+    api_url = f"https://{normalize_host(config.CONTRAST_HOST)}/api/v4/aiml-remediation/organizations/{config.CONTRAST_ORG_ID}/applications/{config.CONTRAST_APP_ID}/remediations/{remediation_id_for_url}/telemetry"
+    
+    headers = {
+        "Authorization": config.CONTRAST_AUTHORIZATION_KEY,
+        "API-Key": config.CONTRAST_API_KEY,
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": f"AI SmartFix {config.VERSION}" # Use specific User-Agent
+    }
+
+    debug_log(f"Sending telemetry data to: {api_url}")
+    # Avoid logging full telemetry data by default in production to prevent sensitive info leakage
+    # For debugging, one might temporarily log: debug_log(f"Telemetry payload: {json.dumps(telemetry_data, indent=2)}")
+
+    try:
+        response = requests.post(api_url, headers=headers, json=telemetry_data, timeout=30)
+        
+        if response.status_code >= 200 and response.status_code < 300:
+            debug_log(f"Telemetry data sent successfully. Status: {response.status_code}")
+            return True
+        else:
+            log(f"Failed to send telemetry data. Status: {response.status_code} - Response: {response.text}", is_error=True)
+            return False
+    except requests.exceptions.RequestException as e:
+        log(f"Error sending telemetry data: {e}", is_error=True)
+        return False
+    except Exception as e:
+        log(f"Unexpected error sending telemetry: {e}", is_error=True)
+        return False
+
+# %%

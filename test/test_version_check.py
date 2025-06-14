@@ -11,10 +11,10 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 mock_config = MagicMock()
 mock_config.DEBUG_MODE = True
 sys.modules['config'] = mock_config
-# Mock utils.debug_print to capture output for testing
+# Mock utils.debug_log to capture output for testing
 mock_utils = MagicMock()
-mock_debug_print = MagicMock()
-mock_utils.debug_print = mock_debug_print
+mock_debug_log = MagicMock()
+mock_utils.debug_log = mock_debug_log
 sys.modules['utils'] = mock_utils
 
 from src.version_check import get_latest_repo_version, check_for_newer_version, do_version_check, normalize_version, safe_parse_version
@@ -45,8 +45,8 @@ class TestVersionCheck(unittest.TestCase):
         self.env_patcher = patch.dict('os.environ', clear=True)
         self.env_patcher.start()
         
-        # Reset debug_print mock before each test
-        mock_debug_print.reset_mock()
+        # Reset debug_log mock before each test
+        mock_debug_log.reset_mock()
     
     def tearDown(self):
         # Clean up after each test
