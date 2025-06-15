@@ -204,7 +204,6 @@ def run_qa_loop(
             build_command=build_command,
             repo_root=config.REPO_ROOT,
             new_branch_name=new_branch_name,
-            formatting_command=formatting_command,
             qa_history=qa_summary_log, # Pass the history of previous QA attempts
             qa_system_prompt=qa_system_prompt,
             qa_user_prompt=qa_user_prompt
