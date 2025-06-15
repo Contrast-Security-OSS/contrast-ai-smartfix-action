@@ -175,7 +175,7 @@ def run_qa_loop(
 
     if initial_build_success:
         log("\n\u2705 Initial build successful after fix. No QA intervention needed.")
-        telemetry_handler.update_telemetry("resultInfo.filesModified", changed_files.count())
+        telemetry_handler.update_telemetry("resultInfo.filesModified", len(changed_files))
         build_success = True
         return build_success, changed_files, build_command, qa_summary_log
 
@@ -232,7 +232,7 @@ def run_qa_loop(
                     formatting_changed_files = run_formatting_command(formatting_command, repo_root, new_branch_name)
                     if formatting_changed_files:
                         changed_files.extend([f for f in formatting_changed_files if f not in changed_files])
-                    telemetry_handler.update_telemetry("resultInfo.filesModified", changed_files.count())
+                    telemetry_handler.update_telemetry("resultInfo.filesModified", len(changed_files))
 
                 # Re-run the main build command to check if the QA fix worked
                 log("\n--- Re-running Build Command After QA Fix ---")
