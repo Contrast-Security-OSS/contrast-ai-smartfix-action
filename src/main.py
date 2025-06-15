@@ -156,7 +156,6 @@ def main():
         # Ensure the build is not broken before running the fix agent
         log("\n--- Running Build Before Fix ---")
         prefix_build_success, prefix_build_output = run_build_command(build_command, config.REPO_ROOT, new_branch_name)
-        telemetry_handler.update_telemetry(f"vulnProcessingDetails.{vuln_uuid}.preFixBuild.success", prefix_build_success)
         if not prefix_build_success:
             # Analyze build failure and show error summary
             error_analysis = extract_build_errors(prefix_build_output)
@@ -198,9 +197,6 @@ def main():
                     qa_system_prompt=qa_system_prompt,
                     qa_user_prompt=qa_user_prompt
                 )
-                telemetry_handler.update_telemetry(f"vulnProcessingDetails.{vuln_uuid}.qaLoop.run", True)
-                telemetry_handler.update_telemetry(f"vulnProcessingDetails.{vuln_uuid}.qaLoop.buildSuccess", build_success)
-                telemetry_handler.update_telemetry(f"vulnProcessingDetails.{vuln_uuid}.qaLoop.finalChangedFiles", final_changed_files)
 
                 qa_section = "\n\n---\n\n## Review \n\n"
 

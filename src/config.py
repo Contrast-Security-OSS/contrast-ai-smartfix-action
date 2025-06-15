@@ -214,7 +214,7 @@ def _parse_and_validate_severities(json_str: Optional[str]) -> list[str]:
             if severity_upper in VALID_SEVERITIES:
                 validated.append(severity_upper)
             else:
-                log(f"Warning: '{severity}' is not a valid severity level. Must be one of {VALID_SEVERITIES}.", file=sys.stderr)
+                log(f"Warning: '{severity}' is not a valid severity level. Must be one of {VALID_SEVERITIES}.", is_error=True)
         
         # Return default if no valid severities
         if not validated:

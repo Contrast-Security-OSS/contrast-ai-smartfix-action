@@ -67,7 +67,7 @@ def initialize_telemetry():
         },
         "configInfo": {
             "sanitizedBuildCommand": config.BUILD_COMMAND, 
-            "buildCommandRunTestsIncluded": bool(config.BUILD_COMMAND),
+            "buildCommandRunTestsIncluded": False,
             "sanitizedFormatCommand": config.FORMATTING_COMMAND, 
             "aiProvider": None, 
             "aiModel": None     
