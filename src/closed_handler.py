@@ -87,8 +87,9 @@ def handle_closed_pr():
             vuln_uuid = label_name.split("VULN-")[1] if "VULN-" in label_name else None
             if vuln_uuid:
                 debug_log(f"Extracted Vulnerability UUID from PR label: {vuln_uuid}")
-                telemetry_handler.update_telemetry("vulnInfo.vulnId", vuln_uuid)
                 break
+    telemetry_handler.update_telemetry("vulnInfo.vulnId", vuln_uuid)
+    telemetry_handler.update_telemetry("vulnInfo.vulnRule", "unknown")
     
     if not vuln_uuid:
         debug_log("Could not extract vulnerability UUID from PR labels. Telemetry may be incomplete.")

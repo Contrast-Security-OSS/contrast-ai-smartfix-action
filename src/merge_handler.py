@@ -94,7 +94,7 @@ def handle_merged_pr():
     
     # Try to extract vulnerability UUID from PR labels
     labels = pull_request.get("labels", [])
-    vuln_uuid = None
+    vuln_uuid = "unknown"
     
     for label in labels:
         label_name = label.get("name", "")
@@ -103,8 +103,9 @@ def handle_merged_pr():
             vuln_uuid = label_name.split("VULN-")[1] if "VULN-" in label_name else None
             if vuln_uuid:
                 debug_log(f"Extracted Vulnerability UUID from PR label: {vuln_uuid}")
-                telemetry_handler.update_telemetry("vulnInfo.vulnId", vuln_uuid)
                 break
+    telemetry_handler.update_telemetry("vulnInfo.vulnId", vuln_uuid)
+    telemetry_handler.update_telemetry("vulnInfo.vulnRule", "unknown")
     
     if not vuln_uuid:
         debug_log("Could not extract vulnerability UUID from PR labels. Telemetry may be incomplete.")

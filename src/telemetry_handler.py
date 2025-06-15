@@ -104,8 +104,30 @@ def initialize_telemetry():
     _telemetry_initialized = True
 
 def get_telemetry_data():
-    """Returns a copy of the current telemetry data object."""
-    telemetry_copy = _telemetry_data.copy()
+    """Returns a copy of the current telemetry data object that is JSON serializable."""
+    import copy
+    import re
+    
+    # Make a deep copy to ensure we're not modifying the original
+    telemetry_copy = copy.deepcopy(_telemetry_data)
+    
+    # Helper function to make sure all values are JSON serializable
+    def ensure_json_serializable(obj):
+        if isinstance(obj, dict):
+            return {k: ensure_json_serializable(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [ensure_json_serializable(item) for item in obj]
+        elif callable(obj):  # If it's a function or method
+            return str(obj)  # Convert to string representation
+        elif obj is None or isinstance(obj, (str, int, float, bool)):
+            return obj  # Already serializable types
+        else:
+            # Convert any other type to string
+            return str(obj)
+    
+    # Make the entire telemetry data structure JSON serializable
+    telemetry_copy = ensure_json_serializable(telemetry_copy)
+    
     if not config.ENABLE_FULL_TELEMETRY:
         # Remove sensitive fields if telemetry is limited
         if "additionalAttributes" in telemetry_copy:
