@@ -138,6 +138,15 @@ def get_telemetry_data():
             telemetry_copy["configInfo"]["sanitizedBuildCommand"] = ""
             telemetry_copy["configInfo"]["sanitizedFormatCommand"] = ""
 
+    # Debug: Print the JSON structure with truncated fullLog
+    import json
+    debug_copy = copy.deepcopy(telemetry_copy)
+    if "additionalAttributes" in debug_copy and "fullLog" in debug_copy["additionalAttributes"]:
+        full_log = debug_copy["additionalAttributes"]["fullLog"]
+        debug_copy["additionalAttributes"]["fullLog"] = f"{full_log[:100]}... [truncated, total length: {len(full_log)}]"
+    print("DEBUG - Telemetry structure (with truncated fullLog):")
+    print(json.dumps(debug_copy, indent=2, default=str))
+
     return telemetry_copy
 
 def update_telemetry(key_path: str, value):
