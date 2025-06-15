@@ -196,8 +196,7 @@ def main():
                     formatting_command=formatting_command,
                     new_branch_name=new_branch_name,
                     qa_system_prompt=qa_system_prompt,
-                    qa_user_prompt=qa_user_prompt,
-                    vuln_uuid=vuln_uuid # Pass vuln_uuid for telemetry
+                    qa_user_prompt=qa_user_prompt
                 )
                 telemetry_handler.update_telemetry(f"vulnProcessingDetails.{vuln_uuid}.qaLoop.run", True)
                 telemetry_handler.update_telemetry(f"vulnProcessingDetails.{vuln_uuid}.qaLoop.buildSuccess", build_success)
