@@ -91,6 +91,23 @@ def handle_merged_pr():
     
     debug_log(f"Extracted Remediation ID: {remediation_id}")
     telemetry_handler.update_telemetry("additionalAttributes.remediationId", remediation_id)
+    
+    # Try to extract vulnerability UUID from PR labels
+    labels = pull_request.get("labels", [])
+    vuln_uuid = None
+    
+    for label in labels:
+        label_name = label.get("name", "")
+        if label_name.startswith("contrast-vuln-id:VULN-"):
+            # Extract UUID from label format "contrast-vuln-id:VULN-{vuln_uuid}"
+            vuln_uuid = label_name.split("VULN-")[1] if "VULN-" in label_name else None
+            if vuln_uuid:
+                debug_log(f"Extracted Vulnerability UUID from PR label: {vuln_uuid}")
+                telemetry_handler.update_telemetry("vulnInfo.vulnId", vuln_uuid)
+                break
+    
+    if not vuln_uuid:
+        debug_log("Could not extract vulnerability UUID from PR labels. Telemetry may be incomplete.")
 
     config.check_contrast_config_values_exist()
     
@@ -109,6 +126,9 @@ def handle_merged_pr():
         log(f"Successfully notified Remediation service about merged PR for remediation {remediation_id}.")
     else:
         log(f"Warning: Failed to notify Remediation service about merged PR for remediation {remediation_id}.", is_error=True)
+
+    telemetry_handler.update_telemetry("additionalAttributes.prStatus", "MERGED")
+    contrast_api.send_telemetry_data()
 
     log("--- Merged Contrast AI SmartFix Pull Request Handling Complete ---")
 
