@@ -304,7 +304,7 @@ def notify_remediation_pr_closed(remediation_id: str, contrast_host: str, contra
         log(f"Error decoding JSON response when notifying Remediation service about closed PR for remediation {remediation_id}.", is_error=True)
         return False
 
-def send_telemetry_data(telemetry_data: dict) -> bool:
+def send_telemetry_data() -> bool:
     """Sends the collected telemetry data to the backend.
 
     Args:
