@@ -108,7 +108,7 @@ def handle_merged_pr():
     if remediation_notified:
         log(f"Successfully notified Remediation service about merged PR for remediation {remediation_id}.")
     else:
-        log(f"Warning: Failed to notify Remediation service about merged PR for remediation {remediation_id}.", file=sys.stderr)
+        log(f"Warning: Failed to notify Remediation service about merged PR for remediation {remediation_id}.", is_error=True)
 
     log("--- Merged Contrast AI SmartFix Pull Request Handling Complete ---")
 

@@ -36,14 +36,14 @@ def handle_closed_pr():
     # Get PR event details from environment variables set by GitHub Actions
     event_path = os.getenv("GITHUB_EVENT_PATH")
     if not event_path:
-        log("Error: GITHUB_EVENT_PATH not set. Cannot process PR event.", file=sys.stderr)
+        log("Error: GITHUB_EVENT_PATH not set. Cannot process PR event.", is_error=True)
         sys.exit(1)
 
     try:
         with open(event_path, 'r') as f:
             event_data = json.load(f)
     except Exception as e:
-        log(f"Error reading or parsing GITHUB_EVENT_PATH file: {e}", file=sys.stderr)
+        log(f"Error reading or parsing GITHUB_EVENT_PATH file: {e}", is_error=True)
         sys.exit(1)
 
     if event_data.get("action") != "closed":
@@ -60,7 +60,7 @@ def handle_closed_pr():
     # Get the branch name from the PR
     branch_name = pull_request.get("head", {}).get("ref")
     if not branch_name:
-        log("Error: Could not determine branch name from PR.", file=sys.stderr)
+        log("Error: Could not determine branch name from PR.", is_error=True)
         sys.exit(1)
     
     debug_log(f"Branch name: {branch_name}")
@@ -69,7 +69,7 @@ def handle_closed_pr():
     remediation_id = extract_remediation_id_from_branch(branch_name)
     
     if not remediation_id:
-        log(f"Error: Could not extract remediation ID from branch name: {branch_name}", file=sys.stderr)
+        log(f"Error: Could not extract remediation ID from branch name: {branch_name}", is_error=True)
         # If we can't find the remediation ID, we can't proceed
         sys.exit(1)
     

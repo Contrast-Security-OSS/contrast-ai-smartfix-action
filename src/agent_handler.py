@@ -158,7 +158,13 @@ async def process_agent_run(runner, session, exit_stack, user_query, new_branch_
     )
 
     agent_run_result = "ERROR"
-    agent_event_telemetry = None
+    # Initialize with a properly structured object
+    agent_event_telemetry = {
+        "llmAction": {
+            "summary": "Starting agent execution"
+        },
+        "toolCalls": []
+    }
     agent_tool_calls_telemetry = []
     try:
         async for event in events_async:
@@ -184,7 +190,7 @@ async def process_agent_run(runner, session, exit_stack, user_query, new_branch_
                     log(f"\n*** {agent_type.upper()} Agent Message: \033[1;36m {message_text} \033[0m")
                     final_response = message_text
                     if agent_event_telemetry is not None:
-                        agent_event_telemetry["toolsCalls"].append(agent_tool_calls_telemetry)
+                        agent_event_telemetry["toolCalls"].append(agent_tool_calls_telemetry)
                         agent_event_actions.append(agent_event_telemetry)
                         agent_event_telemetry = {
                             "llmAction": {
@@ -223,7 +229,6 @@ async def process_agent_run(runner, session, exit_stack, user_query, new_branch_
                             tool_call_status = "SUCCESS"
                         else:
                             tool_call_status = "FAILURE"
-                        debug_log(f"Extracted isError={is_error_value} using regex from {response.name} response")
 
                     agent_tool_calls_telemetry.append({
                         "tool": response.name,
@@ -235,7 +240,7 @@ async def process_agent_run(runner, session, exit_stack, user_query, new_branch_
         await exit_stack.aclose()
         log(f"{agent_type.upper()} agent run finished.")
 
-        agent_event_telemetry["toolsCalls"].append(agent_tool_calls_telemetry)
+        agent_event_telemetry["toolCalls"].append(agent_tool_calls_telemetry)
         agent_event_actions.append(agent_event_telemetry)
         duration_ms = (datetime.datetime.now() - start_time).total_seconds() * 1000
         agent_event_payload = {
@@ -339,7 +344,7 @@ def run_ai_fix_agent(repo_root: Path, fix_system_prompt: str, fix_user_prompt: s
             return agent_summary_str # Return the full summary if tags are not found
             
     except Exception as e:
-        log(f"Error running AI fix agent: {e}", file=sys.stderr)
+        log(f"Error running AI fix agent: {e}", is_error=True)
         # Cleanup any changes made and revert to base branch (no branch name yet)
         error_exit(new_branch_name)
 
@@ -399,7 +404,7 @@ def run_qa_agent(build_output: str, changed_files: List[str], build_command: str
         return qa_summary
 
     except Exception as e:
-        log(f"Error running QA agent: {e}", file=sys.stderr)
+        log(f"Error running QA agent: {e}", is_error=True)
         # Need to get the branch name from main.py context - will be handled by main.py
         # We'll just revert uncommitted changes here
         error_exit(new_branch_name)
