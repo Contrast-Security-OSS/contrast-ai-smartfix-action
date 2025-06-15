@@ -103,7 +103,7 @@ async def create_agent(target_folder: Path, new_branch_name: str, agent_type: st
         agent_instruction = system_prompt
         debug_log(f"Using API-provided system prompt for {agent_type} agent")
     else:
-        log(f"Error: No system prompt available for {agent_type} agent", is_error=True)
+        log(f"Error: No system prompt available for {agent_type} agent")
         await exit_stack.aclose()
         error_exit(new_branch_name)
     agent_name = f"contrast_{agent_type}_agent"
@@ -157,7 +157,7 @@ async def process_agent_run(runner, session, exit_stack, user_query, new_branch_
         new_message=content
     )
 
-    agent_run_result = "SUCCESS"
+    agent_run_result = "ERROR"
     agent_event_telemetry = None
     agent_tool_calls_telemetry = []
     try:
@@ -169,7 +169,6 @@ async def process_agent_run(runner, session, exit_stack, user_query, new_branch_
             if event_count > max_events_limit:
                 log(f"\n⚠️ Reached maximum event limit of {max_events_limit} for {agent_type.upper()} agent. Stopping agent execution early.")
                 final_response += f"\n\n⚠️ Note: Agent execution was terminated early after reaching the maximum limit of {max_events_limit} events. The solution may be incomplete."
-                agent_run_result = "ERROR"
                 await events_async.aclose()
                 # Throw exception to fully abort processing
                 raise RuntimeError(f"Maximum event limit of {max_events_limit} exceeded. Agent execution aborted.")
@@ -194,7 +193,6 @@ async def process_agent_run(runner, session, exit_stack, user_query, new_branch_
                             "toolCalls": []
                         }
                         agent_tool_calls_telemetry = []
-                    agent_event_telemetry["llmAction"]["summary"] = message_text
 
             calls = event.get_function_calls()
             if calls:
@@ -234,6 +232,7 @@ async def process_agent_run(runner, session, exit_stack, user_query, new_branch_
                         "tool": response.name,
                         "result": tool_call_status,
                     })
+        agent_run_result = "SUCCESS"
     finally:
         debug_log(f"Closing MCP server connections for {agent_type.upper()} agent...")
         await exit_stack.aclose()

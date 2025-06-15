@@ -155,7 +155,7 @@ def run_command(command, env=None, check=True):
 
         return process.stdout.strip() if process.stdout else "" # Return stdout or empty string
     finally:
-        debug_log("::endgroup::", flush=True)
+        debug_log("::endgroup::")
 
 
 def error_exit(branch_name: str):

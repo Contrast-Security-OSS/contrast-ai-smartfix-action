@@ -21,7 +21,7 @@ import requests
 import json
 import sys
 import config
-from utils import debug_log, log # Updated import
+from utils import debug_log, log
 import telemetry_handler
 
 def normalize_host(host: str) -> str:
@@ -324,8 +324,6 @@ def send_telemetry_data(telemetry_data: dict) -> bool:
 
     if not remediation_id_for_url:
         log("remediationId not found in telemetry_data.additionalAttributes. Telemetry data not sent.", is_warning=True)
-        # Decide if we should use a placeholder or fail. For now, let's use "unknown"
-        # as the original code did, but this should ideally be a hard failure or a different endpoint if remediationId is truly unknown.
         return
 
     api_url = f"https://{normalize_host(config.CONTRAST_HOST)}/api/v4/aiml-remediation/organizations/{config.CONTRAST_ORG_ID}/applications/{config.CONTRAST_APP_ID}/remediations/{remediation_id_for_url}/telemetry"

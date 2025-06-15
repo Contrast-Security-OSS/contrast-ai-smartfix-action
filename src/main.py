@@ -209,7 +209,7 @@ def main():
                     qa_section += f"*   **Build Run:** Yes (`{used_build_command}`)\n"
 
                     if build_success:
-                        qa_section += "*   **Final Build Status:** Success ✅\\n"
+                        qa_section += "*   **Final Build Status:** Success ✅\n"
                     else:
                         qa_section += "*   **Final Build Status:** Failure ❌\n"
                 else:
@@ -234,9 +234,6 @@ def main():
                     log("Skipping QA Review based on SKIP_QA_REVIEW setting.")
                 elif not build_command:
                     log("Skipping QA Review as no BUILD_COMMAND was provided.")
-
-                pr_title = git_handler.generate_pr_title(vuln_title)
-                # pr_body_base is already set from AI fix agent output (with analytics potentially)
 
             # --- Create Pull Request ---
             pr_title = git_handler.generate_pr_title(vuln_title)

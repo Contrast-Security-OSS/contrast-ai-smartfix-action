@@ -28,7 +28,7 @@ import telemetry_handler
 def check_contrast_config_values_exist():
     # Check for essential Contrast configuration
     if not all([CONTRAST_HOST, CONTRAST_ORG_ID, CONTRAST_APP_ID, CONTRAST_AUTHORIZATION_KEY, CONTRAST_API_KEY]):
-        log("Error: Missing one or more Contrast API configuration variables (HOST, ORG_ID, APP_ID, AUTH_KEY, API_KEY).", file=sys.stderr)
+        log("Error: Missing one or more Contrast API configuration variables (HOST, ORG_ID, APP_ID, AUTH_KEY, API_KEY).", is_error=True)
         sys.exit(1)
 
 def get_env_var(var_name: str, required: bool = True, default: Optional[Any] = None) -> Optional[str]:
@@ -47,7 +47,7 @@ def get_env_var(var_name: str, required: bool = True, default: Optional[Any] = N
     """
     value = os.environ.get(var_name)
     if required and not value:
-        log(f"Error: Required environment variable {var_name} is not set.", file=sys.stderr)
+        log(f"Error: Required environment variable {var_name} is not set.", is_error=True)
         sys.exit(1)
     return value if value else default
 
@@ -204,7 +204,7 @@ def _parse_and_validate_severities(json_str: Optional[str]) -> list[str]:
         
         # Ensure it's a list
         if not isinstance(severities, list):
-            log(f"Warning: vulnerability_severities must be a list, got {type(severities)}. Using default.", file=sys.stderr)
+            log(f"Warning: vulnerability_severities must be a list, got {type(severities)}. Using default.", is_error=True)
             return default_severities
         
         # Convert to uppercase and filter valid values
@@ -218,15 +218,15 @@ def _parse_and_validate_severities(json_str: Optional[str]) -> list[str]:
         
         # Return default if no valid severities
         if not validated:
-            log(f"Warning: No valid severity levels provided. Using default: {default_severities}", file=sys.stderr)
+            log(f"Warning: No valid severity levels provided. Using default: {default_severities}", is_Error=True)
             return default_severities
             
         return validated
     except json.JSONDecodeError:
-        log(f"Error parsing vulnerability_severities JSON: {json_str}. Using default.", file=sys.stderr)
+        log(f"Error parsing vulnerability_severities JSON: {json_str}. Using default.", is_error=True)
         return default_severities
     except Exception as e:
-        log(f"Error processing vulnerability_severities: {e}. Using default.", file=sys.stderr)
+        log(f"Error processing vulnerability_severities: {e}. Using default.", is_error=True)
         return default_severities
 
 # Parse the severity levels from environment variable with a default of ["CRITICAL", "HIGH"]
