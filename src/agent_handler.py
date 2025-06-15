@@ -212,7 +212,7 @@ async def process_agent_run(runner, session, exit_stack, user_query, new_branch_
                     result_str = str(response.response)
                     log(f"\n::group::  Response from tool {response.name} for {agent_type.upper()} Agent...")
                     log(f"  Tool Result: {response.name} -> {result_str}")
-                    log("\n::endgroup::", flush=True)
+                    log("\n::endgroup::")
 
                     tool_call_status = "UNKNOWN" 
                     try:

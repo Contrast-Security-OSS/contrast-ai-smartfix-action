@@ -75,7 +75,7 @@ def main():
         sys.exit(0)
     else:
         log(f"Found {current_open_pr_count} open PR(s) with label prefix '{label_prefix_to_check}' (Limit: {max_open_prs_setting}). Proceeding...")
-    log("\n::endgroup::", flush=True)
+    log("\n::endgroup::")
     # END Check Open PR Limit
 
     # --- Main Processing Loop ---
