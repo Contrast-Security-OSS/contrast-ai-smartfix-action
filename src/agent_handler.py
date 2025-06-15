@@ -215,18 +215,15 @@ async def process_agent_run(runner, session, exit_stack, user_query, new_branch_
                     log("\n::endgroup::")
 
                     tool_call_status = "UNKNOWN" 
-                    try:
-                        parsed_json = json.loads(result_str)
-                        if isinstance(parsed_json, dict) and "isError" in parsed_json:
-                            if parsed_json["isError"] is False: 
-                                tool_call_status = "SUCCESS"
-                            else:
-                                tool_call_status = "FAILURE"
-                    except json.JSONDecodeError:
-                        # Not JSON or malformed, keep default SUCCESS unless other heuristics apply
-                        debug_log(f"Tool response for {response.name} was not valid JSON or did not contain 'isError'.")
-                    except Exception as e:
-                        debug_log(f"Error parsing tool response for {response.name}: {e}", is_error=True)
+                    # First try regex to find isError=True or isError=False pattern
+                    is_error_match = re.search(r'isError\s*=\s*(True|False)', result_str)
+                    if is_error_match:
+                        is_error_value = is_error_match.group(1)
+                        if is_error_value == "False":
+                            tool_call_status = "SUCCESS"
+                        else:
+                            tool_call_status = "FAILURE"
+                        debug_log(f"Extracted isError={is_error_value} using regex from {response.name} response")
 
                     agent_tool_calls_telemetry.append({
                         "tool": response.name,
