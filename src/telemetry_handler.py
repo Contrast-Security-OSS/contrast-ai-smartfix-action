@@ -124,9 +124,42 @@ def get_telemetry_data():
         else:
             # Convert any other type to string
             return str(obj)
+            
+    # Helper function to truncate large text fields within agent events
+    def truncate_large_text_fields(obj, max_length=5000):
+        if isinstance(obj, dict):
+            for key, value in obj.items():
+                if isinstance(value, str) and len(value) > max_length:
+                    # Truncate the string and add an indicator
+                    obj[key] = value[:int(max_length/2)] + f"...[{len(value) - max_length} characters truncated]..." + value[-int(max_length/2):]
+                elif isinstance(value, (dict, list)):
+                    truncate_large_text_fields(value, max_length)
+        elif isinstance(obj, list):
+            for i, item in enumerate(obj):
+                if isinstance(item, (dict, list)):
+                    truncate_large_text_fields(item, max_length)
+        return obj
     
     # Make the entire telemetry data structure JSON serializable
     telemetry_copy = ensure_json_serializable(telemetry_copy)
+    
+    # Truncate fullLog to a reasonable size to avoid database issues
+    # Most database JSON columns have limits of ~64KB or less
+    if "additionalAttributes" in telemetry_copy and "fullLog" in telemetry_copy["additionalAttributes"]:
+        full_log = telemetry_copy["additionalAttributes"]["fullLog"]
+        if len(full_log) > 20000:  # Limit to 20KB which is safe for most DB columns
+            # Keep only the end (most recent logs)
+            telemetry_copy["additionalAttributes"]["fullLog"] = f"...[First {len(full_log) - 20000} characters truncated]...\n{full_log[-20000:]}"
+    
+    # Also truncate any large text fields in agent events
+    if "agentEvents" in telemetry_copy:
+        truncate_large_text_fields(telemetry_copy["agentEvents"])
+    
+    # Also truncate aiSummaryReport if it's too large
+    if "resultInfo" in telemetry_copy and "aiSummaryReport" in telemetry_copy["resultInfo"] and telemetry_copy["resultInfo"]["aiSummaryReport"]:
+        summary = telemetry_copy["resultInfo"]["aiSummaryReport"]
+        if len(summary) > 10000:  # 10KB limit for summary
+            telemetry_copy["resultInfo"]["aiSummaryReport"] = f"{summary[:5000]}...[truncated]...{summary[-5000:]}"
     
     if not config.ENABLE_FULL_TELEMETRY:
         # Remove sensitive fields if telemetry is limited
@@ -143,7 +176,7 @@ def get_telemetry_data():
     debug_copy = copy.deepcopy(telemetry_copy)
     if "additionalAttributes" in debug_copy and "fullLog" in debug_copy["additionalAttributes"]:
         full_log = debug_copy["additionalAttributes"]["fullLog"]
-        debug_copy["additionalAttributes"]["fullLog"] = f"{full_log[:100]}... [truncated, total length: {len(full_log)}]"
+        debug_copy["additionalAttributes"]["fullLog"] = f"... [truncated, showing last 100 chars: {full_log[-100:]}]"
     print("DEBUG - Telemetry structure (with truncated fullLog):")
     print(json.dumps(debug_copy, indent=2, default=str))
 
