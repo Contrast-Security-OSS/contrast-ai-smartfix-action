@@ -204,7 +204,7 @@ def _parse_and_validate_severities(json_str: Optional[str]) -> list[str]:
         
         # Ensure it's a list
         if not isinstance(severities, list):
-            log(f"Warning: vulnerability_severities must be a list, got {type(severities)}. Using default.", is_error=True)
+            log(f"Vulnerability_severities must be a list, got {type(severities)}. Using default.", is_error=True)
             return default_severities
         
         # Convert to uppercase and filter valid values
@@ -214,11 +214,11 @@ def _parse_and_validate_severities(json_str: Optional[str]) -> list[str]:
             if severity_upper in VALID_SEVERITIES:
                 validated.append(severity_upper)
             else:
-                log(f"Warning: '{severity}' is not a valid severity level. Must be one of {VALID_SEVERITIES}.", is_error=True)
+                log(f"'{severity}' is not a valid severity level. Must be one of {VALID_SEVERITIES}.", is_error=True)
         
         # Return default if no valid severities
         if not validated:
-            log(f"Warning: No valid severity levels provided. Using default: {default_severities}", is_Error=True)
+            log(f"No valid severity levels provided. Using default: {default_severities}", is_error=True)
             return default_severities
             
         return validated

@@ -110,7 +110,7 @@ def handle_closed_pr():
     if remediation_notified:
         log(f"Successfully notified Remediation service about closed PR for remediation {remediation_id}.")
     else:
-        log(f"Warning: Failed to notify Remediation service about closed PR for remediation {remediation_id}.", is_error=True)
+        log(f"Failed to notify Remediation service about closed PR for remediation {remediation_id}.", is_error=True)
 
     telemetry_handler.update_telemetry("additionalAttributes.prStatus", "CLOSED")
     contrast_api.send_telemetry_data()

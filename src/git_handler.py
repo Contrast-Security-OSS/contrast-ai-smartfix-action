@@ -131,7 +131,7 @@ def ensure_label(label_name: str, description: str, color: str) -> bool:
     """
     log(f"Ensuring GitHub label exists: {label_name}")
     if len(label_name) > 50:
-        log(f"Warning: Label name '{label_name}' exceeds GitHub's 50-character limit.", is_error=True)
+        log(f"Label name '{label_name}' exceeds GitHub's 50-character limit.", is_error=True)
         return False
         
     gh_env = get_gh_env()
@@ -215,7 +215,7 @@ def check_pr_status_for_label(label_name: str) -> str:
              debug_log(f"Found OPEN PR for label {label_name}.")
              return "OPEN"
     except json.JSONDecodeError:
-        log(f"Warning: Could not parse JSON output from gh pr list (open): {open_pr_output}", is_error=True)
+        log(f"Could not parse JSON output from gh pr list (open): {open_pr_output}", is_error=True)
 
 
     # Check for MERGED PRs
@@ -233,7 +233,7 @@ def check_pr_status_for_label(label_name: str) -> str:
             debug_log(f"Found MERGED PR for label {label_name}.")
             return "MERGED"
     except json.JSONDecodeError:
-        log(f"Warning: Could not parse JSON output from gh pr list (merged): {merged_pr_output}", is_error=True)
+        log(f"Could not parse JSON output from gh pr list (merged): {merged_pr_output}", is_error=True)
 
     debug_log(f"No existing OPEN or MERGED PR found for label {label_name}.")
     return "NONE"
@@ -258,7 +258,7 @@ def count_open_prs_with_prefix(label_prefix: str) -> int:
         pr_list_output = run_command(pr_list_command, env=gh_env, check=True)
         prs_data = json.loads(pr_list_output)
     except json.JSONDecodeError:
-        log(f"Warning: Could not parse JSON output from gh pr list: {pr_list_output}", is_error=True)
+        log(f"Could not parse JSON output from gh pr list: {pr_list_output}", is_error=True)
         return 0 # Assume zero if we can't parse
     except Exception as e:
         log(f"Error running gh pr list command: {e}", is_error=True)
@@ -296,7 +296,7 @@ def create_pr(title: str, body: str, head_branch: str, base_branch: str, label: 
     
     # Truncate PR body if too large
     if len(body) > MAX_PR_BODY_SIZE:
-        log(f"Warning: PR body is too large ({len(body)} chars). Truncating to {MAX_PR_BODY_SIZE} chars.")
+        log(f"PR body is too large ({len(body)} chars). Truncating to {MAX_PR_BODY_SIZE} chars.", is_warning=True)
         body = body[:MAX_PR_BODY_SIZE] + "\n\n...[Content truncated due to size limits]..."
 
     # Add disclaimer to PR body
@@ -329,7 +329,7 @@ def create_pr(title: str, body: str, head_branch: str, base_branch: str, label: 
             )
             debug_log(f"GitHub CLI version: {version_output.stdout.strip() if version_output.returncode == 0 else 'Not available'}")
         except Exception as e:
-            log(f"Warning: Could not determine GitHub CLI version: {e}", is_error=True)
+            log(f"Could not determine GitHub CLI version: {e}", is_error=True)
         
         pr_command = [
             "gh", "pr", "create",
@@ -360,7 +360,7 @@ def create_pr(title: str, body: str, head_branch: str, base_branch: str, label: 
                 os.remove(temp_file_path)
                 debug_log(f"Temporary PR body file {temp_file_path} removed.")
             except OSError as e:
-                log(f"Warning: Could not remove temporary file {temp_file_path}: {e}", is_error=True)
+                log(f"Could not remove temporary file {temp_file_path}: {e}", is_error=True)
 
 def cleanup_branch(branch_name: str):
     """

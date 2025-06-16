@@ -176,7 +176,7 @@ def main():
             if remediation_notified:
                 log(f"Successfully notified Remediation service about failed build for remediation {remediation_id}.")
             else:
-                log(f"Warning: Failed to notify Remediation service about failed build for remediation {remediation_id}.")
+                log(f"Failed to notify Remediation service about failed build for remediation {remediation_id}.", is_warning=True)
                 
             error_exit(new_branch_name) # Exit if the build is broken, no point in proceeding
 
@@ -259,7 +259,7 @@ def main():
                         if remediation_notified:
                             log(f"Successfully notified Remediation service about {failure_category} for remediation {remediation_id}.")
                         else:
-                            log(f"Warning: Failed to notify Remediation service about {failure_category} for remediation {remediation_id}.")
+                            log(f"Failed to notify Remediation service about {failure_category} for remediation {remediation_id}.", is_warning=True)
 
                     git_handler.cleanup_branch(new_branch_name)
                     contrast_api.send_telemetry_data()
@@ -325,9 +325,9 @@ def main():
                             pr_number = int(pr_match.group(1))
                             debug_log(f"Successfully extracted PR number: {pr_number}")
                         else:
-                            log(f"Warning: Could not find PR number pattern in URL: {pr_url}")
+                            log(f"Could not find PR number pattern in URL: {pr_url}", is_warning=True)
                     except (ValueError, IndexError, AttributeError) as e:
-                        log(f"Warning: Could not extract PR number from URL: {pr_url} - Error: {str(e)}")
+                        log(f"Could not extract PR number from URL: {pr_url} - Error: {str(e)}")
                     
                     # Notify the Remediation backend service about the PR
                     if pr_number is None:
