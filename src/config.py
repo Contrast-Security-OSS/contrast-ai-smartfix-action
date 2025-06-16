@@ -22,12 +22,13 @@ import sys
 import json
 from pathlib import Path
 from typing import Optional, Any
-from utils import debug_print # Import debug_print
+from utils import debug_log, log
+import telemetry_handler
 
 def check_contrast_config_values_exist():
     # Check for essential Contrast configuration
     if not all([CONTRAST_HOST, CONTRAST_ORG_ID, CONTRAST_APP_ID, CONTRAST_AUTHORIZATION_KEY, CONTRAST_API_KEY]):
-        print("Error: Missing one or more Contrast API configuration variables (HOST, ORG_ID, APP_ID, AUTH_KEY, API_KEY).", file=sys.stderr)
+        log("Error: Missing one or more Contrast API configuration variables (HOST, ORG_ID, APP_ID, AUTH_KEY, API_KEY).", is_error=True)
         sys.exit(1)
 
 def get_env_var(var_name: str, required: bool = True, default: Optional[Any] = None) -> Optional[str]:
@@ -46,7 +47,7 @@ def get_env_var(var_name: str, required: bool = True, default: Optional[Any] = N
     """
     value = os.environ.get(var_name)
     if required and not value:
-        print(f"Error: Required environment variable {var_name} is not set.", file=sys.stderr)
+        log(f"Error: Required environment variable {var_name} is not set.", is_error=True)
         sys.exit(1)
     return value if value else default
 
@@ -64,12 +65,12 @@ def get_max_qa_attempts() -> int:
         # Apply the hard cap
         max_qa_attempts = min(max_attempts_from_env, hard_cap_attempts)
         if max_attempts_from_env > hard_cap_attempts:
-            debug_print(f"MAX_QA_ATTEMPTS ({max_attempts_from_env}) exceeded hard cap ({hard_cap_attempts}). Using {hard_cap_attempts}.")
+            log(f"MAX_QA_ATTEMPTS ({max_attempts_from_env}) exceeded hard cap ({hard_cap_attempts}). Using {hard_cap_attempts}.", is_warning=True)
         else:
-            debug_print(f"Using MAX_QA_ATTEMPTS from config: {max_qa_attempts}")
+            debug_log(f"Using MAX_QA_ATTEMPTS from config: {max_qa_attempts}")
         return max_qa_attempts
     except (ValueError, TypeError):
-        debug_print(f"Invalid MAX_QA_ATTEMPTS value. Using default: {default_max_attempts}")
+        log(f"Invalid MAX_QA_ATTEMPTS value. Using default: {default_max_attempts}", is_warning=True)
         return default_max_attempts
 
 def get_max_open_prs() -> int:
@@ -83,12 +84,12 @@ def get_max_open_prs() -> int:
         max_open_prs = int(get_env_var("MAX_OPEN_PRS", required=False, default="5"))
         if max_open_prs < 0:  # Ensure non-negative
             max_open_prs = default_max_open_prs
-            debug_print(f"MAX_OPEN_PRS was negative, using default: {default_max_open_prs}")
+            log(f"MAX_OPEN_PRS was negative, using default: {default_max_open_prs}", is_warning=True)
         else:
-            debug_print(f"Using MAX_OPEN_PRS from environment: {max_open_prs}")
+            debug_log(f"Using MAX_OPEN_PRS from environment: {max_open_prs}")
         return max_open_prs
     except (ValueError, TypeError):
-        debug_print(f"Invalid or missing MAX_OPEN_PRS environment variable. Using default: {default_max_open_prs}")
+        log(f"Invalid or missing MAX_OPEN_PRS environment variable. Using default: {default_max_open_prs}", is_warning=True)
         return default_max_open_prs
 
 def get_max_events_per_agent() -> int:
@@ -101,19 +102,21 @@ def get_max_events_per_agent() -> int:
     try:
         max_events = int(get_env_var("MAX_EVENTS_PER_AGENT", required=False, default="120"))
         if max_events < 10:  # Ensure it's at least 10 to allow for minimal agent operation
-            debug_print(f"MAX_EVENTS_PER_AGENT ({max_events}) is too low. Using minimum value: 10")
+            log(f"MAX_EVENTS_PER_AGENT ({max_events}) is too low. Using minimum value: 10", is_warning=True)
             return 10
         elif max_events > 500:
+            log(f"MAX_EVENTS_PER_AGENT ({max_events}) is too high. Using maximum value: 500", is_warning=True)
             return 500
         else:
-            debug_print(f"Using MAX_EVENTS_PER_AGENT from environment: {max_events}")
+            debug_log(f"Using MAX_EVENTS_PER_AGENT from environment: {max_events}")
             return max_events
     except (ValueError, TypeError):
-        debug_print(f"Invalid or missing MAX_EVENTS_PER_AGENT environment variable. Using default: {default_max_events}")
+        log(f"Invalid or missing MAX_EVENTS_PER_AGENT environment variable. Using default: {default_max_events}", is_warning=True)
         return default_max_events
 
 # --- Preset ---
-USER_AGENT = "contrast-smart-fix 0.0.1"
+VERSION = "v1.0.3"
+USER_AGENT = f"contrast-smart-fix {VERSION}"
 
 # --- Core Settings ---
 DEBUG_MODE = get_env_var("DEBUG_MODE", required=False, default="false").lower() == "true"
@@ -124,9 +127,9 @@ RUN_TASK = get_env_var("RUN_TASK", required=False, default="generate_fix")
 # Only require BUILD_COMMAND if RUN_TASK is generate_fix
 is_generate_fix_task = RUN_TASK == "generate_fix"
 if is_generate_fix_task:
-    debug_print("Running in generate_fix mode - BUILD_COMMAND is required")
+    debug_log("Running in generate_fix mode - BUILD_COMMAND is required")
 else:
-    debug_print(f"Running in {RUN_TASK} mode - BUILD_COMMAND and FORMATTING_COMMAND are not required")
+    debug_log(f"Running in {RUN_TASK} mode - BUILD_COMMAND and FORMATTING_COMMAND are not required")
 
 BUILD_COMMAND = get_env_var("BUILD_COMMAND", required=is_generate_fix_task, default=None)
 # FORMATTING_COMMAND is optional even in generate_fix mode
@@ -169,11 +172,14 @@ AWS_WEB_IDENTITY_TOKEN = get_env_var("AWS_WEB_IDENTITY_TOKEN", required=False)
 AWS_BEDROCK_RUNTIME_ENDPOINT = get_env_var("AWS_BEDROCK_RUNTIME_ENDPOINT", required=False)
 
 # --- AI Agent Configuration ---
-AGENT_MODEL = get_env_var("AGENT_MODEL", required=False, default="bedrock/anthropic.claude-3-7-sonnet-20250219-v1:0")
+AGENT_MODEL = get_env_var("AGENT_MODEL", required=False, default="bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0")
 # --- Test Writing Configuration ---
 SKIP_WRITING_SECURITY_TEST = get_env_var("SKIP_WRITING_SECURITY_TEST", required=False, default="false").lower() == "true"
 # --- QA Configuration ---
 SKIP_QA_REVIEW = get_env_var("SKIP_QA_REVIEW", required=False, default="false").lower() == "true"
+
+# --- Telemetry Configuration ---
+ENABLE_FULL_TELEMETRY = get_env_var("ENABLE_FULL_TELEMETRY", required=False, default="true").lower() == "true"
 
 # --- Vulnerability Configuration ---
 # Define the allowlist of valid severity levels
@@ -199,7 +205,7 @@ def _parse_and_validate_severities(json_str: Optional[str]) -> list[str]:
         
         # Ensure it's a list
         if not isinstance(severities, list):
-            print(f"Warning: vulnerability_severities must be a list, got {type(severities)}. Using default.", file=sys.stderr)
+            log(f"Vulnerability_severities must be a list, got {type(severities)}. Using default.", is_warning=True)
             return default_severities
         
         # Convert to uppercase and filter valid values
@@ -209,19 +215,19 @@ def _parse_and_validate_severities(json_str: Optional[str]) -> list[str]:
             if severity_upper in VALID_SEVERITIES:
                 validated.append(severity_upper)
             else:
-                print(f"Warning: '{severity}' is not a valid severity level. Must be one of {VALID_SEVERITIES}.", file=sys.stderr)
+                log(f"'{severity}' is not a valid severity level; disregarding this severity. Must be one of {VALID_SEVERITIES}.", is_warning=True)
         
         # Return default if no valid severities
         if not validated:
-            print(f"Warning: No valid severity levels provided. Using default: {default_severities}", file=sys.stderr)
+            log(f"No valid severity levels provided. Using default: {default_severities}", is_warning=True)
             return default_severities
             
         return validated
     except json.JSONDecodeError:
-        print(f"Error parsing vulnerability_severities JSON: {json_str}. Using default.", file=sys.stderr)
+        log(f"Error parsing vulnerability_severities JSON: {json_str}. Using default.", is_error=True)
         return default_severities
     except Exception as e:
-        print(f"Error processing vulnerability_severities: {e}. Using default.", file=sys.stderr)
+        log(f"Error processing vulnerability_severities: {e}. Using default.", is_error=True)
         return default_severities
 
 # Parse the severity levels from environment variable with a default of ["CRITICAL", "HIGH"]
@@ -236,18 +242,21 @@ ALLOWED_FLAGS = "-l,-a,--help,--version,-i,-r,-R,-n,-v,-c,-e,-E,-A,-B,-C,-p,--in
 SCRIPT_DIR = Path(__file__).parent.resolve()
 REPO_ROOT = Path(get_env_var("GITHUB_WORKSPACE", required=True)).resolve()
 
-debug_print(f"Repository Root: {REPO_ROOT}")
-debug_print(f"Script Directory: {SCRIPT_DIR}")
-debug_print(f"Debug Mode: {DEBUG_MODE}")
-debug_print(f"Base Branch: {BASE_BRANCH}")
-debug_print(f"Run Task: {RUN_TASK}")
-debug_print(f"Agent Model: {AGENT_MODEL}")
-debug_print(f"Skip Writing Security Test: {SKIP_WRITING_SECURITY_TEST}")
-debug_print(f"Skip QA Review: {SKIP_QA_REVIEW}") # Added debug print
-debug_print(f"AWS Region Name: {AWS_REGION_NAME}")
-debug_print(f"Vulnerability Severities: {VULNERABILITY_SEVERITIES}")
-debug_print(f"Max Events Per Agent: {MAX_EVENTS_PER_AGENT}")
+debug_log(f"Repository Root: {REPO_ROOT}")
+debug_log(f"Script Directory: {SCRIPT_DIR}")
+debug_log(f"Debug Mode: {DEBUG_MODE}")
+debug_log(f"Base Branch: {BASE_BRANCH}")
+debug_log(f"Run Task: {RUN_TASK}")
+debug_log(f"Agent Model: {AGENT_MODEL}")
+debug_log(f"Skip Writing Security Test: {SKIP_WRITING_SECURITY_TEST}")
+debug_log(f"Skip QA Review: {SKIP_QA_REVIEW}") # Added debug print
+debug_log(f"AWS Region Name: {AWS_REGION_NAME}")
+debug_log(f"Vulnerability Severities: {VULNERABILITY_SEVERITIES}")
+debug_log(f"Max Events Per Agent: {MAX_EVENTS_PER_AGENT}")
+debug_log(f"Enable Full Telemetry: {ENABLE_FULL_TELEMETRY}")
 if AWS_SESSION_TOKEN:
-    debug_print("AWS Session Token found.")
+    debug_log("AWS Session Token found.")
+
+telemetry_handler.initialize_telemetry() # Initialize telemetry at the start
 
 # %%

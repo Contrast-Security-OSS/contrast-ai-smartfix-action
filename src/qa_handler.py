@@ -18,20 +18,19 @@
 #
 
 import os
-import sys
-import shlex
 import subprocess
 from pathlib import Path
 from typing import Tuple, List, Optional
 
 # Import configurations and utilities
 import config
-from utils import debug_print, run_command
+from utils import debug_log, run_command, log, error_exit
 import agent_handler
 import git_handler
+import telemetry_handler
 from build_output_analyzer import extract_build_errors
 
-def run_build_command(command: str, repo_root: Path) -> Tuple[bool, str]:
+def run_build_command(command: str, repo_root: Path, new_branch_name: str) -> Tuple[bool, str]:
     """
     Runs the specified build command in the repository root.
 
@@ -44,7 +43,7 @@ def run_build_command(command: str, repo_root: Path) -> Tuple[bool, str]:
         - bool: True if the command succeeded (exit code 0), False otherwise.
         - str: The combined stdout and stderr output of the command.
     """
-    print(f"\n--- Running Build Command: {command} ---")
+    log(f"\n--- Running Build Command: {command} ---")
     try:
         # Use shell=True if the command might contain shell operators like &&, ||, > etc.
         # Be cautious with shell=True if the command comes from untrusted input.
@@ -59,23 +58,23 @@ def run_build_command(command: str, repo_root: Path) -> Tuple[bool, str]:
             encoding='utf-8', # Explicitly set encoding
             errors='replace' # Handle potential encoding errors in output
         )
+        telemetry_handler.update_telemetry("configInfo.buildCommandRunTestsIncluded", True);
         output = result.stdout + result.stderr
         if result.returncode == 0:
-            print("Build command succeeded.")
-            # debug_print(f"Build Output (truncated):\n---\n{output[:1000]}...\n---")
+            log("Build command succeeded.")
             return True, output
         else:
-            debug_print(f"Build command failed with exit code {result.returncode}.")
-            # debug_print(f"Build Output:\n---\n{output}\n---")
+            debug_log(f"Build command failed with exit code {result.returncode}.")
+
             return False, output
     except FileNotFoundError:
-        print(f"Error: Build command '{command}' not found. Is it installed and in PATH?", file=sys.stderr)
-        sys.exit(1)
+        log(f"Error: Build command '{command}' not found. Is it installed and in PATH?", is_error=True)
+        error_exit(new_branch_name)
     except Exception as e:
-        print(f"An unexpected error occurred while running the build command: {e}", file=sys.stderr)
-        sys.exit(1)
+        log(f"An unexpected error occurred while running the build command: {e}", is_error=True)
+        error_exit(new_branch_name)
 
-def run_formatting_command(formatting_command: Optional[str], repo_root: Path) -> List[str]:
+def run_formatting_command(formatting_command: Optional[str], repo_root: Path, new_branch_name: str) -> List[str]:
     """
     Runs the formatting command if provided.
     
@@ -90,7 +89,7 @@ def run_formatting_command(formatting_command: Optional[str], repo_root: Path) -
     if not formatting_command:
         return changed_files
         
-    print(f"\n--- Running Formatting Command: {formatting_command} ---", flush=True)
+    log(f"\n--- Running Formatting Command: {formatting_command} ---")
     # Modified to match run_command signature which returns only stdout
     current_dir = os.getcwd()
     try:
@@ -108,18 +107,18 @@ def run_formatting_command(formatting_command: Optional[str], repo_root: Path) -
         os.chdir(current_dir)  # Change back to original directory
     
     if format_success:
-        debug_print("Formatting command successful.")
+        debug_log("Formatting command successful.")
         git_handler.stage_changes()  # Stage any changes made by the formatter
         if not git_handler.check_status():  # Check if formatter made changes
-            print("Formatting command ran but made no changes to commit.")
+            log("Formatting command ran but made no changes to commit.")
         else:
-            debug_print("Formatting command made changes. Committing them.")
+            debug_log("Formatting command made changes. Committing them.")
             git_handler.commit_changes(f"Apply formatting via: {formatting_command}")
             changed_files = git_handler.get_last_commit_changed_files()
     else:
-        print(f"::error::Error executing formatting command: {formatting_command}")
-        print(f"::error::Error details: {format_output}", file=sys.stderr)
-        sys.exit(1)
+        log(f"::error::Error executing formatting command: {formatting_command}")
+        log(f"::error::Error details: {format_output}", is_error=True)
+        error_exit(new_branch_name)
         
     return changed_files
 
@@ -129,6 +128,7 @@ def run_qa_loop(
     max_qa_attempts: int,
     initial_changed_files: List[str],
     formatting_command: Optional[str],
+    new_branch_name: str,
     qa_system_prompt: Optional[str] = None,
     qa_user_prompt: Optional[str] = None
 ) -> Tuple[bool, List[str], Optional[str], List[str]]:
@@ -151,7 +151,7 @@ def run_qa_loop(
         - str: The build command used (or None).
         - List[str]: A log of QA summaries.
     """
-    print("\n--- Starting QA Review Process ---", flush=True)
+    log("\n--- Starting QA Review Process ---")
     qa_attempts = 0
     build_success = False
     build_output = "Build not run."
@@ -159,36 +159,37 @@ def run_qa_loop(
     qa_summary_log = [] # Log QA agent summaries
 
     if not build_command:
-        print("Skipping QA loop: No build command provided.")
+        log("Skipping QA loop: No build command provided.")
         return True, changed_files, build_command, qa_summary_log # Assume success if no build command
 
     # Run formatting command before initial build if specified
     if formatting_command:
-        formatting_changed_files = run_formatting_command(formatting_command, repo_root)
+        formatting_changed_files = run_formatting_command(formatting_command, repo_root, new_branch_name)
         if formatting_changed_files:
             changed_files.extend([f for f in formatting_changed_files if f not in changed_files])
 
     # Try initial build first
-    print("\n--- Running Initial Build After Fix ---", flush=True)
-    initial_build_success, initial_build_output = run_build_command(build_command, repo_root)
+    log("\n--- Running Initial Build After Fix ---")
+    initial_build_success, initial_build_output = run_build_command(build_command, repo_root, new_branch_name)
     build_output = initial_build_output # Store the latest output
 
     if initial_build_success:
-        print("\n\u2705 Initial build successful after fix. No QA intervention needed.", flush=True)
+        log("\n\u2705 Initial build successful after fix. No QA intervention needed.")
+        telemetry_handler.update_telemetry("resultInfo.filesModified", len(changed_files))
         build_success = True
         return build_success, changed_files, build_command, qa_summary_log
 
     # If initial build failed, enter the QA loop
-    print("\n\u274c Initial build failed. Starting QA agent intervention loop.", flush=True)
+    log("\n\u274c Initial build failed. Starting QA agent intervention loop.")
     
     # Analyze build failure and show error summary
     error_analysis = extract_build_errors(initial_build_output)
-    print("\n--- BUILD FAILURE ANALYSIS ---")
-    print(error_analysis)
-    print("--- END BUILD FAILURE ANALYSIS ---\n")
+    debug_log("\n--- BUILD FAILURE ANALYSIS ---")
+    debug_log(error_analysis)
+    debug_log("--- END BUILD FAILURE ANALYSIS ---\n")
     while qa_attempts < max_qa_attempts:
         qa_attempts += 1
-        print(f"\n::group::---- QA Attempt #{qa_attempts}/{max_qa_attempts} ---")
+        log(f"\n::group::---- QA Attempt #{qa_attempts}/{max_qa_attempts} ---")
 
         # Truncate build output if too long for the agent
         max_output_length = 15000 # Adjust as needed
@@ -202,55 +203,56 @@ def run_qa_loop(
             changed_files=changed_files, # Pass the current list of changed files
             build_command=build_command,
             repo_root=config.REPO_ROOT,
-            formatting_command=formatting_command, # <<< ADDED
+            new_branch_name=new_branch_name,
             qa_history=qa_summary_log, # Pass the history of previous QA attempts
-            qa_system_prompt=qa_system_prompt, # <<< ADDED for API prompts
-            qa_user_prompt=qa_user_prompt # <<< ADDED for API prompts
+            qa_system_prompt=qa_system_prompt,
+            qa_user_prompt=qa_user_prompt
         )
         
         # Check if QA agent encountered an error
         if qa_summary.startswith("Error during QA agent execution:"):
-            print(f"QA Agent encountered an unrecoverable error: {qa_summary}")
-            print("Continuing with build process, but PR creation may be skipped.")
+            log(f"QA Agent encountered an unrecoverable error: {qa_summary}")
+            log("Continuing with build process, but PR creation may be skipped.")
             # Note: The branch cleanup will be handled in main.py after checking build_success
         
-        debug_print(f"QA Agent Summary: {qa_summary}")
+        debug_log(f"QA Agent Summary: {qa_summary}")
         qa_summary_log.append(qa_summary) # Log the summary
 
-        print("\n::endgroup::") # TODO: Needs to be in a try finally so a failure doesn't jack up the groups.
+        # Ensure the group is closed even if errors occur later in the loop
+        try:
+            # --- Handle QA Agent Output ---
+            git_handler.stage_changes()
+            if git_handler.check_status():
+                git_handler.amend_commit()
+                changed_files = git_handler.get_last_commit_changed_files() # Update changed files list
+                log("Amended commit with QA agent fixes.")
+                
+                # Always run formatting command before build, if specified
+                if formatting_command:
+                    formatting_changed_files = run_formatting_command(formatting_command, repo_root, new_branch_name)
+                    if formatting_changed_files:
+                        changed_files.extend([f for f in formatting_changed_files if f not in changed_files])
+                    telemetry_handler.update_telemetry("resultInfo.filesModified", len(changed_files))
 
-        # --- Handle QA Agent Output ---
-        git_handler.stage_changes()
-        if git_handler.check_status():
-            git_handler.amend_commit()
-            changed_files = git_handler.get_last_commit_changed_files() # Update changed files list
-            print("Amended commit with QA agent fixes.")
-            
-            # Always run formatting command before build, if specified
-            if formatting_command:
-                formatting_changed_files = run_formatting_command(formatting_command, repo_root)
-                if formatting_changed_files:
-                    changed_files.extend([f for f in formatting_changed_files if f not in changed_files])
-
-            # Re-run the main build command to check if the QA fix worked
-            print("\n--- Re-running Build Command After QA Fix ---")
-            build_success, build_output = run_build_command(build_command, repo_root)
-            if build_success:
-                print("\n\u2705 Build successful after QA agent fix.")
-                break # Exit QA loop
+                # Re-run the main build command to check if the QA fix worked
+                log("\n--- Re-running Build Command After QA Fix ---")
+                build_success, build_output = run_build_command(build_command, repo_root, new_branch_name)
+                if build_success:
+                    log("\n\u2705 Build successful after QA agent fix.")
+                    break # Exit QA loop
+                else:
+                    log("\n\u274c Build still failing after QA agent fix.")
+                    continue # Continue to next QA iteration
             else:
-                print("\n\u274c Build still failing after QA agent fix.")
-                continue # Continue to next QA iteration
-        else:
-            print("QA agent did not request a command and made no file changes. Build still failing.")
-            # Break the loop if QA agent isn't making progress
-            build_success = False
-            break
+                log("QA agent did not request a command and made no file changes. Build still failing.")
+                # Break the loop if QA agent isn't making progress
+                build_success = False
+                break
+        finally:
+            log("\n::endgroup::") # Close the group for the QA attempt
 
     if not build_success:
-        print(f"\n\u274c Build failed after {qa_attempts} QA attempts.")
+        log(f"\n\u274c Build failed after {qa_attempts} QA attempts.")
 
     return build_success, changed_files, build_command, qa_summary_log
-
-
 # %%

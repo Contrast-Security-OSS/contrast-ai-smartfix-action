@@ -18,11 +18,10 @@
 #
 
 import os
-import sys
-import json # Added for parsing gh output
+import json
 import subprocess
-from typing import List # <<< ADDED
-from utils import run_command, debug_print # Import debug_print
+from typing import List
+from utils import run_command, debug_log, log, error_exit
 import config
 
 def get_gh_env():
@@ -39,7 +38,7 @@ def get_gh_env():
 
 def configure_git_user():
     """Configures git user email and name."""
-    print("Configuring Git user...")
+    log("Configuring Git user...")
     run_command(["git", "config", "--global", "user.email", "action@github.com"])
     run_command(["git", "config", "--global", "user.name", "GitHub Action"])
 
@@ -49,7 +48,7 @@ def generate_branch_name(remediation_id: str) -> str:
 
 def prepare_feature_branch(branch_name: str):
     """Prepares a clean repository state and creates a new feature branch."""
-    print("Cleaning workspace and creating new feature branch...")
+    log("Cleaning workspace and creating new feature branch...")
     
     try:
         # Reset any changes and remove all untracked files to ensure a pristine state
@@ -58,18 +57,18 @@ def prepare_feature_branch(branch_name: str):
         run_command(["git", "checkout", config.BASE_BRANCH], check=True)
         # Pull latest changes to ensure we're working with the most up-to-date code
         run_command(["git", "pull", "--ff-only"], check=True)
-        print(f"Successfully cleaned workspace and checked out latest {config.BASE_BRANCH}")
+        log(f"Successfully cleaned workspace and checked out latest {config.BASE_BRANCH}")
         
         # Now create the new branch
-        print(f"Creating and checking out new branch: {branch_name}")
+        log(f"Creating and checking out new branch: {branch_name}")
         run_command(["git", "checkout", "-b", branch_name]) # run_command exits on failure
     except subprocess.CalledProcessError as e:
-        print(f"ERROR: Failed to prepare clean workspace due to a subprocess error: {str(e)}", file=sys.stderr)
-        sys.exit(1)  # Exit if we can't properly prepare the workspace
+        log(f"ERROR: Failed to prepare clean workspace due to a subprocess error: {str(e)}", is_error=True)
+        error_exit(branch_name) # Exit if we can't properly prepare the workspace
 
 def stage_changes():
     """Stages all changes in the repository."""
-    debug_print("Staging changes made by AI agent...")
+    debug_log("Staging changes made by AI agent...")
     # Run with check=False as it might fail if there are no changes, which is ok
     run_command(["git", "add", "."], check=False)
 
@@ -77,10 +76,10 @@ def check_status() -> bool:
     """Checks if there are changes staged for commit. Returns True if changes exist."""
     status_output = run_command(["git", "status", "--porcelain"])
     if not status_output:
-        print("No changes detected after AI agent run. Nothing to commit or push.")
+        log("No changes detected after AI agent run. Nothing to commit or push.")
         return False
     else:
-        debug_print("Changes detected, proceeding with commit and push.")
+        debug_log("Changes detected, proceeding with commit and push.")
         return True
 
 def generate_commit_message(vuln_title: str, vuln_uuid: str) -> str:
@@ -89,30 +88,30 @@ def generate_commit_message(vuln_title: str, vuln_uuid: str) -> str:
 
 def commit_changes(message: str):
     """Commits staged changes."""
-    print(f"Committing changes with message: '{message}'")
+    log(f"Committing changes with message: '{message}'")
     run_command(["git", "commit", "-m", message]) # run_command exits on failure
 
 def get_last_commit_changed_files() -> List[str]:
     """Gets the list of files changed in the most recent commit."""
-    debug_print("Getting files changed in the last commit...")
+    debug_log("Getting files changed in the last commit...")
     # Use --no-pager to prevent potential hanging
     # Use HEAD~1..HEAD to specify the range (last commit)
     # Use --name-only to get just the file paths
     # Use check=True because if this fails, something is wrong with the commit history
     diff_output = run_command(["git", "--no-pager", "diff", "HEAD~1..HEAD", "--name-only"])
     changed_files = diff_output.splitlines()
-    debug_print(f"Files changed in last commit: {changed_files}")
+    debug_log(f"Files changed in last commit: {changed_files}")
     return changed_files
 
 def amend_commit():
     """Amends the last commit with currently staged changes, reusing the previous message."""
-    print("Amending the previous commit with QA fixes...")
+    log("Amending the previous commit with QA fixes...")
     # Use --no-edit to keep the original commit message
     run_command(["git", "commit", "--amend", "--no-edit"]) # run_command exits on failure
 
 def push_branch(branch_name: str):
     """Pushes the current branch to the remote repository."""
-    print(f"Pushing branch {branch_name} to remote...")
+    log(f"Pushing branch {branch_name} to remote...")
     remote_url = f"https://x-access-token:{config.GITHUB_TOKEN}@github.com/{config.GITHUB_REPOSITORY}.git"
     run_command(["git", "push", "--set-upstream", remote_url, branch_name]) # run_command exits on failure
 
@@ -130,9 +129,9 @@ def ensure_label(label_name: str, description: str, color: str) -> bool:
     Returns:
         bool: True if label exists or was successfully created, False otherwise
     """
-    print(f"Ensuring GitHub label exists: {label_name}")
+    log(f"Ensuring GitHub label exists: {label_name}")
     if len(label_name) > 50:
-        print(f"Warning: Label name '{label_name}' exceeds GitHub's 50-character limit.", file=sys.stderr)
+        log(f"Label name '{label_name}' exceeds GitHub's 50-character limit.", is_error=True)
         return False
         
     gh_env = get_gh_env()
@@ -150,12 +149,12 @@ def ensure_label(label_name: str, description: str, color: str) -> bool:
             labels = json.loads(list_output)
             existing_label_names = [label.get("name") for label in labels]
             if label_name in existing_label_names:
-                print(f"Label '{label_name}' already exists.")
+                log(f"Label '{label_name}' already exists.")
                 return True
         except json.JSONDecodeError:
-            debug_print(f"Could not parse label list JSON: {list_output}")
+            debug_log(f"Could not parse label list JSON: {list_output}")
     except Exception as e:
-        debug_print(f"Error listing labels: {e}")
+        debug_log(f"Error listing labels: {e}")
     
     # Create the label if it doesn't exist
     label_command = [
@@ -177,18 +176,18 @@ def ensure_label(label_name: str, description: str, color: str) -> bool:
         )
         
         if process.returncode == 0:
-            print(f"Label '{label_name}' created successfully.")
+            log(f"Label '{label_name}' created successfully.")
             return True
         else:
             # Check for "already exists" type of error which is OK
             if "already exists" in process.stderr.lower():
-                print(f"Label '{label_name}' already exists.")
+                log(f"Label '{label_name}' already exists.")
                 return True
             else:
-                print(f"Error creating label: {process.stderr}", file=sys.stderr)
+                log(f"Error creating label: {process.stderr}", is_error=True)
                 return False
     except Exception as e:
-        print(f"Exception while creating label: {e}", file=sys.stderr)
+        log(f"Exception while creating label: {e}", is_error=True)
         return False
 
 def check_pr_status_for_label(label_name: str) -> str:
@@ -198,7 +197,7 @@ def check_pr_status_for_label(label_name: str) -> str:
     Returns:
         str: 'OPEN', 'MERGED', or 'NONE'
     """
-    print(f"Checking GitHub PR status for label: {label_name}")
+    log(f"Checking GitHub PR status for label: {label_name}")
     gh_env = get_gh_env()
 
     # Check for OPEN PRs
@@ -213,10 +212,10 @@ def check_pr_status_for_label(label_name: str) -> str:
     open_pr_output = run_command(open_pr_command, env=gh_env, check=False) # Don't exit if command fails (e.g., no PRs found)
     try:
         if open_pr_output and json.loads(open_pr_output): # Check if output is not empty and contains JSON data
-             debug_print(f"Found OPEN PR for label {label_name}.")
+             debug_log(f"Found OPEN PR for label {label_name}.")
              return "OPEN"
     except json.JSONDecodeError:
-        print(f"Warning: Could not parse JSON output from gh pr list (open): {open_pr_output}", file=sys.stderr)
+        log(f"Could not parse JSON output from gh pr list (open): {open_pr_output}", is_error=True)
 
 
     # Check for MERGED PRs
@@ -231,17 +230,17 @@ def check_pr_status_for_label(label_name: str) -> str:
     merged_pr_output = run_command(merged_pr_command, env=gh_env, check=False)
     try:
         if merged_pr_output and json.loads(merged_pr_output):
-            debug_print(f"Found MERGED PR for label {label_name}.")
+            debug_log(f"Found MERGED PR for label {label_name}.")
             return "MERGED"
     except json.JSONDecodeError:
-        print(f"Warning: Could not parse JSON output from gh pr list (merged): {merged_pr_output}", file=sys.stderr)
+        log(f"Could not parse JSON output from gh pr list (merged): {merged_pr_output}", is_error=True)
 
-    debug_print(f"No existing OPEN or MERGED PR found for label {label_name}.")
+    debug_log(f"No existing OPEN or MERGED PR found for label {label_name}.")
     return "NONE"
 
 def count_open_prs_with_prefix(label_prefix: str) -> int:
     """Counts the number of open GitHub PRs with at least one label starting with the given prefix."""
-    print(f"Counting open PRs with label prefix: '{label_prefix}'")
+    log(f"Counting open PRs with label prefix: '{label_prefix}'")
     gh_env = get_gh_env()
 
     # Fetch labels of open PRs in JSON format. Limit might need adjustment if > 100 open PRs.
@@ -259,10 +258,10 @@ def count_open_prs_with_prefix(label_prefix: str) -> int:
         pr_list_output = run_command(pr_list_command, env=gh_env, check=True)
         prs_data = json.loads(pr_list_output)
     except json.JSONDecodeError:
-        print(f"Warning: Could not parse JSON output from gh pr list: {pr_list_output}", file=sys.stderr)
+        log(f"Could not parse JSON output from gh pr list: {pr_list_output}", is_error=True)
         return 0 # Assume zero if we can't parse
     except Exception as e:
-        print(f"Error running gh pr list command: {e}", file=sys.stderr)
+        log(f"Error running gh pr list command: {e}", is_error=True)
         # Consider if we should exit or return 0. Returning 0 might be safer to avoid blocking unnecessarily.
         return 0
 
@@ -274,7 +273,7 @@ def count_open_prs_with_prefix(label_prefix: str) -> int:
                     count += 1
                     break # Count this PR once, even if it has multiple matching labels
     
-    debug_print(f"Found {count} open PR(s) with label prefix '{label_prefix}'.")
+    debug_log(f"Found {count} open PR(s) with label prefix '{label_prefix}'.")
     return count
 
 def generate_pr_title(vuln_title: str) -> str:
@@ -287,7 +286,7 @@ def create_pr(title: str, body: str, head_branch: str, base_branch: str, label: 
     Returns:
         str: The URL of the created pull request, or an empty string if creation failed (though gh usually exits).
     """
-    print("Creating Pull Request...")
+    log("Creating Pull Request...")
     import tempfile
     import os.path
     import subprocess
@@ -297,7 +296,7 @@ def create_pr(title: str, body: str, head_branch: str, base_branch: str, label: 
     
     # Truncate PR body if too large
     if len(body) > MAX_PR_BODY_SIZE:
-        print(f"Warning: PR body is too large ({len(body)} chars). Truncating to {MAX_PR_BODY_SIZE} chars.")
+        log(f"PR body is too large ({len(body)} chars). Truncating to {MAX_PR_BODY_SIZE} chars.", is_warning=True)
         body = body[:MAX_PR_BODY_SIZE] + "\n\n...[Content truncated due to size limits]..."
 
     # Add disclaimer to PR body
@@ -307,15 +306,15 @@ def create_pr(title: str, body: str, head_branch: str, base_branch: str, label: 
     with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.md') as temp_file:
         temp_file_path = temp_file.name
         temp_file.write(body)
-        debug_print(f"PR body written to temporary file: {temp_file_path}")
+        debug_log(f"PR body written to temporary file: {temp_file_path}")
     
     try:
         # Check file exists and print size for debugging
         if os.path.exists(temp_file_path):
             file_size = os.path.getsize(temp_file_path)
-            debug_print(f"Temporary file exists: {temp_file_path}, size: {file_size} bytes")
+            debug_log(f"Temporary file exists: {temp_file_path}, size: {file_size} bytes")
         else:
-            print(f"Error: Temporary file {temp_file_path} does not exist", file=sys.stderr)
+            log(f"Error: Temporary file {temp_file_path} does not exist", is_error=True)
             return
             
         gh_env = get_gh_env()
@@ -328,9 +327,9 @@ def create_pr(title: str, body: str, head_branch: str, base_branch: str, label: 
                 capture_output=True, 
                 text=True
             )
-            debug_print(f"GitHub CLI version: {version_output.stdout.strip() if version_output.returncode == 0 else 'Not available'}")
+            debug_log(f"GitHub CLI version: {version_output.stdout.strip() if version_output.returncode == 0 else 'Not available'}")
         except Exception as e:
-            print(f"Warning: Could not determine GitHub CLI version: {e}", file=sys.stderr)
+            log(f"Could not determine GitHub CLI version: {e}", is_error=True)
         
         pr_command = [
             "gh", "pr", "create",
@@ -345,23 +344,23 @@ def create_pr(title: str, body: str, head_branch: str, base_branch: str, label: 
         # Run the command and capture the output (PR URL)
         pr_url = run_command(pr_command, env=gh_env, check=True)
         if pr_url:
-            print(f"Successfully created PR: {pr_url}")
+            log(f"Successfully created PR: {pr_url}")
         return pr_url
 
     except FileNotFoundError:
-        print(f"Error: gh command not found. Please ensure the GitHub CLI is installed and in PATH.", file=sys.stderr)
-        sys.exit(1)
+        log(f"Error: gh command not found. Please ensure the GitHub CLI is installed and in PATH.", is_error=True)
+        error_exit(head_branch)
     except Exception as e:
-        print(f"An unexpected error occurred during PR creation: {e}", file=sys.stderr)
-        sys.exit(1)
+        log(f"An unexpected error occurred during PR creation: {e}", is_error=True)
+        error_exit(head_branch)
     finally:
         # Clean up the temporary file
         if os.path.exists(temp_file_path):
             try:
                 os.remove(temp_file_path)
-                debug_print(f"Temporary PR body file {temp_file_path} removed.")
+                debug_log(f"Temporary PR body file {temp_file_path} removed.")
             except OSError as e:
-                print(f"Warning: Could not remove temporary file {temp_file_path}: {e}", file=sys.stderr)
+                log(f"Could not remove temporary file {temp_file_path}: {e}", is_error=True)
 
 def cleanup_branch(branch_name: str):
     """
@@ -371,9 +370,10 @@ def cleanup_branch(branch_name: str):
     Args:
         branch_name: Name of the branch to delete
     """
-    debug_print(f"Cleaning up branch: {branch_name}")
+    debug_log(f"Cleaning up branch: {branch_name}")
+    run_command(["git", "reset", "--hard"], check=False)
     run_command(["git", "checkout", config.BASE_BRANCH], check=False)
     run_command(["git", "branch", "-D", branch_name], check=False)
-    print("Branch cleanup completed.")
+    log("Branch cleanup completed.")
 
 # %%

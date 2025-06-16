@@ -24,11 +24,27 @@ import re
 from pathlib import Path
 from typing import Optional
 import config # Import config to access DEBUG_MODE
+import telemetry_handler # Import for telemetry logging
 
-def debug_print(*args, **kwargs):
-    """Prints only if DEBUG_MODE is True."""
+def log(message: str, is_error: bool = False, is_warning: bool = False):
+    """Logs a message to telemetry and prints to stdout/stderr."""
+    telemetry_handler.add_log_message(message)
+    if is_error:
+        print(message, file=sys.stderr, flush=True)
+    elif is_warning:
+        # Optionally, differentiate warning logs, e.g., with a prefix
+        print(f"WARNING: {message}", flush=True)
+    else:
+        print(message, flush=True)
+
+def debug_log(*args, **kwargs):
+    """Prints only if DEBUG_MODE is True and logs to telemetry."""
+    message = " ".join(map(str, args))
+    # Log debug messages to telemetry, possibly with a DEBUG prefix or separate field if needed
+    # For now, adding to the main log.
+    telemetry_handler.add_log_message(f"DEBUG: {message}")
     if config.DEBUG_MODE:
-        print(*args, **kwargs)
+        print(*args, **kwargs, flush=True)
 
 def extract_remediation_id_from_branch(branch_name: str) -> Optional[str]:
     """Extracts the remediation ID from a branch name.
@@ -44,6 +60,16 @@ def extract_remediation_id_from_branch(branch_name: str) -> Optional[str]:
     if match:
         return match.group(1)
     return None
+
+# Define custom exception for command errors
+class CommandExecutionError(Exception):
+    """Custom exception for errors during command execution."""
+    def __init__(self, message, return_code, command, stdout=None, stderr=None):
+        super().__init__(message)
+        self.return_code = return_code
+        self.command = command
+        self.stdout = stdout
+        self.stderr = stderr
 
 def run_command(command, env=None, check=True):
     """
@@ -69,8 +95,8 @@ def run_command(command, env=None, check=True):
             # Don't print the actual token
             options_text += ", GITHUB_TOKEN=***"
             
-        debug_print(f"::group::Running command: {' '.join(command)}")
-        debug_print(f"  {options_text}")
+        debug_log(f"::group::Running command: {' '.join(command)}")
+        debug_log(f"  {options_text}")
         
         # Merge with current environment to preserve essential variables like PATH
         full_env = os.environ.copy()
@@ -88,45 +114,58 @@ def run_command(command, env=None, check=True):
             env=full_env
         )
 
-        debug_print(f"  Return Code: {process.returncode}")
+        debug_log(f"  Return Code: {process.returncode}")
         if process.stdout:
             # Truncate very large stdout for readability
             stdout_text = process.stdout.strip()
             if len(stdout_text) > 1000:
-                debug_print(f"  Command stdout (truncated):\n---\n{stdout_text[:500]}...\n...{stdout_text[-500:]}\n---")
+                debug_log(f"  Command stdout (truncated):\n---\n{stdout_text[:500]}...\n...{stdout_text[-500:]}\n---")
             else:
-                debug_print(f"  Command stdout:\n---\n{stdout_text}\n---")
+                debug_log(f"  Command stdout:\n---\n{stdout_text}\n---")
                 
         if process.stderr:
             # Always print stderr if it's not empty, as it often indicates warnings/errors
             stderr_text = process.stderr.strip()
-            debug_level = print if process.returncode != 0 else debug_print
-            stderr_level = sys.stderr if process.returncode != 0 else None
             
-            if len(stderr_text) > 1000:
-                debug_level(f"  Command stderr (truncated):\n---\n{stderr_text[:500]}...\n...{stderr_text[-500:]}\n---", file=stderr_level)
-            else:
-                debug_level(f"  Command stderr:\n---\n{stderr_text}\n---", file=stderr_level)
+            # Use new log function for stderr
+            if process.returncode != 0:
+                if len(stderr_text) > 1000:
+                    log(f"  Command stderr (truncated):\n---\n{stderr_text[:500]}...\n...{stderr_text[-500:]}\n---", is_error=True)
+                else:
+                    log(f"  Command stderr:\n---\n{stderr_text}\n---", is_error=True)
+            elif stderr_text: # Log as debug if there's stderr but command was successful
+                if len(stderr_text) > 1000:
+                    debug_log(f"  Command stderr (truncated):\n---\n{stderr_text[:500]}...\n...{stderr_text[-500:]}\n---")
+                else:
+                    debug_log(f"  Command stderr:\n---\n{stderr_text}\n---")
+
 
         if check and process.returncode != 0:
-            print(f"Error: Command failed with return code {process.returncode}: {' '.join(command)}", file=sys.stderr)
-            error_msg = process.stderr.strip() if process.stderr else "No error output available"
-            print(f"Error details: {error_msg}", file=sys.stderr)
-            sys.exit(1)  # Exit if check is True and command failed
+            error_message_for_log = f"Error: Command failed with return code {process.returncode}: {' '.join(command)}"
+            log(error_message_for_log, is_error=True)
+            error_details = process.stderr.strip() if process.stderr else "No error output available"
+            log(f"Error details: {error_details}", is_error=True)
+            raise CommandExecutionError(
+                message=f"Command '{' '.join(command)}' failed with return code {process.returncode}.",
+                return_code=process.returncode,
+                command=' '.join(command),
+                stdout=process.stdout.strip() if process.stdout else None,
+                stderr=error_details
+            )
 
         return process.stdout.strip() if process.stdout else "" # Return stdout or empty string
-
-    except FileNotFoundError:
-        print(f"Error: Command not found: {command[0]}. Ensure it's installed and in the PATH.", file=sys.stderr)
-        if check:
-            sys.exit(1)
-        return None # Indicate failure if not checking
-    except Exception as e:
-        print(f"An unexpected error occurred running command {' '.join(command)}: {e}", file=sys.stderr)
-        if check:
-            sys.exit(1)
-        return None # Indicate failure if not checking
     finally:
-        debug_print("::endgroup::", flush=True)
+        debug_log("::endgroup::")
 
 
+def error_exit(branch_name: str):
+    """Cleans up a branch (if provided), sends telemetry, and exits with code 1."""
+    # Local imports to avoid circular dependencies
+    import git_handler
+    import contrast_api
+
+    git_handler.cleanup_branch(branch_name)
+    contrast_api.send_telemetry_data()
+    sys.exit(1)
+
+# %%

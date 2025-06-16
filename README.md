@@ -59,7 +59,7 @@ jobs:
           # Contrast Configuration
           contrast_host: ${{ vars.CONTRAST_HOST }} # The host name of your Contrast SaaS instance, e.g. 'app.contrastsecurity.com'
           contrast_org_id: ${{ vars.CONTRAST_ORG_ID }} # The UUID of your Contrast organization
-          contrast_app_id: ${{ vars.CONTRAST_APP_ID }} # The UUID that is specific to the application in this repository
+          contrast_app_id: ${{ vars.CONTRAST_APP_ID }} # The UUID that is specific to the application in this repository.
           contrast_authorization_key: ${{ secrets.CONTRAST_AUTHORIZATION_KEY }} 
           contrast_api_key: ${{ secrets.CONTRAST_API_KEY }}
 
@@ -154,7 +154,7 @@ jobs:
 
 * Store all sensitive values (API keys, tokens) as GitHub Secrets in your repository or Github organization settings.  
 * Replace `v1` with the specific version of the SmartFix GitHub Action you intend to use.  
-* The `contrast_app_id` must correspond to the Contrast Application ID for the code in the repository where this action runs.  
+* The `contrast_app_id` must correspond to the Contrast Application ID for the code in the repository where this action runs.  To find the app ID, visit the application page in the Contrast web UI, then use the last UUID in the URL (immediately after `/applications/`) as the app ID value.
 * The `build_command` configured for `generate_fixes` job must be an appropriate build command for your project and is required for the proper functioning of SmartFix.  A `build_command` that runs your project's unit tests would be doubly useful as it would enable SmartFix to attempt to correct any changes that break your project's tests.  Please remember to do any additional setup for your `build_command` (such as library installation) in the `generate_fixes` job as a new step preceeding the `Run Contrast AI SmartFix - Generate Fixes Action` step.  For details about the libraries that come pre-installed with Github's Ubuntu runner, please visit https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2404-Readme.md.
 * The optional `formatting_command` will be run after SmartFix makes code changes to resolve the vulnerability and prior to any subsequent `build_command` invocations.  We recommend supplying a `formatting_command` to fix code style issues in your project as it is an easy way to correct a common class of build-breaking problems.
 * **Suggestion:** Setup an API-only service user named “Contrast AI SmartFix” in your Organization Settings in your Contrast SaaS instance.  At a minimum, it should have the “View Organization” permission and “Edit Application” permission for this application.  This service user’s `contrast_authorization_key` value and the Organization’s `contrast_api_key` value should be used in the workflow.
@@ -169,7 +169,7 @@ For the Early Access release, SmartFix uses a "Bring Your Own LLM" (BYOLLM) mode
     * Provide your `anthropic_api_key`.
   * Option 2 - AWS Bedrock:
     * Set `agent_model` to the appropriate model string (e.g., `bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0`).  
-    * Provide AWS credentials (`aws_access_key_id`, `aws_secret_access_key`, `aws_region_name`).  
+    * In order for the action to an AWS Bedrock LLM, you need to provide AWS credentials. We recommend using [aws-actions/configure-aws-credentials](https://github.com/aws-actions/configure-aws-credentials) to configure your credentials for a job.  
 
 * **Experimental:** **Google Gemini Pro (e.g., Gemini 2.5 Pro)**. Preliminary testing shows good results, but it has not been fully tested for this release.  
   * Set `agent_model` to the appropriate model string (e.g., `gemini/gemini-1.5-pro-latest`).  
@@ -253,6 +253,27 @@ The following are key inputs for the GitHub Action. Refer to the `action.yml` in
 | `debug_mode` | Enable verbose logging. | No | `false` |
 | `skip_qa_review` | Skip the QA review step (not recommended). | No | `false` |
 | `skip_writing_security_test` | Skip attempting to write a security test for the fix. | No | `false` |
+| `enable_full_telemetry` | Control how much telemetry data is sent back to Contrast. When set to 'true' (default), sends complete log files and build commands. When 'false', sensitive build commands and full logs are omitted. | No | `true` |
+
+## Telemetry
+
+SmartFix collects telemetry data to help improve the service and diagnose issues. This data includes:
+
+* Vulnerability information (IDs and rules)
+* Application metadata (programming language, frameworks)
+* Configuration settings (sanitized build and formatting commands)
+* Result information (PR creation status, files modified)
+* Full log output
+
+### Telemetry Configuration
+
+* The telemetry behavior is determined by the `enable_full_telemetry` setting:
+  * When `enable_full_telemetry: 'true'` (default): Sends complete logs and all configuration data
+  * When `enable_full_telemetry: 'false'`: Omits both log data and sensitive build commands
+
+### Data Handling
+
+* All telemetry data is handled according to Contrast Security's privacy policies.
 
 ## Troubleshooting
 
@@ -293,4 +314,4 @@ The following are key inputs for the GitHub Action. Refer to the `action.yml` in
 
 ---
 
-For further assistance or to provide feedback on the Early Access release, please contact your Contrast Security representative.  
+For further assistance or to provide feedback on the Early Access release, please contact your Contrast Security representative.
