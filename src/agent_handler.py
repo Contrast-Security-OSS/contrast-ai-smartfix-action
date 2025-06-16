@@ -190,7 +190,8 @@ async def process_agent_run(runner, session, exit_stack, user_query, new_branch_
                     log(f"\n*** {agent_type.upper()} Agent Message: \033[1;36m {message_text} \033[0m")
                     final_response = message_text
                     if agent_event_telemetry is not None:
-                        agent_event_telemetry["toolCalls"].append(agent_tool_calls_telemetry)
+                        # Directly assign toolCalls rather than appending
+                        agent_event_telemetry["toolCalls"] = agent_tool_calls_telemetry
                         agent_event_actions.append(agent_event_telemetry)
                         agent_event_telemetry = {
                             "llmAction": {
@@ -240,7 +241,8 @@ async def process_agent_run(runner, session, exit_stack, user_query, new_branch_
         await exit_stack.aclose()
         log(f"{agent_type.upper()} agent run finished.")
 
-        agent_event_telemetry["toolCalls"].append(agent_tool_calls_telemetry)
+        # Directly assign toolCalls rather than appending, to avoid nested arrays
+        agent_event_telemetry["toolCalls"] = agent_tool_calls_telemetry
         agent_event_actions.append(agent_event_telemetry)
         duration_ms = (datetime.datetime.now() - start_time).total_seconds() * 1000
         agent_event_payload = {
