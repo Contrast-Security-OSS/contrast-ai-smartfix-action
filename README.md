@@ -59,7 +59,7 @@ jobs:
           # Contrast Configuration
           contrast_host: ${{ vars.CONTRAST_HOST }} # The host name of your Contrast SaaS instance, e.g. 'app.contrastsecurity.com'
           contrast_org_id: ${{ vars.CONTRAST_ORG_ID }} # The UUID of your Contrast organization
-          contrast_app_id: ${{ vars.CONTRAST_APP_ID }} # The UUID that is specific to the application in this repository
+          contrast_app_id: ${{ vars.CONTRAST_APP_ID }} # The UUID that is specific to the application in this repository.  To find the app ID, visit the application page in the Contrast web UI, then use the last UUID in the URL (immediately after after `/applications/`) as the app ID value.
           contrast_authorization_key: ${{ secrets.CONTRAST_AUTHORIZATION_KEY }} 
           contrast_api_key: ${{ secrets.CONTRAST_API_KEY }}
 
