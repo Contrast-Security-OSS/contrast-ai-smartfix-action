@@ -11,10 +11,12 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 mock_config = MagicMock()
 mock_config.DEBUG_MODE = True
 sys.modules['config'] = mock_config
-# Mock utils.debug_log to capture output for testing
+# Mock utils.debug_log and utils.log to capture output for testing
 mock_utils = MagicMock()
 mock_debug_log = MagicMock()
+mock_log = MagicMock()  # Add mock for regular log function
 mock_utils.debug_log = mock_debug_log
+mock_utils.log = mock_log  # Assign the mock to utils.log
 sys.modules['utils'] = mock_utils
 
 from src.version_check import get_latest_repo_version, check_for_newer_version, do_version_check, normalize_version, safe_parse_version
@@ -45,8 +47,9 @@ class TestVersionCheck(unittest.TestCase):
         self.env_patcher = patch.dict('os.environ', clear=True)
         self.env_patcher.start()
         
-        # Reset debug_log mock before each test
+        # Reset debug_log and log mocks before each test
         mock_debug_log.reset_mock()
+        mock_log.reset_mock()
     
     def tearDown(self):
         # Clean up after each test
@@ -140,13 +143,15 @@ class TestVersionCheck(unittest.TestCase):
         # Check that the appropriate debug_log message was called
         mock_debug_log.assert_any_call("Running from SHA: abcdef1234567890abcdef1234567890abcdef12. No ref found for version check, using SHA.")
 
-    @patch('sys.stdout', new_callable=io.StringIO)
     @patch('src.version_check.get_latest_repo_version')
-    def test_do_version_check_with_github_ref(self, mock_get_latest, mock_stdout):
+    def test_do_version_check_with_github_ref(self, mock_get_latest):
         """Test when GITHUB_REF is set but not GITHUB_ACTION_REF."""
         # Setup environment and mocks
         os.environ["GITHUB_REF"] = "refs/tags/v1.0.0"
         mock_get_latest.return_value = "v2.0.0"
+        
+        # Reset mocks before test
+        mock_log.reset_mock()
         
         do_version_check()
         
@@ -154,9 +159,8 @@ class TestVersionCheck(unittest.TestCase):
         mock_debug_log.assert_any_call("Current action version: v1.0.0")
         mock_debug_log.assert_any_call("Latest version available in repo: v2.0.0")
         
-        # Check stdout for regular print calls (newer version messages)
-        output = mock_stdout.getvalue()
-        self.assertIn("INFO: A newer version of this action is available", output)
+        # Check that the log function was called with the newer version message
+        mock_log.assert_any_call("INFO: A newer version of this action is available (v2.0.0).")
 
     @patch('src.version_check.get_latest_repo_version')
     def test_do_version_check_prefers_action_ref(self, mock_get_latest):
