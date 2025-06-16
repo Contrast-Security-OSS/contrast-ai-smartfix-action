@@ -107,9 +107,13 @@ def get_telemetry_data():
     """
     Returns a copy of the current telemetry data object that is JSON serializable.
     
-    As of June 2025, this function sends the full log data without truncation,
-    overriding the previous 20KB limit. The backend service has been confirmed
-    to handle complete log data to aid in debugging and analysis.
+    Behavior based on ENABLE_FULL_TELEMETRY setting:
+    - When True (default): Sends the full log data without truncation, along with all other telemetry fields.
+      The backend service has been confirmed to handle complete log data to aid in debugging and analysis.
+    - When False: Excludes the fullLog field entirely and omits sensitive command fields.
+    
+    As of June 2025, the previous 20KB limit for logs has been removed, and either the full log is sent
+    or no log is sent, based on the ENABLE_FULL_TELEMETRY setting.
     """
     import copy
     import re
@@ -183,16 +187,19 @@ def get_telemetry_data():
     # Process all agent events and other nested text fields with more conservative limits
     truncate_large_text_fields(telemetry_copy, field_limits["defaultTextLength"])
     
-    # Always send full telemetry data including logs, regardless of ENABLE_FULL_TELEMETRY setting
-    # The original setting has been overridden to always include fullLog
-    
-    # Only sanitize command fields if specifically requested, but always keep logs
+    # Control what telemetry data is sent based on ENABLE_FULL_TELEMETRY setting
     if not config.ENABLE_FULL_TELEMETRY:
-        # Remove only sensitive command fields if telemetry is limited
+        # When full telemetry is disabled:
+        # 1. Remove sensitive command fields
         if "configInfo" in telemetry_copy:
             telemetry_copy["configInfo"] = telemetry_copy["configInfo"].copy()
             telemetry_copy["configInfo"]["sanitizedBuildCommand"] = ""
             telemetry_copy["configInfo"]["sanitizedFormatCommand"] = ""
+        
+        # 2. Remove the fullLog entirely
+        if "additionalAttributes" in telemetry_copy and "fullLog" in telemetry_copy["additionalAttributes"]:
+            telemetry_copy["additionalAttributes"] = telemetry_copy["additionalAttributes"].copy()
+            telemetry_copy["additionalAttributes"].pop("fullLog", None)
 
     # Debug: Print the JSON structure with key info about size
     import json
@@ -213,7 +220,12 @@ def get_telemetry_data():
     json_size_kb = len(json_data) / 1024
     
     from utils import debug_log
-    debug_log(f"Telemetry payload size: {json_size_kb:.2f}KB (fullLog is being sent in its entirety)")
+    
+    # Adjust debug message based on whether fullLog is being sent
+    if config.ENABLE_FULL_TELEMETRY:
+        debug_log(f"Telemetry payload size: {json_size_kb:.2f}KB (fullLog is being sent in its entirety)")
+    else:
+        debug_log(f"Telemetry payload size: {json_size_kb:.2f}KB (fullLog is excluded per ENABLE_FULL_TELEMETRY=false setting)")
     # Uncomment the following line if you need to see the full structure
     # debug_log(json.dumps(debug_copy, indent=2, default=str))
 

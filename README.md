@@ -253,6 +253,29 @@ The following are key inputs for the GitHub Action. Refer to the `action.yml` in
 | `debug_mode` | Enable verbose logging. | No | `false` |
 | `skip_qa_review` | Skip the QA review step (not recommended). | No | `false` |
 | `skip_writing_security_test` | Skip attempting to write a security test for the fix. | No | `false` |
+| `enable_full_telemetry` | Control how much telemetry data is sent back to Contrast. When set to 'true' (default), sends complete log files and build commands. When 'false', sensitive build commands and full logs are omitted. | No | `true` |
+
+## Telemetry
+
+SmartFix collects telemetry data to help improve the service and diagnose issues. This data includes:
+
+* Vulnerability information (IDs and rules)
+* Application metadata (programming language, frameworks)
+* Configuration settings (sanitized build and formatting commands)
+* Result information (PR creation status, files modified)
+* Full log output
+
+### Telemetry Configuration
+
+* As of June 2025, the telemetry behavior is determined by the `enable_full_telemetry` setting:
+  * When `enable_full_telemetry: 'true'` (default): Sends complete logs and all configuration data
+  * When `enable_full_telemetry: 'false'`: Omits both log data and sensitive build commands
+* This change improves data privacy by giving you full control over what information is shared.
+
+### Data Handling
+
+* The AI summary report field is automatically truncated to fit within database constraints (255 characters).
+* All telemetry data is handled according to Contrast Security's privacy policies.
 
 ## Troubleshooting
 
@@ -293,4 +316,4 @@ The following are key inputs for the GitHub Action. Refer to the `action.yml` in
 
 ---
 
-For further assistance or to provide feedback on the Early Access release, please contact your Contrast Security representative.  
+For further assistance or to provide feedback on the Early Access release, please contact your Contrast Security representative.
