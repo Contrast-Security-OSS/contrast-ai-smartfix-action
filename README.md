@@ -169,7 +169,7 @@ For the Early Access release, SmartFix uses a "Bring Your Own LLM" (BYOLLM) mode
     * Provide your `anthropic_api_key`.
   * Option 2 - AWS Bedrock:
     * Set `agent_model` to the appropriate model string (e.g., `bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0`).  
-    * Provide AWS credentials (`aws_access_key_id`, `aws_secret_access_key`, `aws_region_name`).  
+    * Provide AWS credentials (`aws_access_key_id`, `aws_secret_access_key`, `aws_region_name` is one possible combination of AWS credentials).  
 
 * **Experimental:** **Google Gemini Pro (e.g., Gemini 2.5 Pro)**. Preliminary testing shows good results, but it has not been fully tested for this release.  
   * Set `agent_model` to the appropriate model string (e.g., `gemini/gemini-1.5-pro-latest`).  
