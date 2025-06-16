@@ -165,10 +165,10 @@ def get_telemetry_data():
     }
     
     # Special handling for fullLog - it gets its own size limit and we keep the end
-    if "additionalAttributes" in telemetry_copy and "fullLog" in telemetry_copy["additionalAttributes"]:
-        full_log = telemetry_copy["additionalAttributes"]["fullLog"]
-        telemetry_copy["additionalAttributes"]["fullLog"] = truncate_text(
-            full_log, field_limits["fullLog"], keep_end=True)
+#    if "additionalAttributes" in telemetry_copy and "fullLog" in telemetry_copy["additionalAttributes"]:
+#        full_log = telemetry_copy["additionalAttributes"]["fullLog"]
+#        telemetry_copy["additionalAttributes"]["fullLog"] = truncate_text(
+#            full_log, field_limits["fullLog"], keep_end=True)
     
     # Special handling for aiSummaryReport - it gets its own smaller size limit
     if "resultInfo" in telemetry_copy and "aiSummaryReport" in telemetry_copy["resultInfo"]:
