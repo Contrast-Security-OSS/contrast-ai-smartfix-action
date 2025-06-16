@@ -65,12 +65,12 @@ def get_max_qa_attempts() -> int:
         # Apply the hard cap
         max_qa_attempts = min(max_attempts_from_env, hard_cap_attempts)
         if max_attempts_from_env > hard_cap_attempts:
-            debug_log(f"MAX_QA_ATTEMPTS ({max_attempts_from_env}) exceeded hard cap ({hard_cap_attempts}). Using {hard_cap_attempts}.")
+            log(f"MAX_QA_ATTEMPTS ({max_attempts_from_env}) exceeded hard cap ({hard_cap_attempts}). Using {hard_cap_attempts}.", is_warning=True)
         else:
             debug_log(f"Using MAX_QA_ATTEMPTS from config: {max_qa_attempts}")
         return max_qa_attempts
     except (ValueError, TypeError):
-        debug_log(f"Invalid MAX_QA_ATTEMPTS value. Using default: {default_max_attempts}")
+        log(f"Invalid MAX_QA_ATTEMPTS value. Using default: {default_max_attempts}", is_warning=True)
         return default_max_attempts
 
 def get_max_open_prs() -> int:
@@ -84,12 +84,12 @@ def get_max_open_prs() -> int:
         max_open_prs = int(get_env_var("MAX_OPEN_PRS", required=False, default="5"))
         if max_open_prs < 0:  # Ensure non-negative
             max_open_prs = default_max_open_prs
-            debug_log(f"MAX_OPEN_PRS was negative, using default: {default_max_open_prs}")
+            log(f"MAX_OPEN_PRS was negative, using default: {default_max_open_prs}", is_warning=True)
         else:
             debug_log(f"Using MAX_OPEN_PRS from environment: {max_open_prs}")
         return max_open_prs
     except (ValueError, TypeError):
-        debug_log(f"Invalid or missing MAX_OPEN_PRS environment variable. Using default: {default_max_open_prs}")
+        log(f"Invalid or missing MAX_OPEN_PRS environment variable. Using default: {default_max_open_prs}", is_warning=True)
         return default_max_open_prs
 
 def get_max_events_per_agent() -> int:
@@ -102,15 +102,16 @@ def get_max_events_per_agent() -> int:
     try:
         max_events = int(get_env_var("MAX_EVENTS_PER_AGENT", required=False, default="120"))
         if max_events < 10:  # Ensure it's at least 10 to allow for minimal agent operation
-            debug_log(f"MAX_EVENTS_PER_AGENT ({max_events}) is too low. Using minimum value: 10")
+            log(f"MAX_EVENTS_PER_AGENT ({max_events}) is too low. Using minimum value: 10", is_warning=True)
             return 10
         elif max_events > 500:
+            log(f"MAX_EVENTS_PER_AGENT ({max_events}) is too high. Using maximum value: 500", is_warning=True)
             return 500
         else:
             debug_log(f"Using MAX_EVENTS_PER_AGENT from environment: {max_events}")
             return max_events
     except (ValueError, TypeError):
-        debug_log(f"Invalid or missing MAX_EVENTS_PER_AGENT environment variable. Using default: {default_max_events}")
+        log(f"Invalid or missing MAX_EVENTS_PER_AGENT environment variable. Using default: {default_max_events}", is_warning=True)
         return default_max_events
 
 # --- Preset ---
@@ -204,7 +205,7 @@ def _parse_and_validate_severities(json_str: Optional[str]) -> list[str]:
         
         # Ensure it's a list
         if not isinstance(severities, list):
-            log(f"Vulnerability_severities must be a list, got {type(severities)}. Using default.", is_error=True)
+            log(f"Vulnerability_severities must be a list, got {type(severities)}. Using default.", is_warning=True)
             return default_severities
         
         # Convert to uppercase and filter valid values
@@ -214,11 +215,11 @@ def _parse_and_validate_severities(json_str: Optional[str]) -> list[str]:
             if severity_upper in VALID_SEVERITIES:
                 validated.append(severity_upper)
             else:
-                log(f"'{severity}' is not a valid severity level. Must be one of {VALID_SEVERITIES}.", is_error=True)
+                log(f"'{severity}' is not a valid severity level; disregarding this severity. Must be one of {VALID_SEVERITIES}.", is_warning=True)
         
         # Return default if no valid severities
         if not validated:
-            log(f"No valid severity levels provided. Using default: {default_severities}", is_error=True)
+            log(f"No valid severity levels provided. Using default: {default_severities}", is_warning=True)
             return default_severities
             
         return validated
