@@ -149,12 +149,18 @@ def do_version_check():
         return
     
     # Support version detection from refs for tests
+    # Use ref_version for the actual version from tags when available
+    ref_version = None
     if github_action_ref and github_action_ref.startswith("refs/tags/v"):
         ref_version = github_action_ref.replace("refs/tags/", "")
         debug_log(f"Current action version: {ref_version}")
+        # Use this instead of the hardcoded version for comparison
+        current_action_version = ref_version
     elif github_ref and github_ref.startswith("refs/tags/v"):
         ref_version = github_ref.replace("refs/tags/", "")
         debug_log(f"Current action version: {ref_version}")
+        # Use this instead of the hardcoded version for comparison
+        current_action_version = ref_version
     
     # Parse the current version
     parsed_version = safe_parse_version(current_action_version)
