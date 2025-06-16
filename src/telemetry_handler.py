@@ -159,7 +159,7 @@ def get_telemetry_data():
     # Field-specific size limits - tailored to the database column sizes
     field_limits = {
         "fullLog": 20000,              # 20KB for log data
-        "aiSummaryReport": 1000,       # 1KB for summary (VARCHAR column typically limited to 255-4000 chars)
+        "aiSummaryReport": 250,        # 250 chars for aiSummaryReport (VARCHAR(255) in DB)
         "llmAction.summary": 1000,     # 1KB for LLM action summaries
         "defaultTextLength": 1500      # 1.5KB default for any other text field
     }
@@ -174,8 +174,9 @@ def get_telemetry_data():
     if "resultInfo" in telemetry_copy and "aiSummaryReport" in telemetry_copy["resultInfo"]:
         summary = telemetry_copy["resultInfo"]["aiSummaryReport"]
         if summary:  # Only process if not None or empty
-            telemetry_copy["resultInfo"]["aiSummaryReport"] = truncate_text(
-                summary, field_limits["aiSummaryReport"], keep_end=False)
+            if len(summary) > field_limits["aiSummaryReport"]:
+                # Simple truncation for aiSummaryReport to maximize useful content within VARCHAR(255) constraint
+                telemetry_copy["resultInfo"]["aiSummaryReport"] = summary[:field_limits["aiSummaryReport"]-3] + "..."
     
     # Process all agent events and other nested text fields with more conservative limits
     truncate_large_text_fields(telemetry_copy, field_limits["defaultTextLength"])
@@ -207,8 +208,8 @@ def get_telemetry_data():
     json_data = json.dumps(debug_copy, default=str)
     json_size_kb = len(json_data) / 1024
     
-    print(f"DEBUG - Telemetry structure (total JSON size: {json_size_kb:.2f}KB):")
-    print(json.dumps(debug_copy, indent=2, default=str))
+    # print(f"DEBUG - Telemetry structure (total JSON size: {json_size_kb:.2f}KB):")
+    # print(json.dumps(debug_copy, indent=2, default=str))
 
     return telemetry_copy
 
@@ -254,3 +255,74 @@ def add_agent_event(event_data: dict):
     """Appends a new agent event to the agentEvents list."""
     global _telemetry_data
     _telemetry_data["agentEvents"].append(event_data)
+
+def create_ai_summary_report(pr_body: str) -> str:
+    """
+    Creates a concise summary for aiSummaryReport from the PR body content.
+    Extracts the most important information while keeping the result under the
+    VARCHAR(255) constraint of the database field.
+
+    Args:
+        pr_body: The full PR body content
+
+    Returns:
+        str: A concise summary optimized for the aiSummaryReport field
+    """
+    import re
+    
+    # Extract the first heading as the primary fix description
+    first_heading_match = re.search(r'##\s+(.*?)$', pr_body, re.MULTILINE)
+    first_heading = first_heading_match.group(1).strip() if first_heading_match else "Fix applied"
+    
+    # Get a brief excerpt from the vulnerability summary section
+    vuln_summary_match = re.search(r'## Vulnerability Summary\s+(.*?)(?=##|\Z)', pr_body, re.DOTALL)
+    vuln_summary = ""
+    if vuln_summary_match:
+        # Extract the first sentence or up to 80 chars from vulnerability summary
+        vuln_text = vuln_summary_match.group(1).strip()
+        first_sentence = re.match(r'([^.!?]*[.!?])', vuln_text)
+        if first_sentence:
+            vuln_summary = first_sentence.group(1).strip()
+        else:
+            vuln_summary = vuln_text[:80].strip()
+    
+    # Extract fix summary if available
+    fix_summary = ""
+    fix_match = re.search(r'## Fix Summary\s+(.*?)(?=##|\Z)', pr_body, re.DOTALL)
+    if fix_match:
+        # Get just the first sentence or phrase of the fix summary
+        fix_text = fix_match.group(1).strip()
+        first_sentence = re.match(r'([^.!?]*[.!?])', fix_text)
+        if first_sentence:
+            fix_summary = first_sentence.group(1).strip()
+        else:
+            fix_summary = fix_text[:50].strip()
+    
+    # Construct a concise summary with the most important elements
+    # Format: "Heading: Vulnerability info | Fix approach"
+    max_summary_length = 245  # Leave a small margin below 255
+    
+    # Start with the heading
+    summary_parts = [first_heading]
+    
+    # Add vulnerability info if we have space
+    if vuln_summary and (len(first_heading) + len(vuln_summary) + 2) <= max_summary_length:
+        summary_parts.append(vuln_summary)
+    
+    # Add fix approach if we still have space
+    if fix_summary and (len(": ".join(summary_parts)) + len(fix_summary) + 3) <= max_summary_length:
+        summary_parts.append(fix_summary)
+    
+    # Join the parts with appropriate separators
+    if len(summary_parts) == 1:
+        brief_summary = summary_parts[0]
+    elif len(summary_parts) == 2:
+        brief_summary = f"{summary_parts[0]}: {summary_parts[1]}"
+    else:
+        brief_summary = f"{summary_parts[0]}: {summary_parts[1]} | {summary_parts[2]}"
+    
+    # Ensure we stay within the limit
+    if len(brief_summary) > max_summary_length:
+        brief_summary = brief_summary[:max_summary_length - 3] + "..."
+        
+    return brief_summary

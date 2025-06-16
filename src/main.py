@@ -251,7 +251,13 @@ def main():
             pr_title = git_handler.generate_pr_title(vuln_title)
 
             updated_pr_body = pr_body_base + qa_section
-            telemetry_handler.update_telemetry("resultInfo.aiSummaryReport", updated_pr_body)
+            
+            # Create a brief summary for the telemetry aiSummaryReport (limited to 255 chars in DB)
+            # Generate an optimized summary using the dedicated function in telemetry_handler
+            brief_summary = telemetry_handler.create_ai_summary_report(updated_pr_body)
+            
+            # Update telemetry with our optimized summary
+            telemetry_handler.update_telemetry("resultInfo.aiSummaryReport", brief_summary)
 
             try:
                 # Set a flag to track if we should try the fallback approach
