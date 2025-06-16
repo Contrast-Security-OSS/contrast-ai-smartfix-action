@@ -267,14 +267,12 @@ SmartFix collects telemetry data to help improve the service and diagnose issues
 
 ### Telemetry Configuration
 
-* As of June 2025, the telemetry behavior is determined by the `enable_full_telemetry` setting:
+* The telemetry behavior is determined by the `enable_full_telemetry` setting:
   * When `enable_full_telemetry: 'true'` (default): Sends complete logs and all configuration data
   * When `enable_full_telemetry: 'false'`: Omits both log data and sensitive build commands
-* This change improves data privacy by giving you full control over what information is shared.
 
 ### Data Handling
 
-* The AI summary report field is automatically truncated to fit within database constraints (255 characters).
 * All telemetry data is handled according to Contrast Security's privacy policies.
 
 ## Troubleshooting
