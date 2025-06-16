@@ -184,9 +184,9 @@ def run_qa_loop(
     
     # Analyze build failure and show error summary
     error_analysis = extract_build_errors(initial_build_output)
-    log("\n--- BUILD FAILURE ANALYSIS ---")
-    log(error_analysis)
-    log("--- END BUILD FAILURE ANALYSIS ---\n")
+    debug_log("\n--- BUILD FAILURE ANALYSIS ---")
+    debug_log(error_analysis)
+    debug_log("--- END BUILD FAILURE ANALYSIS ---\n")
     while qa_attempts < max_qa_attempts:
         qa_attempts += 1
         log(f"\n::group::---- QA Attempt #{qa_attempts}/{max_qa_attempts} ---")

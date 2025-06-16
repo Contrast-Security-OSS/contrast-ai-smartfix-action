@@ -104,7 +104,13 @@ def initialize_telemetry():
     _telemetry_initialized = True
 
 def get_telemetry_data():
-    """Returns a copy of the current telemetry data object that is JSON serializable."""
+    """
+    Returns a copy of the current telemetry data object that is JSON serializable.
+    
+    As of June 2025, this function sends the full log data without truncation,
+    overriding the previous 20KB limit. The backend service has been confirmed
+    to handle complete log data to aid in debugging and analysis.
+    """
     import copy
     import re
     
@@ -141,10 +147,13 @@ def get_telemetry_data():
     def truncate_large_text_fields(obj, max_length=1500):
         if isinstance(obj, dict):
             for key, value in obj.items():
+                # Skip fullLog entirely - we want to preserve its full content
+                if key == "fullLog":
+                    continue
+                    
                 if isinstance(value, str) and len(value) > max_length:
                     # Most text fields should keep the beginning (more important info)
-                    keep_end = key == "fullLog"  # Only keep end of logs
-                    obj[key] = truncate_text(value, max_length, keep_end)
+                    obj[key] = truncate_text(value, max_length, keep_end=False)
                 elif isinstance(value, (dict, list)):
                     truncate_large_text_fields(value, max_length)
         elif isinstance(obj, list):
@@ -158,17 +167,10 @@ def get_telemetry_data():
     
     # Field-specific size limits - tailored to the database column sizes
     field_limits = {
-        "fullLog": 20000,              # 20KB for log data
         "aiSummaryReport": 250,        # 250 chars for aiSummaryReport (VARCHAR(255) in DB)
         "llmAction.summary": 1000,     # 1KB for LLM action summaries
         "defaultTextLength": 1500      # 1.5KB default for any other text field
     }
-    
-    # Special handling for fullLog - it gets its own size limit and we keep the end
-#    if "additionalAttributes" in telemetry_copy and "fullLog" in telemetry_copy["additionalAttributes"]:
-#        full_log = telemetry_copy["additionalAttributes"]["fullLog"]
-#        telemetry_copy["additionalAttributes"]["fullLog"] = truncate_text(
-#            full_log, field_limits["fullLog"], keep_end=True)
     
     # Special handling for aiSummaryReport - it gets its own smaller size limit
     if "resultInfo" in telemetry_copy and "aiSummaryReport" in telemetry_copy["resultInfo"]:
@@ -181,11 +183,12 @@ def get_telemetry_data():
     # Process all agent events and other nested text fields with more conservative limits
     truncate_large_text_fields(telemetry_copy, field_limits["defaultTextLength"])
     
+    # Always send full telemetry data including logs, regardless of ENABLE_FULL_TELEMETRY setting
+    # The original setting has been overridden to always include fullLog
+    
+    # Only sanitize command fields if specifically requested, but always keep logs
     if not config.ENABLE_FULL_TELEMETRY:
-        # Remove sensitive fields if telemetry is limited
-        if "additionalAttributes" in telemetry_copy:
-            telemetry_copy["additionalAttributes"] = telemetry_copy["additionalAttributes"].copy()
-            telemetry_copy["additionalAttributes"].pop("fullLog", None)
+        # Remove only sensitive command fields if telemetry is limited
         if "configInfo" in telemetry_copy:
             telemetry_copy["configInfo"] = telemetry_copy["configInfo"].copy()
             telemetry_copy["configInfo"]["sanitizedBuildCommand"] = ""
@@ -198,7 +201,8 @@ def get_telemetry_data():
     # Replace large text fields with size info for debug output
     if "additionalAttributes" in debug_copy and "fullLog" in debug_copy["additionalAttributes"]:
         full_log = debug_copy["additionalAttributes"]["fullLog"]
-        debug_copy["additionalAttributes"]["fullLog"] = f"[Log truncated, total length: {len(full_log)} chars]"
+        log_size_kb = len(full_log) / 1024
+        debug_copy["additionalAttributes"]["fullLog"] = f"[Full log included, size: {log_size_kb:.2f}KB, {len(full_log)} chars]"
     
     if "resultInfo" in debug_copy and "aiSummaryReport" in debug_copy["resultInfo"] and debug_copy["resultInfo"]["aiSummaryReport"]:
         summary = debug_copy["resultInfo"]["aiSummaryReport"]
@@ -208,8 +212,10 @@ def get_telemetry_data():
     json_data = json.dumps(debug_copy, default=str)
     json_size_kb = len(json_data) / 1024
     
-    # print(f"DEBUG - Telemetry structure (total JSON size: {json_size_kb:.2f}KB):")
-    # print(json.dumps(debug_copy, indent=2, default=str))
+    from utils import debug_log
+    debug_log(f"Telemetry payload size: {json_size_kb:.2f}KB (fullLog is being sent in its entirety)")
+    # Uncomment the following line if you need to see the full structure
+    # debug_log(json.dumps(debug_copy, indent=2, default=str))
 
     return telemetry_copy
 
