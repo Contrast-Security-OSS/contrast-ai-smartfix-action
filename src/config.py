@@ -115,7 +115,7 @@ def get_max_events_per_agent() -> int:
         return default_max_events
 
 # --- Preset ---
-VERSION = "v1.0.3"
+VERSION = "v1.0.4"
 USER_AGENT = f"contrast-smart-fix {VERSION}"
 
 # --- Core Settings ---
