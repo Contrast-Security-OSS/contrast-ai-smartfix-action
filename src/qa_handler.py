@@ -30,7 +30,7 @@ import git_handler
 import telemetry_handler
 from build_output_analyzer import extract_build_errors
 
-def run_build_command(command: str, repo_root: Path, new_branch_name: str) -> Tuple[bool, str]:
+def run_build_command(command: str, repo_root: Path, remediation_id: str) -> Tuple[bool, str]:
     """
     Runs the specified build command in the repository root.
 
@@ -69,12 +69,12 @@ def run_build_command(command: str, repo_root: Path, new_branch_name: str) -> Tu
             return False, output
     except FileNotFoundError:
         log(f"Error: Build command '{command}' not found. Is it installed and in PATH?", is_error=True)
-        error_exit(new_branch_name)
+        error_exit(remediation_id)
     except Exception as e:
         log(f"An unexpected error occurred while running the build command: {e}", is_error=True)
-        error_exit(new_branch_name)
+        error_exit(remediation_id)
 
-def run_formatting_command(formatting_command: Optional[str], repo_root: Path, new_branch_name: str) -> List[str]:
+def run_formatting_command(formatting_command: Optional[str], repo_root: Path, remediation_id: str) -> List[str]:
     """
     Runs the formatting command if provided.
     
@@ -118,7 +118,7 @@ def run_formatting_command(formatting_command: Optional[str], repo_root: Path, n
     else:
         log(f"::error::Error executing formatting command: {formatting_command}")
         log(f"::error::Error details: {format_output}", is_error=True)
-        error_exit(new_branch_name)
+        error_exit(remediation_id)
         
     return changed_files
 
@@ -128,7 +128,7 @@ def run_qa_loop(
     max_qa_attempts: int,
     initial_changed_files: List[str],
     formatting_command: Optional[str],
-    new_branch_name: str,
+    remediation_id: str,
     qa_system_prompt: Optional[str] = None,
     qa_user_prompt: Optional[str] = None
 ) -> Tuple[bool, List[str], Optional[str], List[str]]:
@@ -164,13 +164,13 @@ def run_qa_loop(
 
     # Run formatting command before initial build if specified
     if formatting_command:
-        formatting_changed_files = run_formatting_command(formatting_command, repo_root, new_branch_name)
+        formatting_changed_files = run_formatting_command(formatting_command, repo_root, remediation_id)
         if formatting_changed_files:
             changed_files.extend([f for f in formatting_changed_files if f not in changed_files])
 
     # Try initial build first
     log("\n--- Running Initial Build After Fix ---")
-    initial_build_success, initial_build_output = run_build_command(build_command, repo_root, new_branch_name)
+    initial_build_success, initial_build_output = run_build_command(build_command, repo_root, remediation_id)
     build_output = initial_build_output # Store the latest output
 
     if initial_build_success:
@@ -203,7 +203,7 @@ def run_qa_loop(
             changed_files=changed_files, # Pass the current list of changed files
             build_command=build_command,
             repo_root=config.REPO_ROOT,
-            new_branch_name=new_branch_name,
+            remediation_id=remediation_id,
             qa_history=qa_summary_log, # Pass the history of previous QA attempts
             qa_system_prompt=qa_system_prompt,
             qa_user_prompt=qa_user_prompt
@@ -229,14 +229,14 @@ def run_qa_loop(
                 
                 # Always run formatting command before build, if specified
                 if formatting_command:
-                    formatting_changed_files = run_formatting_command(formatting_command, repo_root, new_branch_name)
+                    formatting_changed_files = run_formatting_command(formatting_command, repo_root, remediation_id)
                     if formatting_changed_files:
                         changed_files.extend([f for f in formatting_changed_files if f not in changed_files])
                     telemetry_handler.update_telemetry("resultInfo.filesModified", len(changed_files))
 
                 # Re-run the main build command to check if the QA fix worked
                 log("\n--- Re-running Build Command After QA Fix ---")
-                build_success, build_output = run_build_command(build_command, repo_root, new_branch_name)
+                build_success, build_output = run_build_command(build_command, repo_root, remediation_id)
                 if build_success:
                     log("\n\u2705 Build successful after QA agent fix.")
                     break # Exit QA loop

@@ -78,7 +78,7 @@ def handle_closed_pr():
     
     # Try to extract vulnerability UUID from PR labels
     labels = pull_request.get("labels", [])
-    vuln_uuid = None
+    vuln_uuid = "unknown"
     
     for label in labels:
         label_name = label.get("name", "")
