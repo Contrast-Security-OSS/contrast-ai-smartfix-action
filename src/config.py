@@ -152,6 +152,9 @@ CONTRAST_APP_ID = get_env_var("CONTRAST_APP_ID", required=True)
 CONTRAST_AUTHORIZATION_KEY = get_env_var("CONTRAST_AUTHORIZATION_KEY", required=True)
 CONTRAST_API_KEY = get_env_var("CONTRAST_API_KEY", required=True)
 
+# --- Anthropic Claude Credentials (LiteLLM) ---
+ANTHROPIC_API_KEY = get_env_var("ANTHROPIC_API_KEY", required=False)
+
 # --- Google Gemini Credentials (LiteLLM) ---
 GEMINI_API_KEY = get_env_var("GEMINI_API_KEY", required=False)
 

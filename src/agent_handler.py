@@ -180,6 +180,52 @@ async def process_agent_run(runner, session, exit_stack, user_query, remediation
                 # Throw exception to fully abort processing
                 error_exit(remediation_id, FailureCategory.EXCEEDED_AGENT_EVENTS.value)
 
+            # Detailed debug logging of the event object
+            debug_log(f"\n===== EVENT OBJECT ANALYSIS =====")
+            debug_log(f"Event type: {type(event).__name__}")
+            debug_log(f"Event dir: {dir(event)}")
+            
+            # Log all attributes of the event object
+            for attr in dir(event):
+                if not attr.startswith('_') and not callable(getattr(event, attr)):
+                    try:
+                        attr_value = getattr(event, attr)
+                        debug_log(f"event.{attr}: {type(attr_value).__name__} = {attr_value}")
+                        
+                        # If it's content, dive deeper
+                        if attr == "content" and attr_value:
+                            debug_log(f"  content type: {type(attr_value).__name__}")
+                            debug_log(f"  content dir: {dir(attr_value)}")
+                            
+                            # Check for text attribute
+                            if hasattr(attr_value, "text"):
+                                debug_log(f"  content.text: {attr_value.text}")
+                            
+                            # Check for parts attribute
+                            if hasattr(attr_value, "parts"):
+                                debug_log(f"  content.parts: {attr_value.parts}")
+                                if attr_value.parts:
+                                    for i, part in enumerate(attr_value.parts):
+                                        debug_log(f"    part[{i}] type: {type(part).__name__}")
+                                        debug_log(f"    part[{i}] dir: {dir(part)}")
+                                        if hasattr(part, "text"):
+                                            debug_log(f"    part[{i}].text: {part.text}")
+                    except Exception as e:
+                        debug_log(f"Error getting attribute {attr}: {e}")
+            
+            # Try to find raw inputs and outputs for token counting
+            try:
+                if hasattr(event, '_raw_inputs'):
+                    debug_log(f"event._raw_inputs: {event._raw_inputs}")
+                if hasattr(event, '_raw_outputs'):
+                    debug_log(f"event._raw_outputs: {event._raw_outputs}")
+                if hasattr(event, 'raw'):
+                    debug_log(f"event.raw: {event.raw}")
+            except Exception as e:
+                debug_log(f"Error accessing raw data: {e}")
+            
+            debug_log(f"===== END EVENT ANALYSIS =====\n")
+            
             if event.content:
                 message_text = ""
                 if hasattr(event.content, "text"):
