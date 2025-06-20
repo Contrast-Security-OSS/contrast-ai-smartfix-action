@@ -159,7 +159,17 @@ def run_command(command, env=None, check=True):
 
 
 def error_exit(remediation_id: str, failure_code: Optional[str] = None):
-    """Cleans up a branch (if provided), sends telemetry, and exits with code 1."""
+    """
+    Cleans up a branch (if provided), sends telemetry, and exits with code 1.
+    
+    This function handles the graceful shutdown of the SmartFix workflow when an
+    error occurs. It attempts to notify the Remediation service, clean up the 
+    Git branch, and send telemetry data before exiting.
+    
+    Args:
+        remediation_id: The ID of the remediation that failed
+        failure_code: Optional failure category code, defaults to GENERAL_FAILURE
+    """
     # Local imports to avoid circular dependencies
     from git_handler import cleanup_branch, get_branch_name
     from contrast_api import FailureCategory, notify_remediation_failed, send_telemetry_data
@@ -167,23 +177,39 @@ def error_exit(remediation_id: str, failure_code: Optional[str] = None):
     if not failure_code:
        failure_code = FailureCategory.GENERAL_FAILURE.value
 
-    remediation_notified = notify_remediation_failed(
-        remediation_id=remediation_id,
-        failure_category=failure_code,
-        contrast_host=config.CONTRAST_HOST,
-        contrast_org_id=config.CONTRAST_ORG_ID,
-        contrast_app_id=config.CONTRAST_APP_ID,
-        contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
-        contrast_api_key=config.CONTRAST_API_KEY
-    )
+    # Attempt to notify remediation service - continue even if this fails
+    try:
+        remediation_notified = notify_remediation_failed(
+            remediation_id=remediation_id,
+            failure_category=failure_code,
+            contrast_host=config.CONTRAST_HOST,
+            contrast_org_id=config.CONTRAST_ORG_ID,
+            contrast_app_id=config.CONTRAST_APP_ID,
+            contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
+            contrast_api_key=config.CONTRAST_API_KEY
+        )
 
-    if remediation_notified:
-        log(f"Successfully notified Remediation service about {failure_code} for remediation {remediation_id}.")
-    else:
-        log(f"Failed to notify Remediation service about {failure_code} for remediation {remediation_id}.", is_warning=True)
+        if remediation_notified:
+            log(f"Successfully notified Remediation service about {failure_code} for remediation {remediation_id}.")
+        else:
+            log(f"Failed to notify Remediation service about {failure_code} for remediation {remediation_id}.", is_warning=True)
+    except Exception as e:
+        log(f"Error notifying Remediation service: {str(e)}", is_error=True)
 
-    cleanup_branch(get_branch_name(remediation_id))
-    send_telemetry_data()
+    # Attempt to clean up any branches - continue even if this fails
+    try:
+        branch_name = get_branch_name(remediation_id)
+        cleanup_branch(branch_name)
+    except Exception as e:
+        log(f"Error cleaning up branch for remediation {remediation_id}: {str(e)}", is_error=True)
+
+    # Always attempt to send final telemetry
+    try:
+        send_telemetry_data()
+    except Exception as e:
+        log(f"Error sending telemetry data: {str(e)}", is_error=True)
+
+    # Exit with error code
     sys.exit(1)
 
 # %%

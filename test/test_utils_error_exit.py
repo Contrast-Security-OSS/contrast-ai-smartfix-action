@@ -41,12 +41,31 @@ class TestErrorExit(unittest.TestCase):
         config.CONTRAST_AUTHORIZATION_KEY = "test-auth"
         config.CONTRAST_API_KEY = "test-api"
         
+    def tearDown(self):
+        """Clean up after each test"""
+        # Reset any changes to the config module
+        pass
+        
     @contextmanager
     def assert_system_exit(self, expected_code=1):
         """Context manager to assert that sys.exit was called with the expected code"""
         with self.assertRaises(SystemExit) as cm:
             yield
         self.assertEqual(cm.exception.code, expected_code)
+        
+    def find_log_call(self, mock_log, message, is_warning=False, is_error=False):
+        """Helper method to find a specific log call in the mock's call list"""
+        expected_call = call(message)
+        if is_warning:
+            expected_call = call(message, is_warning=True)
+        elif is_error:
+            expected_call = call(message, is_error=True)
+            
+        for actual_call in mock_log.call_args_list:
+            # Compare args and kwargs
+            if actual_call == expected_call:
+                return True
+        return False
 
     @patch('sys.exit')
     @patch('utils.log')
@@ -77,15 +96,19 @@ class TestErrorExit(unittest.TestCase):
             contrast_api_key=config.CONTRAST_API_KEY
         )
         
-        # Verify success log message
-        mock_log.assert_any_call(
-            f"Successfully notified Remediation service about {failure_code} for remediation {remediation_id}."
+        # Use helper method to check for the expected log message
+        expected_log_message = f"Successfully notified Remediation service about {failure_code} for remediation {remediation_id}."
+        self.assertTrue(
+            self.find_log_call(mock_log, expected_log_message),
+            f"Expected log message not found: {expected_log_message}"
         )
         
         # Verify other function calls
         mock_get_branch.assert_called_once_with(remediation_id)
         mock_cleanup.assert_called_once_with(f"smartfix/remediation-{remediation_id}")
         mock_send_telemetry.assert_called_once()
+        # Verify sys.exit was called with code 1
+        mock_exit.assert_called_once_with(1)
 
     @patch('sys.exit')
     @patch('utils.log')
@@ -116,9 +139,19 @@ class TestErrorExit(unittest.TestCase):
             contrast_api_key=config.CONTRAST_API_KEY
         )
         
-        mock_log.assert_any_call(
-            f"Successfully notified Remediation service about {default_failure_code} for remediation {remediation_id}."
+        # Use helper method to check for the expected log message
+        expected_log_message = f"Successfully notified Remediation service about {default_failure_code} for remediation {remediation_id}."
+        self.assertTrue(
+            self.find_log_call(mock_log, expected_log_message),
+            f"Expected log message not found: {expected_log_message}"
         )
+        
+        # Verify other functions were called
+        mock_get_branch.assert_called_once_with(remediation_id)
+        mock_cleanup.assert_called_once()
+        mock_send_telemetry.assert_called_once()
+        # Verify sys.exit was called with code 1
+        mock_exit.assert_called_once_with(1)
 
     @patch('sys.exit')
     @patch('utils.log')
@@ -141,15 +174,18 @@ class TestErrorExit(unittest.TestCase):
         # Assert
         mock_notify.assert_called_once()
         
-        # Verify failure log message with is_warning flag
-        mock_log.assert_any_call(
-            f"Failed to notify Remediation service about {failure_code} for remediation {remediation_id}.",
-            is_warning=True
+        # Use helper method to check for the expected log message
+        expected_log_message = f"Failed to notify Remediation service about {failure_code} for remediation {remediation_id}."
+        self.assertTrue(
+            self.find_log_call(mock_log, expected_log_message, is_warning=True),
+            f"Expected log message not found: {expected_log_message}"
         )
         
         # Still calls cleanup and telemetry
         mock_cleanup.assert_called_once()
         mock_send_telemetry.assert_called_once()
+        # Verify sys.exit was called with code 1
+        mock_exit.assert_called_once_with(1)
 
     @patch('sys.exit')
     @patch('utils.log')
@@ -162,12 +198,16 @@ class TestErrorExit(unittest.TestCase):
         """Test error_exit when notification raises an exception"""
         # Setup
         remediation_id = "test-remediation-id"
-        mock_notify.side_effect = Exception("API connection error")  # Simulate exception
+        exception_msg = "API connection error"
+        mock_notify.side_effect = Exception(exception_msg)  # Simulate exception
         mock_get_branch.return_value = f"smartfix/remediation-{remediation_id}"
 
         # Execute
         utils.error_exit(remediation_id)
 
+        # Verify error was logged
+        mock_log.assert_any_call(f"Error notifying Remediation service: {exception_msg}", is_error=True)
+        
         # Even on exception, should continue with cleanup and telemetry
         mock_cleanup.assert_called_once()
         mock_send_telemetry.assert_called_once()
@@ -186,11 +226,23 @@ class TestErrorExit(unittest.TestCase):
         failure_code = FailureCategory.GIT_COMMAND_FAILURE.value
         mock_notify.return_value = True
         mock_get_branch.return_value = f"smartfix/remediation-{remediation_id}"
-        mock_cleanup.side_effect = Exception("Git error during cleanup")  # Simulate git error
+        error_msg = "Git error during cleanup"
+        mock_cleanup.side_effect = Exception(error_msg)  # Simulate git error
 
         # Execute
         utils.error_exit(remediation_id, failure_code)
 
+        # Verify success notification log
+        mock_log.assert_any_call(
+            f"Successfully notified Remediation service about {failure_code} for remediation {remediation_id}."
+        )
+        
+        # Verify git error log
+        mock_log.assert_any_call(
+            f"Error cleaning up branch for remediation {remediation_id}: {error_msg}", 
+            is_error=True
+        )
+        
         # Assert notifications were sent despite branch cleanup failure
         mock_notify.assert_called_once()
         # Should still attempt to send telemetry
