@@ -164,7 +164,8 @@ def error_exit(remediation_id: str, failure_code: Optional[str] = None):
     
     This function handles the graceful shutdown of the SmartFix workflow when an
     error occurs. It attempts to notify the Remediation service, clean up the 
-    Git branch, and send telemetry data before exiting.
+    Git branch, and send telemetry data before exiting. If any step fails with an 
+    exception, the function will catch it, log it, and continue with the next step.
     
     Args:
         remediation_id: The ID of the remediation that failed
@@ -174,8 +175,9 @@ def error_exit(remediation_id: str, failure_code: Optional[str] = None):
     from git_handler import cleanup_branch, get_branch_name
     from contrast_api import FailureCategory, notify_remediation_failed, send_telemetry_data
 
+    # Set default failure code if none provided
     if not failure_code:
-       failure_code = FailureCategory.GENERAL_FAILURE.value
+        failure_code = FailureCategory.GENERAL_FAILURE.value
 
     # Attempt to notify remediation service - continue even if this fails
     try:
@@ -199,7 +201,8 @@ def error_exit(remediation_id: str, failure_code: Optional[str] = None):
     # Attempt to clean up any branches - continue even if this fails
     try:
         branch_name = get_branch_name(remediation_id)
-        cleanup_branch(branch_name)
+        if branch_name:
+            cleanup_branch(branch_name)
     except Exception as e:
         log(f"Error cleaning up branch for remediation {remediation_id}: {str(e)}", is_error=True)
 
