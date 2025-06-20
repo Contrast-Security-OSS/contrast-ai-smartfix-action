@@ -86,6 +86,8 @@ def main():
     github_repo_url = f"https://github.com/{config.GITHUB_REPOSITORY}"
     debug_log(f"GitHub repository URL: {github_repo_url}")
 
+    remediation_id = "unknown"
+
     while True:
         telemetry_handler.reset_vuln_specific_telemetry()
         # Check if we've exceeded the maximum runtime
@@ -93,6 +95,20 @@ def main():
         elapsed_time = current_time - start_time
         if elapsed_time > max_runtime:
             log(f"\n--- Maximum runtime of 3 hours exceeded (actual: {elapsed_time}). Stopping processing. ---")
+            remediation_notified = contrast_api.notify_remediation_failed(
+                remediation_id=remediation_id,
+                failure_category=contrast_api.FailureCategory.EXCEEDED_TIMEOUT.value,
+                contrast_host=config.CONTRAST_HOST,
+                contrast_org_id=config.CONTRAST_ORG_ID,
+                contrast_app_id=config.CONTRAST_APP_ID,
+                contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
+                contrast_api_key=config.CONTRAST_API_KEY
+            )
+
+            if remediation_notified:
+                log(f"Successfully notified Remediation service about exceeded timeout for remediation {remediation_id}.")
+            else:
+                log(f"Failed to notify Remediation service about exceeded timeout for remediation {remediation_id}.", is_warning=True)
             break
             
         # Check if we've reached the max PR limit
@@ -146,43 +162,26 @@ def main():
         log(f"\n\033[0;33m Selected vuln to fix: {vuln_title} \033[0m")
 
         # Prepare a clean repository state and branch for the fix
-        new_branch_name = git_handler.generate_branch_name(remediation_id)
+        new_branch_name = git_handler.get_branch_name(remediation_id)
         try:
-            git_handler.prepare_feature_branch(new_branch_name)
+            git_handler.prepare_feature_branch(remediation_id)
         except SystemExit:
             log(f"Error preparing feature branch {new_branch_name}. Skipping to next vulnerability.")
             continue
 
         # Ensure the build is not broken before running the fix agent
         log("\n--- Running Build Before Fix ---")
-        prefix_build_success, prefix_build_output = run_build_command(build_command, config.REPO_ROOT, new_branch_name)
+        prefix_build_success, prefix_build_output = run_build_command(build_command, config.REPO_ROOT, remediation_id)
         if not prefix_build_success:
             # Analyze build failure and show error summary
             error_analysis = extract_build_errors(prefix_build_output)
             log("\n❌ Build is broken ❌ -- No fix attempted.")
             log(f"Build output:\n{error_analysis}")
-            
-            # Notify the Remediation service about the failed build
-            remediation_notified = contrast_api.notify_remediation_failed(
-                remediation_id=remediation_id,
-                failure_category=contrast_api.FailureCategory.INITIAL_BUILD_FAILURE.value,
-                contrast_host=config.CONTRAST_HOST,
-                contrast_org_id=config.CONTRAST_ORG_ID,
-                contrast_app_id=config.CONTRAST_APP_ID,
-                contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
-                contrast_api_key=config.CONTRAST_API_KEY
-            )
-            
-            if remediation_notified:
-                log(f"Successfully notified Remediation service about failed build for remediation {remediation_id}.")
-            else:
-                log(f"Failed to notify Remediation service about failed build for remediation {remediation_id}.", is_warning=True)
-                
-            error_exit(new_branch_name) # Exit if the build is broken, no point in proceeding
+            error_exit(remediation_id, contrast_api.FailureCategory.INITIAL_BUILD_FAILURE.value) # Exit if the build is broken, no point in proceeding
 
         # --- Run AI Fix Agent ---
         ai_fix_summary_full = agent_handler.run_ai_fix_agent(
-            config.REPO_ROOT, fix_system_prompt, fix_user_prompt, new_branch_name
+            config.REPO_ROOT, fix_system_prompt, fix_user_prompt, remediation_id
         )
 
         # Check if the fix agent encountered an error
@@ -190,7 +189,7 @@ def main():
             log("Fix agent encountered an unrecoverable error. Skipping this vulnerability.")
             error_message = ai_fix_summary_full[len("Error during AI fix agent execution:"):].strip()
             log(f"Error details: {error_message}")
-            error_exit(new_branch_name)
+            error_exit(remediation_id, contrast_api.FailureCategory.AGENT_FAILURE.value)
 
         # --- Git and GitHub Operations ---
         log("\n--- Proceeding with Git & GitHub Operations ---")
@@ -210,7 +209,7 @@ def main():
                     max_qa_attempts=max_qa_attempts_setting,
                     initial_changed_files=initial_changed_files,
                     formatting_command=formatting_command,
-                    new_branch_name=new_branch_name,
+                    remediation_id=remediation_id,
                     qa_system_prompt=qa_system_prompt,
                     qa_user_prompt=qa_user_prompt
                 )
@@ -308,7 +307,7 @@ def main():
                 
                 # Try to create the PR using the GitHub CLI
                 log("Attempting to create a pull request...")
-                pr_url = git_handler.create_pr(pr_title, updated_pr_body, new_branch_name, config.BASE_BRANCH, label_name)
+                pr_url = git_handler.create_pr(pr_title, updated_pr_body, remediation_id, config.BASE_BRANCH, label_name)
                 
                 if pr_url:
                     pr_creation_success = True
@@ -356,22 +355,15 @@ def main():
                 telemetry_handler.update_telemetry("resultInfo.prCreated", pr_creation_success)
                 
                 if not pr_creation_success:
-                    log("\n--- PR creation failed, but changes were pushed to branch ---")
-                    debug_log(f"Branch name: {new_branch_name}")
-                    # Always clean up the branch when PR creation fails
-                    git_handler.cleanup_branch(new_branch_name)
-                    break;
+                    log("\n--- PR creation failed ---")
+                    error_exit(remediation_id, contrast_api.FailureCategory.GENERATE_PR_FAILURE.value)
                 
                 processed_one = True # Mark that we successfully processed one
                 log(f"\n--- Successfully processed vulnerability {vuln_uuid}. Continuing to look for next vulnerability... ---")
             except Exception as e:
                 log(f"Error creating PR: {e}")
-                log("\n--- PR creation failed, but changes were pushed to branch ---")
-                debug_log(f"Branch name: {new_branch_name}")
-                
-                # Always clean up the branch when PR creation fails
-                git_handler.cleanup_branch(new_branch_name)
-                break;
+                log("\n--- PR creation failed ---")
+                error_exit(remediation_id, contrast_api.FailureCategory.GENERATE_PR_FAILURE.value)
         else:
             log("Skipping commit, push, and PR creation as no changes were detected by the agent.")
             # Clean up the branch if no changes were made

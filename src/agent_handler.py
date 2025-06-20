@@ -28,6 +28,7 @@ import json
 # Import configurations and utilities
 import config
 from utils import debug_log, log, error_exit # Updated import
+from contrast_api import FailureCategory
 import telemetry_handler # Import for telemetry
 import datetime # For timestamps
 import traceback # For error logging
@@ -54,7 +55,7 @@ except ImportError as e:
     print(traceback.format_exc(), file=sys.stderr)
     sys.exit(1) # Exit if ADK is not available
 
-async def get_mcp_tools(target_folder: Path, new_branch_name: str) -> Tuple[List, AsyncExitStack]:
+async def get_mcp_tools(target_folder: Path, remediation_id: str) -> Tuple[List, AsyncExitStack]:
     """Connects to MCP servers (Filesystem)"""
     debug_log("Attempting to connect to MCP servers...")
     exit_stack = AsyncExitStack()
@@ -82,22 +83,22 @@ async def get_mcp_tools(target_folder: Path, new_branch_name: str) -> Tuple[List
     except NameError as ne:
         log(f"FATAL: Error initializing MCP Filesystem server (likely ADK setup issue): {ne}", is_error=True)
         log("No filesystem tools available - cannot make code changes.", is_error=True)
-        error_exit(new_branch_name)
+        error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
     except Exception as e:
         log(f"FATAL: Failed to connect to Filesystem MCP server: {e}", is_error=True)
         log("No filesystem tools available - cannot make code changes.", is_error=True)
-        error_exit(new_branch_name)
+        error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
 
     debug_log(f"Total tools from all MCP servers: {len(all_tools)}")
     return all_tools, exit_stack
 
-async def create_agent(target_folder: Path, new_branch_name: str, agent_type: str = "fix", system_prompt: Optional[str] = None) -> Tuple[Optional[Agent], AsyncExitStack]:
+async def create_agent(target_folder: Path, remediation_id: str, agent_type: str = "fix", system_prompt: Optional[str] = None) -> Tuple[Optional[Agent], AsyncExitStack]:
     """Creates an ADK Agent (either 'fix' or 'qa')."""
-    mcp_tools, exit_stack = await get_mcp_tools(target_folder, new_branch_name)
+    mcp_tools, exit_stack = await get_mcp_tools(target_folder, remediation_id)
     if not mcp_tools:
         log(f"Error: No MCP tools available for the {agent_type} agent. Cannot proceed.", is_error=True)
         await exit_stack.aclose()
-        error_exit(new_branch_name)
+        error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
 
     if system_prompt:
         agent_instruction = system_prompt
@@ -105,7 +106,7 @@ async def create_agent(target_folder: Path, new_branch_name: str, agent_type: st
     else:
         log(f"Error: No system prompt available for {agent_type} agent")
         await exit_stack.aclose()
-        error_exit(new_branch_name)
+        error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
     agent_name = f"contrast_{agent_type}_agent"
 
     try:
@@ -123,20 +124,20 @@ async def create_agent(target_folder: Path, new_branch_name: str, agent_type: st
         if "bedrock" in str(e).lower() or "aws" in str(e).lower():
             log("Hint: Ensure AWS credentials and Bedrock model ID are correct.", is_error=True)
         await exit_stack.aclose()
-        error_exit(new_branch_name)
+        error_exit(remediation_id, FailureCategory.INVALID_LLM_CONFIG.value)
 
-async def process_agent_run(runner, session, exit_stack, user_query, new_branch_name: str, agent_type: str = None) -> str:
+async def process_agent_run(runner, session, exit_stack, user_query, remediation_id: str, agent_type: str = None) -> str:
     """Runs the agent, allowing it to use tools, and returns the final text response."""
     agent_event_actions = []
     start_time = datetime.datetime.now()
 
     if not ADK_AVAILABLE or not runner or not session:
         log("AI Agent execution skipped: ADK libraries not available or runner/session invalid.")
-        error_exit(new_branch_name)
+        error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
 
     if not hasattr(genai_types, 'Content') or not hasattr(genai_types, 'Part'):
         log("AI Agent execution skipped: google.genai types Content/Part not available.")
-        error_exit(new_branch_name)
+        error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
 
     content = genai_types.Content(role='user', parts=[genai_types.Part(text=user_query)])
     log(f"Running AI {agent_type.upper()} agent to analyze vulnerability and apply fix...")
@@ -144,7 +145,7 @@ async def process_agent_run(runner, session, exit_stack, user_query, new_branch_
     user_id = getattr(session, 'user_id', None)
     if not session_id or not user_id:
         log("AI Agent execution skipped: Session object is invalid or missing required attributes (id, user_id).")
-        error_exit(new_branch_name)
+        error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
 
     event_count = 0
     final_response = "AI agent did not provide a final summary."
@@ -177,7 +178,7 @@ async def process_agent_run(runner, session, exit_stack, user_query, new_branch_
                 final_response += f"\n\n⚠️ Note: Agent execution was terminated early after reaching the maximum limit of {max_events_limit} events. The solution may be incomplete."
                 await events_async.aclose()
                 # Throw exception to fully abort processing
-                raise RuntimeError(f"Maximum event limit of {max_events_limit} exceeded. Agent execution aborted.")
+                error_exit(remediation_id, FailureCategory.EXCEEDED_AGENT_EVENTS.value)
 
             if event.content:
                 message_text = ""
@@ -259,7 +260,7 @@ async def process_agent_run(runner, session, exit_stack, user_query, new_branch_
 
     return final_response
 
-def run_ai_fix_agent(repo_root: Path, fix_system_prompt: str, fix_user_prompt: str, new_branch_name: str) -> str:
+def run_ai_fix_agent(repo_root: Path, fix_system_prompt: str, fix_user_prompt: str, remediation_id: str) -> str:
     """Synchronously runs the AI agent to analyze and apply a fix using API-provided prompts."""
 
     # Process the fix user prompt to handle placeholders and optional SecurityTest removal
@@ -275,7 +276,7 @@ def run_ai_fix_agent(repo_root: Path, fix_system_prompt: str, fix_user_prompt: s
     debug_log(f"Skip Writing Security Test: {config.SKIP_WRITING_SECURITY_TEST}")
 
     try:
-        agent_summary_str = asyncio.run(_run_agent_internal_with_prompts('fix', repo_root, processed_user_prompt, fix_system_prompt, new_branch_name))
+        agent_summary_str = asyncio.run(_run_agent_internal_with_prompts('fix', repo_root, processed_user_prompt, fix_system_prompt, remediation_id))
         log("--- AI Agent Fix Attempt Completed ---")
         debug_log("\n--- Full Agent Summary ---")
         debug_log(agent_summary_str)
@@ -284,7 +285,7 @@ def run_ai_fix_agent(repo_root: Path, fix_system_prompt: str, fix_user_prompt: s
         # Check if the agent was unable to use filesystem tools
         if "No MCP tools available" in agent_summary_str or "Proceeding without filesystem tools" in agent_summary_str:
             log(f"Error during AI fix agent execution: No filesystem tools were available. The agent cannot make changes to files.")
-            error_exit(new_branch_name)
+            error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
 
         # Attempt to extract analytics data for telemetry
         analytics_match = re.search(r"<analytics>(.*?)</analytics>", agent_summary_str, re.DOTALL)
@@ -347,10 +348,13 @@ def run_ai_fix_agent(repo_root: Path, fix_system_prompt: str, fix_user_prompt: s
             
     except Exception as e:
         log(f"Error running AI fix agent: {e}", is_error=True)
+        failure_code = FailureCategory.AGENT_FAILURE.value
+        if "litellm." in str(e).lower():
+            failure_code = FailureCategory.INVALID_LLM_CONFIG.value
         # Cleanup any changes made and revert to base branch (no branch name yet)
-        error_exit(new_branch_name)
+        error_exit(remediation_id, failure_code)
 
-def run_qa_agent(build_output: str, changed_files: List[str], build_command: str, repo_root: Path, new_branch_name: str, qa_history: Optional[List[str]] = None, qa_system_prompt: Optional[str] = None, qa_user_prompt: Optional[str] = None) -> str:
+def run_qa_agent(build_output: str, changed_files: List[str], build_command: str, repo_root: Path, remediation_id: str, qa_history: Optional[List[str]] = None, qa_system_prompt: Optional[str] = None, qa_user_prompt: Optional[str] = None) -> str:
     """
     Synchronously runs the QA AI agent to fix build/test errors using API-provided prompts.
 
@@ -390,13 +394,13 @@ def run_qa_agent(build_output: str, changed_files: List[str], build_command: str
         qa_query = process_qa_user_prompt(qa_user_prompt, changed_files, build_output, qa_history_section)
     else:
         log(f"Error: No prompts available for QA agent")
-        error_exit(new_branch_name)
+        error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
 
     qa_summary = f"Error during QA agent execution: Unknown error" # Default error
 
     try:
         # Run the agent internally, using API prompts if available
-        qa_summary = asyncio.run(_run_agent_internal_with_prompts('qa', repo_root, qa_query, qa_system_prompt, new_branch_name))
+        qa_summary = asyncio.run(_run_agent_internal_with_prompts('qa', repo_root, qa_query, qa_system_prompt, remediation_id))
         
         log("--- QA Agent Fix Attempt Completed ---")
         debug_log("\n--- Raw QA Agent Summary ---")
@@ -407,9 +411,10 @@ def run_qa_agent(build_output: str, changed_files: List[str], build_command: str
 
     except Exception as e:
         log(f"Error running QA agent: {e}", is_error=True)
-        # Need to get the branch name from main.py context - will be handled by main.py
-        # We'll just revert uncommitted changes here
-        error_exit(new_branch_name)
+        failure_code = FailureCategory.AGENT_FAILURE.value
+        if "litellm." in str(e).lower():
+            failure_code = FailureCategory.INVALID_LLM_CONFIG.value
+        error_exit(remediation_id, failure_code)
 
 def process_qa_user_prompt(qa_user_prompt: str, changed_files: List[str], build_output: str, qa_history_section: str) -> str:
     """
@@ -465,13 +470,13 @@ def process_fix_user_prompt(fix_user_prompt: str) -> str:
     
     return processed_prompt
 
-async def _run_agent_internal_with_prompts(agent_type: str, repo_root: Path, query: str, system_prompt: str, new_branch_name: str) -> str:
+async def _run_agent_internal_with_prompts(agent_type: str, repo_root: Path, query: str, system_prompt: str, remediation_id: str) -> str:
     """Internal helper to run either fix or QA agent with API-provided prompts. Returns summary."""
     debug_log(f"Using Agent Model ID: {config.AGENT_MODEL}")
 
     if not ADK_AVAILABLE:
         log(f"FATAL: {agent_type.capitalize()} Agent execution skipped: ADK libraries not available (import failed).")
-        error_exit(new_branch_name)
+        error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
 
     try:
         session_service = InMemorySessionService()
@@ -481,13 +486,13 @@ async def _run_agent_internal_with_prompts(agent_type: str, repo_root: Path, que
     except Exception as e:
         # Handle any errors in session creation
         log(f"FATAL: Failed to create {agent_type.capitalize()} agent session: {e}", is_error=True)
-        error_exit(new_branch_name)
+        error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
     
-    agent, exit_stack = await create_agent(repo_root, new_branch_name, agent_type=agent_type, system_prompt=system_prompt)
+    agent, exit_stack = await create_agent(repo_root, remediation_id, agent_type=agent_type, system_prompt=system_prompt)
     if not agent:
         await exit_stack.aclose()
         log(f"AI Agent creation failed ({agent_type} agent). Possible reasons: MCP server connection issue, missing prompts, model configuration error, or internal ADK problem.")
-        error_exit(new_branch_name)
+        error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
 
     runner = Runner(
         app_name=app_name,
@@ -497,7 +502,7 @@ async def _run_agent_internal_with_prompts(agent_type: str, repo_root: Path, que
     )
 
     # Pass the full model ID (though not used for cost calculation anymore, kept for consistency if needed elsewhere)
-    summary = await process_agent_run(runner, session, exit_stack, query, new_branch_name, agent_type)
+    summary = await process_agent_run(runner, session, exit_stack, query, remediation_id, agent_type)
 
     return summary
 

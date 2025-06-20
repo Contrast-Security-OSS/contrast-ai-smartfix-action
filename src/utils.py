@@ -158,14 +158,51 @@ def run_command(command, env=None, check=True):
         debug_log("::endgroup::")
 
 
-def error_exit(branch_name: str):
-    """Cleans up a branch (if provided), sends telemetry, and exits with code 1."""
+def error_exit(remediation_id: str, failure_code: Optional[str] = None):
+    """
+    Cleans up a branch (if provided), sends telemetry, and exits with code 1.
+    
+    This function handles the graceful shutdown of the SmartFix workflow when an
+    error occurs. It attempts to notify the Remediation service, clean up the 
+    Git branch, and send telemetry data before exiting. If any step fails with an 
+    exception, the function will catch it, log it, and continue with the next step.
+    
+    Args:
+        remediation_id: The ID of the remediation that failed
+        failure_code: Optional failure category code, defaults to GENERAL_FAILURE
+    """
     # Local imports to avoid circular dependencies
-    import git_handler
-    import contrast_api
+    from git_handler import cleanup_branch, get_branch_name
+    from contrast_api import FailureCategory, notify_remediation_failed, send_telemetry_data
 
-    git_handler.cleanup_branch(branch_name)
-    contrast_api.send_telemetry_data()
+    # Set default failure code if none provided
+    if not failure_code:
+        failure_code = FailureCategory.GENERAL_FAILURE.value
+
+    # Attempt to notify remediation service - continue even if this fails
+    remediation_notified = notify_remediation_failed(
+        remediation_id=remediation_id,
+        failure_category=failure_code,
+        contrast_host=config.CONTRAST_HOST,
+        contrast_org_id=config.CONTRAST_ORG_ID,
+        contrast_app_id=config.CONTRAST_APP_ID,
+        contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
+        contrast_api_key=config.CONTRAST_API_KEY
+    )
+
+    if remediation_notified:
+        log(f"Successfully notified Remediation service about {failure_code} for remediation {remediation_id}.")
+    else:
+        log(f"Failed to notify Remediation service about {failure_code} for remediation {remediation_id}.", is_warning=True)
+
+    # Attempt to clean up any branches - continue even if this fails
+    branch_name = get_branch_name(remediation_id)
+    cleanup_branch(branch_name)
+
+    # Always attempt to send final telemetry
+    send_telemetry_data()
+
+    # Exit with error code
     sys.exit(1)
 
 # %%

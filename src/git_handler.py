@@ -22,6 +22,7 @@ import json
 import subprocess
 from typing import List
 from utils import run_command, debug_log, log, error_exit
+from contrast_api import FailureCategory
 import config
 
 def get_gh_env():
@@ -42,11 +43,11 @@ def configure_git_user():
     run_command(["git", "config", "--global", "user.email", "action@github.com"])
     run_command(["git", "config", "--global", "user.name", "GitHub Action"])
 
-def generate_branch_name(remediation_id: str) -> str:
+def get_branch_name(remediation_id: str) -> str:
     """Generates a unique branch name based on remediation ID"""
     return f"smartfix/remediation-{remediation_id}"
 
-def prepare_feature_branch(branch_name: str):
+def prepare_feature_branch(remediation_id: str):
     """Prepares a clean repository state and creates a new feature branch."""
     log("Cleaning workspace and creating new feature branch...")
     
@@ -59,12 +60,13 @@ def prepare_feature_branch(branch_name: str):
         run_command(["git", "pull", "--ff-only"], check=True)
         log(f"Successfully cleaned workspace and checked out latest {config.BASE_BRANCH}")
         
+        branch_name = get_branch_name(remediation_id)
         # Now create the new branch
         log(f"Creating and checking out new branch: {branch_name}")
         run_command(["git", "checkout", "-b", branch_name]) # run_command exits on failure
     except subprocess.CalledProcessError as e:
         log(f"ERROR: Failed to prepare clean workspace due to a subprocess error: {str(e)}", is_error=True)
-        error_exit(branch_name) # Exit if we can't properly prepare the workspace
+        error_exit(remediation_id, FailureCategory.GIT_COMMAND_FAILURE.value)
 
 def stage_changes():
     """Stages all changes in the repository."""
@@ -280,7 +282,7 @@ def generate_pr_title(vuln_title: str) -> str:
     """Generates the Pull Request title."""
     return f"Fix: {vuln_title[:100]}"
 
-def create_pr(title: str, body: str, head_branch: str, base_branch: str, label: str) -> str:
+def create_pr(title: str, body: str, remediation_id: str, base_branch: str, label: str) -> str:
     """Creates a GitHub Pull Request.
     
     Returns:
@@ -291,6 +293,8 @@ def create_pr(title: str, body: str, head_branch: str, base_branch: str, label: 
     import os.path
     import subprocess
     
+    head_branch = get_branch_name(remediation_id)
+
     # Set a maximum PR body size (GitHub recommends keeping it under 65536 chars)
     MAX_PR_BODY_SIZE = 32000
     
@@ -349,10 +353,10 @@ def create_pr(title: str, body: str, head_branch: str, base_branch: str, label: 
 
     except FileNotFoundError:
         log(f"Error: gh command not found. Please ensure the GitHub CLI is installed and in PATH.", is_error=True)
-        error_exit(head_branch)
+        error_exit(remediation_id, FailureCategory.GENERATE_PR_FAILURE.value)
     except Exception as e:
         log(f"An unexpected error occurred during PR creation: {e}", is_error=True)
-        error_exit(head_branch)
+        error_exit(remediation_id, FailureCategory.GENERATE_PR_FAILURE.value)
     finally:
         # Clean up the temporary file
         if os.path.exists(temp_file_path):
