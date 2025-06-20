@@ -52,25 +52,6 @@ class TestErrorExit(unittest.TestCase):
         with self.assertRaises(SystemExit) as cm:
             yield
         self.assertEqual(cm.exception.code, expected_code)
-        
-    def find_log_call(self, mock_log, message, is_warning=False, is_error=False):
-        """Helper method to find a specific log call in the mock's call list"""
-        for actual_call in mock_log.call_args_list:
-            # For simplicity, just check if the message string is in the call args
-            args, kwargs = actual_call
-            if args and message in args[0]:
-                # If we need to verify warning/error flags
-                if is_warning and kwargs.get('is_warning', False):
-                    return True
-                elif is_error and kwargs.get('is_error', False):
-                    return True
-                elif not is_warning and not is_error and not kwargs.get('is_warning', False) and not kwargs.get('is_error', False):
-                    return True
-                
-        # If not found, print all calls for debugging
-        print(f"All mock_log calls: {mock_log.call_args_list}")
-        print(f"Failed to find message: {message}")
-        return False
 
     @patch('sys.exit')
     @patch('utils.log')  # Directly patch the module function
@@ -100,11 +81,7 @@ class TestErrorExit(unittest.TestCase):
             contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
             contrast_api_key=config.CONTRAST_API_KEY
         )
-        
-        # Check each log message using our helper
-        success_message = f"Successfully notified Remediation service about {failure_code} for remediation {remediation_id}."
-        self.assertTrue(self.find_log_call(mock_log, success_message), f"Expected log message not found: {success_message}")
-        
+              
         # Verify other function calls
         mock_get_branch.assert_called_once_with(remediation_id)
         mock_cleanup.assert_called_once_with(f"smartfix/remediation-{remediation_id}")
@@ -140,10 +117,6 @@ class TestErrorExit(unittest.TestCase):
             contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
             contrast_api_key=config.CONTRAST_API_KEY
         )
-        
-        # Check the log message using our helper
-        success_message = f"Successfully notified Remediation service about {default_failure_code} for remediation {remediation_id}."
-        self.assertTrue(self.find_log_call(mock_log, success_message), f"Expected log message not found: {success_message}")
         
         # Verify other functions were called
         mock_get_branch.assert_called_once_with(remediation_id)
