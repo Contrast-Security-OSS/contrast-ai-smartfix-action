@@ -528,7 +528,7 @@ async def _run_agent_internal_with_prompts(agent_type: str, repo_root: Path, que
         session_service = InMemorySessionService()
         artifacts_service = InMemoryArtifactService()
         app_name = f'contrast_{agent_type}_app'
-        session = session_service.create_session(state={}, app_name=app_name, user_id=f'github_action_{agent_type}')
+        session = await session_service.create_session(state={}, app_name=app_name, user_id=f'github_action_{agent_type}')
     except Exception as e:
         # Handle any errors in session creation
         log(f"FATAL: Failed to create {agent_type.capitalize()} agent session: {e}", is_error=True)
