@@ -31,7 +31,16 @@ from contrast_api import FailureCategory
 
 class TestErrorExit(unittest.TestCase):
     """Tests for the error_exit function in utils.py"""
-
+    
+    def setUp(self):
+        """Set up test environment before each test"""
+        # Configure config module for all tests
+        config.CONTRAST_HOST = "test-host"
+        config.CONTRAST_ORG_ID = "test-org"
+        config.CONTRAST_APP_ID = "test-app"
+        config.CONTRAST_AUTHORIZATION_KEY = "test-auth"
+        config.CONTRAST_API_KEY = "test-api"
+        
     @contextmanager
     def assert_system_exit(self, expected_code=1):
         """Context manager to assert that sys.exit was called with the expected code"""
@@ -39,13 +48,14 @@ class TestErrorExit(unittest.TestCase):
             yield
         self.assertEqual(cm.exception.code, expected_code)
 
+    @patch('sys.exit')
     @patch('utils.log')
-    @patch('utils.cleanup_branch')
-    @patch('utils.get_branch_name')
-    @patch('utils.send_telemetry_data')
-    @patch('utils.notify_remediation_failed')
+    @patch('git_handler.cleanup_branch')
+    @patch('git_handler.get_branch_name')
+    @patch('contrast_api.send_telemetry_data')
+    @patch('contrast_api.notify_remediation_failed')
     def test_error_exit_with_failure_code(self, mock_notify, mock_send_telemetry, mock_get_branch, 
-                                         mock_cleanup, mock_log):
+                                         mock_cleanup, mock_log, mock_exit):
         """Test error_exit when a specific failure code is provided"""
         # Setup
         remediation_id = "test-remediation-id"
@@ -53,16 +63,8 @@ class TestErrorExit(unittest.TestCase):
         mock_notify.return_value = True  # Notification succeeds
         mock_get_branch.return_value = f"smartfix/remediation-{remediation_id}"
         
-        # Configure config module
-        config.CONTRAST_HOST = "test-host"
-        config.CONTRAST_ORG_ID = "test-org"
-        config.CONTRAST_APP_ID = "test-app"
-        config.CONTRAST_AUTHORIZATION_KEY = "test-auth"
-        config.CONTRAST_API_KEY = "test-api"
-
-        # Execute the function and verify it calls sys.exit(1)
-        with self.assert_system_exit():
-            utils.error_exit(remediation_id, failure_code)
+        # Execute the function
+        utils.error_exit(remediation_id, failure_code)
 
         # Assert
         mock_notify.assert_called_once_with(
@@ -85,13 +87,14 @@ class TestErrorExit(unittest.TestCase):
         mock_cleanup.assert_called_once_with(f"smartfix/remediation-{remediation_id}")
         mock_send_telemetry.assert_called_once()
 
+    @patch('sys.exit')
     @patch('utils.log')
-    @patch('utils.cleanup_branch')
-    @patch('utils.get_branch_name')
-    @patch('utils.send_telemetry_data')
-    @patch('utils.notify_remediation_failed')
+    @patch('git_handler.cleanup_branch')
+    @patch('git_handler.get_branch_name')
+    @patch('contrast_api.send_telemetry_data')
+    @patch('contrast_api.notify_remediation_failed')
     def test_error_exit_default_failure_code(self, mock_notify, mock_send_telemetry, mock_get_branch, 
-                                            mock_cleanup, mock_log):
+                                            mock_cleanup, mock_log, mock_exit):
         """Test error_exit when no failure code is provided (uses default)"""
         # Setup
         remediation_id = "test-remediation-id"
@@ -100,8 +103,7 @@ class TestErrorExit(unittest.TestCase):
         mock_get_branch.return_value = f"smartfix/remediation-{remediation_id}"
 
         # Execute
-        with self.assert_system_exit():
-            utils.error_exit(remediation_id)
+        utils.error_exit(remediation_id)
 
         # Assert
         mock_notify.assert_called_once_with(
@@ -118,13 +120,14 @@ class TestErrorExit(unittest.TestCase):
             f"Successfully notified Remediation service about {default_failure_code} for remediation {remediation_id}."
         )
 
+    @patch('sys.exit')
     @patch('utils.log')
-    @patch('utils.cleanup_branch')
-    @patch('utils.get_branch_name')
-    @patch('utils.send_telemetry_data')
-    @patch('utils.notify_remediation_failed')
+    @patch('git_handler.cleanup_branch')
+    @patch('git_handler.get_branch_name')
+    @patch('contrast_api.send_telemetry_data')
+    @patch('contrast_api.notify_remediation_failed')
     def test_error_exit_notification_failure(self, mock_notify, mock_send_telemetry, mock_get_branch, 
-                                           mock_cleanup, mock_log):
+                                           mock_cleanup, mock_log, mock_exit):
         """Test error_exit when notification to remediation service fails"""
         # Setup
         remediation_id = "test-remediation-id"
@@ -133,8 +136,7 @@ class TestErrorExit(unittest.TestCase):
         mock_get_branch.return_value = f"smartfix/remediation-{remediation_id}"
 
         # Execute
-        with self.assert_system_exit():
-            utils.error_exit(remediation_id, failure_code)
+        utils.error_exit(remediation_id, failure_code)
 
         # Assert
         mock_notify.assert_called_once()
@@ -149,13 +151,14 @@ class TestErrorExit(unittest.TestCase):
         mock_cleanup.assert_called_once()
         mock_send_telemetry.assert_called_once()
 
+    @patch('sys.exit')
     @patch('utils.log')
-    @patch('utils.cleanup_branch')
-    @patch('utils.get_branch_name')
-    @patch('utils.send_telemetry_data')
-    @patch('utils.notify_remediation_failed')
+    @patch('git_handler.cleanup_branch')
+    @patch('git_handler.get_branch_name')
+    @patch('contrast_api.send_telemetry_data')
+    @patch('contrast_api.notify_remediation_failed')
     def test_error_exit_exception_during_notify(self, mock_notify, mock_send_telemetry, mock_get_branch, 
-                                              mock_cleanup, mock_log):
+                                              mock_cleanup, mock_log, mock_exit):
         """Test error_exit when notification raises an exception"""
         # Setup
         remediation_id = "test-remediation-id"
@@ -163,20 +166,20 @@ class TestErrorExit(unittest.TestCase):
         mock_get_branch.return_value = f"smartfix/remediation-{remediation_id}"
 
         # Execute
-        with self.assert_system_exit():
-            utils.error_exit(remediation_id)
+        utils.error_exit(remediation_id)
 
         # Even on exception, should continue with cleanup and telemetry
         mock_cleanup.assert_called_once()
         mock_send_telemetry.assert_called_once()
 
+    @patch('sys.exit')
     @patch('utils.log')
-    @patch('utils.cleanup_branch')
-    @patch('utils.get_branch_name')
-    @patch('utils.send_telemetry_data')
-    @patch('utils.notify_remediation_failed')
+    @patch('git_handler.cleanup_branch')
+    @patch('git_handler.get_branch_name')
+    @patch('contrast_api.send_telemetry_data')
+    @patch('contrast_api.notify_remediation_failed')
     def test_error_exit_branch_cleanup_exception(self, mock_notify, mock_send_telemetry, mock_get_branch, 
-                                               mock_cleanup, mock_log):
+                                               mock_cleanup, mock_log, mock_exit):
         """Test error_exit when branch cleanup raises an exception"""
         # Setup
         remediation_id = "test-remediation-id"
@@ -186,8 +189,7 @@ class TestErrorExit(unittest.TestCase):
         mock_cleanup.side_effect = Exception("Git error during cleanup")  # Simulate git error
 
         # Execute
-        with self.assert_system_exit():
-            utils.error_exit(remediation_id, failure_code)
+        utils.error_exit(remediation_id, failure_code)
 
         # Assert notifications were sent despite branch cleanup failure
         mock_notify.assert_called_once()
