@@ -84,14 +84,15 @@ def handle_closed_pr():
         label_name = label.get("name", "")
         if label_name.startswith("contrast-vuln-id:VULN-"):
             # Extract UUID from label format "contrast-vuln-id:VULN-{vuln_uuid}"
-            vuln_uuid = label_name.split("VULN-")[1] if "VULN-" in label_name else None
-            if vuln_uuid:
+            label_name_parts = label_name.split("VULN-")
+            vuln_uuid = label_name_parts[1] if len(label_name_parts) > 1 else "unknown"
+            if vuln_uuid and vuln_uuid != "unknown":
                 debug_log(f"Extracted Vulnerability UUID from PR label: {vuln_uuid}")
                 break
     telemetry_handler.update_telemetry("vulnInfo.vulnId", vuln_uuid)
     telemetry_handler.update_telemetry("vulnInfo.vulnRule", "unknown")
     
-    if not vuln_uuid:
+    if vuln_uuid == "unknown":
         debug_log("Could not extract vulnerability UUID from PR labels. Telemetry may be incomplete.")
 
     config.check_contrast_config_values_exist()

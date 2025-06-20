@@ -100,33 +100,37 @@ def handle_merged_pr():
         label_name = label.get("name", "")
         if label_name.startswith("contrast-vuln-id:VULN-"):
             # Extract UUID from label format "contrast-vuln-id:VULN-{vuln_uuid}"
-            vuln_uuid = label_name.split("VULN-")[1] if "VULN-" in label_name else None
-            if vuln_uuid:
+            label_name_parts = label_name.split("VULN-")
+            vuln_uuid = label_name_parts[1] if len(label_name_parts) > 1 else "unknown"
+            if vuln_uuid and vuln_uuid != "unknown":
                 debug_log(f"Extracted Vulnerability UUID from PR label: {vuln_uuid}")
                 break
     telemetry_handler.update_telemetry("vulnInfo.vulnId", vuln_uuid)
     telemetry_handler.update_telemetry("vulnInfo.vulnRule", "unknown")
     
-    if not vuln_uuid:
+    if vuln_uuid == "unknown":
         debug_log("Could not extract vulnerability UUID from PR labels. Telemetry may be incomplete.")
 
     config.check_contrast_config_values_exist()
     
     # Notify the Remediation backend service about the merged PR
     log(f"Notifying Remediation service about merged PR for remediation {remediation_id}...")
-    remediation_notified = contrast_api.notify_remediation_pr_merged(
-        remediation_id=remediation_id,
-        contrast_host=config.CONTRAST_HOST,
-        contrast_org_id=config.CONTRAST_ORG_ID,
-        contrast_app_id=config.CONTRAST_APP_ID,
-        contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
-        contrast_api_key=config.CONTRAST_API_KEY
-    )
-    
-    if remediation_notified:
-        log(f"Successfully notified Remediation service about merged PR for remediation {remediation_id}.")
-    else:
-        log(f"Failed to notify Remediation service about merged PR for remediation {remediation_id}.", is_error=True)
+    try:
+        remediation_notified = contrast_api.notify_remediation_pr_merged(
+            remediation_id=remediation_id,
+            contrast_host=config.CONTRAST_HOST,
+            contrast_org_id=config.CONTRAST_ORG_ID,
+            contrast_app_id=config.CONTRAST_APP_ID,
+            contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
+            contrast_api_key=config.CONTRAST_API_KEY
+        )
+        
+        if remediation_notified:
+            log(f"Successfully notified Remediation service about merged PR for remediation {remediation_id}.")
+        else:
+            log(f"Failed to notify Remediation service about merged PR for remediation {remediation_id}.", is_error=True)
+    except Exception as e:
+        log(f"Error while notifying Remediation service: {str(e)}", is_error=True)
 
     telemetry_handler.update_telemetry("additionalAttributes.prStatus", "MERGED")
     contrast_api.send_telemetry_data()
