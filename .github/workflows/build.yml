@@ -27,6 +27,7 @@ jobs:
       - name: Run tests
         run: PYTHONPATH=${{ github.workspace }}/src python -m unittest discover -s test -p "test*.py"
         env:
+          BASE_BRANCH: "${{ github.event.repository.default_branch }}"
           BUILD_COMMAND: "echo 'Mock build command for testing'"
           FORMATTING_COMMAND: "echo 'Mock formatting command for testing'"
           GITHUB_TOKEN: ${{ github.token }}
