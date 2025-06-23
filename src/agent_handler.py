@@ -65,7 +65,7 @@ async def get_mcp_tools(target_folder: Path, remediation_id: str) -> Tuple[List,
     # Filesystem MCP Server
     try:
         debug_log("Connecting to MCP Filesystem server...")
-        fs_tools, fs_exit_stack = await MCPToolset(
+        fs_tools, fs_exit_stack = MCPToolset(
             connection_params=StdioConnectionParams(
                 server_params=StdioServerParameters(
                     command='npx',
