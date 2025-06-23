@@ -41,7 +41,7 @@ try:
     from google.adk.models.lite_llm import LiteLlm
     from google.adk.runners import Runner
     from google.adk.sessions import InMemorySessionService
-    from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset, StdioServerParameters
+    from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset, StdioServerParameters, StdioConnectionParams
     from google.genai import types as genai_types
     ADK_AVAILABLE = True
     debug_log("ADK libraries loaded successfully.")
@@ -66,9 +66,11 @@ async def get_mcp_tools(target_folder: Path, remediation_id: str) -> Tuple[List,
     try:
         debug_log("Connecting to MCP Filesystem server...")
         fs_tools, fs_exit_stack = await MCPToolset(
-            connection_params=StdioConnectionParameters(
-                command='npx',
-                args=["-y", "@modelcontextprotocol/server-filesystem@2025.1.14", target_folder_str],
+            connection_params=StdioConnectionParams(
+                server_params=StdioServerParameters(
+                    command='npx',
+                    args=["-y", "@modelcontextprotocol/server-filesystem@2025.1.14", target_folder_str],
+                )
             )
         )
 
