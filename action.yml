@@ -31,7 +31,7 @@ inputs:
   base_branch:
     description: 'Base branch for PRs'
     required: false
-    default: 'main'
+    default: '${{ github.event.repository.default_branch }}'
   contrast_host:
     description: 'Contrast Security API host'
     required: true
