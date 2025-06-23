@@ -65,7 +65,7 @@ jobs:
 
           # GitHub Configuration
           github_token: ${{ secrets.GITHUB_TOKEN }} # Necessary for creating PRs
-          base_branch: '${{ github.event.repository.default_branch }}' # This will default to your repo default branch (other common base branches are 'master' or 'develop')
+          base_branch: '${{ github.event.repository.default_branch }}' # This will default to your repo default branch (other common base branches are 'main', 'master' or 'develop')
 
           # Required Runtime Configuration
           build_command: 'mvn clean install' # Or the build command appropriate for your project.  SmartFix will use this command to ensure that its changes work correctly with your project.
