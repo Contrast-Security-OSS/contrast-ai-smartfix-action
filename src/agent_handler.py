@@ -55,17 +55,15 @@ except ImportError as e:
     print(traceback.format_exc(), file=sys.stderr)
     sys.exit(1) # Exit if ADK is not available
 
-async def get_mcp_tools(target_folder: Path, remediation_id: str) -> Tuple[List, AsyncExitStack]:
+def get_mcp_tools(target_folder: Path, remediation_id: str) -> MCPToolset:
     """Connects to MCP servers (Filesystem)"""
     debug_log("Attempting to connect to MCP servers...")
-    exit_stack = AsyncExitStack()
-    all_tools = []
     target_folder_str = str(target_folder)
 
     # Filesystem MCP Server
     try:
         debug_log("Connecting to MCP Filesystem server...")
-        fs_tools, fs_exit_stack = MCPToolset(
+        fs_tools = MCPToolset(
             connection_params=StdioConnectionParams(
                 server_params=StdioServerParameters(
                     command='npx',
@@ -74,10 +72,8 @@ async def get_mcp_tools(target_folder: Path, remediation_id: str) -> Tuple[List,
             )
         )
 
-        await exit_stack.enter_async_context(fs_exit_stack)
-        all_tools.extend(fs_tools)
         debug_log(f"Connected to Filesystem MCP server, got {len(fs_tools)} tools")
-        for tool in fs_tools:
+        for tool in fs_tools.get_tools():
             if hasattr(tool, 'name'):
                 debug_log(f"  - Filesystem Tool: {tool.name}")
             else:
@@ -91,15 +87,14 @@ async def get_mcp_tools(target_folder: Path, remediation_id: str) -> Tuple[List,
         log("No filesystem tools available - cannot make code changes.", is_error=True)
         error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
 
-    debug_log(f"Total tools from all MCP servers: {len(all_tools)}")
-    return all_tools, exit_stack
+    debug_log(f"Total tools from all MCP servers: {len(fs_tools.get_tools())}")
+    return fs_tools
 
 async def create_agent(target_folder: Path, remediation_id: str, agent_type: str = "fix", system_prompt: Optional[str] = None) -> Tuple[Optional[Agent], AsyncExitStack]:
     """Creates an ADK Agent (either 'fix' or 'qa')."""
-    mcp_tools, exit_stack = await get_mcp_tools(target_folder, remediation_id)
+    mcp_tools = get_mcp_tools(target_folder, remediation_id)
     if not mcp_tools:
         log(f"Error: No MCP tools available for the {agent_type} agent. Cannot proceed.", is_error=True)
-        await exit_stack.aclose()
         error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
 
     if system_prompt:
@@ -107,7 +102,6 @@ async def create_agent(target_folder: Path, remediation_id: str, agent_type: str
         debug_log(f"Using API-provided system prompt for {agent_type} agent")
     else:
         log(f"Error: No system prompt available for {agent_type} agent")
-        await exit_stack.aclose()
         error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
     agent_name = f"contrast_{agent_type}_agent"
 
@@ -117,18 +111,17 @@ async def create_agent(target_folder: Path, remediation_id: str, agent_type: str
             model=model_instance,
             name=agent_name,
             instruction=agent_instruction,
-            tools=mcp_tools,
+            tools=[mcp_tools],
         )
         debug_log(f"Created {agent_type} agent ({agent_name}) with model {config.AGENT_MODEL}")
-        return root_agent, exit_stack
+        return root_agent
     except Exception as e:
         log(f"Error creating ADK {agent_type} Agent: {e}", is_error=True)
         if "bedrock" in str(e).lower() or "aws" in str(e).lower():
             log("Hint: Ensure AWS credentials and Bedrock model ID are correct.", is_error=True)
-        await exit_stack.aclose()
         error_exit(remediation_id, FailureCategory.INVALID_LLM_CONFIG.value)
 
-async def process_agent_run(runner, session, exit_stack, user_query, remediation_id: str, agent_type: str = None) -> str:
+async def process_agent_run(runner, session, user_query, remediation_id: str, agent_type: str = None) -> str:
     """Runs the agent, allowing it to use tools, and returns the final text response."""
     agent_event_actions = []
     start_time = datetime.datetime.now()
@@ -287,7 +280,6 @@ async def process_agent_run(runner, session, exit_stack, user_query, remediation
         agent_run_result = "SUCCESS"
     finally:
         debug_log(f"Closing MCP server connections for {agent_type.upper()} agent...")
-        await exit_stack.aclose()
         log(f"{agent_type.upper()} agent run finished.")
 
         # Directly assign toolCalls rather than appending, to avoid nested arrays
@@ -536,9 +528,8 @@ async def _run_agent_internal_with_prompts(agent_type: str, repo_root: Path, que
         log(f"FATAL: Failed to create {agent_type.capitalize()} agent session: {e}", is_error=True)
         error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
     
-    agent, exit_stack = await create_agent(repo_root, remediation_id, agent_type=agent_type, system_prompt=system_prompt)
+    agent = await create_agent(repo_root, remediation_id, agent_type=agent_type, system_prompt=system_prompt)
     if not agent:
-        await exit_stack.aclose()
         log(f"AI Agent creation failed ({agent_type} agent). Possible reasons: MCP server connection issue, missing prompts, model configuration error, or internal ADK problem.")
         error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
 
@@ -550,7 +541,7 @@ async def _run_agent_internal_with_prompts(agent_type: str, repo_root: Path, que
     )
 
     # Pass the full model ID (though not used for cost calculation anymore, kept for consistency if needed elsewhere)
-    summary = await process_agent_run(runner, session, exit_stack, query, remediation_id, agent_type)
+    summary = await process_agent_run(runner, session, query, remediation_id, agent_type)
 
     return summary
 
