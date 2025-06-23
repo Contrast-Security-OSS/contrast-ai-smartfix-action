@@ -72,7 +72,7 @@ def get_mcp_tools(target_folder: Path, remediation_id: str) -> MCPToolset:
             )
         )
 
-        debug_log(f"Connected to Filesystem MCP server, got {len(fs_tools)} tools")
+        debug_log(f"Connected to Filesystem MCP server, got {len(fs_tools.get_tools())} tools")
         for tool in fs_tools.get_tools():
             if hasattr(tool, 'name'):
                 debug_log(f"  - Filesystem Tool: {tool.name}")
