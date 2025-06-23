@@ -65,7 +65,7 @@ jobs:
 
           # GitHub Configuration
           github_token: ${{ secrets.GITHUB_TOKEN }} # Necessary for creating PRs
-          base_branch: 'main' # Or your default branch (other common base branches are 'master' or 'develop')
+          base_branch: '${{ github.event.repository.default_branch }}' # This will default to your repo default branch (other common base branches are 'master' or 'develop')
 
           # Required Runtime Configuration
           build_command: 'mvn clean install' # Or the build command appropriate for your project.  SmartFix will use this command to ensure that its changes work correctly with your project.
@@ -235,7 +235,7 @@ The following are key inputs for the GitHub Action. Refer to the `action.yml` in
 | Input | Description | Required | Default |
 | :---- | :---- | :---- | :---- |
 | `github_token` | GitHub token for PR operations. | Yes |  |
-| `base_branch` | Base branch for PRs. | No | `main` |
+| `base_branch` | Base branch for PRs. | No | `${{ github.event.repository.default_branch }}` |
 | `contrast_host` | Contrast Security API host. | Yes |  |
 | `contrast_org_id` | Contrast Organization ID. | Yes |  |
 | `contrast_app_id` | Contrast Application ID for the repository. | Yes |  |

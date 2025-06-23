@@ -48,7 +48,7 @@ jobs:
           # --- Max Open PRs ---
           max_open_prs: 5
           # --- Base Branch ---
-          base_branch: main
+          base_branch: '${{ github.event.repository.default_branch }}'
           # --- Build Command ---
           build_command: 'mvn clean test'
           # --- Formatting Command ---
