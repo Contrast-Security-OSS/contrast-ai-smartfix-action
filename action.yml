@@ -3,7 +3,7 @@ description: 'Automatically generate fixes for vulnerabilities detected by Contr
 author: 'Contrast Security'
 
 branding:
-  icon: 'tool'
+  icon: 'shield'
   color: 'green'
 
 inputs:
