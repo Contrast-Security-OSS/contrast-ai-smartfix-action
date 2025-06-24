@@ -128,60 +128,80 @@ inputs:
 runs:
   using: 'composite'
   steps:
-    # Main header to clearly mark the beginning of the action
+    # Main header to clearly mark the beginning of the action (Linux/macOS)
     - name: Begin SmartFix Process
+      if: runner.os == 'Linux' || runner.os == 'macOS'
+      shell: bash
       run: |
         echo ""
         echo "================================================================"
         echo "🛡️  CONTRAST AI SMARTFIX PROCESS STARTED"
         echo "================================================================"
         echo ""
+    
+    # Main header to clearly mark the beginning of the action (Windows)
+    - name: Begin SmartFix Process (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        Write-Host ""
+        Write-Host "================================================================"
+        Write-Host "🛡️  CONTRAST AI SMARTFIX PROCESS STARTED"
+        Write-Host "================================================================"
+        Write-Host ""
 
-    # Verify Git is available and ensure Git Bash is in PATH on Windows
+    # Verify Git is available (Linux/macOS)
     - name: Verify Git availability
+      if: runner.os == 'Linux' || runner.os == 'macOS'
+      shell: bash
       run: |
         echo "Verifying Git availability..."
-        if [ "$RUNNER_OS" = "Linux" ] || [ "$RUNNER_OS" = "macOS" ]; then
-          # Just verify Git is available
-          which git || { echo "ERROR: Git not found. Git is required for this action."; exit 1; }
-        elif [ "$RUNNER_OS" = "Windows" ]; then
-          # Check if Git is available
-          where git || { echo "ERROR: Git not found. Git is required for this action."; exit 1; }
-          
-          # On Windows, ensure Git Bash is in PATH
-          powershell -Command "
-            # Check if Git Bash exists in standard location
-            $gitBashPath = 'C:\\Program Files\\Git\\bin'
-            if (Test-Path $gitBashPath) {
-              # Check if already in PATH
-              if ($env:PATH -notlike \"*$gitBashPath*\") {
-                echo 'Adding Git Bash to PATH...'
-                $env:PATH += \";$gitBashPath\"
-                [Environment]::SetEnvironmentVariable('PATH', $env:PATH, 'Process')
-              } else {
-                echo 'Git Bash is already in PATH'
-              }
-            } else {
-              echo 'WARNING: Git Bash not found at standard location (C:\Program Files\Git\bin)'
-              # Try to locate bash.exe in other common locations
-              $bashPath = (Get-Command bash.exe -ErrorAction SilentlyContinue).Source
-              if ($bashPath) {
-                echo \"Git Bash found at: $bashPath\"
-                # Add this path to the PATH as well
-                $bashDir = Split-Path -Parent $bashPath
-                if ($env:PATH -notlike \"*$bashDir*\") {
-                  echo \"Adding found Git Bash to PATH...\"
-                  $env:PATH += \";$bashDir\"
-                  [Environment]::SetEnvironmentVariable('PATH', $env:PATH, 'Process')
-                }
-              } else {
-                echo \"ERROR: Could not locate Git Bash executable. Git Bash is required on Windows.\"
-                exit 1
-              }
-            }
-          "
-        fi
+        which git || { echo "ERROR: Git not found. Git is required for this action."; exit 1; }
         echo "Git version: $(git --version)"
+    
+    # Verify Git is available and ensure Git Bash is in PATH (Windows)
+    - name: Verify Git availability (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        Write-Host "Verifying Git availability..."
+        try {
+          $gitVersion = (git --version)
+          Write-Host "Git version: $gitVersion"
+        } catch {
+          Write-Host "ERROR: Git not found. Git is required for this action."
+          exit 1
+        }
+        
+        # Check if Git Bash exists in standard location
+        $gitBashPath = 'C:\Program Files\Git\bin'
+        if (Test-Path $gitBashPath) {
+          # Check if already in PATH
+          if ($env:PATH -notlike "*$gitBashPath*") {
+            Write-Host 'Adding Git Bash to PATH...'
+            $env:PATH += ";$gitBashPath"
+            [Environment]::SetEnvironmentVariable('PATH', $env:PATH, 'Process')
+          } else {
+            Write-Host 'Git Bash is already in PATH'
+          }
+        } else {
+          Write-Host 'WARNING: Git Bash not found at standard location (C:\Program Files\Git\bin)'
+          # Try to locate bash.exe in other common locations
+          $bashPath = (Get-Command bash.exe -ErrorAction SilentlyContinue).Source
+          if ($bashPath) {
+            Write-Host "Git Bash found at: $bashPath"
+            # Add this path to the PATH as well
+            $bashDir = Split-Path -Parent $bashPath
+            if ($env:PATH -notlike "*$bashDir*") {
+              Write-Host "Adding found Git Bash to PATH..."
+              $env:PATH += ";$bashDir"
+              [Environment]::SetEnvironmentVariable('PATH', $env:PATH, 'Process')
+            }
+          } else {
+            Write-Host "ERROR: Could not locate Git Bash executable. Git Bash is required on Windows."
+            exit 1
+          }
+        }
 
     # Checkout with reduced verbosity
     - name: Checkout repository
