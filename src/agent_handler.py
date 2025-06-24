@@ -55,7 +55,7 @@ except ImportError as e:
     print(traceback.format_exc(), file=sys.stderr)
     sys.exit(1) # Exit if ADK is not available
 
-def get_mcp_tools(target_folder: Path, remediation_id: str) -> MCPToolset:
+async def get_mcp_tools(target_folder: Path, remediation_id: str) -> MCPToolset:
     """Connects to MCP servers (Filesystem)"""
     debug_log("Attempting to connect to MCP servers...")
     target_folder_str = str(target_folder)
@@ -72,8 +72,9 @@ def get_mcp_tools(target_folder: Path, remediation_id: str) -> MCPToolset:
             )
         )
 
-        debug_log(f"Connected to Filesystem MCP server, got {len(fs_tools.get_tools())} tools")
-        for tool in fs_tools.get_tools():
+        tools_list = await fs_tools.get_tools()
+        debug_log(f"Connected to Filesystem MCP server, got {len(tools_list)} tools")
+        for tool in tools_list:
             if hasattr(tool, 'name'):
                 debug_log(f"  - Filesystem Tool: {tool.name}")
             else:
@@ -92,7 +93,7 @@ def get_mcp_tools(target_folder: Path, remediation_id: str) -> MCPToolset:
 
 async def create_agent(target_folder: Path, remediation_id: str, agent_type: str = "fix", system_prompt: Optional[str] = None) -> Tuple[Optional[Agent], AsyncExitStack]:
     """Creates an ADK Agent (either 'fix' or 'qa')."""
-    mcp_tools = get_mcp_tools(target_folder, remediation_id)
+    mcp_tools = await get_mcp_tools(target_folder, remediation_id)
     if not mcp_tools:
         log(f"Error: No MCP tools available for the {agent_type} agent. Cannot proceed.", is_error=True)
         error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
