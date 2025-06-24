@@ -17,6 +17,7 @@
 # #L%
 #
 
+import logging
 import asyncio
 import sys
 from pathlib import Path
@@ -54,6 +55,9 @@ except ImportError as e:
     telemetry_handler.add_log_message(traceback.format_exc())
     print(traceback.format_exc(), file=sys.stderr)
     sys.exit(1) # Exit if ADK is not available
+
+library_logger = logging.getLogger("google_adk.google.adk.tools.base_authenticated_tool")
+library_logger.setLevel(logging.ERROR)
 
 async def get_mcp_tools(target_folder: Path, remediation_id: str) -> MCPToolset:
     """Connects to MCP servers (Filesystem)"""
