@@ -72,6 +72,7 @@ async def get_mcp_tools(target_folder: Path, remediation_id: str) -> MCPToolset:
             )
         )
 
+        debug_log("Getting tools list from Filesystem MCP server...")
         tools_list = await fs_tools.get_tools()
         debug_log(f"Connected to Filesystem MCP server, got {len(tools_list)} tools")
         for tool in tools_list:
