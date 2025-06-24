@@ -130,7 +130,6 @@ runs:
   steps:
     # Main header to clearly mark the beginning of the action
     - name: Begin SmartFix Process
-      shell: bash || pwsh || cmd
       run: |
         echo ""
         echo "================================================================"
@@ -140,7 +139,6 @@ runs:
 
     # Verify Git is available and ensure Git Bash is in PATH on Windows
     - name: Verify Git availability
-      shell: bash || pwsh
       run: |
         echo "Verifying Git availability..."
         if [ "$RUNNER_OS" = "Linux" ] || [ "$RUNNER_OS" = "macOS" ]; then
