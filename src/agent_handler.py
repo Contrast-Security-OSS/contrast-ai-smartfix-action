@@ -88,7 +88,7 @@ async def get_mcp_tools(target_folder: Path, remediation_id: str) -> MCPToolset:
         log("No filesystem tools available - cannot make code changes.", is_error=True)
         error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
 
-    debug_log(f"Total tools from all MCP servers: {len(fs_tools.get_tools())}")
+    debug_log(f"Total tools from all MCP servers: {len(tools_list)}")
     return fs_tools
 
 async def create_agent(target_folder: Path, remediation_id: str, agent_type: str = "fix", system_prompt: Optional[str] = None) -> Tuple[Optional[Agent], AsyncExitStack]:
