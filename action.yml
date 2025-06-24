@@ -130,13 +130,60 @@ runs:
   steps:
     # Main header to clearly mark the beginning of the action
     - name: Begin SmartFix Process
+      shell: bash || pwsh || cmd
       run: |
         echo ""
         echo "================================================================"
         echo "🛡️  CONTRAST AI SMARTFIX PROCESS STARTED"
         echo "================================================================"
         echo ""
-      shell: bash
+
+    # Verify Git is available and ensure Git Bash is in PATH on Windows
+    - name: Verify Git availability
+      shell: bash || pwsh
+      run: |
+        echo "Verifying Git availability..."
+        if [ "$RUNNER_OS" = "Linux" ] || [ "$RUNNER_OS" = "macOS" ]; then
+          # Just verify Git is available
+          which git || { echo "ERROR: Git not found. Git is required for this action."; exit 1; }
+        elif [ "$RUNNER_OS" = "Windows" ]; then
+          # Check if Git is available
+          where git || { echo "ERROR: Git not found. Git is required for this action."; exit 1; }
+          
+          # On Windows, ensure Git Bash is in PATH
+          powershell -Command "
+            # Check if Git Bash exists in standard location
+            $gitBashPath = 'C:\\Program Files\\Git\\bin'
+            if (Test-Path $gitBashPath) {
+              # Check if already in PATH
+              if ($env:PATH -notlike \"*$gitBashPath*\") {
+                echo 'Adding Git Bash to PATH...'
+                $env:PATH += \";$gitBashPath\"
+                [Environment]::SetEnvironmentVariable('PATH', $env:PATH, 'Process')
+              } else {
+                echo 'Git Bash is already in PATH'
+              }
+            } else {
+              echo 'WARNING: Git Bash not found at standard location (C:\Program Files\Git\bin)'
+              # Try to locate bash.exe in other common locations
+              $bashPath = (Get-Command bash.exe -ErrorAction SilentlyContinue).Source
+              if ($bashPath) {
+                echo \"Git Bash found at: $bashPath\"
+                # Add this path to the PATH as well
+                $bashDir = Split-Path -Parent $bashPath
+                if ($env:PATH -notlike \"*$bashDir*\") {
+                  echo \"Adding found Git Bash to PATH...\"
+                  $env:PATH += \";$bashDir\"
+                  [Environment]::SetEnvironmentVariable('PATH', $env:PATH, 'Process')
+                }
+              } else {
+                echo \"ERROR: Could not locate Git Bash executable. Git Bash is required on Windows.\"
+                exit 1
+              }
+            }
+          "
+        fi
+        echo "Git version: $(git --version)"
 
     # Checkout with reduced verbosity
     - name: Checkout repository
@@ -146,13 +193,13 @@ runs:
 
     # Setup tools section with cleaner output
     - name: Environment setup header
+      shell: bash
       run: |
         echo ""
         echo "================================================================"
         echo "🔧 ENVIRONMENT SETUP"
         echo "================================================================"
         echo ""
-      shell: bash
 
     # Reduce Python setup verbosity
     - name: Set up Python
@@ -162,29 +209,37 @@ runs:
         
     # Install uv tool for dependency management
     - name: Install uv
+      shell: bash
       run: |
         echo ""
         echo "📦 Installing uv package manager..."
-        pip install uv==0.7.12 > /tmp/uv-install.log || (cat /tmp/uv-install.log && exit 1)
+        if [ "$RUNNER_OS" = "Windows" ]; then
+          pip install uv==0.7.12 > uv-install.log || (cat uv-install.log && exit 1)
+        else
+          pip install uv==0.7.12 > /tmp/uv-install.log || (cat /tmp/uv-install.log && exit 1)
+        fi
         echo "✅ uv installed successfully"
-      shell: bash
 
     # Install dependencies using uv
     - name: Install dependencies with uv
+      shell: bash
       run: |
         echo ""
         echo "📦 Installing Python packages using uv..."
         echo "📎 Using lockfile for deterministic installation"
-        uv pip sync --system ${{ github.action_path }}/src/requirements.lock > /tmp/uv-output.log || (cat /tmp/uv-output.log && exit 1)
+        if [ "$RUNNER_OS" = "Windows" ]; then
+          uv pip sync --system ${{ github.action_path }}/src/requirements.lock > uv-output.log || (cat uv-output.log && exit 1)
+        else
+          uv pip sync --system ${{ github.action_path }}/src/requirements.lock > /tmp/uv-output.log || (cat /tmp/uv-output.log && exit 1)
+        fi
         echo "✅ Python dependencies installed successfully"
-      shell: bash
 
     # Reduce Node.js setup verbosity  
     - name: Set up Node.js
+      shell: bash
       run: |
         echo ""
         echo "➡️ Setting up Node.js 22..."
-      shell: bash
 
     - uses: actions/setup-node@v4
       with:
@@ -193,48 +248,58 @@ runs:
 
     # Install GitHub CLI
     - name: Install GitHub CLI
+      shell: bash
       run: |
         echo ""
         echo "📦 Installing GitHub CLI..."
-        sudo apt-get update -qq > /dev/null
-        sudo apt-get install -y -qq gh > /dev/null
-        echo "✅ GitHub CLI installed successfully"
-      shell: bash
-
-    # Install Git
-    - name: Install Git
-      run: |
-        echo ""
-        echo "📦 Installing Git..."
-        sudo apt-get update -qq > /dev/null
-        sudo apt-get install -y -qq git > /dev/null
-        echo "✅ Git installed successfully"
-      shell: bash
+        if [ "$RUNNER_OS" = "Linux" ]; then
+          sudo apt-get update -qq > /dev/null
+          sudo apt-get install -y -qq gh > /dev/null
+        elif [ "$RUNNER_OS" = "macOS" ]; then
+          brew install gh || echo "GitHub CLI already installed"
+        elif [ "$RUNNER_OS" = "Windows" ]; then
+          # For Windows, use Git Bash to install GitHub CLI
+          if command -v gh &> /dev/null; then
+            echo "GitHub CLI is already installed"
+          else
+            echo "Installing GitHub CLI via direct download..."
+            
+            # Download and install GitHub CLI
+            curl -sSL https://github.com/cli/cli/releases/download/v2.45.0/gh_2.45.0_windows_amd64.msi -o gh.msi
+            start /wait msiexec.exe /i gh.msi /quiet
+            rm gh.msi
+          fi
+        fi
+        echo "✅ GitHub CLI installation attempt complete"
+        # Verify GitHub CLI installation - required for this action
+        gh --version || { echo "ERROR: GitHub CLI verification failed. GitHub CLI is required for this action."; exit 1; }
 
     - name: Setup complete
+      shell: bash
       run: |
         echo ""
         echo "✅ Environment setup complete"
         echo ""
-      shell: bash
 
-    # Run the main SmartFix analysis script with clear start/end markers
+    # Run the main SmartFix analysis script with clear start/end markers - cross-platform compatible
     - name: Run Contrast AI SmartFix
+      shell: bash
       run: |
         echo ""
         echo "================================================================"
+        # Cross-platform compatible script execution
         if [ "${{ inputs.run_task }}" = "merge" ]; then
           echo "🚀 STARTING CONTRAST AI SMARTFIX (Task: merge)"
           echo "================================================================"
-          python ${{ github.action_path }}/src/merge_handler.py
+          python "${{ github.action_path }}/src/merge_handler.py"
         elif [ "${{ inputs.run_task }}" = "closed" ]; then
           echo "🚀 STARTING CONTRAST AI SMARTFIX (Task: closed)"
           echo "================================================================"
-          python ${{ github.action_path }}/src/closed_handler.py
+          python "${{ github.action_path }}/src/closed_handler.py"
         else
           echo "🚀 STARTING CONTRAST AI SMARTFIX (Task: generate_fix)"
           echo "================================================================"
-          python ${{ github.action_path }}/src/main.py
+          python "${{ github.action_path }}/src/main.py"
         fi
         echo ""
         
@@ -242,7 +307,6 @@ runs:
         echo "================================================================"
         echo "✨ CONTRAST AI SMARTFIX PROCESS COMPLETE"
         echo "================================================================"
-      shell: bash
       env:
         # --- Build Command ---
         BUILD_COMMAND: ${{ inputs.build_command }}
