@@ -313,13 +313,36 @@ runs:
           
           rem Download and install GitHub CLI
           curl -sSL https://github.com/cli/cli/releases/download/v2.45.0/gh_2.45.0_windows_amd64.msi -o gh.msi
-          start /wait msiexec.exe /i gh.msi /quiet
+          echo Installing GitHub CLI from MSI package...
+          start /wait msiexec.exe /i gh.msi /quiet /norestart
+          echo Waiting for installation to complete...
+          timeout /t 5 /nobreak >nul
           del gh.msi
+          
+          rem Refresh PATH to include GitHub CLI installation directory
+          echo Refreshing PATH to include GitHub CLI...
+          
+          rem Common installation paths for GitHub CLI
+          set "GH_PATHS=C:\Program Files\GitHub CLI;C:\Program Files (x86)\GitHub CLI"
+          
+          rem Add GitHub CLI paths to current PATH
+          set "PATH=%PATH%;%GH_PATHS%"
+          
+          rem Try to find gh.exe and add its directory to PATH if found
+          for %%I in (gh.exe) do (
+            if exist "%%~$PATH:I" (
+              for %%J in ("%%~$PATH:I\.") do (
+                echo Found gh.exe at: %%~dpJ
+                set "PATH=%PATH%;%%~dpJ"
+              )
+            )
+          )
         )
         
         echo ✅ GitHub CLI installation attempt complete
         
         rem Verify GitHub CLI installation - required for this action
+        where gh >nul 2>nul || (echo ERROR: GitHub CLI not found in PATH after installation. && exit /b 1)
         gh --version || (echo ERROR: GitHub CLI verification failed. GitHub CLI is required for this action. && exit /b 1)
 
     - name: Setup complete
