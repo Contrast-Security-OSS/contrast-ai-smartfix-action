@@ -142,13 +142,14 @@ runs:
     # Main header to clearly mark the beginning of the action (Windows)
     - name: Begin SmartFix Process (Windows)
       if: runner.os == 'Windows'
-      shell: pwsh
+      shell: cmd
       run: |
-        Write-Host ""
-        Write-Host "================================================================"
-        Write-Host "🛡️  CONTRAST AI SMARTFIX PROCESS STARTED"
-        Write-Host "================================================================"
-        Write-Host ""
+        @echo off
+        echo.
+        echo ================================================================
+        echo 🛡️  CONTRAST AI SMARTFIX PROCESS STARTED
+        echo ================================================================
+        echo.
 
     # Verify Git is available (Linux/macOS)
     - name: Verify Git availability
@@ -162,46 +163,48 @@ runs:
     # Verify Git is available and ensure Git Bash is in PATH (Windows)
     - name: Verify Git availability (Windows)
       if: runner.os == 'Windows'
-      shell: pwsh
+      shell: cmd
       run: |
-        Write-Host "Verifying Git availability..."
-        try {
-          $gitVersion = (git --version)
-          Write-Host "Git version: $gitVersion"
-        } catch {
-          Write-Host "ERROR: Git not found. Git is required for this action."
-          exit 1
-        }
+        echo Verifying Git availability...
+        where git 2>nul || (echo ERROR: Git not found. Git is required for this action. && exit /b 1)
+        echo Git version: 
+        git --version
         
-        # Check if Git Bash exists in standard location
-        $gitBashPath = 'C:\Program Files\Git\bin'
-        if (Test-Path $gitBashPath) {
-          # Check if already in PATH
-          if ($env:PATH -notlike "*$gitBashPath*") {
-            Write-Host 'Adding Git Bash to PATH...'
-            $env:PATH += ";$gitBashPath"
-            [Environment]::SetEnvironmentVariable('PATH', $env:PATH, 'Process')
-          } else {
-            Write-Host 'Git Bash is already in PATH'
-          }
-        } else {
-          Write-Host 'WARNING: Git Bash not found at standard location (C:\Program Files\Git\bin)'
-          # Try to locate bash.exe in other common locations
-          $bashPath = (Get-Command bash.exe -ErrorAction SilentlyContinue).Source
-          if ($bashPath) {
-            Write-Host "Git Bash found at: $bashPath"
-            # Add this path to the PATH as well
-            $bashDir = Split-Path -Parent $bashPath
-            if ($env:PATH -notlike "*$bashDir*") {
-              Write-Host "Adding found Git Bash to PATH..."
-              $env:PATH += ";$bashDir"
-              [Environment]::SetEnvironmentVariable('PATH', $env:PATH, 'Process')
-            }
-          } else {
-            Write-Host "ERROR: Could not locate Git Bash executable. Git Bash is required on Windows."
-            exit 1
-          }
-        }
+        rem Check if Git Bash exists in standard location
+        set "gitBashPath=C:\Program Files\Git\bin"
+        if exist "%gitBashPath%" (
+          rem Check if already in PATH
+          echo %PATH% | findstr /i /C:"%gitBashPath%" >nul
+          if errorlevel 1 (
+            echo Adding Git Bash to PATH...
+            set "PATH=%PATH%;%gitBashPath%"
+            setx PATH "%PATH%" >nul
+          ) else (
+            echo Git Bash is already in PATH
+          )
+        ) else (
+          echo WARNING: Git Bash not found at standard location (C:\Program Files\Git\bin)
+          rem Try to locate bash.exe in other common locations
+          where bash.exe 2>nul >nul
+          if not errorlevel 1 (
+            for /f "tokens=*" %%i in ('where bash.exe') do (
+              set "bashPath=%%i"
+              echo Git Bash found at: !bashPath!
+              for %%j in ("!bashPath!") do set "bashDir=%%~dpj"
+              echo %PATH% | findstr /i /C:"!bashDir!" >nul
+              if errorlevel 1 (
+                echo Adding found Git Bash to PATH...
+                set "PATH=%PATH%;!bashDir!"
+                setx PATH "%PATH%" >nul
+              )
+              goto :bashFound
+            )
+          ) else (
+            echo ERROR: Could not locate Git Bash executable. Git Bash is required on Windows.
+            exit /b 1
+          )
+          :bashFound
+        )
 
     # Checkout with reduced verbosity
     - name: Checkout repository
@@ -209,8 +212,9 @@ runs:
       with:
         fetch-depth: 0
 
-    # Setup tools section with cleaner output
+    # Setup tools section with cleaner output (Linux/macOS)
     - name: Environment setup header
+      if: runner.os == 'Linux' || runner.os == 'macOS'
       shell: bash
       run: |
         echo ""
@@ -218,6 +222,17 @@ runs:
         echo "🔧 ENVIRONMENT SETUP"
         echo "================================================================"
         echo ""
+        
+    # Setup tools section with cleaner output (Windows)
+    - name: Environment setup header (Windows)
+      if: runner.os == 'Windows'
+      shell: cmd
+      run: |
+        echo.
+        echo ================================================================
+        echo 🔧 ENVIRONMENT SETUP
+        echo ================================================================
+        echo.
 
     # Reduce Python setup verbosity
     - name: Set up Python
@@ -238,34 +253,56 @@ runs:
         fi
         echo "✅ uv installed successfully"
 
-    # Install dependencies using uv
+    # Install dependencies using uv (Linux/macOS)
     - name: Install dependencies with uv
+      if: runner.os == 'Linux' || runner.os == 'macOS'
       shell: bash
       run: |
         echo ""
         echo "📦 Installing Python packages using uv..."
         echo "📎 Using lockfile for deterministic installation"
-        if [ "$RUNNER_OS" = "Windows" ]; then
-          uv pip sync --system ${{ github.action_path }}/src/requirements.lock > uv-output.log || (cat uv-output.log && exit 1)
-        else
-          uv pip sync --system ${{ github.action_path }}/src/requirements.lock > /tmp/uv-output.log || (cat /tmp/uv-output.log && exit 1)
-        fi
+        uv pip sync --system ${{ github.action_path }}/src/requirements.lock > /tmp/uv-output.log || (cat /tmp/uv-output.log && exit 1)
         echo "✅ Python dependencies installed successfully"
+        
+    # Install dependencies using uv (Windows)
+    - name: Install dependencies with uv (Windows)
+      if: runner.os == 'Windows'
+      shell: cmd
+      run: |
+        echo.
+        echo 📦 Installing Python packages using uv...
+        echo 📎 Using lockfile for deterministic installation
+        
+        rem Convert forward slashes to backslashes for Windows path
+        set "REQUIREMENTS_PATH=%GITHUB_ACTION_PATH%\src\requirements.lock"
+        
+        uv pip sync --system "%REQUIREMENTS_PATH%" > uv-output.log || (type uv-output.log && exit /b 1)
+        echo ✅ Python dependencies installed successfully
 
-    # Reduce Node.js setup verbosity  
+    # Reduce Node.js setup verbosity (Linux/macOS)  
     - name: Set up Node.js
+      if: runner.os == 'Linux' || runner.os == 'macOS'
       shell: bash
       run: |
         echo ""
         echo "➡️ Setting up Node.js 22..."
+        
+    # Reduce Node.js setup verbosity (Windows)
+    - name: Set up Node.js (Windows)
+      if: runner.os == 'Windows'
+      shell: cmd
+      run: |
+        echo.
+        echo ➡️ Setting up Node.js 22...
 
     - uses: actions/setup-node@v4
       with:
         node-version: '22'
         check-latest: false
 
-    # Install GitHub CLI
+    # Install GitHub CLI (Linux/macOS)
     - name: Install GitHub CLI
+      if: runner.os == 'Linux' || runner.os == 'macOS'
       shell: bash
       run: |
         echo ""
@@ -275,32 +312,56 @@ runs:
           sudo apt-get install -y -qq gh > /dev/null
         elif [ "$RUNNER_OS" = "macOS" ]; then
           brew install gh || echo "GitHub CLI already installed"
-        elif [ "$RUNNER_OS" = "Windows" ]; then
-          # For Windows, use Git Bash to install GitHub CLI
-          if command -v gh &> /dev/null; then
-            echo "GitHub CLI is already installed"
-          else
-            echo "Installing GitHub CLI via direct download..."
-            
-            # Download and install GitHub CLI
-            curl -sSL https://github.com/cli/cli/releases/download/v2.45.0/gh_2.45.0_windows_amd64.msi -o gh.msi
-            start /wait msiexec.exe /i gh.msi /quiet
-            rm gh.msi
-          fi
         fi
         echo "✅ GitHub CLI installation attempt complete"
         # Verify GitHub CLI installation - required for this action
         gh --version || { echo "ERROR: GitHub CLI verification failed. GitHub CLI is required for this action."; exit 1; }
+        
+    # Install GitHub CLI (Windows)
+    - name: Install GitHub CLI (Windows)
+      if: runner.os == 'Windows'
+      shell: cmd
+      run: |
+        echo.
+        echo 📦 Installing GitHub CLI...
+        
+        rem Check if GitHub CLI is already installed
+        where gh >nul 2>nul
+        if %ERRORLEVEL% EQU 0 (
+          echo GitHub CLI is already installed
+        ) else (
+          echo Installing GitHub CLI via direct download...
+          
+          rem Download and install GitHub CLI
+          curl -sSL https://github.com/cli/cli/releases/download/v2.45.0/gh_2.45.0_windows_amd64.msi -o gh.msi
+          start /wait msiexec.exe /i gh.msi /quiet
+          del gh.msi
+        )
+        
+        echo ✅ GitHub CLI installation attempt complete
+        
+        rem Verify GitHub CLI installation - required for this action
+        gh --version || (echo ERROR: GitHub CLI verification failed. GitHub CLI is required for this action. && exit /b 1)
 
     - name: Setup complete
+      if: runner.os == 'Linux' || runner.os == 'macOS'
       shell: bash
       run: |
         echo ""
         echo "✅ Environment setup complete"
         echo ""
+        
+    - name: Setup complete (Windows)
+      if: runner.os == 'Windows'
+      shell: cmd
+      run: |
+        echo.
+        echo ✅ Environment setup complete
+        echo.
 
-    # Run the main SmartFix analysis script with clear start/end markers - cross-platform compatible
+    # Run the main SmartFix analysis script with clear start/end markers (Linux/macOS)
     - name: Run Contrast AI SmartFix
+      if: runner.os == 'Linux' || runner.os == 'macOS'
       shell: bash
       run: |
         echo ""
@@ -325,6 +386,37 @@ runs:
         echo "================================================================"
         echo "✨ CONTRAST AI SMARTFIX PROCESS COMPLETE"
         echo "================================================================"
+        
+    # Run the main SmartFix analysis script with clear start/end markers (Windows)
+    - name: Run Contrast AI SmartFix (Windows)
+      if: runner.os == 'Windows'
+      shell: cmd
+      run: |
+        echo.
+        echo ================================================================
+        
+        rem Convert forward slashes to backslashes for Windows path
+        set "ACTION_PATH=%GITHUB_ACTION_PATH%\src"
+        
+        if "${{ inputs.run_task }}" == "merge" (
+          echo 🚀 STARTING CONTRAST AI SMARTFIX (Task: merge)
+          echo ================================================================
+          python "%ACTION_PATH%\merge_handler.py"
+        ) else if "${{ inputs.run_task }}" == "closed" (
+          echo 🚀 STARTING CONTRAST AI SMARTFIX (Task: closed) 
+          echo ================================================================
+          python "%ACTION_PATH%\closed_handler.py"
+        ) else (
+          echo 🚀 STARTING CONTRAST AI SMARTFIX (Task: generate_fix)
+          echo ================================================================
+          python "%ACTION_PATH%\main.py"
+        )
+        echo.
+        
+        echo.
+        echo ================================================================
+        echo ✨ CONTRAST AI SMARTFIX PROCESS COMPLETE
+        echo ================================================================
       env:
         # --- Build Command ---
         BUILD_COMMAND: ${{ inputs.build_command }}
