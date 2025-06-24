@@ -120,7 +120,7 @@ USER_AGENT = f"contrast-smart-fix {VERSION}"
 
 # --- Core Settings ---
 DEBUG_MODE = get_env_var("DEBUG_MODE", required=False, default="false").lower() == "true"
-BASE_BRANCH = get_env_var("BASE_BRANCH", required=False, default="main")
+BASE_BRANCH = get_env_var("BASE_BRANCH", required=True, default=None)
 RUN_TASK = get_env_var("RUN_TASK", required=False, default="generate_fix")
 
 # --- Build and Formatting Configuration ---
