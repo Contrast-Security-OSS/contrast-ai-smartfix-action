@@ -18,6 +18,8 @@
 #
 
 import logging
+import warnings
+
 import asyncio
 import sys
 from pathlib import Path
@@ -56,6 +58,7 @@ except ImportError as e:
     print(traceback.format_exc(), file=sys.stderr)
     sys.exit(1) # Exit if ADK is not available
 
+warnings.filterwarnings('ignore', category=UserWarning)
 library_logger = logging.getLogger("google_adk.google.adk.tools.base_authenticated_tool")
 library_logger.setLevel(logging.ERROR)
 
@@ -67,13 +70,11 @@ async def get_mcp_tools(target_folder: Path, remediation_id: str) -> MCPToolset:
     # Filesystem MCP Server
     try:
         debug_log("Connecting to MCP Filesystem server...")
-        fs_tools = MCPToolset(
-            connection_params=StdioConnectionParams(
-                server_params=StdioServerParameters(
-                    command='npx',
-                    args=["-y", "@modelcontextprotocol/server-filesystem@2025.1.14", target_folder_str],
-                )
-            )
+        fs_tools = MCPToolset(          
+            server_params=StdioServerParameters(
+                command='npx',
+                args=["-y", "@modelcontextprotocol/server-filesystem@2025.1.14", target_folder_str],
+            ),
         )
 
         debug_log("Getting tools list from Filesystem MCP server...")
