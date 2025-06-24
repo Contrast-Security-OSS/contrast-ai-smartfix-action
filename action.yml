@@ -212,9 +212,8 @@ runs:
       with:
         fetch-depth: 0
 
-    # Setup tools section with cleaner output (Linux/macOS)
+    # Setup tools section with cleaner output
     - name: Environment setup header
-      if: runner.os == 'Linux' || runner.os == 'macOS'
       shell: bash
       run: |
         echo ""
@@ -222,17 +221,6 @@ runs:
         echo "🔧 ENVIRONMENT SETUP"
         echo "================================================================"
         echo ""
-        
-    # Setup tools section with cleaner output (Windows)
-    - name: Environment setup header (Windows)
-      if: runner.os == 'Windows'
-      shell: cmd
-      run: |
-        echo.
-        echo ================================================================
-        echo 🔧 ENVIRONMENT SETUP
-        echo ================================================================
-        echo.
 
     # Reduce Python setup verbosity
     - name: Set up Python
@@ -279,21 +267,12 @@ runs:
         uv pip sync --system "%REQUIREMENTS_PATH%" > uv-output.log || (type uv-output.log && exit /b 1)
         echo ✅ Python dependencies installed successfully
 
-    # Reduce Node.js setup verbosity (Linux/macOS)  
+    # Reduce Node.js setup verbosity 
     - name: Set up Node.js
-      if: runner.os == 'Linux' || runner.os == 'macOS'
       shell: bash
       run: |
         echo ""
         echo "➡️ Setting up Node.js 22..."
-        
-    # Reduce Node.js setup verbosity (Windows)
-    - name: Set up Node.js (Windows)
-      if: runner.os == 'Windows'
-      shell: cmd
-      run: |
-        echo.
-        echo ➡️ Setting up Node.js 22...
 
     - uses: actions/setup-node@v4
       with:
@@ -344,24 +323,14 @@ runs:
         gh --version || (echo ERROR: GitHub CLI verification failed. GitHub CLI is required for this action. && exit /b 1)
 
     - name: Setup complete
-      if: runner.os == 'Linux' || runner.os == 'macOS'
       shell: bash
       run: |
         echo ""
         echo "✅ Environment setup complete"
         echo ""
-        
-    - name: Setup complete (Windows)
-      if: runner.os == 'Windows'
-      shell: cmd
-      run: |
-        echo.
-        echo ✅ Environment setup complete
-        echo.
 
-    # Run the main SmartFix analysis script with clear start/end markers (Linux/macOS)
+    # Run the main SmartFix analysis script with clear start/end markers - cross-platform compatible
     - name: Run Contrast AI SmartFix
-      if: runner.os == 'Linux' || runner.os == 'macOS'
       shell: bash
       run: |
         echo ""
@@ -386,37 +355,6 @@ runs:
         echo "================================================================"
         echo "✨ CONTRAST AI SMARTFIX PROCESS COMPLETE"
         echo "================================================================"
-        
-    # Run the main SmartFix analysis script with clear start/end markers (Windows)
-    - name: Run Contrast AI SmartFix (Windows)
-      if: runner.os == 'Windows'
-      shell: cmd
-      run: |
-        echo.
-        echo ================================================================
-        
-        rem Convert forward slashes to backslashes for Windows path
-        set "ACTION_PATH=%GITHUB_ACTION_PATH%\src"
-        
-        if "${{ inputs.run_task }}" == "merge" (
-          echo 🚀 STARTING CONTRAST AI SMARTFIX (Task: merge)
-          echo ================================================================
-          python "%ACTION_PATH%\merge_handler.py"
-        ) else if "${{ inputs.run_task }}" == "closed" (
-          echo 🚀 STARTING CONTRAST AI SMARTFIX (Task: closed) 
-          echo ================================================================
-          python "%ACTION_PATH%\closed_handler.py"
-        ) else (
-          echo 🚀 STARTING CONTRAST AI SMARTFIX (Task: generate_fix)
-          echo ================================================================
-          python "%ACTION_PATH%\main.py"
-        )
-        echo.
-        
-        echo.
-        echo ================================================================
-        echo ✨ CONTRAST AI SMARTFIX PROCESS COMPLETE
-        echo ================================================================
       env:
         # --- Build Command ---
         BUILD_COMMAND: ${{ inputs.build_command }}
