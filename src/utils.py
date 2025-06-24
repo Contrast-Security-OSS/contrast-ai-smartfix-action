@@ -21,21 +21,49 @@ import os
 import subprocess
 import sys
 import re
+import os
+import platform
 from pathlib import Path
 from typing import Optional
 import config # Import config to access DEBUG_MODE
 import telemetry_handler # Import for telemetry logging
 
+# Unicode to ASCII fallback mappings for Windows
+UNICODE_FALLBACKS = {
+    '\u274c': 'X',  # ❌ -> X
+    '\u2705': '√',  # ✅ -> √
+    '\u2728': '*',  # ✨ -> *
+    '🔑': '',    # 🔑 -> ''
+    '🛠️': '',   # 🛠️ -> ''
+    '💡': 'A',   # 💡 -> ''
+    '🚀': '', # 🚀 -> ''
+}
+
+def safe_print(message, file=None, flush=True):
+    """Safely print message, handling encoding issues on Windows."""
+    try:
+        print(message, file=file, flush=flush)
+    except UnicodeEncodeError:
+        # On Windows, replace Unicode chars with ASCII equivalents
+        for unicode_char, ascii_fallback in UNICODE_FALLBACKS.items():
+            message = message.replace(unicode_char, ascii_fallback)
+        
+        # Replace any remaining problematic Unicode characters with '?'
+        if platform.system() == 'Windows':
+            message = ''.join([c if ord(c) < 128 else '?' for c in message])
+            
+        print(message, file=file, flush=flush)
+
 def log(message: str, is_error: bool = False, is_warning: bool = False):
     """Logs a message to telemetry and prints to stdout/stderr."""
     telemetry_handler.add_log_message(message)
     if is_error:
-        print(message, file=sys.stderr, flush=True)
+        safe_print(message, file=sys.stderr, flush=True)
     elif is_warning:
         # Optionally, differentiate warning logs, e.g., with a prefix
-        print(f"WARNING: {message}", flush=True)
+        safe_print(f"WARNING: {message}", flush=True)
     else:
-        print(message, flush=True)
+        safe_print(message, flush=True)
 
 def debug_log(*args, **kwargs):
     """Prints only if DEBUG_MODE is True and logs to telemetry."""
@@ -44,7 +72,8 @@ def debug_log(*args, **kwargs):
     # For now, adding to the main log.
     telemetry_handler.add_log_message(f"DEBUG: {message}")
     if config.DEBUG_MODE:
-        print(*args, **kwargs, flush=True)
+        # Use safe_print for the combined message rather than direct print of args
+        safe_print(message, flush=True)
 
 def extract_remediation_id_from_branch(branch_name: str) -> Optional[str]:
     """Extracts the remediation ID from a branch name.
