@@ -249,13 +249,24 @@ debug_log(f"Base Branch: {BASE_BRANCH}")
 debug_log(f"Run Task: {RUN_TASK}")
 debug_log(f"Agent Model: {AGENT_MODEL}")
 debug_log(f"Skip Writing Security Test: {SKIP_WRITING_SECURITY_TEST}")
-debug_log(f"Skip QA Review: {SKIP_QA_REVIEW}") # Added debug print
+debug_log(f"Skip QA Review: {SKIP_QA_REVIEW}")
+
+# Debug logging for all AWS configuration variables
+debug_log("--- AWS Credentials Debug Information ---")
 debug_log(f"AWS Region Name: {AWS_REGION_NAME}")
+debug_log(f"AWS Access Key ID available: {bool(AWS_ACCESS_KEY_ID)}")
+debug_log(f"AWS Secret Access Key available: {bool(AWS_SECRET_ACCESS_KEY)}")
+debug_log(f"AWS Session Token available: {bool(AWS_SESSION_TOKEN)}")
+debug_log(f"AWS Profile Name: {AWS_PROFILE_NAME or 'Not set'}")
+debug_log(f"AWS Role Name: {AWS_ROLE_NAME or 'Not set'}")
+debug_log(f"AWS Session Name: {AWS_SESSION_NAME or 'Not set'}")
+debug_log(f"AWS Web Identity Token available: {bool(AWS_WEB_IDENTITY_TOKEN)}")
+debug_log(f"AWS Bedrock Runtime Endpoint: {AWS_BEDROCK_RUNTIME_ENDPOINT or 'Not set'}")
+debug_log("----------------------------------------")
+
 debug_log(f"Vulnerability Severities: {VULNERABILITY_SEVERITIES}")
 debug_log(f"Max Events Per Agent: {MAX_EVENTS_PER_AGENT}")
 debug_log(f"Enable Full Telemetry: {ENABLE_FULL_TELEMETRY}")
-if AWS_SESSION_TOKEN:
-    debug_log("AWS Session Token found.")
 
 telemetry_handler.initialize_telemetry() # Initialize telemetry at the start
 
