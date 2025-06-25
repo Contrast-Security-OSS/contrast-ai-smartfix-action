@@ -37,6 +37,14 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: us-east-1
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
@@ -71,16 +79,6 @@ jobs:
           # azure_api_key: ${{ secrets.AZURE_API_KEY }}
           # azure_api_base: ${{ secrets.AZURE_API_BASE }}
           # azure_api_version: ${{ secrets.AZURE_API_VERSION }}
-          # --- AWS Credentials for Bedrock ---
-          aws_access_key_id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws_region_name: ${{ vars.AWS_REGION_NAME || 'us-east-1' }}
-          aws_session_token: ${{ secrets.AWS_SESSION_TOKEN }}
-          aws_profile_name: ${{ vars.AWS_PROFILE_NAME }}
-          aws_role_name: ${{ vars.AWS_ROLE_NAME }}
-          aws_session_name: ${{ vars.AWS_SESSION_NAME }}
-          aws_web_identity_token: ${{ secrets.AWS_WEB_IDENTITY_TOKEN }}
-          aws_bedrock_runtime_endpoint: ${{ vars.AWS_BEDROCK_RUNTIME_ENDPOINT }}
           # --- Agent Configuration ---
           agent_model: ${{ vars.AGENT_MODEL || 'bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0' }}
           # Other Optional Inputs (see action.yml for defaults and more options)

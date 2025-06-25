@@ -160,17 +160,6 @@ AZURE_API_KEY = get_env_var("AZURE_API_KEY", required=False)
 AZURE_API_BASE = get_env_var("AZURE_API_BASE", required=False)
 AZURE_API_VERSION = get_env_var("AZURE_API_VERSION", required=False)
 
-# --- AWS Bedrock Configuration ---
-AWS_REGION_NAME = get_env_var("AWS_REGION_NAME", required=False)
-AWS_ACCESS_KEY_ID = get_env_var("AWS_ACCESS_KEY_ID", required=False)
-AWS_SECRET_ACCESS_KEY = get_env_var("AWS_SECRET_ACCESS_KEY", required=False)
-AWS_SESSION_TOKEN = get_env_var("AWS_SESSION_TOKEN", required=False)
-AWS_PROFILE_NAME = get_env_var("AWS_PROFILE_NAME", required=False)
-AWS_ROLE_NAME = get_env_var("AWS_ROLE_NAME", required=False)
-AWS_SESSION_NAME = get_env_var("AWS_SESSION_NAME", required=False)
-AWS_WEB_IDENTITY_TOKEN = get_env_var("AWS_WEB_IDENTITY_TOKEN", required=False)
-AWS_BEDROCK_RUNTIME_ENDPOINT = get_env_var("AWS_BEDROCK_RUNTIME_ENDPOINT", required=False)
-
 # --- AI Agent Configuration ---
 AGENT_MODEL = get_env_var("AGENT_MODEL", required=False, default="bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0")
 # --- Test Writing Configuration ---
@@ -250,12 +239,9 @@ debug_log(f"Run Task: {RUN_TASK}")
 debug_log(f"Agent Model: {AGENT_MODEL}")
 debug_log(f"Skip Writing Security Test: {SKIP_WRITING_SECURITY_TEST}")
 debug_log(f"Skip QA Review: {SKIP_QA_REVIEW}") # Added debug print
-debug_log(f"AWS Region Name: {AWS_REGION_NAME}")
 debug_log(f"Vulnerability Severities: {VULNERABILITY_SEVERITIES}")
 debug_log(f"Max Events Per Agent: {MAX_EVENTS_PER_AGENT}")
 debug_log(f"Enable Full Telemetry: {ENABLE_FULL_TELEMETRY}")
-if AWS_SESSION_TOKEN:
-    debug_log("AWS Session Token found.")
 
 telemetry_handler.initialize_telemetry() # Initialize telemetry at the start
 

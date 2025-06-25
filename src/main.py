@@ -19,7 +19,13 @@
 
 import sys
 import re
+import asyncio
+import platform
 from datetime import datetime, timedelta
+
+# Set proper event loop policy on Windows to prevent "Event loop is closed" errors
+if platform.system() == 'Windows':
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 # Import configurations and utilities
 import config

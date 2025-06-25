@@ -20,8 +20,14 @@
 import os
 import json
 import sys
+import asyncio
+import platform
 import re
 from typing import Optional
+
+# Set proper event loop policy on Windows to prevent "Event loop is closed" errors
+if platform.system() == 'Windows':
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 # Assuming contrast_api.py is in the same directory or PYTHONPATH is set up
 import contrast_api
