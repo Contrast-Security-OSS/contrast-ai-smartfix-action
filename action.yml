@@ -166,48 +166,39 @@ runs:
       shell: cmd
       run: |
         @echo off
-        setlocal EnableDelayedExpansion
         
         echo Verifying Git availability...
-        where git 2>nul || (echo ERROR: Git not found. Git is required for this action. && exit /b 1)
+        where git >nul 2>nul
+        if %ERRORLEVEL% NEQ 0 (
+          echo ERROR: Git not found. Git is required for this action.
+          exit /b 1
+        )
+        
         echo Git version: 
         git --version
         
-        rem Check if Git Bash exists in standard location
-        set "gitBashPath=C:\Program Files\Git\bin"
-        if exist "%gitBashPath%" (
-          rem Check if already in PATH
-          echo %PATH% | findstr /i /C:"%gitBashPath%" >nul
-          if errorlevel 1 (
-            echo Adding Git Bash to PATH...
-            set "PATH=%PATH%;%gitBashPath%"
-            setx PATH "%PATH%" >nul
-          ) else (
-            echo Git Bash is already in PATH
-          )
-        ) else (
-          echo WARNING: Git Bash not found at standard location (C:\Program Files\Git\bin)
-          rem Try to locate bash.exe in other common locations
-          where bash.exe 2>nul >nul
-          if not errorlevel 1 (
-            for /f "tokens=*" %%i in ('where bash.exe') do (
-              set "bashPath=%%i"
-              echo Git Bash found at: !bashPath!
-              for %%j in ("%%i") do set "bashDir=%%~dpj"
-              echo %PATH% | findstr /i /C:"!bashDir!" >nul
-              if errorlevel 1 (
-                echo Adding found Git Bash to PATH...
-                set "PATH=%PATH%;!bashDir!"
-                setx PATH "%PATH%" >nul
-              )
-            )
-          ) else (
-            echo ERROR: Could not locate Git Bash executable. Git Bash is required on Windows.
-            exit /b 1
-          )
+        rem Add standard Git paths to PATH if they exist
+        if exist "C:\Program Files\Git\bin" (
+          echo Adding Git Bash bin directory to PATH...
+          set "PATH=%PATH%;C:\Program Files\Git\bin"
         )
         
-        echo Git Bash verification completed successfully
+        if exist "C:\Program Files\Git\cmd" (
+          echo Adding Git cmd directory to PATH...
+          set "PATH=%PATH%;C:\Program Files\Git\cmd"
+        )
+        
+        rem Verify bash.exe is available
+        where bash.exe >nul 2>nul
+        if %ERRORLEVEL% NEQ 0 (
+          echo ERROR: bash.exe not found in PATH after adding Git directories.
+          echo Git Bash is required for this action to function properly.
+          exit /b 1
+        ) else (
+          echo Git Bash is available in PATH
+        )
+        
+        echo Git verification completed successfully
 
     # Checkout with reduced verbosity
     - name: Checkout repository
