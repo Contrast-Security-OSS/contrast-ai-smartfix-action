@@ -56,7 +56,7 @@ def get_env_var(var_name: str, required: bool = True, default: Optional[Any] = N
     Exits:
         If required=True and variable not found
     """
-    value = os.environ. get(var_name)
+    value = os.environ.get(var_name)
     if required and not value:
         log(f"Error: Required environment variable {var_name} is not set.", is_error=True)
         sys.exit(1)
