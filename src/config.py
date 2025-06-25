@@ -25,17 +25,6 @@ from typing import Optional, Any
 from utils import debug_log, log
 import telemetry_handler
 
-def set_empty_env_to_none(var_names: list[str]) -> None:
-    """Sets environment variables with empty string values to None.
-    
-    Args:
-        var_names: List of environment variable names to check and convert
-    """
-    for var_name in var_names:
-        if var_name in os.environ and os.environ[var_name] == "":
-            debug_log(f"Converting empty string environment variable {var_name} to None")
-            os.environ[var_name] = None
-
 def check_contrast_config_values_exist():
     # Check for essential Contrast configuration
     if not all([CONTRAST_HOST, CONTRAST_ORG_ID, CONTRAST_APP_ID, CONTRAST_AUTHORIZATION_KEY, CONTRAST_API_KEY]):
@@ -126,33 +115,13 @@ def get_max_events_per_agent() -> int:
         return default_max_events
 
 # --- Preset ---
-VERSION = "v1.0.4"
+VERSION = "v1.0.5"
 USER_AGENT = f"contrast-smart-fix {VERSION}"
 
 # --- Core Settings ---
 DEBUG_MODE = get_env_var("DEBUG_MODE", required=False, default="false").lower() == "true"
 BASE_BRANCH = get_env_var("BASE_BRANCH", required=True, default=None)
 RUN_TASK = get_env_var("RUN_TASK", required=False, default="generate_fix")
-
-# Convert empty string environment variables to None
-credential_env_vars = [
-    "GEMINI_API_KEY",
-    "ANTHROPIC_API_KEY", 
-    "AZURE_API_KEY",
-    "AZURE_API_BASE",
-    "AZURE_API_VERSION",
-    "AWS_ACCESS_KEY_ID",
-    "AWS_SECRET_ACCESS_KEY",
-    "AWS_REGION_NAME",
-    "AWS_SESSION_TOKEN",
-    "AWS_PROFILE_NAME",
-    "AWS_ROLE_NAME",
-    "AWS_SESSION_NAME",
-    "AWS_WEB_IDENTITY_TOKEN",
-    "AWS_BEDROCK_RUNTIME_ENDPOINT"
-]
-set_empty_env_to_none(credential_env_vars)
-debug_log("Converted any empty credential environment variables to None")
 
 # --- Build and Formatting Configuration ---
 # Only require BUILD_COMMAND if RUN_TASK is generate_fix
@@ -185,27 +154,11 @@ CONTRAST_API_KEY = get_env_var("CONTRAST_API_KEY", required=True)
 
 # --- Google Gemini Credentials (LiteLLM) ---
 GEMINI_API_KEY = get_env_var("GEMINI_API_KEY", required=False)
-# Explicitly set empty strings to None
-if GEMINI_API_KEY == "":
-    GEMINI_API_KEY = None
-
-# --- Anthropic Credentials (LiteLLM) ---
-ANTHROPIC_API_KEY = get_env_var("ANTHROPIC_API_KEY", required=False)
-# Explicitly set empty strings to None
-if ANTHROPIC_API_KEY == "":
-    ANTHROPIC_API_KEY = None
 
 # --- Azure Credentials for Azure OpenAI (LiteLLM) ---
 AZURE_API_KEY = get_env_var("AZURE_API_KEY", required=False)
 AZURE_API_BASE = get_env_var("AZURE_API_BASE", required=False)
 AZURE_API_VERSION = get_env_var("AZURE_API_VERSION", required=False)
-# Explicitly set empty strings to None
-if AZURE_API_KEY == "":
-    AZURE_API_KEY = None
-if AZURE_API_BASE == "":
-    AZURE_API_BASE = None
-if AZURE_API_VERSION == "":
-    AZURE_API_VERSION = None
 
 # --- AWS Bedrock Configuration ---
 AWS_REGION_NAME = get_env_var("AWS_REGION_NAME", required=False)
@@ -217,25 +170,6 @@ AWS_ROLE_NAME = get_env_var("AWS_ROLE_NAME", required=False)
 AWS_SESSION_NAME = get_env_var("AWS_SESSION_NAME", required=False)
 AWS_WEB_IDENTITY_TOKEN = get_env_var("AWS_WEB_IDENTITY_TOKEN", required=False)
 AWS_BEDROCK_RUNTIME_ENDPOINT = get_env_var("AWS_BEDROCK_RUNTIME_ENDPOINT", required=False)
-# Explicitly set empty strings to None
-if AWS_REGION_NAME == "":
-    AWS_REGION_NAME = None
-if AWS_ACCESS_KEY_ID == "":
-    AWS_ACCESS_KEY_ID = None
-if AWS_SECRET_ACCESS_KEY == "":
-    AWS_SECRET_ACCESS_KEY = None
-if AWS_SESSION_TOKEN == "":
-    AWS_SESSION_TOKEN = None
-if AWS_PROFILE_NAME == "":
-    AWS_PROFILE_NAME = None
-if AWS_ROLE_NAME == "":
-    AWS_ROLE_NAME = None
-if AWS_SESSION_NAME == "":
-    AWS_SESSION_NAME = None
-if AWS_WEB_IDENTITY_TOKEN == "":
-    AWS_WEB_IDENTITY_TOKEN = None
-if AWS_BEDROCK_RUNTIME_ENDPOINT == "":
-    AWS_BEDROCK_RUNTIME_ENDPOINT = None
 
 # --- AI Agent Configuration ---
 AGENT_MODEL = get_env_var("AGENT_MODEL", required=False, default="bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0")
@@ -315,24 +249,13 @@ debug_log(f"Base Branch: {BASE_BRANCH}")
 debug_log(f"Run Task: {RUN_TASK}")
 debug_log(f"Agent Model: {AGENT_MODEL}")
 debug_log(f"Skip Writing Security Test: {SKIP_WRITING_SECURITY_TEST}")
-debug_log(f"Skip QA Review: {SKIP_QA_REVIEW}")
-
-# Debug logging for all AWS configuration variables
-debug_log("--- AWS Credentials Debug Information ---")
+debug_log(f"Skip QA Review: {SKIP_QA_REVIEW}") # Added debug print
 debug_log(f"AWS Region Name: {AWS_REGION_NAME}")
-debug_log(f"AWS Access Key ID available: {bool(AWS_ACCESS_KEY_ID)}")
-debug_log(f"AWS Secret Access Key available: {bool(AWS_SECRET_ACCESS_KEY)}")
-debug_log(f"AWS Session Token available: {bool(AWS_SESSION_TOKEN)}")
-debug_log(f"AWS Profile Name: {AWS_PROFILE_NAME or 'Not set'}")
-debug_log(f"AWS Role Name: {AWS_ROLE_NAME or 'Not set'}")
-debug_log(f"AWS Session Name: {AWS_SESSION_NAME or 'Not set'}")
-debug_log(f"AWS Web Identity Token available: {bool(AWS_WEB_IDENTITY_TOKEN)}")
-debug_log(f"AWS Bedrock Runtime Endpoint: {AWS_BEDROCK_RUNTIME_ENDPOINT or 'Not set'}")
-debug_log("----------------------------------------")
-
 debug_log(f"Vulnerability Severities: {VULNERABILITY_SEVERITIES}")
 debug_log(f"Max Events Per Agent: {MAX_EVENTS_PER_AGENT}")
 debug_log(f"Enable Full Telemetry: {ENABLE_FULL_TELEMETRY}")
+if AWS_SESSION_TOKEN:
+    debug_log("AWS Session Token found.")
 
 telemetry_handler.initialize_telemetry() # Initialize telemetry at the start
 
