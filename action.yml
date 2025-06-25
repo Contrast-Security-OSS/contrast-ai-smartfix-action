@@ -398,11 +398,11 @@ runs:
         AWS_SECRET_ACCESS_KEY: ${{ inputs.aws_secret_access_key }}
         AWS_REGION_NAME: ${{ inputs.aws_region_name }}
         AWS_SESSION_TOKEN: ${{ inputs.aws_session_token }}
-        AWS_PROFILE_NAME: ${{ inputs.aws_profile_name }}
-        AWS_ROLE_NAME: ${{ inputs.aws_role_name }}
-        AWS_SESSION_NAME: ${{ inputs.aws_session_name }}
-        AWS_WEB_IDENTITY_TOKEN: ${{ inputs.aws_web_identity_token }}
-        AWS_BEDROCK_RUNTIME_ENDPOINT: ${{ inputs.aws_bedrock_runtime_endpoint }}
+        #AWS_PROFILE_NAME: ${{ inputs.aws_profile_name }}
+        #AWS_ROLE_NAME: ${{ inputs.aws_role_name }}
+        #AWS_SESSION_NAME: ${{ inputs.aws_session_name }}
+        #AWS_WEB_IDENTITY_TOKEN: ${{ inputs.aws_web_identity_token }}
+        #AWS_BEDROCK_RUNTIME_ENDPOINT: ${{ inputs.aws_bedrock_runtime_endpoint }}
         # --- Agent Configuration ---
         AGENT_MODEL: ${{ inputs.agent_model }}
         MAX_EVENTS_PER_AGENT: ${{ inputs.max_events_per_agent }}
