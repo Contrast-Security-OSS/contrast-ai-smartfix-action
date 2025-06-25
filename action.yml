@@ -165,6 +165,9 @@ runs:
       if: runner.os == 'Windows'
       shell: cmd
       run: |
+        @echo off
+        setlocal EnableDelayedExpansion
+        
         echo Verifying Git availability...
         where git 2>nul || (echo ERROR: Git not found. Git is required for this action. && exit /b 1)
         echo Git version: 
@@ -190,21 +193,21 @@ runs:
             for /f "tokens=*" %%i in ('where bash.exe') do (
               set "bashPath=%%i"
               echo Git Bash found at: !bashPath!
-              for %%j in ("!bashPath!") do set "bashDir=%%~dpj"
+              for %%j in ("%%i") do set "bashDir=%%~dpj"
               echo %PATH% | findstr /i /C:"!bashDir!" >nul
               if errorlevel 1 (
                 echo Adding found Git Bash to PATH...
                 set "PATH=%PATH%;!bashDir!"
                 setx PATH "%PATH%" >nul
               )
-              goto :bashFound
             )
           ) else (
             echo ERROR: Could not locate Git Bash executable. Git Bash is required on Windows.
             exit /b 1
           )
-          :bashFound
         )
+        
+        echo Git Bash verification completed successfully
 
     # Checkout with reduced verbosity
     - name: Checkout repository
