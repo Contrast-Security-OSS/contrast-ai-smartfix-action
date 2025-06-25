@@ -71,7 +71,6 @@ inputs:
   aws_session_token:
     description: 'AWS Session Token'
     required: false
-    default: ''
   aws_region_name:
     description: 'AWS Region Name'
     required: false
@@ -79,23 +78,18 @@ inputs:
   aws_profile_name:
     description: 'AWS Profile Name'
     required: false
-    default: ''
   aws_role_name:
     description: 'AWS Role Name'
     required: false
-    default: ''
   aws_session_name:
     description: 'AWS Session Name'
     required: false
-    default: ''
   aws_web_identity_token:
     description: 'AWS Web Identity Token'
     required: false
-    default: ''
   aws_bedrock_runtime_endpoint:
     description: 'AWS Bedrock Runtime Endpoint'
     required: false
-    default: ''
   agent_model:
     description: 'LLM model path to use for the agent'
     required: false
