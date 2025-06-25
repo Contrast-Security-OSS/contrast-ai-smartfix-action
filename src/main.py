@@ -220,9 +220,9 @@ def main():
                     qa_section += f"*   **Build Run:** Yes (`{used_build_command}`)\n"
 
                     if build_success:
-                        qa_section += "*   **Final Build Status:** Success ✅\n"
+                        qa_section += "*   **Final Build Status:** Success \n"
                     else:
-                        qa_section += "*   **Final Build Status:** Failure ❌\n"
+                        qa_section += "*   **Final Build Status:** Failure \n"
                 else:
                     qa_section += "*   **Build Run:** No"
                     if not used_build_command:
