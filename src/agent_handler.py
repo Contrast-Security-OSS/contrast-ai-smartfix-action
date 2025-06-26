@@ -305,30 +305,7 @@ def run_ai_fix_agent(repo_root: Path, fix_system_prompt: str, fix_user_prompt: s
     debug_log(f"Skip Writing Security Test: {config.SKIP_WRITING_SECURITY_TEST}")
 
     try:
-        # Use a proper policy for all platforms to avoid "Event loop is closed" errors
-        if platform.system() == 'Windows':
-            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-        
-        # Create a new event loop for this function call
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-        try:
-            agent_summary_str = loop.run_until_complete(_run_agent_internal_with_prompts('fix', repo_root, processed_user_prompt, fix_system_prompt, remediation_id))
-        finally:
-            # Clean up all pending tasks
-            pending = asyncio.all_tasks(loop)
-            if pending:
-                for task in pending:
-                    task.cancel()
-                # Give cancelled tasks a chance to clean up
-                try:
-                    loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
-                except:
-                    pass
-            # Close the loop properly
-            loop.run_until_complete(loop.shutdown_asyncgens())
-            loop.close()
+        agent_summary_str = asyncio.run(_run_agent_internal_with_prompts('fix', repo_root, processed_user_prompt, fix_system_prompt, remediation_id))
         
         log("--- AI Agent Fix Attempt Completed ---")
         debug_log("\n--- Full Agent Summary ---")
@@ -452,31 +429,8 @@ def run_qa_agent(build_output: str, changed_files: List[str], build_command: str
     qa_summary = f"Error during QA agent execution: Unknown error" # Default error
 
     try:
-        # Use a proper policy for all platforms to avoid "Event loop is closed" errors
-        if platform.system() == 'Windows':
-            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-        
-        # Create a new event loop for this function call
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-        try:
-            # Run the agent internally, using API prompts if available
-            qa_summary = loop.run_until_complete(_run_agent_internal_with_prompts('qa', repo_root, qa_query, qa_system_prompt, remediation_id))
-        finally:
-            # Clean up all pending tasks
-            pending = asyncio.all_tasks(loop)
-            if pending:
-                for task in pending:
-                    task.cancel()
-                # Give cancelled tasks a chance to clean up
-                try:
-                    loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
-                except:
-                    pass
-            # Close the loop properly
-            loop.run_until_complete(loop.shutdown_asyncgens())
-            loop.close()
+        # Run the agent internally, using API prompts if available
+        qa_summary = asyncio.run(_run_agent_internal_with_prompts('qa', repo_root, qa_query, qa_system_prompt, remediation_id))
         
         log("--- QA Agent Fix Attempt Completed ---")
         debug_log("\n--- Raw QA Agent Summary ---")
