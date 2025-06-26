@@ -22,6 +22,7 @@ import warnings
 
 import asyncio
 import sys
+import platform
 from pathlib import Path
 from typing import Optional, Tuple, List
 from contextlib import AsyncExitStack
@@ -152,13 +153,18 @@ async def process_agent_run(runner, session, user_query, remediation_id: str, ag
     event_count = 0
     final_response = "AI agent did not provide a final summary."
     max_events_limit = config.MAX_EVENTS_PER_AGENT
+    events_async = None
 
     # Create the async generator
-    events_async = runner.run_async(
-        session_id=session_id,
-        user_id=user_id,
-        new_message=content
-    )
+    try:
+        events_async = runner.run_async(
+            session_id=session_id,
+            user_id=user_id,
+            new_message=content
+        )
+    except Exception as e:
+        log(f"Failed to create agent event stream: {e}", is_error=True)
+        error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
 
     agent_run_result = "ERROR"
     # Initialize with a properly structured object
@@ -241,7 +247,21 @@ async def process_agent_run(runner, session, user_query, remediation_id: str, ag
                         "result": tool_call_status,
                     })
         agent_run_result = "SUCCESS"
+    except Exception as e:
+        log(f"Error during agent execution: {str(e)}", is_error=True)
+        if events_async:
+            try:
+                await events_async.aclose()
+            except:
+                pass
     finally:
+        # Ensure we clean up the event stream
+        if events_async:
+            try:
+                await events_async.aclose()
+            except:
+                pass
+                
         debug_log(f"Closing MCP server connections for {agent_type.upper()} agent...")
         log(f"{agent_type.upper()} agent run finished.")
 
@@ -279,7 +299,31 @@ def run_ai_fix_agent(repo_root: Path, fix_system_prompt: str, fix_user_prompt: s
     debug_log(f"Skip Writing Security Test: {config.SKIP_WRITING_SECURITY_TEST}")
 
     try:
-        agent_summary_str = asyncio.run(_run_agent_internal_with_prompts('fix', repo_root, processed_user_prompt, fix_system_prompt, remediation_id))
+        # Use a proper policy for all platforms to avoid "Event loop is closed" errors
+        if platform.system() == 'Windows':
+            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+        
+        # Create a new event loop for this function call
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        try:
+            agent_summary_str = loop.run_until_complete(_run_agent_internal_with_prompts('fix', repo_root, processed_user_prompt, fix_system_prompt, remediation_id))
+        finally:
+            # Clean up all pending tasks
+            pending = asyncio.all_tasks(loop)
+            if pending:
+                for task in pending:
+                    task.cancel()
+                # Give cancelled tasks a chance to clean up
+                try:
+                    loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                except:
+                    pass
+            # Close the loop properly
+            loop.run_until_complete(loop.shutdown_asyncgens())
+            loop.close()
+        
         log("--- AI Agent Fix Attempt Completed ---")
         debug_log("\n--- Full Agent Summary ---")
         debug_log(agent_summary_str)
@@ -402,8 +446,31 @@ def run_qa_agent(build_output: str, changed_files: List[str], build_command: str
     qa_summary = f"Error during QA agent execution: Unknown error" # Default error
 
     try:
-        # Run the agent internally, using API prompts if available
-        qa_summary = asyncio.run(_run_agent_internal_with_prompts('qa', repo_root, qa_query, qa_system_prompt, remediation_id))
+        # Use a proper policy for all platforms to avoid "Event loop is closed" errors
+        if platform.system() == 'Windows':
+            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+        
+        # Create a new event loop for this function call
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        try:
+            # Run the agent internally, using API prompts if available
+            qa_summary = loop.run_until_complete(_run_agent_internal_with_prompts('qa', repo_root, qa_query, qa_system_prompt, remediation_id))
+        finally:
+            # Clean up all pending tasks
+            pending = asyncio.all_tasks(loop)
+            if pending:
+                for task in pending:
+                    task.cancel()
+                # Give cancelled tasks a chance to clean up
+                try:
+                    loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                except:
+                    pass
+            # Close the loop properly
+            loop.run_until_complete(loop.shutdown_asyncgens())
+            loop.close()
         
         log("--- QA Agent Fix Attempt Completed ---")
         debug_log("\n--- Raw QA Agent Summary ---")
@@ -481,6 +548,9 @@ async def _run_agent_internal_with_prompts(agent_type: str, repo_root: Path, que
         log(f"FATAL: {agent_type.capitalize()} Agent execution skipped: ADK libraries not available (import failed).")
         error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
 
+    session = None
+    runner = None
+    
     try:
         session_service = InMemorySessionService()
         artifacts_service = InMemoryArtifactService()
@@ -505,7 +575,5 @@ async def _run_agent_internal_with_prompts(agent_type: str, repo_root: Path, que
 
     # Pass the full model ID (though not used for cost calculation anymore, kept for consistency if needed elsewhere)
     summary = await process_agent_run(runner, session, query, remediation_id, agent_type)
-
+    
     return summary
-
-# %%
