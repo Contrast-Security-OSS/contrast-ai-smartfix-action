@@ -341,7 +341,7 @@ def run_ai_fix_agent(repo_root: Path, fix_system_prompt: str, fix_user_prompt: s
         pr_body_match = re.search(r"<pr_body>(.*?)</pr_body>", agent_summary_str, re.DOTALL)
         if pr_body_match:
             extracted_pr_body = pr_body_match.group(1).strip()
-            debug_log("\\n--- Extracted PR Body ---")
+            debug_log("\n--- Extracted PR Body ---")
             debug_log(extracted_pr_body)
             debug_log("-------------------------")
             return extracted_pr_body

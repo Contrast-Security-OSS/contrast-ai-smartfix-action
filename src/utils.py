@@ -31,6 +31,7 @@ import telemetry_handler # Import for telemetry logging
 # Unicode to ASCII fallback mappings for Windows
 UNICODE_FALLBACKS = {
     '\u274c': 'X',  # ❌ -> X
+    '❌': 'X',  # ❌ -> X
     '\u2705': '',  # ✅ -> ''
     '\u2728': '*',  # ✨ -> *
     '⚠️': '!',  # ⚠️ -> !
