@@ -20,36 +20,12 @@
 import os
 import json
 import sys
-import asyncio
-import platform
-import re
-from typing import Optional
-
-# Set proper event loop policy on Windows to prevent "Event loop is closed" errors
-if platform.system() == 'Windows':
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 # Assuming contrast_api.py is in the same directory or PYTHONPATH is set up
 import contrast_api
 import config # To access Contrast API credentials and other configs
 from utils import debug_log, extract_remediation_id_from_branch, log
 import telemetry_handler
-
-# Keep this function for backward compatibility with existing PRs
-def get_vuln_uuid_from_labels(labels_json_str: str) -> Optional[str]:
-    """Extracts the vulnerability UUID from a JSON string of PR labels."""
-    try:
-        labels = json.loads(labels_json_str)
-        for label in labels:
-            if isinstance(label, dict) and label.get("name", "").startswith("contrast-vuln-id:VULN-"):
-                return label["name"].split("contrast-vuln-id:VULN-", 1)[1]
-    except json.JSONDecodeError:
-        log(f"Error: Could not decode labels JSON: {labels_json_str}", is_error=True)
-        sys.exit(1)
-    except Exception as e:
-        log(f"Error processing labels: {e}", is_error=True)
-        sys.exit(1)
-    return None
 
 def handle_merged_pr():
     """Handles the logic when a pull request is merged."""
