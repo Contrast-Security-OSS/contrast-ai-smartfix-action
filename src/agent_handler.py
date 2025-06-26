@@ -204,6 +204,7 @@ async def process_agent_run(runner, session, user_query, remediation_id: str, ag
 
                 if message_text:
                     log(f"\n*** {agent_type.upper()} Agent Message: \033[1;36m {message_text} \033[0m")
+                    log(f"Tokens (running total): {total_tokens}")
                     final_response = message_text
                     if agent_event_telemetry is not None:
                         # Directly assign toolCalls rather than appending
