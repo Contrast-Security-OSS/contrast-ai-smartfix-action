@@ -61,6 +61,36 @@ def _patched_loop_check_closed(self):
 # Apply the patch
 asyncio.base_events.BaseEventLoop._check_closed = _patched_loop_check_closed
 
+# Add a specific fix for _ProactorBasePipeTransport.__del__ on Windows
+if platform.system() == 'Windows':
+    # Import the specific module that contains ProactorBasePipeTransport
+    try:
+        from asyncio.proactor_events import _ProactorBasePipeTransport
+        
+        # Store the original __del__ method
+        _original_pipe_del = _ProactorBasePipeTransport.__del__
+        
+        # Define a safe replacement for __del__
+        def _patched_pipe_del(self):
+            try:
+                # Check if the event loop is closed or finalizing
+                if self._loop.is_closed() or sys.is_finalizing():
+                    # Skip the original __del__ which would trigger the error
+                    return
+                
+                # Otherwise use the original __del__ implementation
+                _original_pipe_del(self)
+            except (AttributeError, RuntimeError, ImportError, TypeError):
+                # Catch and ignore all attribute or runtime errors during shutdown
+                pass
+        
+        # Apply the patch to the __del__ method
+        _ProactorBasePipeTransport.__del__ = _patched_pipe_del
+        
+        debug_log("Successfully patched _ProactorBasePipeTransport.__del__ for Windows")
+    except (ImportError, AttributeError) as e:
+        debug_log(f"Could not patch _ProactorBasePipeTransport: {str(e)}")
+
 def cleanup_asyncio():
     """
     Cleanup function registered with atexit to properly handle asyncio resources during shutdown.
@@ -80,28 +110,79 @@ def cleanup_asyncio():
         # Only on Windows do we need the more aggressive error suppression
         if platform.system() == 'Windows':
             sys.stderr = DummyStderr()
-        
-        # Try to close any event loops properly if they exist
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                loop.stop()
             
-            # Cancel all tasks
-            pending = asyncio.all_tasks(loop)
-            if pending:
-                for task in pending:
-                    task.cancel()
+            # Windows-specific: ensure the proactor event loop resources are properly cleaned
+            try:
+                # Try to access the global WindowsProactorEventLoopPolicy
+                loop_policy = asyncio.get_event_loop_policy()
                 
-                # Give tasks a chance to respond to cancellation
+                # If we have any running loops, close them properly
+                try:
+                    loop = loop_policy.get_event_loop()
+                    if not loop.is_closed():
+                        if loop.is_running():
+                            loop.stop()
+                        
+                        # Cancel all tasks
+                        pending = asyncio.all_tasks(loop)
+                        if pending:
+                            for task in pending:
+                                task.cancel()
+                            
+                            # Give tasks a chance to respond to cancellation with a timeout
+                            try:
+                                loop.run_until_complete(asyncio.wait_for(
+                                    asyncio.gather(*pending, return_exceptions=True), 
+                                    timeout=1.0
+                                ))
+                            except (asyncio.CancelledError, asyncio.TimeoutError, Exception):
+                                pass
+                        
+                        # Close transports and other resources
+                        try:
+                            loop.run_until_complete(loop.shutdown_asyncgens())
+                        except Exception:
+                            pass
+                            
+                        try:
+                            loop.close()
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+                    
+                # Force garbage collection to ensure __del__ methods are called
+                try:
+                    import gc
+                    gc.collect()
+                except Exception:
+                    pass
+                    
+            except Exception:
+                pass  # Ignore any errors during Windows-specific cleanup
+        else:
+            # For non-Windows platforms, perform regular cleanup
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    loop.stop()
+                
+                # Cancel all tasks
+                pending = asyncio.all_tasks(loop)
+                if pending:
+                    for task in pending:
+                        task.cancel()
+                    
+                    # Give tasks a chance to respond to cancellation
+                    if not loop.is_closed():
+                        loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                
+                # Close the loop
                 if not loop.is_closed():
-                    loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
-            
-            # Close the loop
-            if not loop.is_closed():
-                loop.close()
-        except Exception:
-            pass  # Ignore any errors during cleanup
+                    loop.run_until_complete(loop.shutdown_asyncgens())
+                    loop.close()
+            except Exception:
+                pass  # Ignore any errors during cleanup
     finally:
         # Restore stderr
         sys.stderr = original_stderr
@@ -464,14 +545,42 @@ def main():
         if not loop.is_closed():
             # Cancel all pending tasks
             pending = asyncio.all_tasks(loop)
-            for task in pending:
-                task.cancel()
+            if pending:
+                for task in pending:
+                    try:
+                        task.cancel()
+                    except Exception:
+                        pass
+                
+                # Give tasks a chance to respond to cancellation
+                try:
+                    # Wait with a timeout to prevent hanging
+                    loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                except (asyncio.CancelledError, Exception):
+                    pass
             
-            # Shut down asyncgens
-            loop.run_until_complete(loop.shutdown_asyncgens())
-            loop.close()
-    except Exception:
+            try:
+                # Shut down asyncgens
+                loop.run_until_complete(loop.shutdown_asyncgens())
+            except Exception:
+                pass
+                
+            try:
+                # Close the loop
+                loop.close()
+            except Exception:
+                pass
+                
+        # On Windows, specifically force garbage collection
+        if platform.system() == 'Windows':
+            try:
+                import gc
+                gc.collect()
+            except Exception:
+                pass
+    except Exception as e:
         # Ignore any errors during cleanup
+        debug_log(f"Ignoring error during asyncio cleanup: {str(e)}")
         pass
 
 
