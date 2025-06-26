@@ -151,6 +151,7 @@ async def process_agent_run(runner, session, user_query, remediation_id: str, ag
         error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
 
     event_count = 0
+    total_tokens = 0  # Variable to track the total token count from latest event
     final_response = "AI agent did not provide a final summary."
     max_events_limit = config.MAX_EVENTS_PER_AGENT
     events_async = None
@@ -188,7 +189,11 @@ async def process_agent_run(runner, session, user_query, remediation_id: str, ag
                 # Throw exception to fully abort processing
                 error_exit(remediation_id, FailureCategory.EXCEEDED_AGENT_EVENTS.value)
 
-            log(f"Usage metadata: {event.usage_metadata}")
+            
+            # Track total tokens from event usage metadata if available
+            if event.usage_metadata is not None and hasattr(event.usage_metadata, "total_token_count"):
+                total_tokens = event.usage_metadata.total_token_count
+                debug_log(f"Updated total token count: {total_tokens}")
             
             if event.content:
                 message_text = ""
@@ -276,9 +281,8 @@ async def process_agent_run(runner, session, user_query, remediation_id: str, ag
             "agentType": agent_type.upper(),
             "result": agent_run_result,
             "actions": agent_event_actions,
-            # totalTokens and totalCost might be harder to get accurately without deeper ADK integration or assumptions
-            "totalTokens": 0, # Placeholder
-            "totalCost": 0.0  # Placeholder
+            "totalTokens": total_tokens,  # Use the tracked token count from latest event
+            "totalCost": 0.0  # Placeholder still as cost calculation would need more info
         }
         telemetry_handler.add_agent_event(agent_event_payload)
 
