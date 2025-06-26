@@ -19,6 +19,10 @@
 
 import sys
 import re
+import asyncio
+import warnings
+import atexit
+import platform
 from datetime import datetime, timedelta
 
 # Import configurations and utilities
@@ -34,6 +38,76 @@ import contrast_api
 import agent_handler
 import git_handler
 import qa_handler
+
+# NOTE: Google ADK appears to have issues with asyncio event loop cleanup, and has had attempts to address them in versions 1.4.0-1.5.0
+# Configure warnings to ignore asyncio ResourceWarnings during shutdown
+warnings.filterwarnings("ignore", category=ResourceWarning, 
+                        message="unclosed.*<asyncio.sslproto._SSLProtocolTransport.*")
+warnings.filterwarnings("ignore", category=ResourceWarning, 
+                        message="unclosed transport")
+warnings.filterwarnings("ignore", category=ResourceWarning, 
+                        message="unclosed.*<asyncio.*")
+
+# Patch asyncio to handle event loop closed errors during shutdown
+_original_loop_check_closed = asyncio.base_events.BaseEventLoop._check_closed
+
+def _patched_loop_check_closed(self):
+    # If Python is in the process of shutting down, ignore the check
+    if sys.is_finalizing():
+        return
+    # Otherwise, use the original implementation
+    return _original_loop_check_closed(self)
+
+# Apply the patch
+asyncio.base_events.BaseEventLoop._check_closed = _patched_loop_check_closed
+
+def cleanup_asyncio():
+    """
+    Cleanup function registered with atexit to properly handle asyncio resources during shutdown.
+    This helps prevent the "Event loop is closed" errors during program exit.
+    """
+    # Suppress stderr temporarily to avoid printing shutdown errors
+    original_stderr = sys.stderr
+    try:
+        # Create a dummy stderr to suppress errors during cleanup
+        class DummyStderr:
+            def write(self, *args, **kwargs):
+                pass
+            
+            def flush(self):
+                pass
+        
+        # Only on Windows do we need the more aggressive error suppression
+        if platform.system() == 'Windows':
+            sys.stderr = DummyStderr()
+        
+        # Try to close any event loops properly if they exist
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                loop.stop()
+            
+            # Cancel all tasks
+            pending = asyncio.all_tasks(loop)
+            if pending:
+                for task in pending:
+                    task.cancel()
+                
+                # Give tasks a chance to respond to cancellation
+                if not loop.is_closed():
+                    loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+            
+            # Close the loop
+            if not loop.is_closed():
+                loop.close()
+        except Exception:
+            pass  # Ignore any errors during cleanup
+    finally:
+        # Restore stderr
+        sys.stderr = original_stderr
+
+# Register the cleanup function
+atexit.register(cleanup_asyncio)
 
 def main():
     """Main orchestration logic."""
@@ -234,7 +308,7 @@ def main():
                 if (used_build_command and not build_success) or any(s.startswith("Error during QA agent execution:") for s in qa_summary_log):
                     failure_category = ""
                     
-                    if any(s.startswith("Error during QA agent execution:") for s in qa_summary_log):
+                    if any(s.startswith("Error during QA agent.execution:") for s in qa_summary_log):
                         log("\n--- Skipping PR creation as QA Agent encountered an error ---")
                         failure_category = contrast_api.FailureCategory.QA_AGENT_FAILURE.value
                     else:
@@ -383,6 +457,22 @@ def main():
 
     log(f"\n--- Script finished (total runtime: {total_runtime}) ---")
     
+    # Clean up any dangling asyncio resources
+    try:
+        # Force asyncio resource cleanup before exit
+        loop = asyncio.get_event_loop_policy().get_event_loop()
+        if not loop.is_closed():
+            # Cancel all pending tasks
+            pending = asyncio.all_tasks(loop)
+            for task in pending:
+                task.cancel()
+            
+            # Shut down asyncgens
+            loop.run_until_complete(loop.shutdown_asyncgens())
+            loop.close()
+    except Exception:
+        # Ignore any errors during cleanup
+        pass
 
 
 if __name__ == "__main__":
