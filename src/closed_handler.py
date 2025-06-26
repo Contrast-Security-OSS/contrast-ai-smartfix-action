@@ -20,8 +20,6 @@
 import os
 import json
 import sys
-import re
-from typing import Optional
 
 # Assuming contrast_api.py is in the same directory or PYTHONPATH is set up
 import contrast_api
