@@ -22,6 +22,7 @@ Welcome to Contrast AI SmartFix\! SmartFix is an AI-powered agent that automatic
 * **Contrast Assess:** You need an active Contrast Assess deployment identifying vulnerabilities in your application.  
 * **GitHub:** Your project must be hosted on GitHub and use GitHub Actions.  
 * **Contrast API Credentials:** You will need your Contrast Host, Organization ID, Application ID, Authorization Key, and API Key.
+* **GitHub Token Permissions:** The GitHub token must have `contents: write` and `pull-requests: write` permissions. These permissions must be explicitly set in your workflow file.
 
 ### Installation and Configuration
 
@@ -48,6 +49,16 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     steps:
+      # For Claude via AWS Bedrock, please include an additional setup step for configuring AWS credentials
+      # This step can be omitted if using another LLM provider.
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
@@ -80,16 +91,6 @@ jobs:
 
           # Claude Via AWS Bedrock
           agent_model: 'bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0' # Example for Claude Sonnet on Bedrock
-          # supported possible AWS connection values
-          aws_access_key_id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws_region_name: ${{ vars.AWS_REGION_NAME }} # Or your AWS region, e.g. 'us-east-1'
-          aws_session_token: ${{ secrets.AWS_SESSION_TOKEN }}
-          aws_profile_name: ${{ vars.AWS_PROFILE_NAME }}
-          aws_role_name: ${{ vars.AWS_ROLE_NAME }}
-          aws_session_name: ${{ vars.AWS_SESSION_NAME }}
-          aws_web_identity_token: ${{ secrets.AWS_WEB_IDENTITY_TOKEN }}
-          aws_bedrock_runtime_endpoint: ${{ vars.AWS_BEDROCK_RUNTIME_ENDPOINT }}
 
           # Experimental: Google Gemini Pro
           # agent_model: 'gemini/gemini-2.5-pro-latest' # Check LiteLLM docs for exact model string
@@ -244,9 +245,6 @@ The following are key inputs for the GitHub Action. Refer to the `action.yml` in
 | `agent_model` | LLM model to use (e.g., `bedrock/anthropic.claude-3-sonnet-20240229-v1:0`). | No | `bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0` |
 | `anthropic_api_key` | Anthropic API key (if using direct Anthropic API). | No |  |
 | `gemini_api_key` | Gemini API key (if using Gemini). | No |  |
-| `aws_access_key_id` | AWS Access Key ID (if using Bedrock). | No |  |
-| `aws_secret_access_key` | AWS Secret Access Key (if using Bedrock). | No |  |
-| `aws_region_name` | AWS Region Name (if using Bedrock). | No | `us-east-1` |
 | `build_command` | Command to build the application (for QA). | Yes, for generating fixes |  |
 | `formatting_command` | Command to format code. | No |  |
 | `max_open_prs` | Maximum number of open PRs SmartFix can create. | No | `5` |

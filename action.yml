@@ -62,40 +62,6 @@ inputs:
   azure_api_version:
     description: 'Azure API Version'
     required: false
-  aws_access_key_id:
-    description: 'AWS Access Key ID for Bedrock'
-    required: false
-  aws_secret_access_key:
-    description: 'AWS Secret Access Key for Bedrock'
-    required: false
-  aws_session_token:
-    description: 'AWS Session Token'
-    required: false
-    default: ''
-  aws_region_name:
-    description: 'AWS Region Name'
-    required: false
-    default: 'us-east-1'
-  aws_profile_name:
-    description: 'AWS Profile Name'
-    required: false
-    default: ''
-  aws_role_name:
-    description: 'AWS Role Name'
-    required: false
-    default: ''
-  aws_session_name:
-    description: 'AWS Session Name'
-    required: false
-    default: ''
-  aws_web_identity_token:
-    description: 'AWS Web Identity Token'
-    required: false
-    default: ''
-  aws_bedrock_runtime_endpoint:
-    description: 'AWS Bedrock Runtime Endpoint'
-    required: false
-    default: ''
   agent_model:
     description: 'LLM model path to use for the agent'
     required: false
@@ -128,15 +94,77 @@ inputs:
 runs:
   using: 'composite'
   steps:
-    # Main header to clearly mark the beginning of the action
+    # Main header to clearly mark the beginning of the action (Linux/macOS)
     - name: Begin SmartFix Process
+      if: runner.os == 'Linux' || runner.os == 'macOS'
+      shell: bash
       run: |
         echo ""
         echo "================================================================"
         echo "🛡️  CONTRAST AI SMARTFIX PROCESS STARTED"
         echo "================================================================"
         echo ""
+    
+    # Main header to clearly mark the beginning of the action (Windows)
+    - name: Begin SmartFix Process (Windows)
+      if: runner.os == 'Windows'
+      shell: cmd
+      run: |
+        @echo off
+        echo.
+        echo ================================================================
+        echo 🛡️  CONTRAST AI SMARTFIX PROCESS STARTED
+        echo ================================================================
+        echo.
+
+    # Verify Git is available (Linux/macOS)
+    - name: Verify Git availability
+      if: runner.os == 'Linux' || runner.os == 'macOS'
       shell: bash
+      run: |
+        echo "Verifying Git availability..."
+        which git || { echo "ERROR: Git not found. Git is required for this action."; exit 1; }
+        echo "Git version: $(git --version)"
+    
+    # Verify Git is available and ensure Git Bash is in PATH (Windows)
+    - name: Verify Git availability (Windows)
+      if: runner.os == 'Windows'
+      shell: cmd
+      run: |
+        @echo off
+        
+        echo Verifying Git availability...
+        where git >nul 2>nul
+        if %ERRORLEVEL% NEQ 0 (
+          echo ERROR: Git not found. Git is required for this action.
+          exit /b 1
+        )
+        
+        echo Git version: 
+        git --version
+        
+        rem Add standard Git paths to PATH if they exist
+        if exist "C:\Program Files\Git\bin" (
+          echo Adding Git Bash bin directory to PATH...
+          set "PATH=%PATH%;C:\Program Files\Git\bin"
+        )
+        
+        if exist "C:\Program Files\Git\cmd" (
+          echo Adding Git cmd directory to PATH...
+          set "PATH=%PATH%;C:\Program Files\Git\cmd"
+        )
+        
+        rem Verify bash.exe is available
+        where bash.exe >nul 2>nul
+        if %ERRORLEVEL% NEQ 0 (
+          echo ERROR: bash.exe not found in PATH after adding Git directories.
+          echo Git Bash is required for this action to function properly.
+          exit /b 1
+        ) else (
+          echo Git Bash is available in PATH
+        )
+        
+        echo Git verification completed successfully
 
     # Checkout with reduced verbosity
     - name: Checkout repository
@@ -146,13 +174,13 @@ runs:
 
     # Setup tools section with cleaner output
     - name: Environment setup header
+      shell: bash
       run: |
         echo ""
         echo "================================================================"
         echo "🔧 ENVIRONMENT SETUP"
         echo "================================================================"
         echo ""
-      shell: bash
 
     # Reduce Python setup verbosity
     - name: Set up Python
@@ -162,79 +190,147 @@ runs:
         
     # Install uv tool for dependency management
     - name: Install uv
+      shell: bash
       run: |
         echo ""
         echo "📦 Installing uv package manager..."
-        pip install uv==0.7.12 > /tmp/uv-install.log || (cat /tmp/uv-install.log && exit 1)
+        if [ "$RUNNER_OS" = "Windows" ]; then
+          pip install uv==0.7.15 > uv-install.log || (cat uv-install.log && exit 1)
+        else
+          pip install uv==0.7.15 > /tmp/uv-install.log || (cat /tmp/uv-install.log && exit 1)
+        fi
         echo "✅ uv installed successfully"
-      shell: bash
 
-    # Install dependencies using uv
+    # Install dependencies using uv (Linux/macOS)
     - name: Install dependencies with uv
+      if: runner.os == 'Linux' || runner.os == 'macOS'
+      shell: bash
       run: |
         echo ""
         echo "📦 Installing Python packages using uv..."
         echo "📎 Using lockfile for deterministic installation"
         uv pip sync --system ${{ github.action_path }}/src/requirements.lock > /tmp/uv-output.log || (cat /tmp/uv-output.log && exit 1)
         echo "✅ Python dependencies installed successfully"
-      shell: bash
+        
+    # Install dependencies using uv (Windows)
+    - name: Install dependencies with uv (Windows)
+      if: runner.os == 'Windows'
+      shell: cmd
+      run: |
+        echo.
+        echo 📦 Installing Python packages using uv...
+        echo 📎 Using lockfile for deterministic installation
+        
+        rem Convert forward slashes to backslashes for Windows path
+        set "REQUIREMENTS_PATH=%GITHUB_ACTION_PATH%\src\requirements.lock"
+        
+        uv pip sync --system "%REQUIREMENTS_PATH%" > uv-output.log || (type uv-output.log && exit /b 1)
+        echo ✅ Python dependencies installed successfully
 
-    # Reduce Node.js setup verbosity  
+    # Reduce Node.js setup verbosity 
     - name: Set up Node.js
+      shell: bash
       run: |
         echo ""
         echo "➡️ Setting up Node.js 22..."
-      shell: bash
 
     - uses: actions/setup-node@v4
       with:
         node-version: '22'
         check-latest: false
 
-    # Install GitHub CLI
+    # Install GitHub CLI (Linux/macOS)
     - name: Install GitHub CLI
+      if: runner.os == 'Linux' || runner.os == 'macOS'
+      shell: bash
       run: |
         echo ""
         echo "📦 Installing GitHub CLI..."
-        sudo apt-get update -qq > /dev/null
-        sudo apt-get install -y -qq gh > /dev/null
-        echo "✅ GitHub CLI installed successfully"
-      shell: bash
-
-    # Install Git
-    - name: Install Git
+        if [ "$RUNNER_OS" = "Linux" ]; then
+          sudo apt-get update -qq > /dev/null
+          sudo apt-get install -y -qq gh > /dev/null
+        elif [ "$RUNNER_OS" = "macOS" ]; then
+          brew install gh || echo "GitHub CLI already installed"
+        fi
+        echo "✅ GitHub CLI installation attempt complete"
+        # Verify GitHub CLI installation - required for this action
+        gh --version || { echo "ERROR: GitHub CLI verification failed. GitHub CLI is required for this action."; exit 1; }
+        
+    # Install GitHub CLI (Windows)
+    - name: Install GitHub CLI (Windows)
+      if: runner.os == 'Windows'
+      shell: cmd
       run: |
-        echo ""
-        echo "📦 Installing Git..."
-        sudo apt-get update -qq > /dev/null
-        sudo apt-get install -y -qq git > /dev/null
-        echo "✅ Git installed successfully"
-      shell: bash
+        echo.
+        echo 📦 Installing GitHub CLI...
+        
+        rem Check if GitHub CLI is already installed
+        where gh >nul 2>nul
+        if %ERRORLEVEL% EQU 0 (
+          echo GitHub CLI is already installed
+        ) else (
+          echo Installing GitHub CLI via direct download...
+          
+          rem Download and install GitHub CLI
+          curl -sSL https://github.com/cli/cli/releases/download/v2.74.2/gh_2.74.2_windows_amd64.msi -o gh.msi
+          echo Installing GitHub CLI from MSI package...
+          start /wait msiexec.exe /i gh.msi /quiet /norestart
+          echo Waiting for installation to complete...
+          timeout /t 5 /nobreak >nul
+          del gh.msi
+          
+          rem Refresh PATH to include GitHub CLI installation directory
+          echo Refreshing PATH to include GitHub CLI...
+          
+          rem Common installation paths for GitHub CLI
+          set "GH_PATHS=C:\Program Files\GitHub CLI;C:\Program Files (x86)\GitHub CLI"
+          
+          rem Add GitHub CLI paths to current PATH
+          set "PATH=%PATH%;%GH_PATHS%"
+          
+          rem Try to find gh.exe and add its directory to PATH if found
+          for %%I in (gh.exe) do (
+            if exist "%%~$PATH:I" (
+              for %%J in ("%%~$PATH:I\.") do (
+                echo Found gh.exe at: %%~dpJ
+                set "PATH=%PATH%;%%~dpJ"
+              )
+            )
+          )
+        )
+        
+        echo ✅ GitHub CLI installation attempt complete
+        
+        rem Verify GitHub CLI installation - required for this action
+        where gh >nul 2>nul || (echo ERROR: GitHub CLI not found in PATH after installation. && exit /b 1)
+        gh --version || (echo ERROR: GitHub CLI verification failed. GitHub CLI is required for this action. && exit /b 1)
 
     - name: Setup complete
+      shell: bash
       run: |
         echo ""
         echo "✅ Environment setup complete"
         echo ""
-      shell: bash
 
-    # Run the main SmartFix analysis script with clear start/end markers
+    # Run the main SmartFix analysis script with clear start/end markers - cross-platform compatible
     - name: Run Contrast AI SmartFix
+      shell: bash
       run: |
         echo ""
         echo "================================================================"
+        # Cross-platform compatible script execution
         if [ "${{ inputs.run_task }}" = "merge" ]; then
           echo "🚀 STARTING CONTRAST AI SMARTFIX (Task: merge)"
           echo "================================================================"
-          python ${{ github.action_path }}/src/merge_handler.py
+          python "${{ github.action_path }}/src/merge_handler.py"
         elif [ "${{ inputs.run_task }}" = "closed" ]; then
           echo "🚀 STARTING CONTRAST AI SMARTFIX (Task: closed)"
           echo "================================================================"
-          python ${{ github.action_path }}/src/closed_handler.py
+          python "${{ github.action_path }}/src/closed_handler.py"
         else
           echo "🚀 STARTING CONTRAST AI SMARTFIX (Task: generate_fix)"
           echo "================================================================"
-          python ${{ github.action_path }}/src/main.py
+          python "${{ github.action_path }}/src/main.py"
         fi
         echo ""
         
@@ -242,7 +338,6 @@ runs:
         echo "================================================================"
         echo "✨ CONTRAST AI SMARTFIX PROCESS COMPLETE"
         echo "================================================================"
-      shell: bash
       env:
         # --- Build Command ---
         BUILD_COMMAND: ${{ inputs.build_command }}
@@ -270,16 +365,6 @@ runs:
         AZURE_API_KEY: ${{ inputs.azure_api_key }}
         AZURE_API_BASE: ${{ inputs.azure_api_base }}
         AZURE_API_VERSION: ${{ inputs.azure_api_version }}
-        # --- AWS Credentials for LiteLLM/Bedrock ---
-        AWS_ACCESS_KEY_ID: ${{ inputs.aws_access_key_id }}
-        AWS_SECRET_ACCESS_KEY: ${{ inputs.aws_secret_access_key }}
-        AWS_REGION_NAME: ${{ inputs.aws_region_name }}
-        AWS_SESSION_TOKEN: ${{ inputs.aws_session_token }}
-        AWS_PROFILE_NAME: ${{ inputs.aws_profile_name }}
-        AWS_ROLE_NAME: ${{ inputs.aws_role_name }}
-        AWS_SESSION_NAME: ${{ inputs.aws_session_name }}
-        AWS_WEB_IDENTITY_TOKEN: ${{ inputs.aws_web_identity_token }}
-        AWS_BEDROCK_RUNTIME_ENDPOINT: ${{ inputs.aws_bedrock_runtime_endpoint }}
         # --- Agent Configuration ---
         AGENT_MODEL: ${{ inputs.agent_model }}
         MAX_EVENTS_PER_AGENT: ${{ inputs.max_events_per_agent }}
