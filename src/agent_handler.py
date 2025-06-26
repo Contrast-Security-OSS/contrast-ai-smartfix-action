@@ -254,6 +254,7 @@ async def process_agent_run(runner, session, user_query, remediation_id: str, ag
                 await events_async.aclose()
             except:
                 pass
+        error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
     finally:
         # Ensure we clean up the event stream
         if events_async:
@@ -577,3 +578,5 @@ async def _run_agent_internal_with_prompts(agent_type: str, repo_root: Path, que
     summary = await process_agent_run(runner, session, query, remediation_id, agent_type)
     
     return summary
+
+# %%
