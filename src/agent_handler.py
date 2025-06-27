@@ -185,7 +185,7 @@ async def process_agent_run(runner, session, user_query, remediation_id: str, ag
             if event_count > max_events_limit:
                 log(f"\n⚠️ Reached maximum event limit of {max_events_limit} for {agent_type.upper()} agent. Stopping agent execution early.")
                 final_response += f"\n\n⚠️ Note: Agent execution was terminated early after reaching the maximum limit of {max_events_limit} events. The solution may be incomplete."
-                await events_async.aclose()
+                await _cleanup_event_stream(events_async)
                 # Throw exception to fully abort processing
                 error_exit(remediation_id, FailureCategory.EXCEEDED_AGENT_EVENTS.value)
 
@@ -254,19 +254,16 @@ async def process_agent_run(runner, session, user_query, remediation_id: str, ag
         agent_run_result = "SUCCESS"
     except Exception as e:
         log(f"Error during agent execution: {str(e)}", is_error=True)
-        if events_async:
-            try:
-                await events_async.aclose()
-            except:
-                pass
-        error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
+        await _cleanup_event_stream(events_async, timeout=3.0)
+        
+        # Check for anyio cancel scope errors which can be ignored
+        if "cancel scope" in str(e) and "different task" in str(e):
+            log("Encountered anyio cancel scope error, but agent execution may have completed successfully", is_warning=True)
+        else:
+            error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
     finally:
         # Ensure we clean up the event stream
-        if events_async:
-            try:
-                await events_async.aclose()
-            except:
-                pass
+        await _cleanup_event_stream(events_async)
                 
         debug_log(f"Closing MCP server connections for {agent_type.upper()} agent...")
         log(f"{agent_type.upper()} agent run finished.")
@@ -288,6 +285,98 @@ async def process_agent_run(runner, session, user_query, remediation_id: str, ag
 
     return final_response
 
+async def _cleanup_event_stream(events_async, timeout=5.0):
+    """
+    Helper function to safely clean up an async event stream.
+    Handles timeout and anyio cancel scope errors gracefully.
+    
+    Args:
+        events_async: The async event stream to close
+        timeout: Timeout in seconds for the close operation
+    """
+    if not events_async:
+        return
+        
+    try:
+        # Use a timeout to prevent hanging on aclose
+        try:
+            # Create a task for aclose with a timeout
+            close_task = asyncio.create_task(events_async.aclose())
+            await asyncio.wait_for(close_task, timeout=timeout)
+        except asyncio.TimeoutError:
+            debug_log(f"Warning: Timeout while closing agent event stream")
+        except RuntimeError as re:
+            # Handle anyio-specific cancel scope errors
+            if "cancel scope" in str(re) or "different task" in str(re):
+                debug_log(f"Suppressing expected anyio cancel scope error during cleanup")
+            else:
+                raise re
+    except Exception as e:
+        debug_log(f"Warning: Error during agent event stream cleanup: {str(e)}")
+
+def _run_agent_in_event_loop(coroutine_func, *args, **kwargs):
+    """
+    Wrapper function to run an async coroutine in a controlled event loop.
+    Handles proper setup and cleanup of the event loop and tasks.
+    
+    Args:
+        coroutine_func: The async function to run
+        *args, **kwargs: Arguments to pass to the coroutine function
+        
+    Returns:
+        The result returned by the coroutine
+    """
+    result = None
+    
+    # Create a new event loop for this function call
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    
+    try:
+        # Create and run the task
+        task = loop.create_task(coroutine_func(*args, **kwargs))
+        result = loop.run_until_complete(task)
+    except Exception as e:
+        # Cancel the task if there was an error
+        if 'task' in locals() and not task.done():
+            task.cancel()
+            # Give it a chance to complete cancellation
+            try:
+                loop.run_until_complete(task)
+            except (asyncio.CancelledError, Exception):
+                pass
+        raise e  # Re-raise the exception
+    finally:
+        # Clean up any remaining tasks
+        pending = asyncio.all_tasks(loop)
+        if pending:
+            # Cancel all pending tasks
+            for task in pending:
+                if not task.done():
+                    task.cancel()
+            
+            # Give tasks a chance to terminate
+            try:
+                # Use a timeout to avoid hanging
+                wait_task = asyncio.wait(pending, timeout=2.0, return_when=asyncio.ALL_COMPLETED)
+                loop.run_until_complete(wait_task)
+            except (asyncio.CancelledError, Exception):
+                pass
+        
+        # Shut down asyncgens and close the loop properly
+        try:
+            loop.run_until_complete(loop.shutdown_asyncgens())
+        except Exception:
+            pass
+        
+        # Close the loop
+        try:
+            loop.close()
+        except Exception:
+            pass
+    
+    return result
+
 def run_ai_fix_agent(repo_root: Path, fix_system_prompt: str, fix_user_prompt: str, remediation_id: str) -> str:
     """Synchronously runs the AI agent to analyze and apply a fix using API-provided prompts."""
 
@@ -304,7 +393,15 @@ def run_ai_fix_agent(repo_root: Path, fix_system_prompt: str, fix_user_prompt: s
     debug_log(f"Skip Writing Security Test: {config.SKIP_WRITING_SECURITY_TEST}")
 
     try:
-        agent_summary_str = asyncio.run(_run_agent_internal_with_prompts('fix', repo_root, processed_user_prompt, fix_system_prompt, remediation_id))
+        # Use the wrapper function to run the agent in a controlled event loop
+        agent_summary_str = _run_agent_in_event_loop(
+            _run_agent_internal_with_prompts,
+            'fix', 
+            repo_root, 
+            processed_user_prompt, 
+            fix_system_prompt, 
+            remediation_id
+        )
         
         log("--- AI Agent Fix Attempt Completed ---")
         debug_log("\n--- Full Agent Summary ---")
@@ -428,8 +525,15 @@ def run_qa_agent(build_output: str, changed_files: List[str], build_command: str
     qa_summary = f"Error during QA agent execution: Unknown error" # Default error
 
     try:
-        # Run the agent internally, using API prompts if available
-        qa_summary = asyncio.run(_run_agent_internal_with_prompts('qa', repo_root, qa_query, qa_system_prompt, remediation_id))
+        # Use the wrapper function to run the agent in a controlled event loop
+        qa_summary = _run_agent_in_event_loop(
+            _run_agent_internal_with_prompts,
+            'qa', 
+            repo_root, 
+            qa_query, 
+            qa_system_prompt, 
+            remediation_id
+        )
         
         log("--- QA Agent Fix Attempt Completed ---")
         debug_log("\n--- Raw QA Agent Summary ---")
@@ -502,6 +606,20 @@ def process_fix_user_prompt(fix_user_prompt: str) -> str:
 async def _run_agent_internal_with_prompts(agent_type: str, repo_root: Path, query: str, system_prompt: str, remediation_id: str) -> str:
     """Internal helper to run either fix or QA agent with API-provided prompts. Returns summary."""
     debug_log(f"Using Agent Model ID: {config.AGENT_MODEL}")
+
+    # Suppress the specific anyio error that occurs during cleanup
+    import logging
+    anyio_logger = logging.getLogger("anyio")
+    anyio_logger.setLevel(logging.ERROR)
+    
+    # Add a filter to specifically ignore the cancel scope error
+    class IgnoreCancelScopeFilter(logging.Filter):
+        def filter(self, record):
+            if "exit cancel scope in a different task" in record.getMessage():
+                return False
+            return True
+    
+    anyio_logger.addFilter(IgnoreCancelScopeFilter())
 
     if not ADK_AVAILABLE:
         log(f"FATAL: {agent_type.capitalize()} Agent execution skipped: ADK libraries not available (import failed).")
