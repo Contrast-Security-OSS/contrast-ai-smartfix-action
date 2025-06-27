@@ -197,6 +197,7 @@ async def process_agent_run(runner, session, user_query, remediation_id: str, ag
             
             # Track total tokens from event usage metadata if available
             if event.usage_metadata is not None and hasattr(event.usage_metadata, "total_token_count"):
+                debug_log(f"Event #{event_count} usage metadata: {event.usage_metadata}")
                 total_tokens = event.usage_metadata.total_token_count
             
             if event.content:
