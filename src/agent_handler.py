@@ -151,6 +151,7 @@ async def process_agent_run(runner, session, user_query, remediation_id: str, ag
     event_count = 0
     total_tokens = 0
     prompt_tokens = 0
+    output_tokens = 0
     final_response = "AI agent did not provide a final summary."
     max_events_limit = config.MAX_EVENTS_PER_AGENT
     events_async = None
@@ -202,6 +203,8 @@ async def process_agent_run(runner, session, user_query, remediation_id: str, ag
                     total_tokens = event.usage_metadata.total_token_count
                 if hasattr(event.usage_metadata, "prompt_token_count"):
                     prompt_tokens = event.usage_metadata.prompt_token_count
+                if total_tokens > 0 and prompt_tokens > 0:
+                    output_tokens = total_tokens - prompt_tokens
             
             if event.content:
                 message_text = ""
@@ -212,7 +215,7 @@ async def process_agent_run(runner, session, user_query, remediation_id: str, ag
 
                 if message_text:
                     log(f"\n*** {agent_type.upper()} Agent Message: \033[1;36m {message_text} \033[0m")
-                    log(f"Tokens (running counts). prompt tokens: {prompt_tokens}, total tokens: {total_tokens}")
+                    log(f"Tokens (running counts). prompt tokens: {prompt_tokens}, output tokens {output_tokens}, total tokens: {total_tokens}")
                     final_response = message_text
                     if agent_event_telemetry is not None:
                         # Directly assign toolCalls rather than appending
