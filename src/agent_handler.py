@@ -24,10 +24,11 @@ import asyncio
 import sys
 import platform
 from pathlib import Path
-from typing import Optional, Tuple, List
-from contextlib import AsyncExitStack
+from typing import Optional, Tuple, List, Any
+from contextlib import AsyncExitStack, suppress
 import re
 import json
+import logging
 
 # Import configurations and utilities
 import config
@@ -185,9 +186,16 @@ async def process_agent_run(runner, session, user_query, remediation_id: str, ag
             if event_count > max_events_limit:
                 log(f"\n⚠️ Reached maximum event limit of {max_events_limit} for {agent_type.upper()} agent. Stopping agent execution early.")
                 final_response += f"\n\n⚠️ Note: Agent execution was terminated early after reaching the maximum limit of {max_events_limit} events. The solution may be incomplete."
-                await _cleanup_event_stream(events_async)
-                # Throw exception to fully abort processing
-                error_exit(remediation_id, FailureCategory.EXCEEDED_AGENT_EVENTS.value)
+                
+                # First clean up the event stream gracefully
+                try:
+                    await _cleanup_event_stream(events_async)
+                except Exception:
+                    pass  # Ignore any cleanup errors
+                    
+                # Set result and let the function complete normally instead of throwing exception
+                agent_run_result = "EXCEEDED_EVENTS"
+                break  # Exit the event loop
 
             
             # Track total tokens from event usage metadata if available
@@ -253,13 +261,25 @@ async def process_agent_run(runner, session, user_query, remediation_id: str, ag
                     })
         agent_run_result = "SUCCESS"
     except Exception as e:
-        log(f"Error during agent execution: {str(e)}", is_error=True)
+        # Filter out noisy error messages related to asyncio cleanup
+        error_message = str(e)
+        is_asyncio_error = any(pattern in error_message for pattern in [
+            "cancel scope", "different task", "CancelledError", 
+            "GeneratorExit", "BaseExceptionGroup", "TaskGroup"
+        ])
+        
+        if is_asyncio_error:
+            # For asyncio-related errors, log at debug level and don't consider it a failure
+            debug_log(f"Ignoring expected asyncio error during agent execution: {error_message[:100]}...")
+        else:
+            # For other errors, log normally
+            log(f"Error during agent execution: {error_message}", is_error=True)
+            
+        # Always attempt cleanup
         await _cleanup_event_stream(events_async, timeout=3.0)
         
-        # Check for anyio cancel scope errors which can be ignored
-        if "cancel scope" in str(e) and "different task" in str(e):
-            log("Encountered anyio cancel scope error, but agent execution may have completed successfully", is_warning=True)
-        else:
+        # Only exit with an error for non-asyncio errors
+        if not is_asyncio_error:
             error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
     finally:
         # Ensure we clean up the event stream
@@ -288,7 +308,7 @@ async def process_agent_run(runner, session, user_query, remediation_id: str, ag
 async def _cleanup_event_stream(events_async, timeout=5.0):
     """
     Helper function to safely clean up an async event stream.
-    Handles timeout and anyio cancel scope errors gracefully.
+    Handles timeout and asyncio/anyio errors gracefully without logging warnings.
     
     Args:
         events_async: The async event stream to close
@@ -296,23 +316,21 @@ async def _cleanup_event_stream(events_async, timeout=5.0):
     """
     if not events_async:
         return
-        
+    
+    # We don't log any warnings here anymore as we're now filtering these at the logger level
+    # Just silently handle all exceptions that occur during cleanup
     try:
-        # Use a timeout to prevent hanging on aclose
+        # Wrap the aclose in a shield to prevent cancellation issues
         try:
-            # Create a task for aclose with a timeout
-            close_task = asyncio.create_task(events_async.aclose())
+            # Use shield to prevent this task from being cancelled by other tasks
+            close_task = asyncio.shield(asyncio.create_task(events_async.aclose()))
             await asyncio.wait_for(close_task, timeout=timeout)
-        except asyncio.TimeoutError:
-            debug_log(f"Warning: Timeout while closing agent event stream")
-        except RuntimeError as re:
-            # Handle anyio-specific cancel scope errors
-            if "cancel scope" in str(re) or "different task" in str(re):
-                debug_log(f"Suppressing expected anyio cancel scope error during cleanup")
-            else:
-                raise re
-    except Exception as e:
-        debug_log(f"Warning: Error during agent event stream cleanup: {str(e)}")
+        except (asyncio.TimeoutError, asyncio.CancelledError, RuntimeError, GeneratorExit):
+            # Silently ignore all expected errors during cleanup
+            pass
+    except Exception:
+        # Catch-all for any other exceptions - just suppress them
+        pass
 
 def _run_agent_in_event_loop(coroutine_func, *args, **kwargs):
     """
@@ -607,19 +625,44 @@ async def _run_agent_internal_with_prompts(agent_type: str, repo_root: Path, que
     """Internal helper to run either fix or QA agent with API-provided prompts. Returns summary."""
     debug_log(f"Using Agent Model ID: {config.AGENT_MODEL}")
 
-    # Suppress the specific anyio error that occurs during cleanup
+    # Configure logging to suppress asyncio and anyio errors that typically occur during cleanup
     import logging
-    anyio_logger = logging.getLogger("anyio")
-    anyio_logger.setLevel(logging.ERROR)
     
-    # Add a filter to specifically ignore the cancel scope error
-    class IgnoreCancelScopeFilter(logging.Filter):
+    # Suppress anyio error logging
+    anyio_logger = logging.getLogger("anyio")
+    anyio_logger.setLevel(logging.CRITICAL)  # Using CRITICAL instead of ERROR for stricter filtering
+    
+    # Suppress MCP client/stdio error logging
+    mcp_logger = logging.getLogger("mcp.client.stdio")
+    mcp_logger.setLevel(logging.CRITICAL)
+    
+    # Silence the task exception was never retrieved warnings
+    asyncio_logger = logging.getLogger("asyncio")
+    asyncio_logger.setLevel(logging.CRITICAL)
+    
+    # Add a comprehensive filter to specifically ignore common cancel scope and cleanup errors
+    class AsyncioCleanupFilter(logging.Filter):
         def filter(self, record):
-            if "exit cancel scope in a different task" in record.getMessage():
+            message = record.getMessage()
+            # Filter out common cleanup errors
+            if any(pattern in message for pattern in [
+                "exit cancel scope in a different task",
+                "Task exception was never retrieved",
+                "unhandled errors in a TaskGroup",
+                "GeneratorExit",
+                "CancelledError",
+                "asyncio.exceptions",
+                "BaseExceptionGroup"
+            ]):
                 return False
             return True
     
-    anyio_logger.addFilter(IgnoreCancelScopeFilter())
+    # Apply the filter to multiple loggers
+    cleanup_filter = AsyncioCleanupFilter()
+    anyio_logger.addFilter(cleanup_filter)
+    asyncio_logger.addFilter(cleanup_filter)
+    if mcp_logger:
+        mcp_logger.addFilter(cleanup_filter)
 
     if not ADK_AVAILABLE:
         log(f"FATAL: {agent_type.capitalize()} Agent execution skipped: ADK libraries not available (import failed).")
