@@ -122,7 +122,7 @@ async def get_mcp_tools(target_folder: Path, remediation_id: str) -> MCPToolset:
                         target_folder_str,
                     ],
                 ),
-                timeout=5,
+                timeout=50,
             )
         )
 
