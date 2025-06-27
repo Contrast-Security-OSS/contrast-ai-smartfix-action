@@ -107,6 +107,10 @@ async def get_mcp_tools(target_folder: Path, remediation_id: str) -> MCPToolset:
                 
         except Exception as e:
             debug_log(f"Error during Windows prerequisite checks: {e}")
+
+    # Filesystem MCP Server
+    try:
+        debug_log("Connecting to MCP Filesystem server...")
             
         fs_tools = MCPToolset(
             connection_params=StdioConnectionParams(
