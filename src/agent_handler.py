@@ -73,40 +73,6 @@ async def get_mcp_tools(target_folder: Path, remediation_id: str) -> MCPToolset:
     """Connects to MCP servers (Filesystem)"""
     debug_log("Attempting to connect to MCP servers...")
     target_folder_str = str(target_folder)
-    
-    # Log platform and event loop information for debugging
-    debug_log(f"Platform: {platform.system()}")
-    debug_log(f"Event loop policy: {type(asyncio.get_event_loop_policy()).__name__}")
-    debug_log(f"Target folder: {target_folder_str}")
-
-    # On Windows, check for Node.js and npm/npx prerequisites
-    # These should already be verified in action.yml, but we'll log versions as a sanity check
-    if platform.system() == 'Windows':
-        debug_log("Performing Windows-specific prerequisite checks...")
-        try:
-            import subprocess  # Import subprocess explicitly here
-            
-            # Check Node.js version
-            try:
-                node_process = subprocess.run(['node', '--version'], 
-                                           capture_output=True, text=True, check=False)
-                if node_process.returncode == 0:
-                    debug_log(f"Node.js version: {node_process.stdout.strip()}")
-                else:
-                    log(f"Warning: Node.js check failed: {node_process.stderr.strip()}", is_error=True)
-            except Exception as e:
-                debug_log(f"Error checking Node.js: {e}")
-                
-            # Warm up npx.cmd command to ensure it's ready
-            try:
-                debug_log("Running npx.cmd help to warm up the command...")
-                subprocess.run(['npx.cmd', '--version'], 
-                             capture_output=True, text=True, check=False, timeout=5)
-            except Exception as e:
-                debug_log(f"Error running npx help: {e}")
-                
-        except Exception as e:
-            debug_log(f"Error during Windows prerequisite checks: {e}")
 
     # Filesystem MCP Server
     try:
@@ -127,50 +93,19 @@ async def get_mcp_tools(target_folder: Path, remediation_id: str) -> MCPToolset:
         )
 
         debug_log("Getting tools list from Filesystem MCP server...")
-        # Add a timeout for the get_tools operation using asyncio.wait_for
-        # This will ensure we don't hang indefinitely waiting for tools
-        try:
-            # Use a longer timeout on Windows
-            timeout_seconds = 30.0 if platform.system() == 'Windows' else 10.0
-            debug_log(f"Using {timeout_seconds} second timeout for get_tools")
-            
-            # Wrap the get_tools call in wait_for to apply a timeout
-            tools_list = await asyncio.wait_for(fs_tools.get_tools(), timeout=timeout_seconds)
-            
-            debug_log(f"Connected to Filesystem MCP server, got {len(tools_list)} tools")
-            for tool in tools_list:
-                if hasattr(tool, 'name'):
-                    debug_log(f"  - Filesystem Tool: {tool.name}")
-                else:
-                    debug_log(f"  - Filesystem Tool: (Name attribute missing)")
-                    
-        except asyncio.TimeoutError:
-            log(f"FATAL: Timeout waiting for MCP tools list after {timeout_seconds} seconds", is_error=True)
-            log("This often indicates npx is having trouble finding or starting the MCP filesystem server.", is_error=True)
-            
-            # Add diagnostics for Windows
-            if platform.system() == 'Windows':
-                try:
-                    import subprocess
-                    log("Running npx diagnostics on Windows:", is_error=True)
-                    # Check if npx is available
-                    try:
-                        result = subprocess.run(['where', 'npx'], capture_output=True, text=True)
-                        log(f"npx location: {result.stdout}", is_error=True)
-                    except Exception as npx_e:
-                        log(f"Error checking npx location: {npx_e}", is_error=True)
-                        
-                    # Check Node.js version
-                    try:
-                        result = subprocess.run(['node', '--version'], capture_output=True, text=True)
-                        log(f"Node.js version: {result.stdout}", is_error=True)
-                    except Exception as node_e:
-                        log(f"Error checking Node.js version: {node_e}", is_error=True)
-                except Exception as diag_e:
-                    log(f"Error running diagnostics: {diag_e}", is_error=True)
-                    
-            log("No filesystem tools available - cannot make code changes.", is_error=True)
-            error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
+        # Use a longer timeout on Windows
+        timeout_seconds = 30.0 if platform.system() == 'Windows' else 10.0
+        debug_log(f"Using {timeout_seconds} second timeout for get_tools")
+        
+        # Wrap the get_tools call in wait_for to apply a timeout
+        tools_list = await asyncio.wait_for(fs_tools.get_tools(), timeout=timeout_seconds)
+        
+        debug_log(f"Connected to Filesystem MCP server, got {len(tools_list)} tools")
+        for tool in tools_list:
+            if hasattr(tool, 'name'):
+                debug_log(f"  - Filesystem Tool: {tool.name}")
+            else:
+                debug_log(f"  - Filesystem Tool: (Name attribute missing)")
             
     except NameError as ne:
         log(f"FATAL: Error initializing MCP Filesystem server (likely ADK setup issue): {ne}", is_error=True)
@@ -489,16 +424,6 @@ def _run_agent_in_event_loop(coroutine_func, *args, **kwargs):
         # Create and run the task
         task = loop.create_task(coroutine_func(*args, **kwargs))
         result = loop.run_until_complete(task)
-    except Exception as e:
-        # Cancel the task if there was an error
-        if 'task' in locals() and not task.done():
-            task.cancel()
-            # Give it a chance to complete cancellation
-            try:
-                loop.run_until_complete(task)
-            except (asyncio.CancelledError, Exception):
-                pass
-        raise e  # Re-raise the exception
     finally:
         # Clean up any remaining tasks
         pending = asyncio.all_tasks(loop)
