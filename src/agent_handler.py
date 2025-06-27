@@ -22,11 +22,14 @@ import warnings
 
 import asyncio
 import sys
+import os
 import platform
+import subprocess
 from pathlib import Path
 from typing import Optional, Tuple, List
 from contextlib import AsyncExitStack
 import re
+import traceback
 
 # Import configurations and utilities
 import config
@@ -72,30 +75,148 @@ async def get_mcp_tools(target_folder: Path, remediation_id: str) -> MCPToolset:
     debug_log(f"Event loop policy: {type(asyncio.get_event_loop_policy()).__name__}")
     debug_log(f"Target folder: {target_folder_str}")
 
+    # On Windows, check for Node.js and npm/npx prerequisites
+    if platform.system() == 'Windows':
+        debug_log("Performing Windows-specific prerequisite checks...")
+        try:
+            # Check Node.js version
+            node_process = subprocess.run(['node', '--version'], 
+                                         capture_output=True, text=True, check=False)
+            if node_process.returncode == 0:
+                debug_log(f"Node.js version: {node_process.stdout.strip()}")
+            else:
+                log(f"Warning: Node.js check failed: {node_process.stderr.strip()}", is_error=True)
+                
+            # Check npm version
+            npm_process = subprocess.run(['npm', '--version'], 
+                                        capture_output=True, text=True, check=False)
+            if npm_process.returncode == 0:
+                debug_log(f"npm version: {npm_process.stdout.strip()}")
+            else:
+                log(f"Warning: npm check failed: {npm_process.stderr.strip()}", is_error=True)
+                
+            # Check npx version
+            npx_process = subprocess.run(['npx', '--version'], 
+                                        capture_output=True, text=True, check=False)
+            if npx_process.returncode == 0:
+                debug_log(f"npx version: {npx_process.stdout.strip()}")
+            else:
+                log(f"Warning: npx check failed: {npx_process.stderr.strip()}", is_error=True)
+                
+            debug_log("Running npx help to warm up the command...")
+            subprocess.run(['npx', '--help'], 
+                          capture_output=True, text=True, check=False, timeout=5)
+        except Exception as e:
+            debug_log(f"Error during Windows prerequisite checks: {e}")
+
     # Filesystem MCP Server
     try:
         debug_log("Connecting to MCP Filesystem server...")
-        fs_tools=MCPToolset(
-            connection_params=StdioServerParameters(
-                command='npx',
-                args=["-y", "@modelcontextprotocol/server-filesystem@2025.1.14", target_folder_str],
+        
+        # On Windows, use shell=True option through environment settings
+        # This can help with PATH resolution issues on Windows
+        env = None
+        cmd_args = ["-y", "@modelcontextprotocol/server-filesystem@2025.1.14", target_folder_str]
+        
+        if platform.system() == 'Windows':
+            import os
+            # Preserve existing environment and PATH
+            env = os.environ.copy()
+            
+            # Add explicit paths that might help npx resolution on Windows
+            if 'PATH' in env:
+                # Add common Node.js installation paths
+                extra_paths = [
+                    os.path.join(os.getcwd(), 'node_modules', '.bin'),
+                    r'C:\Program Files\nodejs',
+                    r'C:\Program Files (x86)\nodejs',
+                    os.path.join(os.path.expanduser('~'), 'AppData', 'Roaming', 'npm')
+                ]
+                
+                for extra_path in extra_paths:
+                    if os.path.exists(extra_path):
+                        env['PATH'] = f"{extra_path}{os.pathsep}{env['PATH']}"
+                        debug_log(f"Added to PATH: {extra_path}")
+                        
+            debug_log(f"Using Windows-specific environment with extended PATH")
+            
+            # Try to find npx explicitly
+            npx_cmd = 'npx.cmd'  # Default for Windows
+            if os.path.exists(r'C:\Program Files\nodejs\npx.cmd'):
+                npx_cmd = r'C:\Program Files\nodejs\npx.cmd'
+                debug_log(f"Found npx at: {npx_cmd}")
+            
+            fs_tools = MCPToolset(
+                connection_params=StdioServerParameters(
+                    command=npx_cmd,
+                    args=cmd_args,
+                    env=env,  # Pass our custom environment
+                )
             )
-        )
+        else:
+            # For non-Windows platforms, use the original command
+            fs_tools = MCPToolset(
+                connection_params=StdioServerParameters(
+                    command='npx',
+                    args=cmd_args,
+                )
+            )
 
         debug_log("Getting tools list from Filesystem MCP server...")
-        tools_list = await fs_tools.get_tools()
-        debug_log(f"Connected to Filesystem MCP server, got {len(tools_list)} tools")
-        for tool in tools_list:
-            if hasattr(tool, 'name'):
-                debug_log(f"  - Filesystem Tool: {tool.name}")
-            else:
-                debug_log(f"  - Filesystem Tool: (Name attribute missing)")
+        # Add a timeout for the get_tools operation using asyncio.wait_for
+        # This will ensure we don't hang indefinitely waiting for tools
+        try:
+            # Use a longer timeout on Windows
+            timeout_seconds = 30.0 if platform.system() == 'Windows' else 10.0
+            debug_log(f"Using {timeout_seconds} second timeout for get_tools")
+            
+            # Wrap the get_tools call in wait_for to apply a timeout
+            tools_list = await asyncio.wait_for(fs_tools.get_tools(), timeout=timeout_seconds)
+            
+            debug_log(f"Connected to Filesystem MCP server, got {len(tools_list)} tools")
+            for tool in tools_list:
+                if hasattr(tool, 'name'):
+                    debug_log(f"  - Filesystem Tool: {tool.name}")
+                else:
+                    debug_log(f"  - Filesystem Tool: (Name attribute missing)")
+                    
+        except asyncio.TimeoutError:
+            log(f"FATAL: Timeout waiting for MCP tools list after {timeout_seconds} seconds", is_error=True)
+            log("This often indicates npx is having trouble finding or starting the MCP filesystem server.", is_error=True)
+            
+            # Add diagnostics for Windows
+            if platform.system() == 'Windows':
+                try:
+                    import subprocess
+                    log("Running npx diagnostics on Windows:", is_error=True)
+                    # Check if npx is available
+                    try:
+                        result = subprocess.run(['where', 'npx'], capture_output=True, text=True)
+                        log(f"npx location: {result.stdout}", is_error=True)
+                    except Exception as npx_e:
+                        log(f"Error checking npx location: {npx_e}", is_error=True)
+                        
+                    # Check Node.js version
+                    try:
+                        result = subprocess.run(['node', '--version'], capture_output=True, text=True)
+                        log(f"Node.js version: {result.stdout}", is_error=True)
+                    except Exception as node_e:
+                        log(f"Error checking Node.js version: {node_e}", is_error=True)
+                except Exception as diag_e:
+                    log(f"Error running diagnostics: {diag_e}", is_error=True)
+                    
+            log("No filesystem tools available - cannot make code changes.", is_error=True)
+            error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
+            
     except NameError as ne:
         log(f"FATAL: Error initializing MCP Filesystem server (likely ADK setup issue): {ne}", is_error=True)
         log("No filesystem tools available - cannot make code changes.", is_error=True)
         error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
     except Exception as e:
-        log(f"FATAL: Failed to connect to Filesystem MCP server: {e}", is_error=True)
+        log(f"FATAL: Failed to connect to Filesystem MCP server: {str(e)}", is_error=True)
+        # Get better error information when possible
+        if hasattr(e, '__traceback__'):
+            log(f"Error details: {traceback.format_exc()}", is_error=True)
         log("No filesystem tools available - cannot make code changes.", is_error=True)
         error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
 
@@ -356,14 +477,38 @@ def _run_agent_in_event_loop(coroutine_func, *args, **kwargs):
     """
     result = None
     
-    # Set the appropriate event loop policy for Windows
-    # This is done outside the coroutine as well to ensure it's set before loop creation
-    if platform.system() == 'Windows':
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    # Platform-specific setup
+    is_windows = platform.system() == 'Windows'
+    
+    # Ensure we have the appropriate event loop policy, especially for Windows
+    if is_windows:
+        debug_log("Setting WindowsSelectorEventLoopPolicy for Windows compatibility")
+        try:
+            # Close any existing loop first
+            try:
+                existing_loop = asyncio.get_event_loop()
+                if not existing_loop.is_closed():
+                    debug_log("Closing existing event loop")
+                    existing_loop.close()
+            except RuntimeError:
+                pass  # No current loop, that's fine
+                
+            # Set the selector policy for Windows
+            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+            debug_log("Successfully set Windows event loop policy")
+        except Exception as e:
+            debug_log(f"Warning: Error setting Windows event loop policy: {e}")
+    
+    debug_log(f"Creating new event loop with policy: {type(asyncio.get_event_loop_policy()).__name__}")
     
     # Create a new event loop for this function call
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
+    
+    # For Windows, add extra debugging info
+    if is_windows:
+        debug_log(f"Created loop type: {type(loop).__name__}")
+        debug_log(f"Is ProactorEventLoop: {isinstance(loop, getattr(asyncio, 'ProactorEventLoop', type(None)))}")
     
     try:
         # Create and run the task
@@ -643,8 +788,27 @@ async def _run_agent_internal_with_prompts(agent_type: str, repo_root: Path, que
     # Set the correct event loop policy for Windows
     # This is crucial for the MCP filesystem server connections to work on Windows
     if platform.system() == 'Windows':
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-        debug_log("Set Windows-specific event loop policy (WindowsSelectorEventLoopPolicy)")
+        try:
+            # First ensure there's no active event loop that might conflict
+            try:
+                loop = asyncio.get_event_loop()
+                if not loop.is_closed():
+                    debug_log("Closing existing event loop before setting policy")
+                    loop.close()
+            except RuntimeError:
+                pass  # No event loop, which is fine
+                
+            # Set the selector event loop policy, important for subprocess management on Windows
+            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+            debug_log("Set Windows-specific event loop policy (WindowsSelectorEventLoopPolicy)")
+            
+            # Create a fresh event loop with the new policy and set it as active
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            debug_log("Created and set new event loop with Windows policy")
+        except Exception as e:
+            debug_log(f"Warning: Error setting Windows event loop policy: {e}")
+            debug_log("Will continue with default event loop policy")
 
     # Configure logging to suppress asyncio and anyio errors that typically occur during cleanup
     import logging
