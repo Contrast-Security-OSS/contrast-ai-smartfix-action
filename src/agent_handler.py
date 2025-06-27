@@ -25,6 +25,10 @@ import sys
 import os
 import platform
 import subprocess
+
+# Explicitly import Windows-specific event loop policy to ensure proper subprocess support
+if platform.system() == 'Windows':
+    from asyncio import WindowsProactorEventLoopPolicy
 from pathlib import Path
 from typing import Optional, Tuple, List
 from contextlib import AsyncExitStack
@@ -79,33 +83,56 @@ async def get_mcp_tools(target_folder: Path, remediation_id: str) -> MCPToolset:
     if platform.system() == 'Windows':
         debug_log("Performing Windows-specific prerequisite checks...")
         try:
-            # Check Node.js version
-            node_process = subprocess.run(['node', '--version'], 
-                                         capture_output=True, text=True, check=False)
-            if node_process.returncode == 0:
-                debug_log(f"Node.js version: {node_process.stdout.strip()}")
-            else:
-                log(f"Warning: Node.js check failed: {node_process.stderr.strip()}", is_error=True)
+            import subprocess  # Import subprocess explicitly here
+            
+            try:
+                # Check Node.js version
+                node_process = subprocess.run(['node', '--version'], 
+                                            capture_output=True, text=True, check=False)
+                if node_process.returncode == 0:
+                    debug_log(f"Node.js version: {node_process.stdout.strip()}")
+                else:
+                    log(f"Warning: Node.js check failed: {node_process.stderr.strip()}", is_error=True)
+            except Exception as e:
+                debug_log(f"Error checking Node.js: {e}")
+                    
+            try:
+                # Check npm version
+                npm_process = subprocess.run(['npm', '--version'], 
+                                            capture_output=True, text=True, check=False)
+                if npm_process.returncode == 0:
+                    debug_log(f"npm version: {npm_process.stdout.strip()}")
+                else:
+                    log(f"Warning: npm check failed: {npm_process.stderr.strip()}", is_error=True)
+            except Exception as e:
+                debug_log(f"Error checking npm: {e}")
+                    
+            try:
+                # Check npx version and location
+                npx_process = subprocess.run(['where', 'npx'], 
+                                            capture_output=True, text=True, check=False)
+                if npx_process.returncode == 0:
+                    debug_log(f"npx location(s): {npx_process.stdout.strip()}")
+                    
+                    # Now check version
+                    npx_ver = subprocess.run(['npx', '--version'], 
+                                            capture_output=True, text=True, check=False)
+                    if npx_ver.returncode == 0:
+                        debug_log(f"npx version: {npx_ver.stdout.strip()}")
+                    else:
+                        log(f"Warning: npx version check failed: {npx_ver.stderr.strip()}", is_error=True)
+                else:
+                    log(f"Warning: npx not found in PATH", is_error=True)
+            except Exception as e:
+                debug_log(f"Error checking npx: {e}")
                 
-            # Check npm version
-            npm_process = subprocess.run(['npm', '--version'], 
-                                        capture_output=True, text=True, check=False)
-            if npm_process.returncode == 0:
-                debug_log(f"npm version: {npm_process.stdout.strip()}")
-            else:
-                log(f"Warning: npm check failed: {npm_process.stderr.strip()}", is_error=True)
+            try:
+                debug_log("Running npx help to warm up the command...")
+                subprocess.run(['npx', '--help'], 
+                              capture_output=True, text=True, check=False, timeout=5)
+            except Exception as e:
+                debug_log(f"Error running npx help: {e}")
                 
-            # Check npx version
-            npx_process = subprocess.run(['npx', '--version'], 
-                                        capture_output=True, text=True, check=False)
-            if npx_process.returncode == 0:
-                debug_log(f"npx version: {npx_process.stdout.strip()}")
-            else:
-                log(f"Warning: npx check failed: {npx_process.stderr.strip()}", is_error=True)
-                
-            debug_log("Running npx help to warm up the command...")
-            subprocess.run(['npx', '--help'], 
-                          capture_output=True, text=True, check=False, timeout=5)
         except Exception as e:
             debug_log(f"Error during Windows prerequisite checks: {e}")
 
@@ -480,9 +507,9 @@ def _run_agent_in_event_loop(coroutine_func, *args, **kwargs):
     # Platform-specific setup
     is_windows = platform.system() == 'Windows'
     
-    # Ensure we have the appropriate event loop policy, especially for Windows
+    # On Windows, we must use the WindowsProactorEventLoopPolicy 
+    # The SelectorEventLoop on Windows doesn't support subprocesses, which are required for MCP
     if is_windows:
-        debug_log("Setting WindowsSelectorEventLoopPolicy for Windows compatibility")
         try:
             # Close any existing loop first
             try:
@@ -493,22 +520,33 @@ def _run_agent_in_event_loop(coroutine_func, *args, **kwargs):
             except RuntimeError:
                 pass  # No current loop, that's fine
                 
-            # Set the selector policy for Windows
-            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-            debug_log("Successfully set Windows event loop policy")
+            # Explicitly set the WindowsProactorEventLoopPolicy
+            # This ensures subprocesses will work on Windows
+            asyncio.set_event_loop_policy(WindowsProactorEventLoopPolicy())
+            debug_log("Explicitly set WindowsProactorEventLoopPolicy for subprocess support")
         except Exception as e:
-            debug_log(f"Warning: Error setting Windows event loop policy: {e}")
-    
-    debug_log(f"Creating new event loop with policy: {type(asyncio.get_event_loop_policy()).__name__}")
+            debug_log(f"Warning: Error handling Windows event loop policy: {e}")
     
     # Create a new event loop for this function call
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     
-    # For Windows, add extra debugging info
+    # For diagnostic purposes, log information about the loop
+    loop_policy_name = type(asyncio.get_event_loop_policy()).__name__
+    loop_type_name = type(loop).__name__
+    debug_log(f"Created new event loop: {loop_type_name} with policy: {loop_policy_name}")
+    
+    # On Windows, verify we're using the correct event loop type for subprocess support
     if is_windows:
-        debug_log(f"Created loop type: {type(loop).__name__}")
-        debug_log(f"Is ProactorEventLoop: {isinstance(loop, getattr(asyncio, 'ProactorEventLoop', type(None)))}")
+        if 'Proactor' not in loop_type_name:
+            log(f"WARNING: Current event loop {loop_type_name} is not a ProactorEventLoop, subprocesses may not work!", is_error=True)
+            log(f"Current event loop policy: {loop_policy_name}", is_error=True)
+    
+    # More detailed logging for Windows environments
+    if is_windows:
+        # Check if we have a ProactorEventLoop which is required for subprocess support on Windows
+        is_proactor = loop_type_name == 'ProactorEventLoop' or 'Proactor' in loop_type_name
+        debug_log(f"Windows event loop is ProactorEventLoop: {is_proactor} (required for subprocess support)")
     
     try:
         # Create and run the task
@@ -798,14 +836,16 @@ async def _run_agent_internal_with_prompts(agent_type: str, repo_root: Path, que
             except RuntimeError:
                 pass  # No event loop, which is fine
                 
-            # Set the selector event loop policy, important for subprocess management on Windows
-            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-            debug_log("Set Windows-specific event loop policy (WindowsSelectorEventLoopPolicy)")
+            # IMPORTANT: On Windows, we MUST use the ProactorEventLoop
+            # SelectorEventLoop doesn't support subprocesses on Windows
+            # Explicitly set the WindowsProactorEventLoopPolicy to ensure subprocess support
+            asyncio.set_event_loop_policy(WindowsProactorEventLoopPolicy())
+            debug_log("Explicitly set WindowsProactorEventLoopPolicy for subprocess support")
             
-            # Create a fresh event loop with the new policy and set it as active
+            # Create a fresh event loop with the WindowsProactorEventLoopPolicy
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            debug_log("Created and set new event loop with Windows policy")
+            debug_log(f"Created and set new event loop with Windows default policy: {type(loop).__name__}")
         except Exception as e:
             debug_log(f"Warning: Error setting Windows event loop policy: {e}")
             debug_log("Will continue with default event loop policy")
