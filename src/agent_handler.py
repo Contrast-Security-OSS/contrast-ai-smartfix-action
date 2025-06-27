@@ -51,7 +51,7 @@ try:
     from google.adk.models.lite_llm import LiteLlm
     from google.adk.runners import Runner
     from google.adk.sessions import InMemorySessionService
-    from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset, StdioServerParameters
+    from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset, StdioServerParameters, StdioConnectionParams
     from google.genai import types as genai_types
     ADK_AVAILABLE = True
     debug_log("ADK libraries loaded successfully.")
@@ -107,45 +107,20 @@ async def get_mcp_tools(target_folder: Path, remediation_id: str) -> MCPToolset:
                 
         except Exception as e:
             debug_log(f"Error during Windows prerequisite checks: {e}")
-
-    # Filesystem MCP Server
-    try:
-        debug_log("Connecting to MCP Filesystem server...")
-        
-        # On Windows, use shell=True option through environment settings
-        # This can help with PATH resolution issues on Windows
-        env = None
-        cmd_args = ["-y", "@modelcontextprotocol/server-filesystem@2025.1.14", target_folder_str]
-        
-        if platform.system() == 'Windows':
-            import os
-            # Preserve existing environment and PATH
-            env = os.environ.copy()
             
-            # Since we're verifying npm/npx availability in action.yml, 
-            # we can rely on npx.cmd being available in the PATH
-            
-            # On Windows, we need to use npx.cmd instead of just npx
-            npx_cmd = 'npx.cmd'  # Use the command extension on Windows
-            
-            debug_log(f"Using Windows-specific environment with standard PATH")
-            debug_log(f"Using npx command: {npx_cmd}")
-            
-            fs_tools = MCPToolset(
-                connection_params=StdioServerParameters(
-                    command=npx_cmd,
-                    args=cmd_args,
-                    env=env,  # Pass our environment with PATH
-                )
-            )
-        else:
-            # For non-Windows platforms, use the original command
-            fs_tools = MCPToolset(
-                connection_params=StdioServerParameters(
+        fs_tools = MCPToolset(
+            connection_params=StdioConnectionParams(
+                server_params=StdioServerParameters(
                     command='npx',
-                    args=cmd_args,
-                )
+                    args=[
+                        '-y',  # Arguments for the command
+                        '@modelcontextprotocol/server-filesystem@2025.1.14',
+                        target_folder_str,
+                    ],
+                ),
+                timeout=5,
             )
+        )
 
         debug_log("Getting tools list from Filesystem MCP server...")
         # Add a timeout for the get_tools operation using asyncio.wait_for
