@@ -22,6 +22,7 @@ import warnings
 
 import asyncio
 import sys
+import platform
 from pathlib import Path
 from typing import Optional, Tuple, List
 from contextlib import AsyncExitStack
@@ -65,6 +66,11 @@ async def get_mcp_tools(target_folder: Path, remediation_id: str) -> MCPToolset:
     """Connects to MCP servers (Filesystem)"""
     debug_log("Attempting to connect to MCP servers...")
     target_folder_str = str(target_folder)
+    
+    # Log platform and event loop information for debugging
+    debug_log(f"Platform: {platform.system()}")
+    debug_log(f"Event loop policy: {type(asyncio.get_event_loop_policy()).__name__}")
+    debug_log(f"Target folder: {target_folder_str}")
 
     # Filesystem MCP Server
     try:
@@ -350,6 +356,11 @@ def _run_agent_in_event_loop(coroutine_func, *args, **kwargs):
     """
     result = None
     
+    # Set the appropriate event loop policy for Windows
+    # This is done outside the coroutine as well to ensure it's set before loop creation
+    if platform.system() == 'Windows':
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    
     # Create a new event loop for this function call
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
@@ -628,6 +639,12 @@ def process_fix_user_prompt(fix_user_prompt: str) -> str:
 async def _run_agent_internal_with_prompts(agent_type: str, repo_root: Path, query: str, system_prompt: str, remediation_id: str) -> str:
     """Internal helper to run either fix or QA agent with API-provided prompts. Returns summary."""
     debug_log(f"Using Agent Model ID: {config.AGENT_MODEL}")
+    
+    # Set the correct event loop policy for Windows
+    # This is crucial for the MCP filesystem server connections to work on Windows
+    if platform.system() == 'Windows':
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+        debug_log("Set Windows-specific event loop policy (WindowsSelectorEventLoopPolicy)")
 
     # Configure logging to suppress asyncio and anyio errors that typically occur during cleanup
     import logging
