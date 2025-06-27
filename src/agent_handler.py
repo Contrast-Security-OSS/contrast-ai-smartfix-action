@@ -149,7 +149,8 @@ async def process_agent_run(runner, session, user_query, remediation_id: str, ag
         error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
 
     event_count = 0
-    total_tokens = 0  # Variable to track the total token count from latest event
+    total_tokens = 0
+    prompt_tokens = 0
     final_response = "AI agent did not provide a final summary."
     max_events_limit = config.MAX_EVENTS_PER_AGENT
     events_async = None
@@ -196,9 +197,11 @@ async def process_agent_run(runner, session, user_query, remediation_id: str, ag
 
             
             # Track total tokens from event usage metadata if available
-            if event.usage_metadata is not None and hasattr(event.usage_metadata, "total_token_count"):
-                debug_log(f"Event #{event_count} usage metadata: {event.usage_metadata}")
-                total_tokens = event.usage_metadata.total_token_count
+            if event.usage_metadata is not None:
+                if hasattr(event.usage_metadata, "total_token_count"):
+                    total_tokens = event.usage_metadata.total_token_count
+                if hasattr(event.usage_metadata, "prompt_token_count"):
+                    prompt_tokens = event.usage_metadata.prompt_token_count
             
             if event.content:
                 message_text = ""
@@ -209,7 +212,7 @@ async def process_agent_run(runner, session, user_query, remediation_id: str, ag
 
                 if message_text:
                     log(f"\n*** {agent_type.upper()} Agent Message: \033[1;36m {message_text} \033[0m")
-                    log(f"Tokens (running total): {total_tokens}")
+                    log(f"Tokens (running counts). prompt tokens: {prompt_tokens}, total tokens: {total_tokens}")
                     final_response = message_text
                     if agent_event_telemetry is not None:
                         # Directly assign toolCalls rather than appending
