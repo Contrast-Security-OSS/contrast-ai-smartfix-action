@@ -80,56 +80,28 @@ async def get_mcp_tools(target_folder: Path, remediation_id: str) -> MCPToolset:
     debug_log(f"Target folder: {target_folder_str}")
 
     # On Windows, check for Node.js and npm/npx prerequisites
+    # These should already be verified in action.yml, but we'll log versions as a sanity check
     if platform.system() == 'Windows':
         debug_log("Performing Windows-specific prerequisite checks...")
         try:
             import subprocess  # Import subprocess explicitly here
             
+            # Check Node.js version
             try:
-                # Check Node.js version
                 node_process = subprocess.run(['node', '--version'], 
-                                            capture_output=True, text=True, check=False)
+                                           capture_output=True, text=True, check=False)
                 if node_process.returncode == 0:
                     debug_log(f"Node.js version: {node_process.stdout.strip()}")
                 else:
                     log(f"Warning: Node.js check failed: {node_process.stderr.strip()}", is_error=True)
             except Exception as e:
                 debug_log(f"Error checking Node.js: {e}")
-                    
-            try:
-                # Check npm version
-                npm_process = subprocess.run(['npm', '--version'], 
-                                            capture_output=True, text=True, check=False)
-                if npm_process.returncode == 0:
-                    debug_log(f"npm version: {npm_process.stdout.strip()}")
-                else:
-                    log(f"Warning: npm check failed: {npm_process.stderr.strip()}", is_error=True)
-            except Exception as e:
-                debug_log(f"Error checking npm: {e}")
-                    
-            try:
-                # Check npx version and location
-                npx_process = subprocess.run(['where', 'npx'], 
-                                            capture_output=True, text=True, check=False)
-                if npx_process.returncode == 0:
-                    debug_log(f"npx location(s): {npx_process.stdout.strip()}")
-                    
-                    # Now check version
-                    npx_ver = subprocess.run(['npx', '--version'], 
-                                            capture_output=True, text=True, check=False)
-                    if npx_ver.returncode == 0:
-                        debug_log(f"npx version: {npx_ver.stdout.strip()}")
-                    else:
-                        log(f"Warning: npx version check failed: {npx_ver.stderr.strip()}", is_error=True)
-                else:
-                    log(f"Warning: npx not found in PATH", is_error=True)
-            except Exception as e:
-                debug_log(f"Error checking npx: {e}")
                 
+            # Warm up npx.cmd command to ensure it's ready
             try:
-                debug_log("Running npx help to warm up the command...")
-                subprocess.run(['npx', '--help'], 
-                              capture_output=True, text=True, check=False, timeout=5)
+                debug_log("Running npx.cmd help to warm up the command...")
+                subprocess.run(['npx.cmd', '--version'], 
+                             capture_output=True, text=True, check=False, timeout=5)
             except Exception as e:
                 debug_log(f"Error running npx help: {e}")
                 
@@ -150,34 +122,20 @@ async def get_mcp_tools(target_folder: Path, remediation_id: str) -> MCPToolset:
             # Preserve existing environment and PATH
             env = os.environ.copy()
             
-            # Add explicit paths that might help npx resolution on Windows
-            if 'PATH' in env:
-                # Add common Node.js installation paths
-                extra_paths = [
-                    os.path.join(os.getcwd(), 'node_modules', '.bin'),
-                    r'C:\Program Files\nodejs',
-                    r'C:\Program Files (x86)\nodejs',
-                    os.path.join(os.path.expanduser('~'), 'AppData', 'Roaming', 'npm')
-                ]
-                
-                for extra_path in extra_paths:
-                    if os.path.exists(extra_path):
-                        env['PATH'] = f"{extra_path}{os.pathsep}{env['PATH']}"
-                        debug_log(f"Added to PATH: {extra_path}")
-                        
-            debug_log(f"Using Windows-specific environment with extended PATH")
+            # Since we're verifying npm/npx availability in action.yml, 
+            # we can rely on npx.cmd being available in the PATH
             
-            # Try to find npx explicitly
-            npx_cmd = 'npx.cmd'  # Default for Windows
-            if os.path.exists(r'C:\Program Files\nodejs\npx.cmd'):
-                npx_cmd = r'C:\Program Files\nodejs\npx.cmd'
-                debug_log(f"Found npx at: {npx_cmd}")
+            # On Windows, we need to use npx.cmd instead of just npx
+            npx_cmd = 'npx.cmd'  # Use the command extension on Windows
+            
+            debug_log(f"Using Windows-specific environment with standard PATH")
+            debug_log(f"Using npx command: {npx_cmd}")
             
             fs_tools = MCPToolset(
                 connection_params=StdioServerParameters(
                     command=npx_cmd,
                     args=cmd_args,
-                    env=env,  # Pass our custom environment
+                    env=env,  # Pass our environment with PATH
                 )
             )
         else:
@@ -250,7 +208,7 @@ async def get_mcp_tools(target_folder: Path, remediation_id: str) -> MCPToolset:
     debug_log(f"Total tools from all MCP servers: {len(tools_list)}")
     return fs_tools
 
-async def create_agent(target_folder: Path, remediation_id: str, agent_type: str = "fix", system_prompt: Optional[str] = None) -> Tuple[Optional[Agent], AsyncExitStack]:
+async def create_agent(target_folder: Path, remediation_id: str, agent_type: str = "fix", system_prompt: Optional[str] = None) -> Optional[Agent]:
     """Creates an ADK Agent (either 'fix' or 'qa')."""
     mcp_tools = await get_mcp_tools(target_folder, remediation_id)
     if not mcp_tools:
