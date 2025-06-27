@@ -298,124 +298,123 @@ runs:
     # Verify Node.js, npm, and npx are available (Windows)
     - name: Verify Node.js setup (Windows)
       if: runner.os == 'Windows'
-      shell: cmd /v:on
+      shell: bash
       run: |
-        echo.
-        echo 📋 Verifying Node.js tools availability...
+        echo ""
+        echo "📋 Verifying Node.js tools availability..."
         
-        rem First, try to add Node.js paths to PATH if they aren't already there
-        rem Check common locations for Node.js installations on Windows
+        # Flag to track if we've added paths
+        NODE_PATHS_ADDED=false
         
-        set "NODE_PATHS_ADDED=false"
+        # Check GitHub Actions tool cache (Windows path format)
+        for NODE_DIR in /c/hostedtoolcache/windows/node/*/x64; do
+          if [ -f "$NODE_DIR/node.exe" ]; then
+            echo "Adding Node.js path to PATH: $NODE_DIR"
+            export PATH="$NODE_DIR:$PATH"
+            NODE_PATHS_ADDED=true
+          fi
+        done
         
-        rem Check GitHub Actions tool cache
-        for /d %%G in (C:\hostedtoolcache\windows\node\*) do (
-          if exist "%%G\x64\node.exe" (
-            echo Adding Node.js path to PATH: %%G\x64
-            set "PATH=%%G\x64;%PATH%"
-            set "NODE_PATHS_ADDED=true"
-          )
-        )
+        # Check common installation directories
+        if [ -d "/c/Program Files/nodejs" ]; then
+          echo "Adding Node.js path to PATH: /c/Program Files/nodejs"
+          export PATH="/c/Program Files/nodejs:$PATH"
+          NODE_PATHS_ADDED=true
+        fi
         
-        rem Check common installation directories
-        if exist "C:\Program Files\nodejs" (
-          echo Adding Node.js path to PATH: C:\Program Files\nodejs
-          set "PATH=C:\Program Files\nodejs;%PATH%"
-          set "NODE_PATHS_ADDED=true"
-        )
+        if [ -d "/c/Program Files (x86)/nodejs" ]; then
+          echo "Adding Node.js path to PATH: /c/Program Files (x86)/nodejs"
+          export PATH="/c/Program Files (x86)/nodejs:$PATH"
+          NODE_PATHS_ADDED=true
+        fi
         
-        if exist "C:\Program Files (x86)\nodejs" (
-          echo Adding Node.js path to PATH: C:\Program Files (x86)\nodejs
-          set "PATH=C:\Program Files (x86)\nodejs;%PATH%"
-          set "NODE_PATHS_ADDED=true"
-        )
+        if [ "$NODE_PATHS_ADDED" = true ]; then
+          echo "Successfully added Node.js paths to PATH"
+        fi
         
-        if "%NODE_PATHS_ADDED%" == "true" (
-          echo Successfully added Node.js paths to PATH
-        )
+        # Verify node is in PATH and working
+        if ! command -v node &> /dev/null; then
+          echo "ERROR: Node.js not found in PATH even after adding standard locations."
+          echo "Searched in:"
+          echo "- /c/hostedtoolcache/windows/node/*/x64"
+          echo "- /c/Program Files/nodejs"
+          echo "- /c/Program Files (x86)/nodejs"
+          echo "Installation may have failed or is in a non-standard location."
+          exit 1
+        fi
         
-        rem Verify node is in PATH and working
-        where node >nul 2>nul
-        if %ERRORLEVEL% NEQ 0 (
-          echo ERROR: Node.js not found in PATH even after adding standard locations.
-          echo Searched in:
-          echo - C:\hostedtoolcache\windows\node\*\x64
-          echo - C:\Program Files\nodejs
-          echo - C:\Program Files (x86)\nodejs
-          echo Installation may have failed or is in a non-standard location.
-          exit /b 1
-        )
+        # Check if node works
+        node_version=$(node --version)
+        if [ $? -ne 0 ]; then
+          echo "ERROR: Node.js command failed. Installation may be corrupted."
+          exit 1
+        fi
+        echo "Node.js: $node_version"
         
-        node --version
-        if %ERRORLEVEL% NEQ 0 (
-          echo ERROR: Node.js command failed. Installation may be corrupted.
-          exit /b 1
-        )
-        
-        rem Verify npm is in PATH and working
-        where npm >nul 2>nul
-        if %ERRORLEVEL% NEQ 0 (
-          rem Try to locate npm.cmd in the same directory as node.exe
-          for /f "tokens=*" %%i in ('where node') do (
-            set "NODE_DIR=%%~dpi"
-            if exist "!NODE_DIR!npm.cmd" (
-              echo Adding npm directory to PATH: !NODE_DIR!
-              set "PATH=!NODE_DIR!;%PATH%"
-            )
-          )
+        # Check if npm is available
+        if ! command -v npm &> /dev/null; then
+          # Try to find npm in the same directory as node
+          NODE_DIR=$(dirname $(which node))
+          if [ -f "$NODE_DIR/npm" ] || [ -f "$NODE_DIR/npm.cmd" ]; then
+            echo "Adding npm directory to PATH: $NODE_DIR"
+            export PATH="$NODE_DIR:$PATH"
+          fi
           
-          rem Check again after adding node directory
-          where npm >nul 2>nul
-          if %ERRORLEVEL% NEQ 0 (
-            echo ERROR: npm not found in PATH. Node.js installation may be incomplete.
-            exit /b 1
-          )
-        )
+          # Check again after adding node directory
+          if ! command -v npm &> /dev/null; then
+            echo "ERROR: npm not found in PATH. Node.js installation may be incomplete."
+            exit 1
+          fi
+        fi
         
-        npm --version
-        if %ERRORLEVEL% NEQ 0 (
-          echo ERROR: npm command failed. Node.js installation may be corrupted.
-          exit /b 1
-        )
+        # Check if npm works
+        npm_version=$(npm --version)
+        if [ $? -ne 0 ]; then
+          echo "ERROR: npm command failed. Node.js installation may be corrupted."
+          exit 1
+        fi
+        echo "npm: $npm_version"
         
-        rem Verify npx is in PATH and working
-        where npx >nul 2>nul
-        if %ERRORLEVEL% NEQ 0 (
-          rem Try to locate npx.cmd in the same directory as node.exe
-          for /f "tokens=*" %%i in ('where node') do (
-            set "NODE_DIR=%%~dpi"
-            if exist "!NODE_DIR!npx.cmd" (
-              echo Adding npx directory to PATH: !NODE_DIR!
-              set "PATH=!NODE_DIR!;%PATH%"
-            )
-          )
+        # Check if npx is available
+        if ! command -v npx &> /dev/null; then
+          # Try to find npx in the same directory as node
+          NODE_DIR=$(dirname $(which node))
+          if [ -f "$NODE_DIR/npx" ] || [ -f "$NODE_DIR/npx.cmd" ]; then
+            echo "Adding npx directory to PATH: $NODE_DIR"
+            export PATH="$NODE_DIR:$PATH"
+          fi
           
-          rem Check again after adding node directory
-          where npx >nul 2>nul
-          if %ERRORLEVEL% NEQ 0 (
-            echo ERROR: npx not found in PATH. Node.js installation may be incomplete.
-            exit /b 1
-          )
-        )
+          # Check again after adding node directory
+          if ! command -v npx &> /dev/null; then
+            echo "ERROR: npx not found in PATH. Node.js installation may be incomplete."
+            exit 1
+          fi
+        fi
         
-        npx --version
-        if %ERRORLEVEL% NEQ 0 (
-          echo ERROR: npx command failed. Node.js installation may be corrupted.
-          exit /b 1
-        )
+        # Check if npx works
+        npx_version=$(npx --version)
+        if [ $? -ne 0 ]; then
+          echo "ERROR: npx command failed. Node.js installation may be corrupted."
+          exit 1
+        fi
+        echo "npx: $npx_version"
         
-        rem Log Node.js paths for diagnostics
-        echo Node.js binary location:
-        where node
+        # Show locations for diagnostics
+        echo "Node.js path: $(which node)"
+        echo "npm path: $(which npm)"
+        echo "npx path: $(which npx)"
         
-        echo npm binary location: 
-        where npm
+        # For Windows-specific verification, check if we have .cmd versions
+        if [ -f "$(dirname $(which node))/npx.cmd" ]; then
+          echo "Confirmed npx.cmd exists alongside node"
+        fi
         
-        echo npx binary location:
-        where npx
+        if [ -f "$(dirname $(which node))/npm.cmd" ]; then
+          echo "Confirmed npm.cmd exists alongside node"
+        fi
         
-        echo.
-        echo ✅ Node.js environment verified
+        echo ""
+        echo "✅ Node.js environment verified"
 
     # Install GitHub CLI (Linux/macOS)
     - name: Install GitHub CLI
