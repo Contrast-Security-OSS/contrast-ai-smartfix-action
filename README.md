@@ -1,4 +1,4 @@
-# Contrast AI SmartFix \- Early Access User Documentation
+# Contrast AI SmartFix \- User Documentation
 
 ## Legal Disclaimer
 
@@ -13,16 +13,16 @@ Welcome to Contrast AI SmartFix\! SmartFix is an AI-powered agent that automatic
 * **Automated Remediation:** Reduces the manual effort and time required to fix vulnerabilities.  
 * **Developer-Focused:** Delivers fixes as PRs directly in your GitHub repository, fitting naturally into existing workflows.  
 * **Runtime Context:** Leverages Contrast Assess's runtime analysis (IAST) to provide more accurate and relevant fixes.  
-* **Early Access (EA):** This document covers the Early Access release of SmartFix.
 
 ## Getting Started
 
 ### Prerequisites
 
 * **Contrast Assess:** You need an active Contrast Assess deployment identifying vulnerabilities in your application.  
-* **GitHub:** Your project must be hosted on GitHub and use GitHub Actions.  
+* **GitHub:** Your project must be hosted on GitHub and use GitHub Actions.  In the GitHub repository's Settings, enable the Actions > General > Workflow Permissions checkbox for "Allow GitHub Actions to create and approve pull requests".
 * **Contrast API Credentials:** You will need your Contrast Host, Organization ID, Application ID, Authorization Key, and API Key.
 * **GitHub Token Permissions:** The GitHub token must have `contents: write` and `pull-requests: write` permissions. These permissions must be explicitly set in your workflow file.
+* **LLM Access:** Ensure that you have access to one of our recommended LLMs for use with SmartFix.  If using an AWS Bedrock model, please see Amazon's User Guide on [model access](https://docs.aws.amazon.com/bedrock/latest/userguide/model-access-modify.html).
 
 ### Installation and Configuration
 
@@ -75,7 +75,7 @@ jobs:
           contrast_api_key: ${{ secrets.CONTRAST_API_KEY }}
 
           # GitHub Configuration
-          github_token: ${{ secrets.GITHUB_TOKEN }} # Necessary for creating PRs
+          github_token: ${{ secrets.GITHUB_TOKEN }} # Necessary for creating PRs.  This is the token GitHub auto-creates for actions and is not a Personal Access Token (PAT).
           base_branch: '${{ github.event.repository.default_branch }}' # This will default to your repo default branch (other common base branches are 'main', 'master' or 'develop')
 
           # Required Runtime Configuration
@@ -90,10 +90,11 @@ jobs:
           # anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
           # Claude Via AWS Bedrock
+          # Setup AWS credentials in the earlier "Configure AWS Credentials" step.
           agent_model: 'bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0' # Example for Claude Sonnet on Bedrock
 
           # Experimental: Google Gemini Pro
-          # agent_model: 'gemini/gemini-2.5-pro-latest' # Check LiteLLM docs for exact model string
+          # agent_model: 'gemini/gemini-2.5-pro-preview-05-06' # Check LiteLLM docs for exact model string
           # gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
 
           # Other Optional Inputs (see action.yml for defaults and more options)
@@ -173,7 +174,7 @@ For the Early Access release, SmartFix uses a "Bring Your Own LLM" (BYOLLM) mode
     * In order for the action to an AWS Bedrock LLM, you need to provide AWS credentials. We recommend using [aws-actions/configure-aws-credentials](https://github.com/aws-actions/configure-aws-credentials) to configure your credentials for a job.  
 
 * **Experimental:** **Google Gemini Pro (e.g., Gemini 2.5 Pro)**. Preliminary testing shows good results, but it has not been fully tested for this release.  
-  * Set `agent_model` to the appropriate model string (e.g., `gemini/gemini-1.5-pro-latest`).  
+  * Set `agent_model` to the appropriate model string (e.g., `gemini/gemini-2.5-pro-preview-05-06`).  
   * Provide your `gemini_api_key`.  
 * **Not Recommended:** OpenAI GPT models (e.g., gpt-4, gpt-4.1, o1, o3, etc) are **not recommended** at this time, as they have shown issues following instructions within the SmartFix agent.
 
@@ -181,12 +182,19 @@ Refer to the `action.yml` file within the SmartFix GitHub Action repository and 
 
 ### Supported Languages
 
-* **Java:** The Early Access release is primarily tested and supported for Java applications.  
-* **Other Languages:** While it might work for other languages, comprehensive testing has not been performed. Use with caution for non-Java projects during the EA period.
+* **Java, .NET, Go, Python:** Java applications have received the most testing so far, but we have had also had good results for .NET, Go, and Python projects.
+* **Other Languages:** While it might work for other languages (such as Node, Ruby, and PHP), comprehensive testing has not been performed. Use with caution for non-Java projects.
+
+### Supported GitHub Runners
+
+* **Ubuntu, Windows:** The Windows and Ubuntu GitHub runners have both been tested and work well for the SmartFix action.
+* **MacOS, and Self-hosted:** No matter the runner you choose, please ensure that your `smartfix.yml` workflow file installs and sets up any PATH or other necessary environmental variables so that your project's build and formatting commands can run as planned.  
+
+Note, the SmartFix action's setup steps rely on the bash shell.  Please ensure that your self-hosted runner has a a bash shell available and on the PATH.  For Windows runners, SmartFix will use the Git Bash shell.
 
 ### Supported Vulnerabilities
 
-SmartFix for Early Access focuses on remediating:
+SmartFix focuses on remediating:
 
 * **CRITICAL** and **HIGH** severity vulnerabilities identified by Contrast Assess.  
 * **Exclusions:**  
@@ -253,6 +261,14 @@ The following are key inputs for the GitHub Action. Refer to the `action.yml` in
 | `skip_writing_security_test` | Skip attempting to write a security test for the fix. | No | `false` |
 | `enable_full_telemetry` | Control how much telemetry data is sent back to Contrast. When set to 'true' (default), sends complete log files and build commands. When 'false', sensitive build commands and full logs are omitted. | No | `true` |
 
+## Agent Model values
+
+Here are several recommended `agent_model` values:
+
+* `bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0`
+* `anthropic/claude-3-7-sonnet-20250219`
+* `gemini/gemini-2.5-pro-preview-05-06`
+
 ## Telemetry
 
 SmartFix collects telemetry data to help improve the service and diagnose issues. This data includes:
@@ -295,7 +311,7 @@ SmartFix collects telemetry data to help improve the service and diagnose issues
 * **Ensure the `build_command` Runs the Tests:** This allows SmartFix to catch and fix any tests that may fail due to its changes. It also allows it to run the security tests it creates, if that option is enabled.  
 * **Review PRs Thoroughly:** Always carefully review the code changes proposed by SmartFix before merging.  
 * **Monitor Action Runs:** Regularly check the GitHub Action logs for successful runs and any reported issues.  
-* **Use Recommended LLMs:** For the best experience during Early Access, use the Anthropic Claude Sonnet 3.7 or 4 model.
+* **Use Recommended LLMs:** For the best experience, use the Anthropic Claude Sonnet 3.7 model.
 
 ## FAQ
 
@@ -312,4 +328,4 @@ SmartFix collects telemetry data to help improve the service and diagnose issues
 
 ---
 
-For further assistance or to provide feedback on the Early Access release, please contact your Contrast Security representative.
+For further assistance or to provide feedback on SmartFix, please contact your Contrast Security representative.
