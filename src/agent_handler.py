@@ -424,6 +424,16 @@ def _run_agent_in_event_loop(coroutine_func, *args, **kwargs):
         # Create and run the task
         task = loop.create_task(coroutine_func(*args, **kwargs))
         result = loop.run_until_complete(task)
+    except Exception as e:
+        # Cancel the task if there was an error
+        if 'task' in locals() and not task.done():
+            task.cancel()
+            # Give it a chance to complete cancellation
+            try:
+                loop.run_until_complete(task)
+            except (asyncio.CancelledError, Exception):
+                pass
+        raise e  # Re-raise the exception        
     finally:
         # Clean up any remaining tasks
         pending = asyncio.all_tasks(loop)
@@ -698,18 +708,11 @@ async def _run_agent_internal_with_prompts(agent_type: str, repo_root: Path, que
             except RuntimeError:
                 pass  # No event loop, which is fine
             
-            # Check current policy before changing it
-            current_policy = asyncio.get_event_loop_policy()
-            debug_log(f"Current event loop policy: {type(current_policy).__name__}")
-            
             # IMPORTANT: On Windows, we MUST use the ProactorEventLoop
             # SelectorEventLoop doesn't support subprocesses on Windows
             # Explicitly set the WindowsProactorEventLoopPolicy to ensure subprocess support
-            if not isinstance(current_policy, WindowsProactorEventLoopPolicy):
-                debug_log("Setting WindowsProactorEventLoopPolicy for subprocess support")
-                asyncio.set_event_loop_policy(WindowsProactorEventLoopPolicy())
-            else:
-                debug_log("WindowsProactorEventLoopPolicy already set")
+            asyncio.set_event_loop_policy(WindowsProactorEventLoopPolicy())
+            debug_log("Explicitly set WindowsProactorEventLoopPolicy for subprocess support")
                 
             # Create a fresh event loop with the WindowsProactorEventLoopPolicy
             loop = asyncio.new_event_loop()
@@ -717,7 +720,6 @@ async def _run_agent_internal_with_prompts(agent_type: str, repo_root: Path, que
             debug_log(f"Created and set new event loop with Windows default policy: {type(loop).__name__}")
         except Exception as e:
             debug_log(f"Warning: Error setting Windows event loop policy: {e}")
-            debug_log(f"Error details: {traceback.format_exc()}")
             debug_log("Will continue with default event loop policy")
 
     # Configure logging to suppress asyncio and anyio errors that typically occur during cleanup
@@ -747,14 +749,7 @@ async def _run_agent_internal_with_prompts(agent_type: str, repo_root: Path, que
                 "GeneratorExit",
                 "CancelledError",
                 "asyncio.exceptions",
-                "BaseExceptionGroup",
-                "Event loop is closed",
-                "_ProactorBasePipeTransport",
-                "unclosed transport",
-                "unclosed file handles",
-                "unclosed socket",
-                "ResourceWarning",
-                "Exception ignored in"
+                "BaseExceptionGroup"
             ]):
                 return False
             return True

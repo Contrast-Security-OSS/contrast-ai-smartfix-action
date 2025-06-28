@@ -238,22 +238,6 @@ runs:
       with:
         node-version: '22'
         check-latest: false
-        
-    - name: Verify Node.js setup (Linux/macOS)
-      if: runner.os == 'Linux' || runner.os == 'macOS'
-      shell: bash
-      run: |
-        echo ""
-        echo "🔍 Verifying Node.js environment..."
-        # Verify that node, npm and npx are available
-        command -v node || { echo "❌ ERROR: Node.js (node command) not found in PATH"; exit 1; }
-        command -v npm || { echo "❌ ERROR: npm command not found in PATH"; exit 1; }
-        command -v npx || { echo "❌ ERROR: npx command not found in PATH"; exit 1; }
-        
-        echo "✅ Node.js verification complete. All required tools found:"
-        echo "- node: $(node --version)"
-        echo "- npm: $(npm --version)"
-        echo "- npx: $(npx --version)"
 
     # Install GitHub CLI (Linux/macOS)
     - name: Install GitHub CLI
@@ -320,49 +304,6 @@ runs:
         rem Verify GitHub CLI installation - required for this action
         where gh >nul 2>nul || (echo ERROR: GitHub CLI not found in PATH after installation. && exit /b 1)
         gh --version || (echo ERROR: GitHub CLI verification failed. GitHub CLI is required for this action. && exit /b 1)
-
-    # Verify Node.js setup (Windows)
-    - name: Verify Node.js setup (Windows)
-      if: runner.os == 'Windows'
-      shell: bash
-      run: |
-        echo ""
-        echo "🔍 Verifying Node.js environment on Windows..."
-        
-        # Make sure common Node.js paths are in PATH
-        export PATH="$PATH:/c/Program Files/nodejs:/c/Program Files (x86)/nodejs:$APPDATA/npm:$APPDATA/npm/node_modules/.bin"
-        
-        # Check if node is available
-        if ! command -v node &> /dev/null; then
-            echo "❌ ERROR: Node.js (node command) not found in PATH"
-            echo "PATH is: $PATH"
-            echo "Attempted to find node in common locations:"
-            ls -la '/c/Program Files/nodejs' 2>/dev/null || echo "Directory not found: /c/Program Files/nodejs"
-            exit 1
-        fi
-        
-        # Check if npm is available
-        if ! command -v npm &> /dev/null; then
-            echo "❌ ERROR: npm command not found in PATH"
-            echo "PATH is: $PATH"
-            exit 1
-        fi
-        
-        # Check if npx is available (crucial for MCP server)
-        if ! command -v npx &> /dev/null; then
-            echo "❌ ERROR: npx command not found in PATH"
-            echo "PATH is: $PATH"
-            exit 1
-        fi
-        
-        # Warm up npx cache to avoid first-run delays
-        echo "🔄 Warming up Node.js environment..."
-        npx --version
-        
-        echo "✅ Node.js verification complete. All required tools found:"
-        echo "- node: $(node --version)"
-        echo "- npm: $(npm --version)"
-        echo "- npx: $(npx --version)"
 
     - name: Setup complete
       shell: bash
