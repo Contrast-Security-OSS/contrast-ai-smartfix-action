@@ -697,19 +697,27 @@ async def _run_agent_internal_with_prompts(agent_type: str, repo_root: Path, que
                     loop.close()
             except RuntimeError:
                 pass  # No event loop, which is fine
-                
+            
+            # Check current policy before changing it
+            current_policy = asyncio.get_event_loop_policy()
+            debug_log(f"Current event loop policy: {type(current_policy).__name__}")
+            
             # IMPORTANT: On Windows, we MUST use the ProactorEventLoop
             # SelectorEventLoop doesn't support subprocesses on Windows
             # Explicitly set the WindowsProactorEventLoopPolicy to ensure subprocess support
-            asyncio.set_event_loop_policy(WindowsProactorEventLoopPolicy())
-            debug_log("Explicitly set WindowsProactorEventLoopPolicy for subprocess support")
-            
+            if not isinstance(current_policy, WindowsProactorEventLoopPolicy):
+                debug_log("Setting WindowsProactorEventLoopPolicy for subprocess support")
+                asyncio.set_event_loop_policy(WindowsProactorEventLoopPolicy())
+            else:
+                debug_log("WindowsProactorEventLoopPolicy already set")
+                
             # Create a fresh event loop with the WindowsProactorEventLoopPolicy
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             debug_log(f"Created and set new event loop with Windows default policy: {type(loop).__name__}")
         except Exception as e:
             debug_log(f"Warning: Error setting Windows event loop policy: {e}")
+            debug_log(f"Error details: {traceback.format_exc()}")
             debug_log("Will continue with default event loop policy")
 
     # Configure logging to suppress asyncio and anyio errors that typically occur during cleanup
@@ -739,7 +747,14 @@ async def _run_agent_internal_with_prompts(agent_type: str, repo_root: Path, que
                 "GeneratorExit",
                 "CancelledError",
                 "asyncio.exceptions",
-                "BaseExceptionGroup"
+                "BaseExceptionGroup",
+                "Event loop is closed",
+                "_ProactorBasePipeTransport",
+                "unclosed transport",
+                "unclosed file handles",
+                "unclosed socket",
+                "ResourceWarning",
+                "Exception ignored in"
             ]):
                 return False
             return True

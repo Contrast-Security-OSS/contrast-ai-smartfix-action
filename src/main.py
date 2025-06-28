@@ -47,6 +47,12 @@ warnings.filterwarnings("ignore", category=ResourceWarning,
                         message="unclosed transport")
 warnings.filterwarnings("ignore", category=ResourceWarning, 
                         message="unclosed.*<asyncio.*")
+warnings.filterwarnings("ignore", category=RuntimeWarning, 
+                        message="coroutine.*was never awaited")
+warnings.filterwarnings("ignore", category=RuntimeWarning, 
+                        message="Event loop is closed")
+# Ignore all ResourceWarnings which often occur during shutdown
+warnings.filterwarnings("ignore", category=ResourceWarning)
 
 # Patch asyncio to handle event loop closed errors during shutdown
 _original_loop_check_closed = asyncio.base_events.BaseEventLoop._check_closed
@@ -74,14 +80,19 @@ if platform.system() == 'Windows':
         def _patched_pipe_del(self):
             try:
                 # Check if the event loop is closed or finalizing
-                if self._loop.is_closed() or sys.is_finalizing():
+                if not hasattr(self, '_loop') or not self._loop or self._loop.is_closed() or sys.is_finalizing():
                     # Skip the original __del__ which would trigger the error
                     return
                 
+                # Extra check for the _closed attribute
+                if hasattr(self, '_closed') and self._closed:
+                    return
+                    
                 # Otherwise use the original __del__ implementation
                 _original_pipe_del(self)
-            except (AttributeError, RuntimeError, ImportError, TypeError):
-                # Catch and ignore all attribute or runtime errors during shutdown
+            except Exception:
+                # Catch and ignore ALL errors during shutdown
+                # This is important for clean process termination
                 pass
         
         # Apply the patch to the __del__ method
