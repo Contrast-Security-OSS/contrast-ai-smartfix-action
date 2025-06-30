@@ -55,6 +55,11 @@ except ImportError as e:
     print(traceback.format_exc(), file=sys.stderr)
     sys.exit(1) # Exit if ADK is not available
 
+import litellm
+
+# Enable LiteLLM's in-memory prompt cache
+litellm.caching = True
+
 async def get_mcp_tools(target_folder: Path, remediation_id: str) -> Tuple[List, AsyncExitStack]:
     """Connects to MCP servers (Filesystem)"""
     debug_log("Attempting to connect to MCP servers...")
