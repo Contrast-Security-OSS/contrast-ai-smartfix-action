@@ -225,6 +225,7 @@ async def process_agent_run(runner, session, user_query, remediation_id: str, ag
             
             # Track total tokens from event usage metadata if available
             if event.usage_metadata is not None:
+                debug_log(f"Event Usage Metadata: {event.usage_metadata}")
                 if hasattr(event.usage_metadata, "total_token_count"):
                     total_tokens = event.usage_metadata.total_token_count
                 if hasattr(event.usage_metadata, "prompt_token_count"):
@@ -241,7 +242,7 @@ async def process_agent_run(runner, session, user_query, remediation_id: str, ag
 
                 if message_text:
                     log(f"\n*** {agent_type.upper()} Agent Message: \033[1;36m {message_text} \033[0m")
-                    log(f"Tokens (running counts). prompt tokens: {prompt_tokens}, output tokens {output_tokens}, total tokens: {total_tokens}")
+                    log(f"Tokens statistics. prompt tokens: {prompt_tokens}, output tokens {output_tokens}, total tokens: {total_tokens}")
                     final_response = message_text
                     if agent_event_telemetry is not None:
                         # Directly assign toolCalls rather than appending
@@ -807,3 +808,5 @@ if platform.system() == "Windows":
                  return #ignore this error
              raise
         asyncio.BaseEventLoop._check_closed = _patched_loop_check_closed
+
+# %%
