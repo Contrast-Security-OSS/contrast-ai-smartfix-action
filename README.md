@@ -190,7 +190,7 @@ Here are several recommended `agent_model` values:
 
 ### Supported Languages
 
-* **Java, .NET, Go, Python:** Java applications have received the most testing so far, but we have had also had good results for .NET, Go, and Python projects.
+* **Java, .NET, Go, Python:** Java applications have received the most testing so far, but we have also had good results for .NET, Go, and Python projects.
 * **Other Languages:** While it might work for other languages (such as Node, Ruby, and PHP), comprehensive testing is in progress. Use with caution for non-Java projects.
 
 ### Supported GitHub Runners
