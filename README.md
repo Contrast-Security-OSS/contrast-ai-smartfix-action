@@ -21,7 +21,7 @@ Welcome to Contrast AI SmartFix\! SmartFix is an AI-powered agent that automatic
 * **Contrast Assess:** You need an active Contrast Assess deployment identifying vulnerabilities in your application.  
 * **GitHub:** Your project must be hosted on GitHub and use GitHub Actions.  In the GitHub repository's Settings, enable the Actions > General > Workflow Permissions checkbox for "Allow GitHub Actions to create and approve pull requests".
 * **Contrast API Credentials:** You will need your Contrast Host, Organization ID, Application ID, Authorization Key, and API Key.
-* **GitHub Token Permissions:** The GitHub token must have `contents: write` and `pull-requests: write` permissions. These permissions must be explicitly set in your workflow file.
+* **GitHub Token Permissions:** The GitHub token must have `contents: write` and `pull-requests: write` permissions. These permissions must be explicitly set in your workflow file.  Note, SmartFix uses the internal GitHub token for Actions; you do not need to create a Personal Access Token (PAT).
 * **LLM Access:** Ensure that you have access to one of our recommended LLMs for use with SmartFix.  If using an AWS Bedrock model, please see Amazon's User Guide on [model access](https://docs.aws.amazon.com/bedrock/latest/userguide/model-access-modify.html).
 
 ### Installation and Configuration
