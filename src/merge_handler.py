@@ -97,22 +97,19 @@ def handle_merged_pr():
     
     # Notify the Remediation backend service about the merged PR
     log(f"Notifying Remediation service about merged PR for remediation {remediation_id}...")
-    try:
-        remediation_notified = contrast_api.notify_remediation_pr_merged(
-            remediation_id=remediation_id,
-            contrast_host=config.CONTRAST_HOST,
-            contrast_org_id=config.CONTRAST_ORG_ID,
-            contrast_app_id=config.CONTRAST_APP_ID,
-            contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
-            contrast_api_key=config.CONTRAST_API_KEY
-        )
-        
-        if remediation_notified:
-            log(f"Successfully notified Remediation service about merged PR for remediation {remediation_id}.")
-        else:
-            log(f"Failed to notify Remediation service about merged PR for remediation {remediation_id}.", is_error=True)
-    except Exception as e:
-        log(f"Error while notifying Remediation service: {str(e)}", is_error=True)
+    remediation_notified = contrast_api.notify_remediation_pr_merged(
+        remediation_id=remediation_id,
+        contrast_host=config.CONTRAST_HOST,
+        contrast_org_id=config.CONTRAST_ORG_ID,
+        contrast_app_id=config.CONTRAST_APP_ID,
+        contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
+        contrast_api_key=config.CONTRAST_API_KEY
+    )
+    
+    if remediation_notified:
+        log(f"Successfully notified Remediation service about merged PR for remediation {remediation_id}.")
+    else:
+        log(f"Failed to notify Remediation service about merged PR for remediation {remediation_id}.", is_error=True)
 
     telemetry_handler.update_telemetry("additionalAttributes.prStatus", "MERGED")
     contrast_api.send_telemetry_data()

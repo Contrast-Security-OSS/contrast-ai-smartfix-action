@@ -24,6 +24,7 @@ import warnings
 import atexit
 import platform
 from datetime import datetime, timedelta
+from asyncio.proactor_events import _ProactorBasePipeTransport
 
 # Import configurations and utilities
 import config
@@ -52,14 +53,13 @@ warnings.filterwarnings("ignore", category=ResourceWarning,
 _original_loop_check_closed = asyncio.base_events.BaseEventLoop._check_closed
 
 def _patched_loop_check_closed(self):
-    # If Python is in the process of shutting down, ignore the check
-    if sys.is_finalizing():
-        return
-    # Otherwise, use the original implementation
-    return _original_loop_check_closed(self)
-
-# Apply the patch
-asyncio.base_events.BaseEventLoop._check_closed = _patched_loop_check_closed
+    try:
+        _original_loop_check_closed(self)
+    except RuntimeError as e:
+        if "Event loop is closed" in str(e):
+            return  # Suppress the error
+        raise
+asyncio.BaseEventLoop._check_closed = _patched_loop_check_closed
 
 # Add a specific fix for _ProactorBasePipeTransport.__del__ on Windows
 if platform.system() == 'Windows':
@@ -77,7 +77,7 @@ if platform.system() == 'Windows':
                 if self._loop.is_closed() or sys.is_finalizing():
                     # Skip the original __del__ which would trigger the error
                     return
-                
+
                 # Otherwise use the original __del__ implementation
                 _original_pipe_del(self)
             except (AttributeError, RuntimeError, ImportError, TypeError):
@@ -586,5 +586,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-# %%

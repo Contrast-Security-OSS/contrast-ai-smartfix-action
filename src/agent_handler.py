@@ -17,13 +17,23 @@
 # #L%
 #
 
+import logging
+import warnings
+
 import asyncio
 import sys
+import os
+import platform
+import subprocess
+
+# Explicitly import Windows-specific event loop policy to ensure proper subprocess support
+if platform.system() == 'Windows':
+    from asyncio import WindowsProactorEventLoopPolicy
 from pathlib import Path
 from typing import Optional, Tuple, List
 from contextlib import AsyncExitStack
 import re
-import json
+import traceback
 
 # Import configurations and utilities
 import config
@@ -41,7 +51,7 @@ try:
     from google.adk.models.lite_llm import LiteLlm
     from google.adk.runners import Runner
     from google.adk.sessions import InMemorySessionService
-    from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset, StdioServerParameters
+    from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset, StdioServerParameters, StdioConnectionParams
     from google.genai import types as genai_types
     ADK_AVAILABLE = True
     debug_log("ADK libraries loaded successfully.")
@@ -55,54 +65,73 @@ except ImportError as e:
     print(traceback.format_exc(), file=sys.stderr)
     sys.exit(1) # Exit if ADK is not available
 
+warnings.filterwarnings('ignore', category=UserWarning)
+library_logger = logging.getLogger("google_adk.google.adk.tools.base_authenticated_tool")
+library_logger.setLevel(logging.ERROR)
+
 import litellm
 
 # Enable LiteLLM's in-memory prompt cache
 litellm.caching = True
 
-async def get_mcp_tools(target_folder: Path, remediation_id: str) -> Tuple[List, AsyncExitStack]:
+async def get_mcp_tools(target_folder: Path, remediation_id: str) -> MCPToolset:
     """Connects to MCP servers (Filesystem)"""
     debug_log("Attempting to connect to MCP servers...")
-    exit_stack = AsyncExitStack()
-    all_tools = []
     target_folder_str = str(target_folder)
 
     # Filesystem MCP Server
     try:
         debug_log("Connecting to MCP Filesystem server...")
-        fs_tools, fs_exit_stack = await MCPToolset.from_server(
-            connection_params=StdioServerParameters(
-                command='npx',
-                args=["-y", "@modelcontextprotocol/server-filesystem@2025.1.14", target_folder_str],
+            
+        fs_tools = MCPToolset(
+            connection_params=StdioConnectionParams(
+                server_params=StdioServerParameters(
+                    command='npx',
+                    args=[
+                        '-y',  # Arguments for the command
+                        '@modelcontextprotocol/server-filesystem@2025.1.14',
+                        target_folder_str,
+                    ],
+                ),
+                timeout=50,
             )
         )
 
-        await exit_stack.enter_async_context(fs_exit_stack)
-        all_tools.extend(fs_tools)
-        debug_log(f"Connected to Filesystem MCP server, got {len(fs_tools)} tools")
-        for tool in fs_tools:
+        debug_log("Getting tools list from Filesystem MCP server...")
+        # Use a longer timeout on Windows
+        timeout_seconds = 30.0 if platform.system() == 'Windows' else 10.0
+        debug_log(f"Using {timeout_seconds} second timeout for get_tools")
+        
+        # Wrap the get_tools call in wait_for to apply a timeout
+        tools_list = await asyncio.wait_for(fs_tools.get_tools(), timeout=timeout_seconds)
+        
+        debug_log(f"Connected to Filesystem MCP server, got {len(tools_list)} tools")
+        for tool in tools_list:
             if hasattr(tool, 'name'):
                 debug_log(f"  - Filesystem Tool: {tool.name}")
             else:
                 debug_log(f"  - Filesystem Tool: (Name attribute missing)")
+            
     except NameError as ne:
         log(f"FATAL: Error initializing MCP Filesystem server (likely ADK setup issue): {ne}", is_error=True)
         log("No filesystem tools available - cannot make code changes.", is_error=True)
         error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
     except Exception as e:
-        log(f"FATAL: Failed to connect to Filesystem MCP server: {e}", is_error=True)
+        log(f"FATAL: Failed to connect to Filesystem MCP server: {str(e)}", is_error=True)
+        # Get better error information when possible
+        if hasattr(e, '__traceback__'):
+            log(f"Error details: {traceback.format_exc()}", is_error=True)
         log("No filesystem tools available - cannot make code changes.", is_error=True)
         error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
 
-    debug_log(f"Total tools from all MCP servers: {len(all_tools)}")
-    return all_tools, exit_stack
+    debug_log(f"Total tools from all MCP servers: {len(tools_list)}")
+    return fs_tools
 
-async def create_agent(target_folder: Path, remediation_id: str, agent_type: str = "fix", system_prompt: Optional[str] = None) -> Tuple[Optional[Agent], AsyncExitStack]:
+async def create_agent(target_folder: Path, remediation_id: str, agent_type: str = "fix", system_prompt: Optional[str] = None) -> Optional[Agent]:
     """Creates an ADK Agent (either 'fix' or 'qa')."""
-    mcp_tools, exit_stack = await get_mcp_tools(target_folder, remediation_id)
+    mcp_tools = await get_mcp_tools(target_folder, remediation_id)
     if not mcp_tools:
         log(f"Error: No MCP tools available for the {agent_type} agent. Cannot proceed.", is_error=True)
-        await exit_stack.aclose()
         error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
 
     if system_prompt:
@@ -110,28 +139,26 @@ async def create_agent(target_folder: Path, remediation_id: str, agent_type: str
         debug_log(f"Using API-provided system prompt for {agent_type} agent")
     else:
         log(f"Error: No system prompt available for {agent_type} agent")
-        await exit_stack.aclose()
         error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
     agent_name = f"contrast_{agent_type}_agent"
 
     try:
-        model_instance = LiteLlm(model=config.AGENT_MODEL)
+        model_instance = LiteLlm(model=config.AGENT_MODEL, stream_options={"include_usage": True})
         root_agent = Agent(
             model=model_instance,
             name=agent_name,
             instruction=agent_instruction,
-            tools=mcp_tools,
+            tools=[mcp_tools],
         )
         debug_log(f"Created {agent_type} agent ({agent_name}) with model {config.AGENT_MODEL}")
-        return root_agent, exit_stack
+        return root_agent
     except Exception as e:
         log(f"Error creating ADK {agent_type} Agent: {e}", is_error=True)
         if "bedrock" in str(e).lower() or "aws" in str(e).lower():
             log("Hint: Ensure AWS credentials and Bedrock model ID are correct.", is_error=True)
-        await exit_stack.aclose()
         error_exit(remediation_id, FailureCategory.INVALID_LLM_CONFIG.value)
 
-async def process_agent_run(runner, session, exit_stack, user_query, remediation_id: str, agent_type: str = None) -> str:
+async def process_agent_run(runner, session, user_query, remediation_id: str, agent_type: str = None) -> str:
     """Runs the agent, allowing it to use tools, and returns the final text response."""
     agent_event_actions = []
     start_time = datetime.datetime.now()
@@ -153,15 +180,23 @@ async def process_agent_run(runner, session, exit_stack, user_query, remediation
         error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
 
     event_count = 0
+    total_tokens = 0
+    prompt_tokens = 0
+    output_tokens = 0
     final_response = "AI agent did not provide a final summary."
     max_events_limit = config.MAX_EVENTS_PER_AGENT
+    events_async = None
 
     # Create the async generator
-    events_async = runner.run_async(
-        session_id=session_id,
-        user_id=user_id,
-        new_message=content
-    )
+    try:
+        events_async = runner.run_async(
+            session_id=session_id,
+            user_id=user_id,
+            new_message=content
+        )
+    except Exception as e:
+        log(f"Failed to create agent event stream: {e}", is_error=True)
+        error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
 
     agent_run_result = "ERROR"
     # Initialize with a properly structured object
@@ -181,10 +216,28 @@ async def process_agent_run(runner, session, exit_stack, user_query, remediation
             if event_count > max_events_limit:
                 log(f"\n⚠️ Reached maximum event limit of {max_events_limit} for {agent_type.upper()} agent. Stopping agent execution early.")
                 final_response += f"\n\n⚠️ Note: Agent execution was terminated early after reaching the maximum limit of {max_events_limit} events. The solution may be incomplete."
-                await events_async.aclose()
-                # Throw exception to fully abort processing
-                error_exit(remediation_id, FailureCategory.EXCEEDED_AGENT_EVENTS.value)
+                
+                # First clean up the event stream gracefully
+                try:
+                    await _cleanup_event_stream(events_async)
+                except Exception:
+                    pass  # Ignore any cleanup errors
+                    
+                # Set result and let the function complete normally instead of throwing exception
+                agent_run_result = "EXCEEDED_EVENTS"
+                break  # Exit the event loop
 
+            
+            # Track total tokens from event usage metadata if available
+            if event.usage_metadata is not None:
+                debug_log(f"Event usage metadata for this message: {event.usage_metadata}")
+                if hasattr(event.usage_metadata, "total_token_count"):
+                    total_tokens = event.usage_metadata.total_token_count
+                if hasattr(event.usage_metadata, "prompt_token_count"):
+                    prompt_tokens = event.usage_metadata.prompt_token_count
+                if total_tokens > 0 and prompt_tokens > 0:
+                    output_tokens = total_tokens - prompt_tokens
+            
             if event.content:
                 message_text = ""
                 if hasattr(event.content, "text"):
@@ -194,6 +247,7 @@ async def process_agent_run(runner, session, exit_stack, user_query, remediation
 
                 if message_text:
                     log(f"\n*** {agent_type.upper()} Agent Message: \033[1;36m {message_text} \033[0m")
+                    log(f"Tokens statistics. prompt tokens: {prompt_tokens}, output tokens {output_tokens}, total tokens: {total_tokens}")
                     final_response = message_text
                     if agent_event_telemetry is not None:
                         # Directly assign toolCalls rather than appending
@@ -242,9 +296,32 @@ async def process_agent_run(runner, session, exit_stack, user_query, remediation
                         "result": tool_call_status,
                     })
         agent_run_result = "SUCCESS"
+    except Exception as e:
+        # Filter out noisy error messages related to asyncio cleanup
+        error_message = str(e)
+        is_asyncio_error = any(pattern in error_message for pattern in [
+            "cancel scope", "different task", "CancelledError", 
+            "GeneratorExit", "BaseExceptionGroup", "TaskGroup"
+        ])
+        
+        if is_asyncio_error:
+            # For asyncio-related errors, log at debug level and don't consider it a failure
+            debug_log(f"Ignoring expected asyncio error during agent execution: {error_message[:100]}...")
+        else:
+            # For other errors, log normally
+            log(f"Error during agent execution: {error_message}", is_error=True)
+            
+        # Always attempt cleanup
+        await _cleanup_event_stream(events_async, timeout=3.0)
+        
+        # Only exit with an error for non-asyncio errors
+        if not is_asyncio_error:
+            error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
     finally:
+        # Ensure we clean up the event stream
+        await _cleanup_event_stream(events_async)
+                
         debug_log(f"Closing MCP server connections for {agent_type.upper()} agent...")
-        await exit_stack.aclose()
         log(f"{agent_type.upper()} agent run finished.")
 
         # Directly assign toolCalls rather than appending, to avoid nested arrays
@@ -257,13 +334,142 @@ async def process_agent_run(runner, session, exit_stack, user_query, remediation
             "agentType": agent_type.upper(),
             "result": agent_run_result,
             "actions": agent_event_actions,
-            # totalTokens and totalCost might be harder to get accurately without deeper ADK integration or assumptions
-            "totalTokens": 0, # Placeholder
-            "totalCost": 0.0  # Placeholder
+            "totalTokens": total_tokens,  # Use the tracked token count from latest event
+            "totalCost": 0.0  # Placeholder still as cost calculation would need more info
         }
         telemetry_handler.add_agent_event(agent_event_payload)
 
     return final_response
+
+async def _cleanup_event_stream(events_async, timeout=5.0):
+    """
+    Helper function to safely clean up an async event stream.
+    Handles timeout and asyncio/anyio errors gracefully without logging warnings.
+    
+    Args:
+        events_async: The async event stream to close
+        timeout: Timeout in seconds for the close operation
+    """
+    if not events_async:
+        return
+    
+    # We don't log any warnings here anymore as we're now filtering these at the logger level
+    # Just silently handle all exceptions that occur during cleanup
+    try:
+        # Wrap the aclose in a shield to prevent cancellation issues
+        try:
+            # Use shield to prevent this task from being cancelled by other tasks
+            close_task = asyncio.shield(asyncio.create_task(events_async.aclose()))
+            await asyncio.wait_for(close_task, timeout=timeout)
+        except (asyncio.TimeoutError, asyncio.CancelledError, RuntimeError, GeneratorExit):
+            # Silently ignore all expected errors during cleanup
+            pass
+    except Exception:
+        # Catch-all for any other exceptions - just suppress them
+        pass
+
+def _run_agent_in_event_loop(coroutine_func, *args, **kwargs):
+    """
+    Wrapper function to run an async coroutine in a controlled event loop.
+    Handles proper setup and cleanup of the event loop and tasks.
+    
+    Args:
+        coroutine_func: The async function to run
+        *args, **kwargs: Arguments to pass to the coroutine function
+        
+    Returns:
+        The result returned by the coroutine
+    """
+    result = None
+    
+    # Platform-specific setup
+    is_windows = platform.system() == 'Windows'
+    
+    # On Windows, we must use the WindowsProactorEventLoopPolicy 
+    # The SelectorEventLoop on Windows doesn't support subprocesses, which are required for MCP
+    if is_windows:
+        try:
+            # Close any existing loop first
+            try:
+                existing_loop = asyncio.get_event_loop()
+                if not existing_loop.is_closed():
+                    debug_log("Closing existing event loop")
+                    existing_loop.close()
+            except RuntimeError:
+                pass  # No current loop, that's fine
+                
+            # Explicitly set the WindowsProactorEventLoopPolicy
+            # This ensures subprocesses will work on Windows
+            asyncio.set_event_loop_policy(WindowsProactorEventLoopPolicy())
+            debug_log("Explicitly set WindowsProactorEventLoopPolicy for subprocess support")
+        except Exception as e:
+            debug_log(f"Warning: Error handling Windows event loop policy: {e}")
+    
+    # Create a new event loop for this function call
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    
+    # For diagnostic purposes, log information about the loop
+    loop_policy_name = type(asyncio.get_event_loop_policy()).__name__
+    loop_type_name = type(loop).__name__
+    debug_log(f"Created new event loop: {loop_type_name} with policy: {loop_policy_name}")
+    
+    # On Windows, verify we're using the correct event loop type for subprocess support
+    if is_windows:
+        if 'Proactor' not in loop_type_name:
+            log(f"WARNING: Current event loop {loop_type_name} is not a ProactorEventLoop, subprocesses may not work!", is_error=True)
+            log(f"Current event loop policy: {loop_policy_name}", is_error=True)
+    
+    # More detailed logging for Windows environments
+    if is_windows:
+        # Check if we have a ProactorEventLoop which is required for subprocess support on Windows
+        is_proactor = loop_type_name == 'ProactorEventLoop' or 'Proactor' in loop_type_name
+        debug_log(f"Windows event loop is ProactorEventLoop: {is_proactor} (required for subprocess support)")
+    
+    try:
+        # Create and run the task
+        task = loop.create_task(coroutine_func(*args, **kwargs))
+        result = loop.run_until_complete(task)
+    except Exception as e:
+        # Cancel the task if there was an error
+        if 'task' in locals() and not task.done():
+            task.cancel()
+            # Give it a chance to complete cancellation
+            try:
+                loop.run_until_complete(task)
+            except (asyncio.CancelledError, Exception):
+                pass
+        raise e  # Re-raise the exception        
+    finally:
+        # Clean up any remaining tasks
+        pending = asyncio.all_tasks(loop)
+        if pending:
+            # Cancel all pending tasks
+            for task in pending:
+                if not task.done():
+                    task.cancel()
+            
+            # Give tasks a chance to terminate
+            try:
+                # Use a timeout to avoid hanging
+                wait_task = asyncio.wait(pending, timeout=2.0, return_when=asyncio.ALL_COMPLETED)
+                loop.run_until_complete(wait_task)
+            except (asyncio.CancelledError, Exception):
+                pass
+        
+        # Shut down asyncgens and close the loop properly
+        try:
+            loop.run_until_complete(loop.shutdown_asyncgens())
+        except Exception:
+            pass
+        
+        # Close the loop
+        try:
+            loop.close()
+        except Exception:
+            pass
+    
+    return result
 
 def run_ai_fix_agent(repo_root: Path, fix_system_prompt: str, fix_user_prompt: str, remediation_id: str) -> str:
     """Synchronously runs the AI agent to analyze and apply a fix using API-provided prompts."""
@@ -281,7 +487,16 @@ def run_ai_fix_agent(repo_root: Path, fix_system_prompt: str, fix_user_prompt: s
     debug_log(f"Skip Writing Security Test: {config.SKIP_WRITING_SECURITY_TEST}")
 
     try:
-        agent_summary_str = asyncio.run(_run_agent_internal_with_prompts('fix', repo_root, processed_user_prompt, fix_system_prompt, remediation_id))
+        # Use the wrapper function to run the agent in a controlled event loop
+        agent_summary_str = _run_agent_in_event_loop(
+            _run_agent_internal_with_prompts,
+            'fix', 
+            repo_root, 
+            processed_user_prompt, 
+            fix_system_prompt, 
+            remediation_id
+        )
+        
         log("--- AI Agent Fix Attempt Completed ---")
         debug_log("\n--- Full Agent Summary ---")
         debug_log(agent_summary_str)
@@ -404,8 +619,15 @@ def run_qa_agent(build_output: str, changed_files: List[str], build_command: str
     qa_summary = f"Error during QA agent execution: Unknown error" # Default error
 
     try:
-        # Run the agent internally, using API prompts if available
-        qa_summary = asyncio.run(_run_agent_internal_with_prompts('qa', repo_root, qa_query, qa_system_prompt, remediation_id))
+        # Use the wrapper function to run the agent in a controlled event loop
+        qa_summary = _run_agent_in_event_loop(
+            _run_agent_internal_with_prompts,
+            'qa', 
+            repo_root, 
+            qa_query, 
+            qa_system_prompt, 
+            remediation_id
+        )
         
         log("--- QA Agent Fix Attempt Completed ---")
         debug_log("\n--- Raw QA Agent Summary ---")
@@ -478,24 +700,92 @@ def process_fix_user_prompt(fix_user_prompt: str) -> str:
 async def _run_agent_internal_with_prompts(agent_type: str, repo_root: Path, query: str, system_prompt: str, remediation_id: str) -> str:
     """Internal helper to run either fix or QA agent with API-provided prompts. Returns summary."""
     debug_log(f"Using Agent Model ID: {config.AGENT_MODEL}")
+    
+    # Set the correct event loop policy for Windows
+    # This is crucial for the MCP filesystem server connections to work on Windows
+    if platform.system() == 'Windows':
+        try:
+            # First ensure there's no active event loop that might conflict
+            try:
+                loop = asyncio.get_event_loop()
+                if not loop.is_closed():
+                    debug_log("Closing existing event loop before setting policy")
+                    loop.close()
+            except RuntimeError:
+                pass  # No event loop, which is fine
+            
+            # IMPORTANT: On Windows, we MUST use the ProactorEventLoop
+            # SelectorEventLoop doesn't support subprocesses on Windows
+            # Explicitly set the WindowsProactorEventLoopPolicy to ensure subprocess support
+            asyncio.set_event_loop_policy(WindowsProactorEventLoopPolicy())
+            debug_log("Explicitly set WindowsProactorEventLoopPolicy for subprocess support")
+                
+            # Create a fresh event loop with the WindowsProactorEventLoopPolicy
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            debug_log(f"Created and set new event loop with Windows default policy: {type(loop).__name__}")
+        except Exception as e:
+            debug_log(f"Warning: Error setting Windows event loop policy: {e}")
+            debug_log("Will continue with default event loop policy")
+
+    # Configure logging to suppress asyncio and anyio errors that typically occur during cleanup
+    import logging
+    
+    # Suppress anyio error logging
+    anyio_logger = logging.getLogger("anyio")
+    anyio_logger.setLevel(logging.CRITICAL)  # Using CRITICAL instead of ERROR for stricter filtering
+    
+    # Suppress MCP client/stdio error logging
+    mcp_logger = logging.getLogger("mcp.client.stdio")
+    mcp_logger.setLevel(logging.CRITICAL)
+    
+    # Silence the task exception was never retrieved warnings
+    asyncio_logger = logging.getLogger("asyncio")
+    asyncio_logger.setLevel(logging.CRITICAL)
+    
+    # Add a comprehensive filter to specifically ignore common cancel scope and cleanup errors
+    class AsyncioCleanupFilter(logging.Filter):
+        def filter(self, record):
+            message = record.getMessage()
+            # Filter out common cleanup errors
+            if any(pattern in message for pattern in [
+                "exit cancel scope in a different task",
+                "Task exception was never retrieved",
+                "unhandled errors in a TaskGroup",
+                "GeneratorExit",
+                "CancelledError",
+                "asyncio.exceptions",
+                "BaseExceptionGroup"
+            ]):
+                return False
+            return True
+    
+    # Apply the filter to multiple loggers
+    cleanup_filter = AsyncioCleanupFilter()
+    anyio_logger.addFilter(cleanup_filter)
+    asyncio_logger.addFilter(cleanup_filter)
+    if mcp_logger:
+        mcp_logger.addFilter(cleanup_filter)
 
     if not ADK_AVAILABLE:
         log(f"FATAL: {agent_type.capitalize()} Agent execution skipped: ADK libraries not available (import failed).")
         error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
 
+    session = None
+    runner = None
+    
     try:
         session_service = InMemorySessionService()
         artifacts_service = InMemoryArtifactService()
         app_name = f'contrast_{agent_type}_app'
-        session = session_service.create_session(state={}, app_name=app_name, user_id=f'github_action_{agent_type}')
+        session = await session_service.create_session(state={}, app_name=app_name, user_id=f'github_action_{agent_type}')
     except Exception as e:
         # Handle any errors in session creation
         log(f"FATAL: Failed to create {agent_type.capitalize()} agent session: {e}", is_error=True)
         error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
     
-    agent, exit_stack = await create_agent(repo_root, remediation_id, agent_type=agent_type, system_prompt=system_prompt)
+    agent = await create_agent(repo_root, remediation_id, agent_type=agent_type, system_prompt=system_prompt)
     if not agent:
-        await exit_stack.aclose()
         log(f"AI Agent creation failed ({agent_type} agent). Possible reasons: MCP server connection issue, missing prompts, model configuration error, or internal ADK problem.")
         error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
 
@@ -507,8 +797,21 @@ async def _run_agent_internal_with_prompts(agent_type: str, repo_root: Path, que
     )
 
     # Pass the full model ID (though not used for cost calculation anymore, kept for consistency if needed elsewhere)
-    summary = await process_agent_run(runner, session, exit_stack, query, remediation_id, agent_type)
-
+    summary = await process_agent_run(runner, session, query, remediation_id, agent_type)
+    
     return summary
+
+# This patch is now handled in src/asyncio_win_patch.py and called from main.py
+if platform.system() == "Windows":
+    _original_loop_check_closed = asyncio.BaseEventLoop._check_closed
+    
+    def _patched_loop_check_closed(self):
+        try:
+            _original_loop_check_closed(self)
+        except RuntimeError as e:
+             if "Event loop is closed" in str(e):
+                 return #ignore this error
+             raise
+        asyncio.BaseEventLoop._check_closed = _patched_loop_check_closed
 
 # %%
