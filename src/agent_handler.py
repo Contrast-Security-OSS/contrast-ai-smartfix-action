@@ -70,10 +70,6 @@ library_logger = logging.getLogger("google_adk.google.adk.tools.base_authenticat
 library_logger.setLevel(logging.ERROR)
 
 import litellm
-import litellm.caching
-
-# Enable LiteLLM's in-memory prompt cache
-litellm.cache = litellm.caching.InMemoryCache() # Use in-memory cache for prompts
 litellm.set_verbose = True # or litellm.set_verbose=True
 
 async def get_mcp_tools(target_folder: Path, remediation_id: str) -> MCPToolset:
@@ -145,7 +141,7 @@ async def create_agent(target_folder: Path, remediation_id: str, agent_type: str
     agent_name = f"contrast_{agent_type}_agent"
 
     try:
-        model_instance = LiteLlm(model=config.AGENT_MODEL, stream_options={"include_usage": True})
+        model_instance = LiteLlm(model=config.AGENT_MODEL, stream_options={"include_usage": True}, caching=True)
         root_agent = Agent(
             model=model_instance,
             name=agent_name,
