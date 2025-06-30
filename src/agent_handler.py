@@ -70,9 +70,10 @@ library_logger = logging.getLogger("google_adk.google.adk.tools.base_authenticat
 library_logger.setLevel(logging.ERROR)
 
 import litellm
+import litellm.caching
 
 # Enable LiteLLM's in-memory prompt cache
-litellm.caching = True
+litellm.cache = litellm.caching.InMemoryCache() # Use in-memory cache for prompts
 litellm.set_verbose = True # or litellm.set_verbose=True
 
 async def get_mcp_tools(target_folder: Path, remediation_id: str) -> MCPToolset:
