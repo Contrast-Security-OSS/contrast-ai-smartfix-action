@@ -48,19 +48,18 @@ warnings.filterwarnings("ignore", category=ResourceWarning,
                         message="unclosed transport")
 warnings.filterwarnings("ignore", category=ResourceWarning, 
                         message="unclosed.*<asyncio.*")
-'''
+
 # Patch asyncio to handle event loop closed errors during shutdown
 _original_loop_check_closed = asyncio.base_events.BaseEventLoop._check_closed
 
 def _patched_loop_check_closed(self):
-    # If Python is in the process of shutting down, ignore the check
-    if sys.is_finalizing():
-        return
-    # Otherwise, use the original implementation
-    return _original_loop_check_closed(self)
-
-# Apply the patch
-asyncio.base_events.BaseEventLoop._check_closed = _patched_loop_check_closed
+    try:
+        _original_loop_check_closed(self)
+    except RuntimeError as e:
+        if "Event loop is closed" in str(e):
+            return  # Suppress the error
+        raise
+asyncio.BaseEventLoop._check_closed = _patched_loop_check_closed
 
 # Add a specific fix for _ProactorBasePipeTransport.__del__ on Windows
 if platform.system() == 'Windows':
@@ -190,7 +189,7 @@ def cleanup_asyncio():
 
 # Register the cleanup function
 atexit.register(cleanup_asyncio)
-'''
+
 def main():
     """Main orchestration logic."""
     
@@ -587,10 +586,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-    # Suppress the "Event loop is closed" error on Windows
-    if platform.system() == "Windows":
-        from asyncio_win_patch import apply_asyncio_win_patch
-        apply_asyncio_win_patch()
-
-    sys.exit(0)

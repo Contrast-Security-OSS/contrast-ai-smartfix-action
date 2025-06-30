@@ -795,32 +795,15 @@ async def _run_agent_internal_with_prompts(agent_type: str, repo_root: Path, que
     
     return summary
 
-# This patch is now handled in src/asyncio_win_patch.py
-    # and called from main.py
-    # if platform.system() == "Windows":
-    #     _original_loop_check_closed = asyncio.BaseEventLoop._check_closed
-    #     def _patched_loop_check_closed(self):
-    #         try:
-    #             _original_loop_check_closed(self)
-    #         except RuntimeError as e:
-    #             if "Event loop is closed" in str(e):
-    #                 return #ignore this error
-    #             raise
-    #     asyncio.BaseEventLoop._check_closed = _patched_loop_check_closed
-
-'''Maybe re-enable 
-    try:
-        # This is a workaround for Windows where the event loop may be closed prematurely.
-        # It re-creates the event loop if it's found to be closed.
-        # See: https://github.com/python/cpython/issues/98765
-        if sys.platform == "win32":
-            debug_log("Windows platform detected. Checking event loop status...")
-            loop = asyncio.get_running_loop()
-            if loop.is_closed():
-                debug_log("Event loop is closed. Re-creating the event loop...")
-                new_loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(new_loop)
-                debug_log("New event loop set.")
-            else:
-                debug_log("Event loop is active.")
-'''
+# This patch is now handled in src/asyncio_win_patch.py and called from main.py
+if platform.system() == "Windows":
+    _original_loop_check_closed = asyncio.BaseEventLoop._check_closed
+    
+    def _patched_loop_check_closed(self):
+        try:
+            _original_loop_check_closed(self)
+        except RuntimeError as e:
+             if "Event loop is closed" in str(e):
+                 return #ignore this error
+             raise
+        asyncio.BaseEventLoop._check_closed = _patched_loop_check_closed
