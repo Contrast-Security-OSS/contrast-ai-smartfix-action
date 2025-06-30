@@ -180,6 +180,14 @@ For the Early Access release, SmartFix uses a "Bring Your Own LLM" (BYOLLM) mode
 
 Refer to the `action.yml` file within the SmartFix GitHub Action repository and LiteLLM documentation for specific `agent_model` strings and required credentials for other models/providers.  The LiteLLM documentation can be found at https://docs.litellm.ai/docs/providers/.
 
+## Agent Model values
+
+Here are several recommended `agent_model` values:
+
+* `bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0`
+* `anthropic/claude-3-7-sonnet-20250219`
+* `gemini/gemini-2.5-pro-preview-05-06`
+
 ### Supported Languages
 
 * **Java, .NET, Go, Python:** Java applications have received the most testing so far, but we have had also had good results for .NET, Go, and Python projects.
@@ -260,14 +268,6 @@ The following are key inputs for the GitHub Action. Refer to the `action.yml` in
 | `skip_qa_review` | Skip the QA review step (not recommended). | No | `false` |
 | `skip_writing_security_test` | Skip attempting to write a security test for the fix. | No | `false` |
 | `enable_full_telemetry` | Control how much telemetry data is sent back to Contrast. When set to 'true' (default), sends complete log files and build commands. When 'false', sensitive build commands and full logs are omitted. | No | `true` |
-
-## Agent Model values
-
-Here are several recommended `agent_model` values:
-
-* `bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0`
-* `anthropic/claude-3-7-sonnet-20250219`
-* `gemini/gemini-2.5-pro-preview-05-06`
 
 ## Telemetry
 
