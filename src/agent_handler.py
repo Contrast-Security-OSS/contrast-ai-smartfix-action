@@ -73,6 +73,7 @@ import litellm
 
 # Enable LiteLLM's in-memory prompt cache
 litellm.caching = True
+litellm.set_verbose = True # or litellm.set_verbose=True
 
 async def get_mcp_tools(target_folder: Path, remediation_id: str) -> MCPToolset:
     """Connects to MCP servers (Filesystem)"""
