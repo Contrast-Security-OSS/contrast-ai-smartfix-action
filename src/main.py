@@ -77,7 +77,7 @@ if platform.system() == 'Windows':
                 if self._loop.is_closed() or sys.is_finalizing():
                     # Skip the original __del__ which would trigger the error
                     return
-                    
+
                 # Otherwise use the original __del__ implementation
                 _original_pipe_del(self)
             except (AttributeError, RuntimeError, ImportError, TypeError):
