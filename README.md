@@ -311,7 +311,7 @@ SmartFix collects telemetry data to help improve the service and diagnose issues
 * **Ensure the `build_command` Runs the Tests:** This allows SmartFix to catch and fix any tests that may fail due to its changes. It also allows it to run the security tests it creates, if that option is enabled.  
 * **Review PRs Thoroughly:** Always carefully review the code changes proposed by SmartFix before merging.  
 * **Monitor Action Runs:** Regularly check the GitHub Action logs for successful runs and any reported issues.  
-* **Use Recommended LLMs:** For the best experience, use the Anthropic Claude Sonnet 3.7 model.
+* **Use Recommended LLMs:** For the best experience, Contrast recommends using the Anthropic Claude Sonnet 3.7 model.
 
 ## FAQ
 
