@@ -173,7 +173,7 @@ For the Early Access release, SmartFix uses a "Bring Your Own LLM" (BYOLLM) mode
     * Set `agent_model` to the appropriate model string (e.g., `bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0`).  
     * In order for the action to an AWS Bedrock LLM, you need to provide AWS credentials. We recommend using [aws-actions/configure-aws-credentials](https://github.com/aws-actions/configure-aws-credentials) to configure your credentials for a job.  
 
-* **Experimental:** **Google Gemini Pro (e.g., Gemini 2.5 Pro)**. Preliminary testing shows good results, but it has not been fully tested for this release.  
+* **Experimental:** **Google Gemini Pro (e.g., Gemini 2.5 Pro)**. Preliminary testing shows good results.  
   * Set `agent_model` to the appropriate model string (e.g., `gemini/gemini-2.5-pro-preview-05-06`).  
   * Provide your `gemini_api_key`.  
 * **Not Recommended:** OpenAI GPT models (e.g., gpt-4, gpt-4.1, o1, o3, etc) are **not recommended** at this time, as they have shown issues following instructions within the SmartFix agent.
