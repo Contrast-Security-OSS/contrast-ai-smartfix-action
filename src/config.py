@@ -25,6 +25,12 @@ from typing import Optional, Any
 from utils import debug_log, log
 import telemetry_handler
 
+import litellm
+from litellm import Cache
+litellm.set_verbose = True
+print("--- Initializing LiteLLM In-Memory Prompt Cache ---")
+litellm.cache = Cache(type="local", mode="default_on")
+
 def check_contrast_config_values_exist():
     # Check for essential Contrast configuration
     if not all([CONTRAST_HOST, CONTRAST_ORG_ID, CONTRAST_APP_ID, CONTRAST_AUTHORIZATION_KEY, CONTRAST_API_KEY]):
