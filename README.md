@@ -198,7 +198,7 @@ Here are several recommended `agent_model` values:
 * **Ubuntu, Windows:** The Windows and Ubuntu GitHub runners have both been tested and work well for the SmartFix action.
 * **MacOS, and Self-hosted:** No matter the runner you choose, please ensure that your `smartfix.yml` workflow file installs the necessary tools and sets up any PATH or other environmental variables so that your project's build and formatting commands can run as planned.  
 
-Note, the SmartFix action's setup steps rely on the bash shell.  Please ensure that your self-hosted runner has a bash shell available and on the PATH.  For Windows runners, SmartFix will use the Git Bash shell.
+Note: the SmartFix action's setup steps rely on the bash shell.  Please ensure that your self-hosted runner has a bash shell available and on the PATH.  For Windows runners, SmartFix will use the Git Bash shell.
 
 ### Supported Vulnerabilities
 
