@@ -69,6 +69,67 @@ warnings.filterwarnings('ignore', category=UserWarning)
 library_logger = logging.getLogger("google_adk.google.adk.tools.base_authenticated_tool")
 library_logger.setLevel(logging.ERROR)
 
+async def run_isolation_test():
+    """
+    This test strips away all complexity to check if caching works at a fundamental level.
+    """
+    print("--- Running Isolation Test for LiteLLM Caching ---")
+
+    # 1. Setup - The configuration we know should work
+    os.environ["LITELLM_LOG"] = "DEBUG"
+    os.environ["AWS_REGION_NAME"] = "us-east-1" # Or your default region
+    # Add your AWS keys here if they are not already in your environment
+    # os.environ["AWS_ACCESS_KEY_ID"] = "Your_Key"
+    # os.environ["AWS_SECRET_ACCESS_KEY"] = "Your_Secret"
+
+    litellm.cache = Cache(type="local", mode="default_on")
+    print(f"DEBUG: Cache object created: {litellm.cache}")
+    print(f"DEBUG: Cache mode: {litellm.cache.mode}")
+
+    # 2. Make the first, simple, non-streaming call
+    print("\n--- Making First Call (should be a live API call) ---")
+    try:
+        response1 = await litellm.acompletion(
+            model="bedrock/anthropic.claude-3-sonnet-20240229-v1:0",
+            messages=[{"role": "user", "content": "What is the formula for the area of a circle?"}],
+            # NO streaming, NO tools, NO 'caching' or 'cache' kwargs needed due to global setup
+        )
+        print("First call successful.")
+        print("First call usage:", response1.usage)
+    except Exception as e:
+        print(f"First call failed: {e}")
+        return
+
+    # 3. Make the second, identical call
+    print("\n--- Making Second Call (should hit the cache) ---")
+    try:
+        response2 = await litellm.acompletion(
+            model="bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0",
+            messages=[{"role": "user", "content": "What is the formula for the area of a circle?"}],
+        )
+        print("Second call successful.")
+        print("Second call usage:", response2.usage)
+    except Exception as e:
+        print(f"Second call failed: {e}")
+        return
+
+    # 4. Final Analysis
+    print("\n------ ANALYSIS ------")
+    if hasattr(response2.usage, "cacheReadInputTokenCount") and response2.usage.cacheReadInputTokenCount > 0:
+        print("\n✅ SUCCESS: Caching is working at a fundamental level.")
+        print("   The issue is almost certainly with caching complex, tool-using agent calls.")
+    else:
+        print("\n❌ FAILURE: Caching is NOT working even for simple calls.")
+        if hasattr(response1.usage, "cacheWriteInputTokenCount") and response1.usage.cacheWriteInputTokenCount > 0:
+             print("   However, the first call WAS written to the cache. This indicates a key mismatch issue.")
+        else:
+             print("   The first call was NOT written to the cache. This indicates a fundamental write issue in your environment.")
+    print("----------------------")
+
+asyncio.run(run_isolation_test())
+
+
+
 async def get_mcp_tools(target_folder: Path, remediation_id: str) -> MCPToolset:
     """Connects to MCP servers (Filesystem)"""
     debug_log("Attempting to connect to MCP servers...")
