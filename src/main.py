@@ -240,7 +240,7 @@ def main():
     # Construct GitHub repository URL (used for each API call)
     github_repo_url = f"https://github.com/{config.GITHUB_REPOSITORY}"
     debug_log(f"GitHub repository URL: {github_repo_url}")
-
+    skipped_vulns = set()  # TS-39904
     remediation_id = "unknown"
 
     while True:
@@ -308,8 +308,12 @@ def main():
 
         # Changed this logic to check only for OPEN PRs for dev purposes
         if pr_status == "OPEN":
-            log(f"Skipping vulnerability {vuln_uuid} as an OPEN or MERGED PR with label '{label_name}' already exists.")
+            log(f"Skipping vulnerability {vuln_uuid} as an OPEN PR with label '{label_name}' already exists.")
             log("\n::endgroup::")
+            if vuln_uuid in skipped_vulns:
+                log(f"Already skipped {vuln_uuid} before, breaking loop to avoid infinite loop.")
+                break
+            skipped_vulns.add(vuln_uuid)
             continue
         else:
             log(f"No existing OPEN or MERGED PR found for vulnerability {vuln_uuid}. Proceeding with fix attempt.")
