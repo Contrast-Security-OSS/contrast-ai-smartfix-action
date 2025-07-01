@@ -69,8 +69,6 @@ warnings.filterwarnings('ignore', category=UserWarning)
 library_logger = logging.getLogger("google_adk.google.adk.tools.base_authenticated_tool")
 library_logger.setLevel(logging.ERROR)
 
-
-
 async def get_mcp_tools(target_folder: Path, remediation_id: str) -> MCPToolset:
     """Connects to MCP servers (Filesystem)"""
     debug_log("Attempting to connect to MCP servers...")
@@ -140,7 +138,7 @@ async def create_agent(target_folder: Path, remediation_id: str, agent_type: str
     agent_name = f"contrast_{agent_type}_agent"
 
     try:
-        model_instance = LiteLlm(model=config.AGENT_MODEL, stream_options={"include_usage": True}, caching=True)
+        model_instance = LiteLlm(model=config.AGENT_MODEL, stream_options={"include_usage": True}, caching=True, cache={"use-cache": True})
         root_agent = Agent(
             model=model_instance,
             name=agent_name,
