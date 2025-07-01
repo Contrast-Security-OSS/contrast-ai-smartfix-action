@@ -69,6 +69,10 @@ warnings.filterwarnings('ignore', category=UserWarning)
 library_logger = logging.getLogger("google_adk.google.adk.tools.base_authenticated_tool")
 library_logger.setLevel(logging.ERROR)
 
+import litellm
+from litellm import Cache
+import os
+import asyncio
 async def run_isolation_test():
     """
     This test strips away all complexity to check if caching works at a fundamental level.
