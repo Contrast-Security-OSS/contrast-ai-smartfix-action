@@ -94,7 +94,9 @@ async def run_isolation_test():
     print("\n--- Making First Call (should be a live API call) ---")
     try:
         response1 = await litellm.acompletion(
-            model="bedrock/anthropic.claude-3-sonnet-20240229-v1:0",
+            model="bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0",
+            caching=True,  # Enable caching for this call
+            cache={"use-cache": True},  # Use the global cache setup
             messages=[{"role": "user", "content": "What is the formula for the area of a circle?"}],
             # NO streaming, NO tools, NO 'caching' or 'cache' kwargs needed due to global setup
         )
@@ -109,6 +111,8 @@ async def run_isolation_test():
     try:
         response2 = await litellm.acompletion(
             model="bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0",
+            caching=True,  # Enable caching for this call
+            cache={"use-cache": True},  # Use the global cache setup
             messages=[{"role": "user", "content": "What is the formula for the area of a circle?"}],
         )
         print("Second call successful.")
