@@ -44,6 +44,7 @@ def reset_vuln_specific_telemetry():
     _telemetry_data["resultInfo"]["filesModified"] = 0
     _telemetry_data["resultInfo"]["aiSummaryReport"] = None
     _telemetry_data["additionalAttributes"]["remediationId"] = None
+    _telemetry_data["agentEvents"] = []
 
 def initialize_telemetry():
     """
