@@ -122,9 +122,9 @@ class AgentSystem:
             changed_files=changed_files,
             build_command=build_command,
             repo_root=repo_root,
-            max_events_per_agent=max_events or self.max_events_per_agent,
             remediation_id=remediation_id,
             agent_model=agent_model,
+            max_events_per_agent=max_events or self.max_events_per_agent,
             qa_history=qa_history,
             qa_system_prompt=qa_system_prompt,
             qa_user_prompt=qa_user_prompt

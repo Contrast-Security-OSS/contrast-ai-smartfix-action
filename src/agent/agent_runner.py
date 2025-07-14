@@ -675,7 +675,7 @@ class AgentRunner:
             # Cleanup any changes made and revert to base branch (no branch name yet)
             error_exit(remediation_id, failure_code)
 
-    def run_qa_agent(self, build_output: str, changed_files: List[str], build_command: str, repo_root: Path, max_events_per_agent: int, remediation_id: str, agent_model: str,qa_history: Optional[List[str]] = None, qa_system_prompt: Optional[str] = None, qa_user_prompt: Optional[str] = None) -> str:
+    def run_qa_agent(self, build_output: str, changed_files: List[str], build_command: str, repo_root: Path, remediation_id: str, agent_model: str, max_events_per_agent: int = 120, qa_history: Optional[List[str]] = None, qa_system_prompt: Optional[str] = None, qa_user_prompt: Optional[str] = None) -> str:
         """
         Synchronously runs the QA AI agent to fix build/test errors using API-provided prompts.
 
