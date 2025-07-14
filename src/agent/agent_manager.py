@@ -150,6 +150,7 @@ class AgentManager:
         debug_log("\n--- BUILD FAILURE ANALYSIS ---")
         debug_log(error_analysis)
         debug_log("--- END BUILD FAILURE ANALYSIS ---\n")
+        build_output = initial_build_output
 
         qa_attempts = 0
         while qa_attempts < max_qa_attempts_setting:

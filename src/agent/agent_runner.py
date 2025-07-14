@@ -725,12 +725,12 @@ class AgentRunner:
         try:
             # Use the wrapper function to run the agent in a controlled event loop
             qa_summary = self._run_agent_in_event_loop(
+                agent_model,
                 'qa', 
                 repo_root, 
                 qa_query, 
                 qa_system_prompt, 
                 remediation_id,
-                agent_model,
                 max_events_per_agent
             )
             
