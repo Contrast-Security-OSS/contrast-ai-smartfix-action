@@ -57,7 +57,7 @@ class AgentManager:
                 encoding='utf-8', # Explicitly set encoding
                 errors='replace' # Handle potential encoding errors in output
             )
-            update_telemetry("configInfo.buildCommandRunTestsIncluded", True);
+            self.telemetry_handler.update_telemetry("configInfo.buildCommandRunTestsIncluded", True);
             output = result.stdout + result.stderr
             if result.returncode == 0:
                 log("Build command succeeded.")
@@ -137,7 +137,7 @@ class AgentManager:
 
         if initial_build_success:
             log("\n\u2705 Initial build successful after fix. No QA intervention needed.")
-            update_telemetry("resultInfo.filesModified", len(changed_files))
+            self.telemetry_handler.update_telemetry("resultInfo.filesModified", len(changed_files))
             qa_result += "*   **Final Build Status:** Success \n"
             return True, qa_result
 
@@ -197,7 +197,7 @@ class AgentManager:
                         formatting_changed_files = self._format(remediation_id, formatting_command, repo_root)
                         if formatting_changed_files:
                             changed_files.extend([f for f in formatting_changed_files if f not in changed_files])
-                        update_telemetry("resultInfo.filesModified", len(changed_files))
+                        self.telemetry_handler.update_telemetry("resultInfo.filesModified", len(changed_files))
 
                     # Re-run the main build command to check if the QA fix worked
                     log("\n--- Re-running Build Command After QA Fix ---")
