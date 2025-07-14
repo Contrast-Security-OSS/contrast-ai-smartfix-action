@@ -272,8 +272,39 @@ def add_log_message(message: str):
 
 def add_agent_event(event_data: dict):
     """Appends a new agent event to the agentEvents list."""
+    from utils import debug_log
+    import json
+
     global _telemetry_data
-    _telemetry_data["agentEvents"].append(event_data)
+    debug_log("--- Entering add_agent_event ---")
+    
+    # Check for the existence and type of 'agentEvents' key before trying to access it
+    if 'agentEvents' not in _telemetry_data:
+        debug_log("CRITICAL: 'agentEvents' key not found in _telemetry_data before append.")
+        debug_log(f"Current _telemetry_data keys: {list(_telemetry_data.keys())}")
+    elif not isinstance(_telemetry_data.get('agentEvents'), list):
+        debug_log(f"CRITICAL: 'agentEvents' is not a list, but a {type(_telemetry_data.get('agentEvents'))}.")
+        debug_log(f"Current value: {str(_telemetry_data.get('agentEvents'))}")
+
+    try:
+        # The actual operation that is failing
+        _telemetry_data["agentEvents"].append(event_data)
+        
+        # Log success
+        event_type = event_data.get('eventType', 'N/A')
+        debug_log(f"Successfully appended event '{event_type}'. New count: {len(_telemetry_data['agentEvents'])}")
+
+    except KeyError:
+        debug_log("KeyError caught inside add_agent_event. This confirms the key is missing at the time of append.")
+        debug_log(f"Dumping _telemetry_data keys at time of error: {list(_telemetry_data.keys())}")
+        # Re-raise the exception so the program still fails as expected
+        raise
+    except Exception as e:
+        debug_log(f"An unexpected error occurred in add_agent_event: {type(e).__name__} - {e}")
+        raise
+    finally:
+        debug_log("--- Exiting add_agent_event ---")
+
 
 def create_ai_summary_report(pr_body: str) -> str:
     """
