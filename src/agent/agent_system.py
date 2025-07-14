@@ -88,7 +88,7 @@ class AgentSystem:
         changed_files: List[str],
         build_command: str,
         repo_root: Path,
-        max_events: int,
+        max_events_per_agent: int,
         remediation_id: str,
         agent_model: str,
         qa_history: Optional[List[str]] = None,
@@ -103,7 +103,7 @@ class AgentSystem:
             changed_files: List of files changed by the fix agent
             build_command: The build command to use
             repo_root: The root directory of the repository
-            max_events: Maximum number of events per agent run
+            max_events_per_agent: Maximum number of events per agent run
             remediation_id: The ID of the remediation
             agent_model: The LLM model to use
             qa_history: Optional history of previous QA attempts
@@ -124,7 +124,7 @@ class AgentSystem:
             repo_root=repo_root,
             remediation_id=remediation_id,
             agent_model=agent_model,
-            max_events_per_agent=max_events or self.max_events_per_agent,
+            max_events_per_agent=max_events_per_agent or self.max_events_per_agent,
             qa_history=qa_history,
             qa_system_prompt=qa_system_prompt,
             qa_user_prompt=qa_user_prompt
