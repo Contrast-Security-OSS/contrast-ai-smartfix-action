@@ -354,7 +354,7 @@ class AgentRunner:
 
         return final_response
 
-    def _process_qa_user_prompt(qa_user_prompt: str, changed_files: List[str], build_output: str, qa_history_section: str) -> str:
+    def _process_qa_user_prompt(self, qa_user_prompt: str, changed_files: List[str], build_output: str, qa_history_section: str) -> str:
         """
         Process the QA user prompt by replacing placeholders.
         
