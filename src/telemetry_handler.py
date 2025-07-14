@@ -17,7 +17,7 @@
 # #L%
 #
 
-import config # To access VERSION and other config values as needed
+from src.config_compat import VERSION, CONTRAST_HOST, BUILD_COMMAND, FORMATTING_COMMAND, AGENT_MODEL, ENABLE_FULL_TELEMETRY
 
 # Initialize the global telemetry data object
 # This will be populated throughout the script's execution.
@@ -56,7 +56,7 @@ def initialize_telemetry():
     global _telemetry_data, _pre_init_log_buffer, _telemetry_initialized
 
     _telemetry_data = {
-        "teamServerHost": config.CONTRAST_HOST,
+        "teamServerHost": CONTRAST_HOST,
         "vulnInfo": {
             "vulnId": None, 
             "vulnRule": None
@@ -67,9 +67,9 @@ def initialize_telemetry():
             "frameworksAndLibraries": [] 
         },
         "configInfo": {
-            "sanitizedBuildCommand": config.BUILD_COMMAND, 
+            "sanitizedBuildCommand": BUILD_COMMAND, 
             "buildCommandRunTestsIncluded": False,
-            "sanitizedFormatCommand": config.FORMATTING_COMMAND, 
+            "sanitizedFormatCommand": FORMATTING_COMMAND, 
             "aiProvider": None, 
             "aiModel": None     
         },
@@ -82,12 +82,12 @@ def initialize_telemetry():
         "agentEvents": [], 
         "additionalAttributes": {
             "fullLog": "", 
-            "scriptVersion": config.VERSION, 
+            "scriptVersion": VERSION, 
             "remediationId": None, # Populated when remediation ID is known
         }
     }
     
-    agent_model = config.AGENT_MODEL
+    agent_model = AGENT_MODEL
     if agent_model:
         parts = agent_model.split('/', 1)
         _telemetry_data["configInfo"]["aiProvider"] = parts[0]
@@ -189,7 +189,7 @@ def get_telemetry_data():
     truncate_large_text_fields(telemetry_copy, field_limits["defaultTextLength"])
     
     # Control what telemetry data is sent based on ENABLE_FULL_TELEMETRY setting
-    if not config.ENABLE_FULL_TELEMETRY:
+    if not ENABLE_FULL_TELEMETRY:
         # When full telemetry is disabled:
         # 1. Remove sensitive command fields
         if "configInfo" in telemetry_copy:
@@ -220,10 +220,10 @@ def get_telemetry_data():
     json_data = json.dumps(debug_copy, default=str)
     json_size_kb = len(json_data) / 1024
     
-    from utils import debug_log
+    from src.utils import debug_log
     
     # Adjust debug message based on whether fullLog is being sent
-    if config.ENABLE_FULL_TELEMETRY:
+    if ENABLE_FULL_TELEMETRY:
         debug_log(f"Telemetry payload size: {json_size_kb:.2f}KB (fullLog is being sent in its entirety)")
     else:
         debug_log(f"Telemetry payload size: {json_size_kb:.2f}KB (fullLog is excluded per ENABLE_FULL_TELEMETRY=false setting)")

@@ -21,9 +21,9 @@ import os
 import json
 import subprocess
 from typing import List
-from utils import run_command, debug_log, log, error_exit
-from contrast_api import FailureCategory
-import config
+from src.utils import run_command, debug_log, log, error_exit
+from src.api.contrast_api_client import FailureCategory
+from src.config_compat import GITHUB_TOKEN, GITHUB_REPOSITORY, BASE_BRANCH
 
 def get_gh_env():
     """
@@ -34,7 +34,7 @@ def get_gh_env():
         dict: Environment variables dictionary with GitHub token
     """
     gh_env = os.environ.copy()
-    gh_env["GITHUB_TOKEN"] = config.GITHUB_TOKEN
+    gh_env["GITHUB_TOKEN"] = GITHUB_TOKEN
     return gh_env
 
 def configure_git_user():
@@ -55,10 +55,10 @@ def prepare_feature_branch(remediation_id: str):
         # Reset any changes and remove all untracked files to ensure a pristine state
         run_command(["git", "reset", "--hard"], check=True)
         run_command(["git", "clean", "-fd"], check=True)  # Force removal of untracked files and directories
-        run_command(["git", "checkout", config.BASE_BRANCH], check=True)
+        run_command(["git", "checkout", BASE_BRANCH], check=True)
         # Pull latest changes to ensure we're working with the most up-to-date code
         run_command(["git", "pull", "--ff-only"], check=True)
-        log(f"Successfully cleaned workspace and checked out latest {config.BASE_BRANCH}")
+        log(f"Successfully cleaned workspace and checked out latest {BASE_BRANCH}")
         
         branch_name = get_branch_name(remediation_id)
         # Now create the new branch
@@ -130,7 +130,7 @@ def amend_commit():
 def push_branch(branch_name: str):
     """Pushes the current branch to the remote repository."""
     log(f"Pushing branch {branch_name} to remote...")
-    remote_url = f"https://x-access-token:{config.GITHUB_TOKEN}@github.com/{config.GITHUB_REPOSITORY}.git"
+    remote_url = f"https://x-access-token:{GITHUB_TOKEN}@github.com/{GITHUB_REPOSITORY}.git"
     run_command(["git", "push", "--set-upstream", remote_url, branch_name]) # run_command exits on failure
 
 def generate_label_details(vuln_uuid: str) -> tuple[str, str, str]:
@@ -158,7 +158,7 @@ def ensure_label(label_name: str, description: str, color: str) -> bool:
     try:
         list_command = [
             "gh", "label", "list",
-            "--repo", config.GITHUB_REPOSITORY,
+            "--repo", GITHUB_REPOSITORY,
             "--json", "name"
         ]
         import json
@@ -179,7 +179,7 @@ def ensure_label(label_name: str, description: str, color: str) -> bool:
         "gh", "label", "create", label_name,
         "--description", description,
         "--color", color,
-        "--repo", config.GITHUB_REPOSITORY
+        "--repo", GITHUB_REPOSITORY
     ]
     
     try:
@@ -221,7 +221,7 @@ def check_pr_status_for_label(label_name: str) -> str:
     # Check for OPEN PRs
     open_pr_command = [
         "gh", "pr", "list",
-        "--repo", config.GITHUB_REPOSITORY,
+        "--repo", GITHUB_REPOSITORY,
         "--label", label_name,
         "--state", "open",
         "--limit", "1", # We only need to know if at least one exists
@@ -239,7 +239,7 @@ def check_pr_status_for_label(label_name: str) -> str:
     # Check for MERGED PRs
     merged_pr_command = [
         "gh", "pr", "list",
-        "--repo", config.GITHUB_REPOSITORY,
+        "--repo", GITHUB_REPOSITORY,
         "--label", label_name,
         "--state", "merged",
         "--limit", "1",
@@ -266,7 +266,7 @@ def count_open_prs_with_prefix(label_prefix: str) -> int:
     # Let's try fetching labels and filtering locally first.
     pr_list_command = [
         "gh", "pr", "list",
-        "--repo", config.GITHUB_REPOSITORY,
+        "--repo", GITHUB_REPOSITORY,
         "--state", "open",
         "--limit", "100", # Adjust if needed, max is 100 for this command without pagination
         "--json", "number,labels" # Get PR number and labels
@@ -392,7 +392,7 @@ def cleanup_branch(branch_name: str):
     """
     debug_log(f"Cleaning up branch: {branch_name}")
     run_command(["git", "reset", "--hard"], check=False)
-    run_command(["git", "checkout", config.BASE_BRANCH], check=False)
+    run_command(["git", "checkout", BASE_BRANCH], check=False)
     run_command(["git", "branch", "-D", branch_name], check=False)
     log("Branch cleanup completed.")
 

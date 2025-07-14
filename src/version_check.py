@@ -1,8 +1,8 @@
 import os
 import requests
 from packaging.version import parse as parse_version, Version
-from utils import debug_log, log
-import config
+from src.utils import debug_log, log
+from src.config_compat import VERSION
 
 HEX_CHARS = "0123456789abcdef"
 ACTION_REPO_URL = "https://github.com/Contrast-Security-OSS/contrast-ai-smartfix-action"
@@ -124,7 +124,7 @@ def do_version_check():
         debug_log(f"  GITHUB_SHA: {github_sha}")
     
     # In production, use the hardcoded version constant
-    current_action_version = config.VERSION 
+    current_action_version = VERSION 
     debug_log(f"Using hardcoded action version: {current_action_version}")
     
     # For test compatibility:

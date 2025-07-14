@@ -25,8 +25,9 @@ import os
 import platform
 from pathlib import Path
 from typing import Optional
-import config # Import config to access DEBUG_MODE
-import telemetry_handler # Import for telemetry logging
+# Import DEBUG_MODE from config_compat to avoid circular imports
+from src.config_compat import DEBUG_MODE
+import src.telemetry_handler as telemetry_handler # Import for telemetry logging
 
 # Unicode to ASCII fallback mappings for Windows
 UNICODE_FALLBACKS = {
@@ -73,7 +74,7 @@ def debug_log(*args, **kwargs):
     # Log debug messages to telemetry, possibly with a DEBUG prefix or separate field if needed
     # For now, adding to the main log.
     telemetry_handler.add_log_message(f"DEBUG: {message}")
-    if config.DEBUG_MODE:
+    if DEBUG_MODE:
         # Use safe_print for the combined message rather than direct print of args
         safe_print(message, flush=True)
 
@@ -203,22 +204,28 @@ def error_exit(remediation_id: str, failure_code: Optional[str] = None):
         failure_code: Optional failure category code, defaults to GENERAL_FAILURE
     """
     # Local imports to avoid circular dependencies
-    from git_handler import cleanup_branch, get_branch_name
-    from contrast_api import FailureCategory, notify_remediation_failed, send_telemetry_data
+    from src.git_handler import cleanup_branch, get_branch_name
+    from src.contrast_api import notify_remediation_failed, send_telemetry_data
+    # Import FailureCategory from the new API client to avoid circular imports
+    from src.api.contrast_api_client import FailureCategory
 
     # Set default failure code if none provided
     if not failure_code:
         failure_code = FailureCategory.GENERAL_FAILURE.value
 
+    # Import config values from config_compat to avoid circular imports
+    from src.config_compat import CONTRAST_HOST, CONTRAST_ORG_ID, CONTRAST_APP_ID
+    from src.config_compat import CONTRAST_AUTHORIZATION_KEY, CONTRAST_API_KEY
+
     # Attempt to notify remediation service - continue even if this fails
     remediation_notified = notify_remediation_failed(
         remediation_id=remediation_id,
         failure_category=failure_code,
-        contrast_host=config.CONTRAST_HOST,
-        contrast_org_id=config.CONTRAST_ORG_ID,
-        contrast_app_id=config.CONTRAST_APP_ID,
-        contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
-        contrast_api_key=config.CONTRAST_API_KEY
+        contrast_host=CONTRAST_HOST,
+        contrast_org_id=CONTRAST_ORG_ID,
+        contrast_app_id=CONTRAST_APP_ID,
+        contrast_auth_key=CONTRAST_AUTHORIZATION_KEY,
+        contrast_api_key=CONTRAST_API_KEY
     )
 
     if remediation_notified:

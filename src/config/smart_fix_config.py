@@ -22,7 +22,8 @@ import sys
 import json
 from pathlib import Path
 from typing import Optional, Any, List
-from src.utils import debug_log, log
+# Avoid circular imports with utils.py
+# Will use print directly instead of debug_log and log
 
 class SmartFixConfig:
     """
@@ -49,7 +50,7 @@ class SmartFixConfig:
         """Gets an environment variable or exits if required and not found."""
         value = self.env_vars.get(var_name)
         if required and not value:
-            log(f"Error: Required environment variable {var_name} is not set.", is_error=True)
+            print(f"Error: Required environment variable {var_name} is not set.", file=sys.stderr)
             sys.exit(1)
         return value if value else default
         
@@ -63,10 +64,10 @@ class SmartFixConfig:
         
         # --- Build and Formatting Configuration ---
         self.is_generate_fix_task = self.run_task == "generate_fix"
-        if self.is_generate_fix_task:
-            debug_log("Running in generate_fix mode - BUILD_COMMAND is required")
-        else:
-            debug_log(f"Running in {self.run_task} mode - BUILD_COMMAND and FORMATTING_COMMAND are not required")
+        if self.is_generate_fix_task and self.debug_mode:
+            print("Running in generate_fix mode - BUILD_COMMAND is required")
+        elif self.debug_mode:
+            print(f"Running in {self.run_task} mode - BUILD_COMMAND and FORMATTING_COMMAND are not required")
         
         self.build_command = self._get_env_var("BUILD_COMMAND", required=self.is_generate_fix_task, default=None)
         self.formatting_command = self._get_env_var("FORMATTING_COMMAND", required=False, default=None)
@@ -109,17 +110,18 @@ class SmartFixConfig:
         self.repo_root = Path(self._get_env_var("GITHUB_WORKSPACE", required=True)).resolve()
         
         # Debug logs for configuration
-        debug_log(f"Repository Root: {self.repo_root}")
-        debug_log(f"Script Directory: {self.script_dir}")
-        debug_log(f"Debug Mode: {self.debug_mode}")
-        debug_log(f"Base Branch: {self.base_branch}")
-        debug_log(f"Run Task: {self.run_task}")
-        debug_log(f"Agent Model: {self.agent_model}")
-        debug_log(f"Skip Writing Security Test: {self.skip_writing_security_test}")
-        debug_log(f"Skip QA Review: {self.skip_qa_review}") 
-        debug_log(f"Vulnerability Severities: {self.vulnerability_severities}")
-        debug_log(f"Max Events Per Agent: {self.max_events_per_agent}")
-        debug_log(f"Enable Full Telemetry: {self.enable_full_telemetry}")
+        if self.debug_mode:
+            print(f"Repository Root: {self.repo_root}")
+            print(f"Script Directory: {self.script_dir}")
+            print(f"Debug Mode: {self.debug_mode}")
+            print(f"Base Branch: {self.base_branch}")
+            print(f"Run Task: {self.run_task}")
+            print(f"Agent Model: {self.agent_model}")
+            print(f"Skip Writing Security Test: {self.skip_writing_security_test}")
+            print(f"Skip QA Review: {self.skip_qa_review}") 
+            print(f"Vulnerability Severities: {self.vulnerability_severities}")
+            print(f"Max Events Per Agent: {self.max_events_per_agent}")
+            print(f"Enable Full Telemetry: {self.enable_full_telemetry}")
     
     def _get_max_qa_attempts(self) -> int:
         """Validates and normalizes the MAX_QA_ATTEMPTS setting."""
@@ -130,12 +132,12 @@ class SmartFixConfig:
             # Apply the hard cap
             max_qa_attempts = min(max_attempts_from_env, hard_cap_attempts)
             if max_attempts_from_env > hard_cap_attempts:
-                log(f"MAX_QA_ATTEMPTS ({max_attempts_from_env}) exceeded hard cap ({hard_cap_attempts}). Using {hard_cap_attempts}.", is_warning=True)
-            else:
-                debug_log(f"Using MAX_QA_ATTEMPTS from config: {max_qa_attempts}")
+                print(f"WARNING: MAX_QA_ATTEMPTS ({max_attempts_from_env}) exceeded hard cap ({hard_cap_attempts}). Using {hard_cap_attempts}.")
+            elif self.debug_mode:
+                print(f"Using MAX_QA_ATTEMPTS from config: {max_qa_attempts}")
             return max_qa_attempts
         except (ValueError, TypeError):
-            log(f"Invalid MAX_QA_ATTEMPTS value. Using default: {default_max_attempts}", is_warning=True)
+            print(f"WARNING: Invalid MAX_QA_ATTEMPTS value. Using default: {default_max_attempts}")
             return default_max_attempts
     
     def _get_max_open_prs(self) -> int:
@@ -145,12 +147,12 @@ class SmartFixConfig:
             max_open_prs = int(self._get_env_var("MAX_OPEN_PRS", required=False, default="5"))
             if max_open_prs < 0:  # Ensure non-negative
                 max_open_prs = default_max_open_prs
-                log(f"MAX_OPEN_PRS was negative, using default: {default_max_open_prs}", is_warning=True)
-            else:
-                debug_log(f"Using MAX_OPEN_PRS from environment: {max_open_prs}")
+                print(f"WARNING: MAX_OPEN_PRS was negative, using default: {default_max_open_prs}")
+            elif self.debug_mode:
+                print(f"Using MAX_OPEN_PRS from environment: {max_open_prs}")
             return max_open_prs
         except (ValueError, TypeError):
-            log(f"Invalid or missing MAX_OPEN_PRS environment variable. Using default: {default_max_open_prs}", is_warning=True)
+            print(f"WARNING: Invalid or missing MAX_OPEN_PRS environment variable. Using default: {default_max_open_prs}")
             return default_max_open_prs
     
     def _get_max_events_per_agent(self) -> int:
@@ -159,16 +161,16 @@ class SmartFixConfig:
         try:
             max_events = int(self._get_env_var("MAX_EVENTS_PER_AGENT", required=False, default="120"))
             if max_events < 10:  # Ensure it's at least 10 to allow for minimal agent operation
-                log(f"MAX_EVENTS_PER_AGENT ({max_events}) is too low. Using minimum value: 10", is_warning=True)
+                print(f"WARNING: MAX_EVENTS_PER_AGENT ({max_events}) is too low. Using minimum value: 10")
                 return 10
             elif max_events > 500:
-                log(f"MAX_EVENTS_PER_AGENT ({max_events}) is too high. Using maximum value: 500", is_warning=True)
+                print(f"WARNING: MAX_EVENTS_PER_AGENT ({max_events}) is too high. Using maximum value: 500")
                 return 500
-            else:
-                debug_log(f"Using MAX_EVENTS_PER_AGENT from environment: {max_events}")
+            elif self.debug_mode:
+                print(f"Using MAX_EVENTS_PER_AGENT from environment: {max_events}")
                 return max_events
         except (ValueError, TypeError):
-            log(f"Invalid or missing MAX_EVENTS_PER_AGENT environment variable. Using default: {default_max_events}", is_warning=True)
+            print(f"WARNING: Invalid or missing MAX_EVENTS_PER_AGENT environment variable. Using default: {default_max_events}")
             return default_max_events
     
     def _parse_and_validate_severities(self, json_str: Optional[str]) -> List[str]:
@@ -183,7 +185,7 @@ class SmartFixConfig:
             
             # Ensure it's a list
             if not isinstance(severities, list):
-                log(f"Vulnerability_severities must be a list, got {type(severities)}. Using default.", is_warning=True)
+                print(f"WARNING: Vulnerability_severities must be a list, got {type(severities)}. Using default.")
                 return default_severities
             
             # Convert to uppercase and filter valid values
@@ -193,17 +195,17 @@ class SmartFixConfig:
                 if severity_upper in self.VALID_SEVERITIES:
                     validated.append(severity_upper)
                 else:
-                    log(f"'{severity}' is not a valid severity level; disregarding this severity. Must be one of {self.VALID_SEVERITIES}.", is_warning=True)
+                    print(f"WARNING: '{severity}' is not a valid severity level; disregarding this severity. Must be one of {self.VALID_SEVERITIES}.")
             
             # Return default if no valid severities
             if not validated:
-                log(f"No valid severity levels provided. Using default: {default_severities}", is_warning=True)
+                print(f"WARNING: No valid severity levels provided. Using default: {default_severities}")
                 return default_severities
                 
             return validated
         except json.JSONDecodeError:
-            log(f"Error parsing vulnerability_severities JSON: {json_str}. Using default.", is_error=True)
+            print(f"ERROR: Error parsing vulnerability_severities JSON: {json_str}. Using default.", file=sys.stderr)
             return default_severities
         except Exception as e:
-            log(f"Error processing vulnerability_severities: {e}. Using default.", is_error=True)
+            print(f"ERROR: Error processing vulnerability_severities: {e}. Using default.", file=sys.stderr)
             return default_severities
