@@ -2,3 +2,4 @@
 from src.agent.agent_system import AgentSystem
 from src.agent.agent_prompts import AgentPrompts
 from src.agent.agent_runner import AgentRunner
+from src.agent.agent_manager import AgentManager, AgentManagerFactory
