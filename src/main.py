@@ -452,7 +452,7 @@ def main():
             remediation_id=remediation_id,
             build_command=build_command,
             formatting_command=formatting_command,
-            max_qa_attempts=max_qa_attempts_setting,
+            max_qa_attempts_setting=max_qa_attempts_setting,
             max_events_per_agent=config.MAX_EVENTS_PER_AGENT,
             skip_writing_security_test=config.SKIP_WRITING_SECURITY_TEST,
             agent_model=config.AGENT_MODEL
