@@ -227,9 +227,9 @@ class BuildQaManager:
                 changed_files=changed_files, # Pass the current list of changed files
                 build_command=build_command,
                 repo_root=repo_root,
-                max_events_per_agent=max_events_per_agent,
                 remediation_id=remediation_id,
                 agent_model=agent_model,
+                max_events_per_agent=max_events_per_agent,
                 qa_history=qa_summary_log, # Pass the history of previous QA attempts
                 qa_system_prompt=qa_agent.system_prompt,
                 qa_user_prompt=qa_agent.user_prompt
