@@ -111,7 +111,8 @@ class AgentManager:
         formatting_command: str,
         repo_root: Path, 
         max_qa_attempts_setting: int,
-        agent_model: str
+        agent_model: str,
+        max_events_per_agent: int
     ) -> Tuple[bool, str]:
         qa_result = ""
         log("\n--- Starting QA Review Process ---")
@@ -167,6 +168,7 @@ class AgentManager:
                 changed_files=changed_files, # Pass the current list of changed files
                 build_command=build_command,
                 repo_root=repo_root,
+                max_events_per_agent=max_events_per_agent,
                 remediation_id=remediation_id,
                 agent_model=agent_model,
                 qa_history=qa_summary_log, # Pass the history of previous QA attempts
@@ -314,8 +316,9 @@ class AgentManager:
                                          formatting_command=formatting_command,
                                          repo_root=repo_root,
                                          max_qa_attempts_setting=max_qa_attempts_setting,
-                                         agent_model=agent_model)
-        
+                                         agent_model=agent_model,
+                                         max_events_per_agent=max_events_per_agent)
+
         return qa_success, result + qa_result
 
 # %%
