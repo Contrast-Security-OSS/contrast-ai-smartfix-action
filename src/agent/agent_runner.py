@@ -576,9 +576,6 @@ class AgentRunner:
 
     def run_fix_agent(self, fix_agent: AgentPrompts, remediation_id: str, repo_root: Path, max_events_per_agent: int, skip_writing_security_test: bool, agent_model: str) -> str:
         """Synchronously runs the AI agent to analyze and apply a fix using API-provided prompts."""
-
-        # Process the fix user prompt to handle placeholders and optional SecurityTest removal
-#        processed_user_prompt = process_fix_user_prompt(fix_user_prompt) # TODO: call this when making the fix agent
         
         # Use the API-provided prompts instead of hardcoded template
         debug_log("Using API-provided fix prompts")

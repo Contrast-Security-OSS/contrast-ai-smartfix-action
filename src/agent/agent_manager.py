@@ -117,8 +117,6 @@ class AgentManager:
         qa_result = ""
         log("\n--- Starting QA Review Process ---")
         changed_files = git_handler.get_list_changed_files()
-        
-### Start run_qa_loop
         build_success = False
         build_output = "Build not run."
         qa_summary_log = [] # Log QA agent summaries
@@ -189,75 +187,31 @@ class AgentManager:
             # Ensure the group is closed even if errors occur later in the loop
             try:
                 # --- Handle QA Agent Output ---
-#                git_handler.stage_changes()
-#                if git_handler.check_status():
-#                    git_handler.amend_commit()
-                    changed_files = git_handler.get_list_changed_files() # Update changed files list
-#                    log("Amended commit with QA agent fixes.")
-                    
-                    # Always run formatting command before build, if specified
-                    if formatting_command:
-                        formatting_changed_files = self._format(remediation_id, formatting_command, repo_root)
-                        if formatting_changed_files:
-                            changed_files.extend([f for f in formatting_changed_files if f not in changed_files])
-                        self.telemetry_handler.update_telemetry("resultInfo.filesModified", len(changed_files))
+                changed_files = git_handler.get_list_changed_files() # Update changed files list
+                
+                # Always run formatting command before build, if specified
+                if formatting_command:
+                    formatting_changed_files = self._format(remediation_id, formatting_command, repo_root)
+                    if formatting_changed_files:
+                        changed_files.extend([f for f in formatting_changed_files if f not in changed_files])
+                    self.telemetry_handler.update_telemetry("resultInfo.filesModified", len(changed_files))
 
-                    # Re-run the main build command to check if the QA fix worked
-                    log("\n--- Re-running Build Command After QA Fix ---")
-                    build_success, build_output = self._build(remediation_id, build_command, repo_root)
-                    if build_success:
-                        log("\n\u2705 Build successful after QA agent fix.")
-                        qa_result += "*   **Final Build Status:** Success \n"
-                        return True, qa_result
-                    else:
-                        log("\n\u274c Build still failing after QA agent fix.")
-                        continue # Continue to next QA iteration
-#                else:
-#                    log("QA agent did not request a command and made no file changes. Build still failing.")
-#                    # Break the loop if QA agent isn't making progress
-#                    build_success = False
-#                    break
+                # Re-run the main build command to check if the QA fix worked
+                log("\n--- Re-running Build Command After QA Fix ---")
+                build_success, build_output = self._build(remediation_id, build_command, repo_root)
+                if build_success:
+                    log("\n\u2705 Build successful after QA agent fix.")
+                    qa_result += "*   **Final Build Status:** Success \n"
+                    return True, qa_result
+                else:
+                    log("\n\u274c Build still failing after QA agent fix.")
+                    continue # Continue to next QA iteration
             finally:
                 log("\n::endgroup::") # Close the group for the QA attempt
 
-#        if not build_success:
         log(f"\n\u274c Build failed after {qa_attempts} QA attempts.")
-
-#        return build_success, changed_files, build_command, qa_summary_log
-### End run qa loop
-### remove this call to run_qa_loop()
-#        build_success, final_changed_files, used_build_command, qa_summary_log = qa_handler.run_qa_loop(
-#            build_command=build_command,
-#            repo_root=repo_root,
-#            max_qa_attempts=max_qa_attempts_setting,
-#            initial_changed_files=initial_changed_files,
-#            formatting_command=formatting_command,
-#            remediation_id=remediation_id,
-#            qa_system_prompt=qa_system_prompt,
-#            qa_user_prompt=qa_user_prompt
-#        )
-
-#        if build_success:
-#            qa_result += "*   **Final Build Status:** Success \n"
-#        else:
         qa_result += "*   **Final Build Status:** Failure \n"
-        
-        # Skip PR creation if QA was run and the build is failing
-        # or if the QA agent encountered an error (detected by checking qa_summary_log entries)
-#        if not build_success or any(s.startswith("Error during QA agent execution:") for s in qa_summary_log):
-#            failure_category = ""
-            
-#            if any(s.startswith("Error during QA agent.execution:") for s in qa_summary_log):
-#                log("\n--- Skipping PR creation as QA Agent encountered an error ---")
-#                failure_category = FailureCategory.QA_AGENT_FAILURE.value
-#            else:
-#                log("\n--- Skipping PR creation as QA Agent failed to fix build issues ---")
-                # Check if we've exhausted all retry attempts
-#                if len(qa_summary_log) >= max_qa_attempts_setting:
         failure_category = FailureCategory.EXCEEDED_QA_ATTEMPTS.value
-            
-            # Notify the Remediation service about the failed remediation if we have a failure category
-#            if failure_category:
         remediation_notified = notify_remediation_failed(
             remediation_id=remediation_id,
             failure_category=failure_category
