@@ -437,7 +437,7 @@ def main():
 #                elif not build_command:
 #                    log("Skipping QA Review as no BUILD_COMMAND was provided.")
 ### END agent manager
-        agent_manager = AgentManager()
+        agent_manager = AgentManager(telemetry_handler=telemetry_handler)
         
         remediation_success, ai_fix_summary_full = agent_manager.remediate_vulnerability(
             fix_agent = AgentPrompts(

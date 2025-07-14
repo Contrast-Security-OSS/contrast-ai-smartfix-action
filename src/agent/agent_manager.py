@@ -28,7 +28,7 @@ from src import git_handler
 from src.utils import singleton, log, debug_log, error_exit, run_command
 from src.build_output_analyzer import extract_build_errors
 from src.contrast_api import FailureCategory, notify_remediation_failed
-from src.telemetry_handler import update_telemetry
+#from src.telemetry_handler import update_telemetry
 
 from src.agent.agent_prompts import AgentPrompts
 from src.agent.agent_runner import AgentRunner
@@ -36,9 +36,10 @@ from src.agent.agent_runner import AgentRunner
 
 @singleton
 class AgentManager:
-    def __init__(self):
+    def __init__(self, telemetry_handler):
         debug_log("Initializing AgentManager")
-        self.agent_runner = AgentRunner()
+        self.telemetry_handler = telemetry_handler
+        self.agent_runner = AgentRunner(telemetry_handler)
 
     def _build(self, remediation_id: str, build_command: str, repo_root: str) -> Tuple[bool, str]:
         log(f"\n--- Running Build Command: {build_command} ---")

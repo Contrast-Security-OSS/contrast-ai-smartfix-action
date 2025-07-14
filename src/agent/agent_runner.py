@@ -31,12 +31,11 @@ if platform.system() == 'Windows':
     from asyncio import WindowsProactorEventLoopPolicy
 from typing import Optional, Tuple, List
 
-import src.telemetry_handler as telemetry_handler
+#import src.telemetry_handler as telemetry_handler
 
 from src.utils import debug_log, log, error_exit
 from src.contrast_api import FailureCategory
 from src.agent.agent_prompts import AgentPrompts
-
 
 try:
     from google.adk.agents import Agent
@@ -53,7 +52,7 @@ except ImportError as e:
     log(f"Specific Error: {e}", is_error=True)
     log("Traceback:", is_error=True)
     # Use telemetry_handler directly for logging traceback if utils.log is not fully available
-    telemetry_handler.add_log_message(traceback.format_exc())
+    # telemetry_handler.add_log_message(traceback.format_exc())
     print(traceback.format_exc(), file=sys.stderr)
     sys.exit(1) # Exit if ADK is not available
 
@@ -62,8 +61,9 @@ library_logger = logging.getLogger("google_adk.google.adk.tools.base_authenticat
 library_logger.setLevel(logging.ERROR)
 
 class AgentRunner:
-    def __init__(self):
+    def __init__(self, telemetry_handler):
         debug_log("Initializing AgentManager")
+        self.telemetry_handler = telemetry_handler
 
     async def _get_mcp_tools(self, target_folder: Path, remediation_id: str) -> MCPToolset:
         """Connects to MCP servers (Filesystem)"""
@@ -350,7 +350,7 @@ class AgentRunner:
                 "totalTokens": total_tokens,  # Use the tracked token count from latest event
                 "totalCost": 0.0  # Placeholder still as cost calculation would need more info
             }
-            telemetry_handler.add_agent_event(agent_event_payload)
+            self.telemetry_handler.add_agent_event(agent_event_payload)
 
         return final_response
 
@@ -622,7 +622,7 @@ class AgentRunner:
                 if confidence_score_line_match:
                     confidence_str = confidence_score_line_match.group(1).strip()
                     if confidence_str: # Update telemetry if a non-empty string was found
-                        telemetry_handler.update_telemetry("resultInfo.confidence", confidence_str)
+                        self.telemetry_handler.update_telemetry("resultInfo.confidence", confidence_str)
                 else:
                     debug_log("Confidence_Score not found in analytics or is empty.")
 
@@ -631,7 +631,7 @@ class AgentRunner:
                 if prog_lang_match:
                     programming_language_str = prog_lang_match.group(1).strip()
                     if programming_language_str:
-                        telemetry_handler.update_telemetry("appInfo.programmingLanguage", programming_language_str)
+                        self.telemetry_handler.update_telemetry("appInfo.programmingLanguage", programming_language_str)
                 else:
                     debug_log("Programming_Language not found in analytics.")
 
@@ -640,7 +640,7 @@ class AgentRunner:
                 if tech_stack_match:
                     technical_stack_str = tech_stack_match.group(1).strip()
                     if technical_stack_str:
-                        telemetry_handler.update_telemetry("appInfo.technicalStackInfo", technical_stack_str)
+                        self.telemetry_handler.update_telemetry("appInfo.technicalStackInfo", technical_stack_str)
                 else:
                     debug_log("Technical_Stack not found in analytics.")
 
@@ -652,7 +652,7 @@ class AgentRunner:
                         # Split by comma, strip whitespace from each item, and filter out any empty strings
                         frameworks_list = [fw.strip() for fw in frameworks_raw_str.split(',') if fw.strip()]
                         if frameworks_list: # Check if the list is not empty after processing
-                            telemetry_handler.update_telemetry("appInfo.frameworksAndLibraries", frameworks_list)
+                            self.telemetry_handler.update_telemetry("appInfo.frameworksAndLibraries", frameworks_list)
                 else:
                     debug_log("Frameworks not found in analytics.")
             else:
