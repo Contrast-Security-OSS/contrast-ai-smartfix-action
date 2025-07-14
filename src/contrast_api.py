@@ -7,7 +7,7 @@
 # Contact: support@contrastsecurity.com
 # License: Commercial
 # NOTICE: This Software and the patented inventions embodied within may only be
-# used as part of Contrast Security’s commercial offerings. Even though it is
+# used as part of Contrast Security's commercial offerings. Even though it is
 # made available through public repositories, use of this Software is subject to
 # the applicable End User Licensing Agreement found at
 # https://www.contrastsecurity.com/enduser-terms-0317a or as otherwise agreed
@@ -21,9 +21,10 @@ import requests
 import json
 import sys
 from enum import Enum
-import config
-from utils import debug_log, log
-import telemetry_handler
+# Change import to use compatibility layer
+from src.config_compat import USER_AGENT, CONTRAST_HOST, CONTRAST_ORG_ID, CONTRAST_APP_ID, CONTRAST_AUTHORIZATION_KEY, CONTRAST_API_KEY, VERSION, REPO_ROOT
+from src.utils import debug_log, log
+import src.telemetry_handler as telemetry_handler
 
 # Define failure categories as an enum to ensure consistency
 class FailureCategory(Enum):
@@ -75,13 +76,13 @@ def get_vulnerability_with_prompts(contrast_host, contrast_org_id, contrast_app_
         "API-Key": contrast_api_key,
         "Content-Type": "application/json",
         "Accept": "application/json",
-        "User-Agent": config.USER_AGENT
+        "User-Agent": USER_AGENT
     }
     
     # Replace placeholder values with actual config values
     payload = {
         "teamserverHost": f"https://{normalize_host(contrast_host)}",
-        "repoRootDir": str(config.REPO_ROOT),
+        "repoRootDir": str(REPO_ROOT),
         "repoUrl": github_repo_url,
         "maxPullRequests": max_open_prs,
         "severities": vulnerability_severities
@@ -163,7 +164,7 @@ def notify_remediation_pr_opened(remediation_id: str, pr_number: int, pr_url: st
         "API-Key": contrast_api_key,
         "Content-Type": "application/json",
         "Accept": "application/json",
-        "User-Agent": config.USER_AGENT
+        "User-Agent": USER_AGENT
     }
     
     payload = {
@@ -226,7 +227,7 @@ def notify_remediation_pr_merged(remediation_id: str, contrast_host: str, contra
         "API-Key": contrast_api_key,
         "Content-Type": "application/json",
         "Accept": "application/json",
-        "User-Agent": config.USER_AGENT
+        "User-Agent": USER_AGENT
     }
 
     try:
@@ -283,7 +284,7 @@ def notify_remediation_pr_closed(remediation_id: str, contrast_host: str, contra
         "API-Key": contrast_api_key,
         "Content-Type": "application/json",
         "Accept": "application/json",
-        "User-Agent": config.USER_AGENT
+        "User-Agent": USER_AGENT
     }
 
     try:
@@ -329,7 +330,7 @@ def send_telemetry_data() -> bool:
     """
     telemetry_data = telemetry_handler.get_telemetry_data()
 
-    if not config.CONTRAST_HOST or not config.CONTRAST_ORG_ID or not config.CONTRAST_APP_ID or not config.CONTRAST_AUTHORIZATION_KEY or not config.CONTRAST_API_KEY:
+    if not CONTRAST_HOST or not CONTRAST_ORG_ID or not CONTRAST_APP_ID or not CONTRAST_AUTHORIZATION_KEY or not CONTRAST_API_KEY:
         log("Telemetry endpoint configuration is incomplete. Skipping telemetry send.", is_warning=True)
         return False
 
@@ -338,21 +339,20 @@ def send_telemetry_data() -> bool:
 
     if not remediation_id_for_url:
         log("remediationId not found in telemetry_data.additionalAttributes. Telemetry data not sent.", is_warning=True)
-        return
+        return False
 
-    api_url = f"https://{normalize_host(config.CONTRAST_HOST)}/api/v4/aiml-remediation/organizations/{config.CONTRAST_ORG_ID}/applications/{config.CONTRAST_APP_ID}/remediations/{remediation_id_for_url}/telemetry"
+    api_url = f"https://{normalize_host(CONTRAST_HOST)}/api/v4/aiml-remediation/organizations/{CONTRAST_ORG_ID}/applications/{CONTRAST_APP_ID}/remediations/{remediation_id_for_url}/telemetry"
     
     headers = {
-        "Authorization": config.CONTRAST_AUTHORIZATION_KEY,
-        "API-Key": config.CONTRAST_API_KEY,
+        "Authorization": CONTRAST_AUTHORIZATION_KEY,
+        "API-Key": CONTRAST_API_KEY,
         "Content-Type": "application/json",
         "Accept": "application/json",
-        "User-Agent": f"AI SmartFix {config.VERSION}" # Use specific User-Agent
+        "User-Agent": f"AI SmartFix {VERSION}" # Use specific User-Agent
     }
 
     debug_log(f"Sending telemetry data to: {api_url}")
     # Avoid logging full telemetry data by default in production to prevent sensitive info leakage
-    # For debugging, one might temporarily log: debug_log(f"Telemetry payload: {json.dumps(telemetry_data, indent=2)}")
 
     try:
         response = requests.post(api_url, headers=headers, json=telemetry_data, timeout=30)
@@ -373,11 +373,11 @@ def send_telemetry_data() -> bool:
 def notify_remediation_failed(
     remediation_id: str, 
     failure_category: str, 
-    contrast_host: str = config.CONTRAST_HOST, 
-    contrast_org_id: str = config.CONTRAST_ORG_ID,
-    contrast_app_id: str = config.CONTRAST_APP_ID,
-    contrast_auth_key: str = config.CONTRAST_AUTHORIZATION_KEY,
-    contrast_api_key: str = config.CONTRAST_API_KEY
+    contrast_host: str = CONTRAST_HOST, 
+    contrast_org_id: str = CONTRAST_ORG_ID,
+    contrast_app_id: str = CONTRAST_APP_ID,
+    contrast_auth_key: str = CONTRAST_AUTHORIZATION_KEY,
+    contrast_api_key: str = CONTRAST_API_KEY
 ) -> bool:
     """Notifies the Remediation backend service that a remediation has failed.
 
@@ -401,7 +401,7 @@ def notify_remediation_failed(
         "API-Key": contrast_api_key,
         "Content-Type": "application/json",
         "Accept": "application/json",
-        "User-Agent": config.USER_AGENT
+        "User-Agent": USER_AGENT
     }
     
     payload = {

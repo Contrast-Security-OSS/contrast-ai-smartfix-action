@@ -7,7 +7,7 @@
 # Contact: support@contrastsecurity.com
 # License: Commercial
 # NOTICE: This Software and the patented inventions embodied within may only be
-# used as part of Contrast Security’s commercial offerings. Even though it is
+# used as part of Contrast Security's commercial offerings. Even though it is
 # made available through public repositories, use of this Software is subject to
 # the applicable End User Licensing Agreement found at
 # https://www.contrastsecurity.com/enduser-terms-0317a or as otherwise agreed
@@ -19,12 +19,6 @@
 
 import sys
 import os
-
-# Add the project root to the Python path to allow for absolute imports
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
-
 import re
 import asyncio
 import warnings
@@ -33,18 +27,32 @@ import platform
 from datetime import datetime, timedelta
 from asyncio.proactor_events import _ProactorBasePipeTransport
 
-# Import configurations and utilities
-import config
-from utils import debug_log, log, error_exit
-import telemetry_handler
-from version_check import do_version_check
-from agent.agent_manager import AgentManager
-from agent.agent_prompts import AgentPrompts
+# Add the project root to the Python path to allow for absolute imports
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
-# Import domain-specific handlers
-import contrast_api
-import git_handler
-# import qa_handler
+# Import utilities and check version
+from src.utils import debug_log, log, error_exit
+from src.version_check import do_version_check
+
+# Import for compatibility with existing code
+# Import this first since other modules might import from config
+import src.config_compat as config
+
+# Import domain-specific modules - new OO classes
+from src.config.smart_fix_config import SmartFixConfig
+from src.telemetry.telemetry_handler import TelemetryHandler
+from src.api.contrast_api_client import ContrastApiClient, FailureCategory
+from src.git.git_handler import GitHandler
+from src.agent.agent_manager import AgentManager, AgentManagerFactory
+from src.agent.agent_prompts import AgentPrompts
+from src.orchestrator.smart_fix_orchestrator import SmartFixOrchestrator
+
+# Import legacy modules for compatibility
+import src.telemetry_handler as telemetry_handler
+import src.contrast_api as contrast_api
+import src.git_handler as git_handler
 
 # NOTE: Google ADK appears to have issues with asyncio event loop cleanup, and has had attempts to address them in versions 1.4.0-1.5.0
 # Configure warnings to ignore asyncio ResourceWarnings during shutdown
@@ -198,7 +206,7 @@ atexit.register(cleanup_asyncio)
 
 
 def main():
-    """Main orchestration logic."""
+    """Main orchestration logic using the new object-oriented structure."""
     
     start_time = datetime.now()
     log("--- Starting Contrast AI SmartFix Script ---")
@@ -206,6 +214,74 @@ def main():
 
     # --- Version Check ---
     do_version_check()
+    
+    # --- Initialize Configuration ---
+    # For backward compatibility, initialize the global config module first
+    # Most other modules will reference it
+
+    # --- Initialize Telemetry ---
+    telemetry_handler.initialize_telemetry()
+    
+    # --- Run the main process with the legacy code ---
+    # The refactored code will eventually be integrated here,
+    # but for now, we'll use the original implementation
+
+    # Continue with legacy main function
+    # We'll use our config_compat module for compatibility
+    _legacy_main()
+    
+    # Clean up any dangling asyncio resources
+    try:
+        # Force asyncio resource cleanup before exit
+        loop = asyncio.get_event_loop_policy().get_event_loop()
+        if not loop.is_closed():
+            # Cancel all pending tasks
+            pending = asyncio.all_tasks(loop)
+            if pending:
+                for task in pending:
+                    try:
+                        task.cancel()
+                    except Exception:
+                        pass
+                
+                # Give tasks a chance to respond to cancellation
+                try:
+                    # Wait with a timeout to prevent hanging
+                    loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                except (asyncio.CancelledError, Exception):
+                    pass
+            
+            try:
+                # Shut down asyncgens
+                loop.run_until_complete(loop.shutdown_asyncgens())
+            except Exception:
+                pass
+                
+            try:
+                # Close the loop
+                loop.close()
+            except Exception:
+                pass
+                
+        # On Windows, specifically force garbage collection
+        if platform.system() == 'Windows':
+            try:
+                import gc
+                gc.collect()
+            except Exception:
+                pass
+    except Exception as e:
+        # Ignore any errors during cleanup
+        debug_log(f"Ignoring error during asyncio cleanup: {str(e)}")
+        pass
+
+
+def _legacy_main():
+    """Legacy main orchestration logic."""
+    
+    start_time = datetime.now()
+    log("--- Starting Contrast AI SmartFix Script ---")
+    debug_log(f"Start time: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
     # --- Use Build Command and Max Attempts/PRs from Config ---
     build_command = config.BUILD_COMMAND
@@ -442,7 +518,6 @@ def main():
                         log(f"Failed to notify Remediation service about PR for remediation {remediation_id}.", is_warning=True)
                 else:
                     # This case should ideally be handled by create_pr exiting or returning empty
-                    # and then the logic below for SKIP_PR_ON_FAILURE would trigger.
                     # However, if create_pr somehow returns without a URL but doesn't cause an exit:
                     log("PR creation did not return a URL. Assuming failure.")
 
@@ -476,54 +551,7 @@ def main():
         log("\n--- Finished processing vulnerabilities. At least one vulnerability was successfully processed. ---")
 
     log(f"\n--- Script finished (total runtime: {total_runtime}) ---")
-    
-    # Clean up any dangling asyncio resources
-    try:
-        # Force asyncio resource cleanup before exit
-        loop = asyncio.get_event_loop_policy().get_event_loop()
-        if not loop.is_closed():
-            # Cancel all pending tasks
-            pending = asyncio.all_tasks(loop)
-            if pending:
-                for task in pending:
-                    try:
-                        task.cancel()
-                    except Exception:
-                        pass
-                
-                # Give tasks a chance to respond to cancellation
-                try:
-                    # Wait with a timeout to prevent hanging
-                    loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
-                except (asyncio.CancelledError, Exception):
-                    pass
-            
-            try:
-                # Shut down asyncgens
-                loop.run_until_complete(loop.shutdown_asyncgens())
-            except Exception:
-                pass
-                
-            try:
-                # Close the loop
-                loop.close()
-            except Exception:
-                pass
-                
-        # On Windows, specifically force garbage collection
-        if platform.system() == 'Windows':
-            try:
-                import gc
-                gc.collect()
-            except Exception:
-                pass
-    except Exception as e:
-        # Ignore any errors during cleanup
-        debug_log(f"Ignoring error during asyncio cleanup: {str(e)}")
-        pass
 
 
 if __name__ == "__main__":
     main()
-
-# %%
