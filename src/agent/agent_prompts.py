@@ -25,7 +25,7 @@ class AgentPrompts:
         self.user_prompt = user_prompt
 
     @staticmethod
-    def process_fix_user_prompt(self, fix_user_prompt: str, skip_writing_security_test: bool) -> str:
+    def process_fix_user_prompt(fix_user_prompt: str, skip_writing_security_test: bool) -> str:
         """
         Process the fix user prompt by handling SecurityTest removal.
     
