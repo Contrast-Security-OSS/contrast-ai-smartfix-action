@@ -33,7 +33,8 @@ import telemetry_handler
 # from qa_handler import run_build_command
 # from version_check import do_version_check
 # from build_output_analyzer import extract_build_errors
-from agent.agent_manager import AgentManager, AgentPrompts
+from agent.agent_manager import AgentManager
+from agent.agent_prompts import AgentPrompts
 
 # Import domain-specific handlers
 import contrast_api
