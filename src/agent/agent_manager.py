@@ -23,10 +23,9 @@ import os
 from pathlib import Path
 from typing import Tuple, List
 
-import src.git_handler as git_handler
+from src import git_handler
 
 from src.utils import singleton, log, debug_log, error_exit, run_command
-from src.qa_handler import run_build_command
 from src.build_output_analyzer import extract_build_errors
 from src.contrast_api import FailureCategory, notify_remediation_failed
 from src.telemetry_handler import update_telemetry
