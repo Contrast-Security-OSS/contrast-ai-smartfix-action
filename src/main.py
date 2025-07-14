@@ -449,6 +449,7 @@ def main():
                 user_prompt=qa_user_prompt
             ),
             repo_root=config.REPO_ROOT,
+            skip_qa_review=config.SKIP_QA_REVIEW,
             remediation_id=remediation_id,
             build_command=build_command,
             formatting_command=formatting_command,
