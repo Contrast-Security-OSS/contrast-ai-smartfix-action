@@ -442,7 +442,7 @@ def main():
         remediation_success, ai_fix_summary_full = agent_manager.remediate_vulnerability(
             fix_agent = AgentPrompts(
                 system_prompt=fix_system_prompt,
-                user_prompt=AgentPrompts.process_fix_user_prompt(fix_user_prompt)
+                user_prompt=AgentPrompts.process_fix_user_prompt(fix_user_prompt, config.SKIP_WRITING_SECURITY_TEST)
             ),
             qa_agent=AgentPrompts(
                 system_prompt=qa_system_prompt,
