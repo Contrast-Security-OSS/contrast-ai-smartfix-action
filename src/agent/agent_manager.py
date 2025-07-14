@@ -272,7 +272,8 @@ class AgentManager:
         fix_agent: AgentPrompts, 
         qa_agent: AgentPrompts, 
         remediation_id: str, 
-        build_command: str, 
+        build_command: str,
+        formatting_command: str,
         repo_root: Path, 
         skip_qa_review: bool, 
         max_qa_attempts_setting: int,
@@ -309,7 +310,7 @@ class AgentManager:
         qa_success, qa_result = self._qa(qa_agent=qa_agent,
                                          remediation_id=remediation_id,
                                          build_command=build_command,
-                                         formatting_command=fix_agent.formatting_command,
+                                         formatting_command=formatting_command,
                                          repo_root=repo_root,
                                          max_qa_attempts_setting=max_qa_attempts_setting,
                                          agent_model=agent_model)
