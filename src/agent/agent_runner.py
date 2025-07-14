@@ -582,8 +582,8 @@ class AgentRunner:
         
         # Use the API-provided prompts instead of hardcoded template
         debug_log("Using API-provided fix prompts")
-        debug_log(f"Fix System Prompt Length: {len(fix_agent.fix_system_prompt)} chars")
-        debug_log(f"Fix User Prompt Length: {len(fix_agent.processed_user_prompt)} chars")
+        debug_log(f"Fix System Prompt Length: {len(fix_agent.system_prompt)} chars")
+        debug_log(f"Fix User Prompt Length: {len(fix_agent.user_prompt)} chars")
 
         log("\n--- Preparing to run AI Agent to Apply Fix ---")
         debug_log(f"Repo Root for Agent Tools: {repo_root}")
