@@ -90,7 +90,7 @@ class AgentRunner:
 
             debug_log("Getting tools list from Filesystem MCP server...")
             # Use a longer timeout on Windows
-            timeout_seconds = 30.0 if platform.system() == 'Windows' else 10.0
+            timeout_seconds = 30.0
             debug_log(f"Using {timeout_seconds} second timeout for get_tools")
             
             # Wrap the get_tools call in wait_for to apply a timeout
