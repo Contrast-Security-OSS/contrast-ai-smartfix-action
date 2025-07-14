@@ -23,7 +23,7 @@ import os
 from pathlib import Path
 from typing import Tuple, List
 
-from src import git_handler
+from .. import git_handler
 
 from src.utils import singleton, log, debug_log, error_exit, run_command
 from src.build_output_analyzer import extract_build_errors
