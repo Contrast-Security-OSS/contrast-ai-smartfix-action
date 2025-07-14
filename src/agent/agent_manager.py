@@ -23,15 +23,15 @@ import os
 from pathlib import Path
 from typing import Tuple, List
 
-from .. import git_handler
+from src import git_handler
 
 from src.utils import singleton, log, debug_log, error_exit, run_command
 from src.build_output_analyzer import extract_build_errors
 from src.contrast_api import FailureCategory, notify_remediation_failed
 from src.telemetry_handler import update_telemetry
 
-from agent_prompts import AgentPrompts
-from agent_runner import AgentRunner
+from src.agent.agent_prompts import AgentPrompts
+from src.agent.agent_runner import AgentRunner
 
 
 @singleton
