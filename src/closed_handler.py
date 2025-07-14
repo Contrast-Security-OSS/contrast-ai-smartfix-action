@@ -21,11 +21,18 @@ import os
 import json
 import sys
 
-# Assuming contrast_api.py is in the same directory or PYTHONPATH is set up
-import contrast_api
-import config  # To access Contrast API credentials and other configs
-from utils import debug_log, extract_remediation_id_from_branch, log
-import telemetry_handler
+# Add project root to Python path to allow absolute imports when run as script
+import os
+import sys
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+# Import using absolute imports
+from src import contrast_api
+from src.config_compat import CONTRAST_HOST, CONTRAST_ORG_ID, CONTRAST_APP_ID, CONTRAST_AUTHORIZATION_KEY, CONTRAST_API_KEY
+from src.utils import debug_log, extract_remediation_id_from_branch, log
+import src.telemetry_handler as telemetry_handler
 
 def handle_closed_pr():
     """Handles the logic when a pull request is closed without merging."""
@@ -93,17 +100,17 @@ def handle_closed_pr():
     if vuln_uuid == "unknown":
         debug_log("Could not extract vulnerability UUID from PR labels. Telemetry may be incomplete.")
 
-    config.check_contrast_config_values_exist()
+    # Config values already checked through config_compat
     
     # Notify the Remediation backend service about the closed PR
     log(f"Notifying Remediation service about closed PR for remediation {remediation_id}...")
     remediation_notified = contrast_api.notify_remediation_pr_closed(
         remediation_id=remediation_id,
-        contrast_host=config.CONTRAST_HOST,
-        contrast_org_id=config.CONTRAST_ORG_ID,
-        contrast_app_id=config.CONTRAST_APP_ID,
-        contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
-        contrast_api_key=config.CONTRAST_API_KEY
+        contrast_host=CONTRAST_HOST,
+        contrast_org_id=CONTRAST_ORG_ID,
+        contrast_app_id=CONTRAST_APP_ID,
+        contrast_auth_key=CONTRAST_AUTHORIZATION_KEY,
+        contrast_api_key=CONTRAST_API_KEY
     )
     
     if remediation_notified:
