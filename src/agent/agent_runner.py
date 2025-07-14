@@ -31,12 +31,12 @@ if platform.system() == 'Windows':
     from asyncio import WindowsProactorEventLoopPolicy
 from typing import Optional, Tuple, List
 
-import telemetry_handler
+import src.telemetry_handler as telemetry_handler
 
-from src.utils import debug_log
-from agent_prompts import AgentPrompts
-from utils import debug_log, log, error_exit
-from contrast_api import FailureCategory
+from src.utils import debug_log, log, error_exit
+from src.contrast_api import FailureCategory
+from src.agent.agent_prompts import AgentPrompts
+
 
 try:
     from google.adk.agents import Agent
@@ -746,3 +746,4 @@ class AgentRunner:
             if "litellm." in str(e).lower():
                 failure_code = FailureCategory.INVALID_LLM_CONFIG.value
             error_exit(remediation_id, failure_code)
+# %%
