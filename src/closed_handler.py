@@ -43,6 +43,22 @@ def handle_closed_pr():
     """Handles the logic when a pull request is closed without merging."""
     global contrast_client, telemetry_handler_obj
     log("--- Handling Closed (Unmerged) Contrast AI SmartFix Pull Request ---")
+    
+    # Create or reuse ContrastApiClient - Do this at the beginning
+    contrast_client = ContrastApiClient(
+        host=CONTRAST_HOST,
+        org_id=CONTRAST_ORG_ID,
+        app_id=CONTRAST_APP_ID,
+        auth_key=CONTRAST_AUTHORIZATION_KEY,
+        api_key=CONTRAST_API_KEY,
+        user_agent=USER_AGENT
+    )
+    
+    # Initialize the TelemetryHandler - Do this at the beginning
+    telemetry_handler_obj = TelemetryHandler(
+        contrast_api_client=contrast_client,
+        enable_full_telemetry=ENABLE_FULL_TELEMETRY
+    )
 
     # Get PR event details from environment variables set by GitHub Actions
     event_path = os.getenv("GITHUB_EVENT_PATH")
@@ -113,23 +129,8 @@ def handle_closed_pr():
 
     # Config values already checked through config_compat
     
-    # Create or reuse ContrastApiClient
-    if contrast_client is None:
-        contrast_client = ContrastApiClient(
-            host=CONTRAST_HOST,
-            org_id=CONTRAST_ORG_ID,
-            app_id=CONTRAST_APP_ID,
-            auth_key=CONTRAST_AUTHORIZATION_KEY,
-            api_key=CONTRAST_API_KEY,
-            user_agent=USER_AGENT
-        )
-    
-    # Initialize the TelemetryHandler if not already initialized
-    if telemetry_handler_obj is None:
-        telemetry_handler_obj = TelemetryHandler(
-            contrast_api_client=contrast_client,
-            enable_full_telemetry=ENABLE_FULL_TELEMETRY
-        )
+    # Notify the Remediation backend service about the closed PR
+    log(f"Notifying Remediation service about closed PR for remediation {remediation_id}...")
     
     # Notify the Remediation backend service about the closed PR
     log(f"Notifying Remediation service about closed PR for remediation {remediation_id}...")

@@ -43,6 +43,22 @@ def handle_merged_pr():
     """Handles the logic when a pull request is merged."""
     global contrast_client, telemetry_handler_obj
     log("--- Handling Merged Contrast AI SmartFix Pull Request ---")
+    
+    # Create or reuse ContrastApiClient - Do this at the beginning
+    contrast_client = ContrastApiClient(
+        host=CONTRAST_HOST,
+        org_id=CONTRAST_ORG_ID,
+        app_id=CONTRAST_APP_ID,
+        auth_key=CONTRAST_AUTHORIZATION_KEY,
+        api_key=CONTRAST_API_KEY,
+        user_agent=USER_AGENT
+    )
+    
+    # Initialize the TelemetryHandler - Do this at the beginning
+    telemetry_handler_obj = TelemetryHandler(
+        contrast_api_client=contrast_client,
+        enable_full_telemetry=ENABLE_FULL_TELEMETRY
+    )
 
     # Get PR event details from environment variables set by GitHub Actions
     event_path = os.getenv("GITHUB_EVENT_PATH")
