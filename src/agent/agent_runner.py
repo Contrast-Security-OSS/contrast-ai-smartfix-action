@@ -84,14 +84,14 @@ class AgentRunner:
                             target_folder_str,
                         ],
                     ),
-                    timeout=50,
+                    timeout=90 if platform.system() == 'Windows' else 50,
                 )
             )
 
             debug_log("Getting tools list from Filesystem MCP server...")
-            # Use a longer timeout on Windows
-            timeout_seconds = 30.0
-            debug_log(f"Using {timeout_seconds} second timeout for get_tools")
+            # Use a much longer timeout on Windows to handle slower startup times
+            timeout_seconds = 60.0 if platform.system() == 'Windows' else 30.0
+            debug_log(f"Using {timeout_seconds} second timeout for get_tools on {platform.system()}")
             
             # Wrap the get_tools call in wait_for to apply a timeout
             tools_list = await asyncio.wait_for(fs_tools.get_tools(), timeout=timeout_seconds)

@@ -217,8 +217,6 @@ def error_exit(remediation_id: str, failure_code: Optional[str] = None):
         failure_code: Optional failure category code, defaults to GENERAL_FAILURE
     """
     # Local imports to avoid circular dependencies
-    from src.git_handler import cleanup_branch, get_branch_name
-    from src.contrast_api import notify_remediation_failed, send_telemetry_data
     # Import FailureCategory from the new API client to avoid circular imports
     from src.api.contrast_api_client import FailureCategory
 
@@ -230,16 +228,32 @@ def error_exit(remediation_id: str, failure_code: Optional[str] = None):
     from src.config_compat import CONTRAST_HOST, CONTRAST_ORG_ID, CONTRAST_APP_ID
     from src.config_compat import CONTRAST_AUTHORIZATION_KEY, CONTRAST_API_KEY
 
-    # Attempt to notify remediation service - continue even if this fails
-    remediation_notified = notify_remediation_failed(
-        remediation_id=remediation_id,
-        failure_category=failure_code,
-        contrast_host=CONTRAST_HOST,
-        contrast_org_id=CONTRAST_ORG_ID,
-        contrast_app_id=CONTRAST_APP_ID,
-        contrast_auth_key=CONTRAST_AUTHORIZATION_KEY,
-        contrast_api_key=CONTRAST_API_KEY
-    )
+    # Try to use the OO implementation first, fall back to legacy if not available
+    remediation_notified = False
+    try:
+        from src.main import contrast_api_client_obj
+        if contrast_api_client_obj:
+            remediation_notified = contrast_api_client_obj.notify_remediation_failed(
+                remediation_id=remediation_id,
+                failure_category=failure_code
+            )
+        else:
+            log("Warning: contrast_api_client_obj not initialized, falling back to legacy implementation", is_warning=True)
+    except (ImportError, AttributeError) as e:
+        debug_log(f"Cannot access contrast_api_client_obj ({str(e)}), falling back to legacy implementation")
+        
+    # If OO implementation not available, use legacy function
+    if not remediation_notified:
+        from src.contrast_api import notify_remediation_failed
+        remediation_notified = notify_remediation_failed(
+            remediation_id=remediation_id,
+            failure_category=failure_code,
+            contrast_host=CONTRAST_HOST,
+            contrast_org_id=CONTRAST_ORG_ID,
+            contrast_app_id=CONTRAST_APP_ID,
+            contrast_auth_key=CONTRAST_AUTHORIZATION_KEY,
+            contrast_api_key=CONTRAST_API_KEY
+        )
 
     if remediation_notified:
         log(f"Successfully notified Remediation service about {failure_code} for remediation {remediation_id}.")
@@ -247,11 +261,38 @@ def error_exit(remediation_id: str, failure_code: Optional[str] = None):
         log(f"Failed to notify Remediation service about {failure_code} for remediation {remediation_id}.", is_warning=True)
 
     # Attempt to clean up any branches - continue even if this fails
-    branch_name = get_branch_name(remediation_id)
-    cleanup_branch(branch_name)
+    try:
+        from src.main import git_handler_obj
+        if git_handler_obj:
+            branch_name = git_handler_obj.get_branch_name(remediation_id)
+            git_handler_obj.cleanup_branch(branch_name)
+        else:
+            debug_log("Warning: git_handler_obj not initialized, falling back to legacy implementation")
+            from src.git_handler import get_branch_name, cleanup_branch
+            branch_name = get_branch_name(remediation_id)
+            cleanup_branch(branch_name)
+    except (ImportError, AttributeError) as e:
+        debug_log(f"Cannot access git_handler_obj ({str(e)}), falling back to legacy implementation")
+        from src.git_handler import get_branch_name, cleanup_branch
+        branch_name = get_branch_name(remediation_id)
+        cleanup_branch(branch_name)
 
-    # Always attempt to send final telemetry
-    send_telemetry_data()
+    # Always attempt to send final telemetry - try OO first, then legacy
+    telemetry_sent = False
+    try:
+        from src.main import telemetry_handler_obj
+        if telemetry_handler_obj:
+            telemetry_handler_obj.send_telemetry_data()
+            telemetry_sent = True
+        else:
+            debug_log("Warning: telemetry_handler_obj not initialized for sending final telemetry")
+    except (ImportError, AttributeError) as e:
+        debug_log(f"Cannot access telemetry_handler_obj ({str(e)}), falling back to legacy implementation")
+        
+    # If OO implementation not available, use legacy function
+    if not telemetry_sent:
+        from src.contrast_api import send_telemetry_data
+        send_telemetry_data()
 
     # Exit with error code
     sys.exit(1)
