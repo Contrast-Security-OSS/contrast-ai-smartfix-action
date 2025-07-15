@@ -7,7 +7,7 @@
 # Contact: support@contrastsecurity.com
 # License: Commercial
 # NOTICE: This Software and the patented inventions embodied within may only be
-# used as part of Contrast Security’s commercial offerings. Even though it is
+# used as part of Contrast Security's commercial offerings. Even though it is
 # made available through public repositories, use of this Software is subject to
 # the applicable End User Licensing Agreement found at
 # https://www.contrastsecurity.com/enduser-terms-0317a or as otherwise agreed
@@ -25,375 +25,558 @@ from src.utils import run_command, debug_log, log, error_exit
 from src.api.contrast_api_client import FailureCategory
 from src.config_compat import GITHUB_TOKEN, GITHUB_REPOSITORY, BASE_BRANCH
 
+# NOTE: This module provides legacy git handler functions.
+# New code should use the GitHandler class from src.git.git_handler instead.
+
 def get_gh_env():
     """
     Returns an environment dictionary with the GitHub token set.
-    Used for GitHub CLI commands that require authentication.
     
-    Returns:
-        dict: Environment variables dictionary with GitHub token
+    @deprecated Use GitHandler.get_gh_env() instead
     """
-    gh_env = os.environ.copy()
-    gh_env["GITHUB_TOKEN"] = GITHUB_TOKEN
-    return gh_env
+    try:
+        from src.main import git_handler_obj
+        if git_handler_obj:
+            return git_handler_obj.get_gh_env()
+    except (ImportError, AttributeError):
+        pass
+        
+    # Fall back to legacy implementation
+    return {
+        "GH_TOKEN": GITHUB_TOKEN,
+        **os.environ
+    }
 
 def configure_git_user():
-    """Configures git user email and name."""
-    log("Configuring Git user...")
-    run_command(["git", "config", "--global", "user.email", "action@github.com"])
-    run_command(["git", "config", "--global", "user.name", "GitHub Action"])
+    """
+    Configures the git user name and email for committing changes.
+    
+    @deprecated Use GitHandler.configure_git_user() instead
+    """
+    try:
+        from src.main import git_handler_obj
+        if git_handler_obj:
+            git_handler_obj.configure_git_user()
+            return
+    except (ImportError, AttributeError):
+        pass
+        
+    # Fall back to legacy implementation
+    # Set the git user name and email for committing changes
+    run_command(["git", "config", "--global", "user.name", "Contrast Security"])
+    run_command(["git", "config", "--global", "user.email", "seceng@contrastsecurity.com"])
+    run_command(["git", "config", "--global", "pull.rebase", "false"])
 
 def get_branch_name(remediation_id: str) -> str:
-    """Generates a unique branch name based on remediation ID"""
+    """
+    Returns a branch name for a given remediation ID.
+    
+    @deprecated Use GitHandler.get_branch_name() instead
+    
+    Args:
+        remediation_id: The ID of the remediation
+        
+    Returns:
+        str: The branch name to use for the remediation
+    """
+    try:
+        from src.main import git_handler_obj
+        if git_handler_obj:
+            return git_handler_obj.get_branch_name(remediation_id)
+    except (ImportError, AttributeError):
+        pass
+        
+    # Fall back to legacy implementation
     return f"smartfix/remediation-{remediation_id}"
 
 def prepare_feature_branch(remediation_id: str):
-    """Prepares a clean repository state and creates a new feature branch."""
-    log("Cleaning workspace and creating new feature branch...")
+    """
+    Creates and checks out a feature branch for a remediation.
     
+    @deprecated Use GitHandler.prepare_feature_branch() instead
+    
+    Args:
+        remediation_id: The ID of the remediation
+    """
     try:
-        # Reset any changes and remove all untracked files to ensure a pristine state
-        run_command(["git", "reset", "--hard"], check=True)
-        run_command(["git", "clean", "-fd"], check=True)  # Force removal of untracked files and directories
-        run_command(["git", "checkout", BASE_BRANCH], check=True)
-        # Pull latest changes to ensure we're working with the most up-to-date code
-        run_command(["git", "pull", "--ff-only"], check=True)
-        log(f"Successfully cleaned workspace and checked out latest {BASE_BRANCH}")
+        from src.main import git_handler_obj
+        if git_handler_obj:
+            git_handler_obj.prepare_feature_branch(remediation_id)
+            return
+    except (ImportError, AttributeError):
+        pass
         
-        branch_name = get_branch_name(remediation_id)
-        # Now create the new branch
-        log(f"Creating and checking out new branch: {branch_name}")
-        run_command(["git", "checkout", "-b", branch_name]) # run_command exits on failure
-    except subprocess.CalledProcessError as e:
-        log(f"ERROR: Failed to prepare clean workspace due to a subprocess error: {str(e)}", is_error=True)
-        error_exit(remediation_id, FailureCategory.GIT_COMMAND_FAILURE.value)
+    # Fall back to legacy implementation
+    branch_name = get_branch_name(remediation_id)
+    
+    # Make sure we're on the base branch before creating a new one
+    run_command(["git", "checkout", BASE_BRANCH])
+    
+    # Delete the branch if it already exists (from a previous run)
+    try:
+        run_command(["git", "branch", "-D", branch_name])
+    except Exception:
+        # It's okay if the branch doesn't exist yet
+        pass
+
+    # Create a new branch from the base branch
+    run_command(["git", "checkout", "-b", branch_name])
 
 def stage_changes():
-    """Stages all changes in the repository."""
-    debug_log("Staging changes made by AI agent...")
-    # Run with check=False as it might fail if there are no changes, which is ok
-    run_command(["git", "add", "."], check=False)
+    """
+    Stages all changes in the git repository.
+    
+    @deprecated Use GitHandler.stage_changes() instead
+    """
+    try:
+        from src.main import git_handler_obj
+        if git_handler_obj:
+            git_handler_obj.stage_changes()
+            return
+    except (ImportError, AttributeError):
+        pass
+        
+    # Fall back to legacy implementation
+    run_command(["git", "add", "-A"])
 
 def check_status() -> bool:
-    """Checks if there are changes staged for commit. Returns True if changes exist."""
-    status_output = run_command(["git", "status", "--porcelain"])
-    if not status_output:
-        log("No changes detected after AI agent run. Nothing to commit or push.")
-        return False
-    else:
-        debug_log("Changes detected, proceeding with commit and push.")
-        return True
-
-def generate_commit_message(vuln_title: str, vuln_uuid: str) -> str:
-    """Generates the commit message."""
-    return f"Automated fix attempt for: {vuln_title[:50]} (VULN-{vuln_uuid})"
-
-def commit_changes(message: str):
-    """Commits staged changes."""
-    log(f"Committing changes with message: '{message}'")
-    run_command(["git", "commit", "-m", message]) # run_command exits on failure
+    """
+    Checks if there are any changes to commit.
+    
+    @deprecated Use GitHandler.check_status() instead
+    
+    Returns:
+        bool: True if there are changes to commit, False otherwise
+    """
+    try:
+        from src.main import git_handler_obj
+        if git_handler_obj:
+            return git_handler_obj.check_status()
+    except (ImportError, AttributeError):
+        pass
+        
+    # Fall back to legacy implementation
+    result = run_command(["git", "status", "--porcelain"])
+    return bool(result.strip())
 
 def get_list_changed_files() -> List[str]:
-    """Gets the list of files changed in the current working directory."""
-    debug_log("Getting list of changed files...")
-    # Use --no-pager to prevent potential hanging
-    # Use --name-only to get just the file paths
-    # Use check=True because if this fails, something is wrong with the git status
-    status_output = run_command(["git", "--no-pager", "status", "--porcelain", "--untracked-files=no"])
+    """
+    Returns a list of all changed files in the git repository.
     
-    changed_files = []
-    for line in status_output.splitlines():
-        if line and len(line) >= 3:  # Ensure line has enough length to contain a file path
-            changed_files.append(line[3:])  # Skip the first 3 characters (status codes)
+    @deprecated Use GitHandler.get_list_changed_files() instead
     
-    debug_log(f"Changed files: {changed_files}")
-    return changed_files
+    Returns:
+        List[str]: List of changed file paths
+    """
+    try:
+        from src.main import git_handler_obj
+        if git_handler_obj:
+            return git_handler_obj.get_list_changed_files()
+    except (ImportError, AttributeError):
+        pass
+        
+    # Fall back to legacy implementation
+    result = run_command(["git", "diff", "--name-only", "HEAD"])
+    changed_files = [line.strip() for line in result.splitlines() if line.strip()]
+    
+    # Also include staged but uncommitted files
+    staged = run_command(["git", "diff", "--name-only", "--staged"])
+    staged_files = [line.strip() for line in staged.splitlines() if line.strip()]
+    
+    # Also include untracked files
+    untracked = run_command(["git", "ls-files", "--others", "--exclude-standard"])
+    untracked_files = [line.strip() for line in untracked.splitlines() if line.strip()]
+    
+    # Combine all files and remove duplicates
+    all_files = list(set(changed_files + staged_files + untracked_files))
+    
+    return all_files
 
 def get_last_commit_changed_files() -> List[str]:
-    """Gets the list of files changed in the most recent commit."""
-    debug_log("Getting files changed in the last commit...")
-    # Use --no-pager to prevent potential hanging
-    # Use HEAD~1..HEAD to specify the range (last commit)
-    # Use --name-only to get just the file paths
-    # Use check=True because if this fails, something is wrong with the commit history
-    diff_output = run_command(["git", "--no-pager", "diff", "HEAD~1..HEAD", "--name-only"])
-    changed_files = diff_output.splitlines()
-    debug_log(f"Files changed in last commit: {changed_files}")
-    return changed_files
+    """
+    Returns a list of files changed in the last commit.
+    
+    @deprecated Use GitHandler.get_last_commit_changed_files() instead
+    
+    Returns:
+        List[str]: List of changed file paths
+    """
+    try:
+        from src.main import git_handler_obj
+        if git_handler_obj:
+            return git_handler_obj.get_last_commit_changed_files()
+    except (ImportError, AttributeError):
+        pass
+        
+    # Fall back to legacy implementation
+    result = run_command(["git", "diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"])
+    return [line.strip() for line in result.splitlines() if line.strip()]
+
+def generate_commit_message(vuln_title: str, vuln_uuid: str) -> str:
+    """
+    Generates a commit message for a vulnerability fix.
+    
+    @deprecated Use GitHandler.generate_commit_message() instead
+    
+    Args:
+        vuln_title: The title of the vulnerability
+        vuln_uuid: The UUID of the vulnerability
+        
+    Returns:
+        str: The generated commit message
+    """
+    try:
+        from src.main import git_handler_obj
+        if git_handler_obj:
+            return git_handler_obj.generate_commit_message(vuln_title, vuln_uuid)
+    except (ImportError, AttributeError):
+        pass
+        
+    # Fall back to legacy implementation
+    # Limit the title length to avoid overly long commit messages
+    title_limit = 50
+    truncated_title = vuln_title[:title_limit] if len(vuln_title) > title_limit else vuln_title
+    return f"Automated fix attempt for: {truncated_title} (VULN-{vuln_uuid})"
+
+def commit_changes(message: str):
+    """
+    Commits staged changes with the given message.
+    
+    @deprecated Use GitHandler.commit_changes() instead
+    
+    Args:
+        message: The commit message
+    """
+    try:
+        from src.main import git_handler_obj
+        if git_handler_obj:
+            git_handler_obj.commit_changes(message)
+            return
+    except (ImportError, AttributeError):
+        pass
+        
+    # Fall back to legacy implementation
+    run_command(["git", "commit", "-m", message])
 
 def amend_commit():
-    """Amends the last commit with currently staged changes, reusing the previous message."""
-    log("Amending the previous commit with QA fixes...")
-    # Use --no-edit to keep the original commit message
-    run_command(["git", "commit", "--amend", "--no-edit"]) # run_command exits on failure
+    """
+    Amends the previous commit with any newly staged changes.
+    
+    @deprecated Use GitHandler.amend_commit() instead
+    """
+    try:
+        from src.main import git_handler_obj
+        if git_handler_obj:
+            git_handler_obj.amend_commit()
+            return
+    except (ImportError, AttributeError):
+        pass
+        
+    # Fall back to legacy implementation
+    run_command(["git", "commit", "--amend", "--no-edit"])
 
 def push_branch(branch_name: str):
-    """Pushes the current branch to the remote repository."""
-    log(f"Pushing branch {branch_name} to remote...")
-    remote_url = f"https://x-access-token:{GITHUB_TOKEN}@github.com/{GITHUB_REPOSITORY}.git"
-    run_command(["git", "push", "--set-upstream", remote_url, branch_name]) # run_command exits on failure
+    """
+    Pushes a branch to the remote repository.
+    
+    @deprecated Use GitHandler.push_branch() instead
+    
+    Args:
+        branch_name: The name of the branch to push
+    """
+    try:
+        from src.main import git_handler_obj
+        if git_handler_obj:
+            git_handler_obj.push_branch(branch_name)
+            return
+    except (ImportError, AttributeError):
+        pass
+        
+    # Fall back to legacy implementation
+    run_command(["git", "push", "-f", "origin", branch_name])
 
-def generate_label_details(vuln_uuid: str) -> tuple[str, str, str]:
-    """Generates the label name, description, and color."""
+def cleanup_branch(branch_name: str):
+    """
+    Cleans up a feature branch by switching to the base branch and deleting the feature branch.
+    
+    @deprecated Use GitHandler.cleanup_branch() instead
+    
+    Args:
+        branch_name: The name of the branch to clean up
+    """
+    try:
+        from src.main import git_handler_obj
+        if git_handler_obj:
+            git_handler_obj.cleanup_branch(branch_name)
+            return
+    except (ImportError, AttributeError):
+        pass
+        
+    # Fall back to legacy implementation
+    # Make sure we're not on the branch we're trying to delete
+    run_command(["git", "checkout", BASE_BRANCH])
+    
+    try:
+        # Delete the local branch
+        run_command(["git", "branch", "-D", branch_name])
+    except Exception as e:
+        debug_log(f"Warning: Failed to delete local branch {branch_name}: {e}")
+    
+    try:
+        # Delete the remote branch if it exists
+        run_command(["git", "push", "origin", "--delete", branch_name])
+    except Exception as e:
+        debug_log(f"Warning: Failed to delete remote branch {branch_name}: {e}")
+
+def generate_label_details(vuln_uuid: str) -> tuple:
+    """
+    Generates details for a label to be used in a PR.
+    
+    @deprecated Use GitHandler.generate_label_details() instead
+    
+    Args:
+        vuln_uuid: The UUID of the vulnerability
+        
+    Returns:
+        tuple: A tuple containing (label_name, description, color)
+    """
+    try:
+        from src.main import git_handler_obj
+        if git_handler_obj:
+            return git_handler_obj.generate_label_details(vuln_uuid)
+    except (ImportError, AttributeError):
+        pass
+        
+    # Fall back to legacy implementation
     label_name = f"contrast-vuln-id:VULN-{vuln_uuid}"
-    label_description = "Vulnerability identified by Contrast AI SmartFix"
-    label_color = "ff0000" # Red
-    return label_name, label_description, label_color
+    description = "Vulnerability ID from Contrast Security"
+    color = "ff0000"  # Red
+    return (label_name, description, color)
 
 def ensure_label(label_name: str, description: str, color: str) -> bool:
     """
-    Ensures the GitHub label exists, creating it if necessary.
+    Ensures that a label exists in the GitHub repository.
     
-    Returns:
-        bool: True if label exists or was successfully created, False otherwise
-    """
-    log(f"Ensuring GitHub label exists: {label_name}")
-    if len(label_name) > 50:
-        log(f"Label name '{label_name}' exceeds GitHub's 50-character limit.", is_error=True)
-        return False
+    @deprecated Use GitHandler.ensure_label() instead
+    
+    Args:
+        label_name: The name of the label
+        description: The description of the label
+        color: The color of the label (without # prefix)
         
-    gh_env = get_gh_env()
-    
-    # First try to list labels to see if it already exists
+    Returns:
+        bool: True if the label was created or already exists, False otherwise
+    """
     try:
-        list_command = [
-            "gh", "label", "list",
-            "--repo", GITHUB_REPOSITORY,
-            "--json", "name"
-        ]
-        import json
-        list_output = run_command(list_command, env=gh_env, check=False)
-        try:
-            labels = json.loads(list_output)
-            existing_label_names = [label.get("name") for label in labels]
-            if label_name in existing_label_names:
-                log(f"Label '{label_name}' already exists.")
-                return True
-        except json.JSONDecodeError:
-            debug_log(f"Could not parse label list JSON: {list_output}")
-    except Exception as e:
-        debug_log(f"Error listing labels: {e}")
+        from src.main import git_handler_obj
+        if git_handler_obj:
+            return git_handler_obj.ensure_label(label_name, description, color)
+    except (ImportError, AttributeError):
+        pass
+        
+    # Fall back to legacy implementation
+    env = get_gh_env()
     
-    # Create the label if it doesn't exist
-    label_command = [
-        "gh", "label", "create", label_name,
-        "--description", description,
-        "--color", color,
-        "--repo", GITHUB_REPOSITORY
-    ]
-    
+    # Check if the label already exists
     try:
-        # Run with check=False to handle the label already existing
-        import subprocess
-        process = subprocess.run(
-            label_command, 
-            env=gh_env,
+        result = subprocess.run(
+            ["gh", "label", "list", "--json", "name"],
             capture_output=True,
             text=True,
-            check=False
+            env=env,
+            check=True
         )
-        
-        if process.returncode == 0:
-            log(f"Label '{label_name}' created successfully.")
+        labels = json.loads(result.stdout)
+        if any(label["name"] == label_name for label in labels):
+            debug_log(f"Label {label_name} already exists")
             return True
-        else:
-            # Check for "already exists" type of error which is OK
-            if "already exists" in process.stderr.lower():
-                log(f"Label '{label_name}' already exists.")
-                return True
-            else:
-                log(f"Error creating label: {process.stderr}", is_error=True)
-                return False
     except Exception as e:
-        log(f"Exception while creating label: {e}", is_error=True)
+        log(f"Error checking if label exists: {e}", is_warning=True)
+    
+    # Create the label
+    try:
+        subprocess.run(
+            ["gh", "label", "create", label_name, "--description", description, "--color", color],
+            capture_output=True,
+            env=env,
+            check=True
+        )
+        debug_log(f"Created label {label_name}")
+        return True
+    except Exception as e:
+        log(f"Error creating label: {e}", is_warning=True)
         return False
 
 def check_pr_status_for_label(label_name: str) -> str:
     """
-    Checks GitHub for OPEN or MERGED PRs with the given label.
-
-    Returns:
-        str: 'OPEN', 'MERGED', or 'NONE'
-    """
-    log(f"Checking GitHub PR status for label: {label_name}")
-    gh_env = get_gh_env()
-
-    # Check for OPEN PRs
-    open_pr_command = [
-        "gh", "pr", "list",
-        "--repo", GITHUB_REPOSITORY,
-        "--label", label_name,
-        "--state", "open",
-        "--limit", "1", # We only need to know if at least one exists
-        "--json", "number" # Requesting JSON output
-    ]
-    open_pr_output = run_command(open_pr_command, env=gh_env, check=False) # Don't exit if command fails (e.g., no PRs found)
-    try:
-        if open_pr_output and json.loads(open_pr_output): # Check if output is not empty and contains JSON data
-             debug_log(f"Found OPEN PR for label {label_name}.")
-             return "OPEN"
-    except json.JSONDecodeError:
-        log(f"Could not parse JSON output from gh pr list (open): {open_pr_output}", is_error=True)
-
-
-    # Check for MERGED PRs
-    merged_pr_command = [
-        "gh", "pr", "list",
-        "--repo", GITHUB_REPOSITORY,
-        "--label", label_name,
-        "--state", "merged",
-        "--limit", "1",
-        "--json", "number"
-    ]
-    merged_pr_output = run_command(merged_pr_command, env=gh_env, check=False)
-    try:
-        if merged_pr_output and json.loads(merged_pr_output):
-            debug_log(f"Found MERGED PR for label {label_name}.")
-            return "MERGED"
-    except json.JSONDecodeError:
-        log(f"Could not parse JSON output from gh pr list (merged): {merged_pr_output}", is_error=True)
-
-    debug_log(f"No existing OPEN or MERGED PR found for label {label_name}.")
-    return "NONE"
-
-def count_open_prs_with_prefix(label_prefix: str) -> int:
-    """Counts the number of open GitHub PRs with at least one label starting with the given prefix."""
-    log(f"Counting open PRs with label prefix: '{label_prefix}'")
-    gh_env = get_gh_env()
-
-    # Fetch labels of open PRs in JSON format. Limit might need adjustment if > 100 open PRs.
-    # Using --search to filter by label prefix might be more efficient if supported, but --json gives flexibility.
-    # Let's try fetching labels and filtering locally first.
-    pr_list_command = [
-        "gh", "pr", "list",
-        "--repo", GITHUB_REPOSITORY,
-        "--state", "open",
-        "--limit", "100", # Adjust if needed, max is 100 for this command without pagination
-        "--json", "number,labels" # Get PR number and labels
-    ]
-
-    try:
-        pr_list_output = run_command(pr_list_command, env=gh_env, check=True)
-        prs_data = json.loads(pr_list_output)
-    except json.JSONDecodeError:
-        log(f"Could not parse JSON output from gh pr list: {pr_list_output}", is_error=True)
-        return 0 # Assume zero if we can't parse
-    except Exception as e:
-        log(f"Error running gh pr list command: {e}", is_error=True)
-        # Consider if we should exit or return 0. Returning 0 might be safer to avoid blocking unnecessarily.
-        return 0
-
-    count = 0
-    for pr in prs_data:
-        if "labels" in pr and isinstance(pr["labels"], list):
-            for label in pr["labels"]:
-                if "name" in label and label["name"].startswith(label_prefix):
-                    count += 1
-                    break # Count this PR once, even if it has multiple matching labels
+    Checks if there is an open PR with the given label.
     
-    debug_log(f"Found {count} open PR(s) with label prefix '{label_prefix}'.")
-    return count
-
-def generate_pr_title(vuln_title: str) -> str:
-    """Generates the Pull Request title."""
-    return f"Fix: {vuln_title[:100]}"
-
-def create_pr(title: str, body: str, remediation_id: str, base_branch: str, label: str) -> str:
-    """Creates a GitHub Pull Request.
-    
-    Returns:
-        str: The URL of the created pull request, or an empty string if creation failed (though gh usually exits).
-    """
-    log("Creating Pull Request...")
-    import tempfile
-    import os.path
-    import subprocess
-    
-    head_branch = get_branch_name(remediation_id)
-
-    # Set a maximum PR body size (GitHub recommends keeping it under 65536 chars)
-    MAX_PR_BODY_SIZE = 32000
-    
-    # Truncate PR body if too large
-    if len(body) > MAX_PR_BODY_SIZE:
-        log(f"PR body is too large ({len(body)} chars). Truncating to {MAX_PR_BODY_SIZE} chars.", is_warning=True)
-        body = body[:MAX_PR_BODY_SIZE] + "\n\n...[Content truncated due to size limits]..."
-
-    # Add disclaimer to PR body
-    body += "\n\n*Contrast AI SmartFix is powered by AI, so mistakes are possible.  Review before merging.*\n\n"
-    
-    # Create a temporary file to store the PR body
-    with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.md') as temp_file:
-        temp_file_path = temp_file.name
-        temp_file.write(body)
-        debug_log(f"PR body written to temporary file: {temp_file_path}")
-    
-    try:
-        # Check file exists and print size for debugging
-        if os.path.exists(temp_file_path):
-            file_size = os.path.getsize(temp_file_path)
-            debug_log(f"Temporary file exists: {temp_file_path}, size: {file_size} bytes")
-        else:
-            log(f"Error: Temporary file {temp_file_path} does not exist", is_error=True)
-            return
-            
-        gh_env = get_gh_env()
-        
-        # First check if gh is available
-        try:
-            version_output = subprocess.run(
-                ["gh", "--version"], 
-                check=False, 
-                capture_output=True, 
-                text=True
-            )
-            debug_log(f"GitHub CLI version: {version_output.stdout.strip() if version_output.returncode == 0 else 'Not available'}")
-        except Exception as e:
-            log(f"Could not determine GitHub CLI version: {e}", is_error=True)
-        
-        pr_command = [
-            "gh", "pr", "create",
-            "--title", title,
-            "--body-file", temp_file_path,
-            "--base", base_branch,
-            "--head", head_branch,
-        ]
-        if label:
-            pr_command.extend(["--label", label])
-
-        # Run the command and capture the output (PR URL)
-        pr_url = run_command(pr_command, env=gh_env, check=True)
-        if pr_url:
-            log(f"Successfully created PR: {pr_url}")
-        return pr_url
-
-    except FileNotFoundError:
-        log(f"Error: gh command not found. Please ensure the GitHub CLI is installed and in PATH.", is_error=True)
-        error_exit(remediation_id, FailureCategory.GENERATE_PR_FAILURE.value)
-    except Exception as e:
-        log(f"An unexpected error occurred during PR creation: {e}", is_error=True)
-        error_exit(remediation_id, FailureCategory.GENERATE_PR_FAILURE.value)
-    finally:
-        # Clean up the temporary file
-        if os.path.exists(temp_file_path):
-            try:
-                os.remove(temp_file_path)
-                debug_log(f"Temporary PR body file {temp_file_path} removed.")
-            except OSError as e:
-                log(f"Could not remove temporary file {temp_file_path}: {e}", is_error=True)
-
-def cleanup_branch(branch_name: str):
-    """
-    Cleans up a git branch by switching back to the base branch and deleting the specified branch.
-    This function is designed to be safe to use even if errors occur (using check=False).
+    @deprecated Use GitHandler.check_pr_status_for_label() instead
     
     Args:
-        branch_name: Name of the branch to delete
+        label_name: The label to check for
+        
+    Returns:
+        str: "OPEN" if there is an open PR, "MERGED" if there is a merged PR,
+             "CLOSED" if there is a closed PR, or "NONE" if there is no PR
     """
-    debug_log(f"Cleaning up branch: {branch_name}")
-    run_command(["git", "reset", "--hard"], check=False)
-    run_command(["git", "checkout", BASE_BRANCH], check=False)
-    run_command(["git", "branch", "-D", branch_name], check=False)
-    log("Branch cleanup completed.")
+    try:
+        from src.main import git_handler_obj
+        if git_handler_obj:
+            return git_handler_obj.check_pr_status_for_label(label_name)
+    except (ImportError, AttributeError):
+        pass
+        
+    # Fall back to legacy implementation
+    env = get_gh_env()
+    
+    # Search for PRs with the label
+    try:
+        # Try to find OPEN PRs first
+        result = subprocess.run(
+            ["gh", "pr", "list", "--search", f"label:{label_name}", "--json", "state"],
+            capture_output=True,
+            text=True,
+            env=env,
+            check=True
+        )
+        prs = json.loads(result.stdout)
+        if prs:
+            return "OPEN"
+        
+        # Check for closed PRs
+        result = subprocess.run(
+            ["gh", "pr", "list", "--search", f"label:{label_name} is:closed", "--json", "state"],
+            capture_output=True,
+            text=True,
+            env=env,
+            check=True
+        )
+        prs = json.loads(result.stdout)
+        if prs:
+            # Check if any are merged
+            for pr in prs:
+                if pr.get("state") == "MERGED":
+                    return "MERGED"
+            return "CLOSED"
+            
+        return "NONE"
+    except Exception as e:
+        log(f"Error checking PR status: {e}", is_warning=True)
+        return "NONE"
 
-# %%
+def count_open_prs_with_prefix(label_prefix: str) -> int:
+    """
+    Counts the number of open PRs with labels that start with the given prefix.
+    
+    @deprecated Use GitHandler.count_open_prs_with_prefix() instead
+    
+    Args:
+        label_prefix: The prefix to search for
+        
+    Returns:
+        int: The number of open PRs
+    """
+    try:
+        from src.main import git_handler_obj
+        if git_handler_obj:
+            return git_handler_obj.count_open_prs_with_prefix(label_prefix)
+    except (ImportError, AttributeError):
+        pass
+        
+    # Fall back to legacy implementation
+    env = get_gh_env()
+    
+    try:
+        # Use the GitHub CLI to list open PRs with the label prefix
+        result = subprocess.run(
+            ["gh", "pr", "list", "--search", f"label:{label_prefix}*", "--json", "number"],
+            capture_output=True,
+            text=True,
+            env=env,
+            check=True
+        )
+        prs = json.loads(result.stdout)
+        return len(prs)
+    except Exception as e:
+        log(f"Error counting open PRs: {e}", is_warning=True)
+        return 0
+
+def generate_pr_title(vuln_title: str) -> str:
+    """
+    Generates a PR title for a vulnerability fix.
+    
+    @deprecated Use GitHandler.generate_pr_title() instead
+    
+    Args:
+        vuln_title: The title of the vulnerability
+        
+    Returns:
+        str: The generated PR title
+    """
+    try:
+        from src.main import git_handler_obj
+        if git_handler_obj:
+            return git_handler_obj.generate_pr_title(vuln_title)
+    except (ImportError, AttributeError):
+        pass
+        
+    # Fall back to legacy implementation
+    title_limit = 100
+    truncated_title = vuln_title[:title_limit] if len(vuln_title) > title_limit else vuln_title
+    return f"Fix: {truncated_title}"
+
+def create_pr(title: str, body: str, remediation_id: str, base_branch: str, label: str) -> str:
+    """
+    Creates a PR with the given title, body, and label.
+    
+    @deprecated Use GitHandler.create_pr() instead
+    
+    Args:
+        title: The title of the PR
+        body: The body of the PR
+        remediation_id: The ID of the remediation
+        base_branch: The branch to merge into
+        label: The label to apply to the PR
+        
+    Returns:
+        str: The URL of the created PR
+    """
+    try:
+        from src.main import git_handler_obj
+        if git_handler_obj:
+            return git_handler_obj.create_pr(title, body, remediation_id, base_branch, label)
+    except (ImportError, AttributeError):
+        pass
+        
+    # Fall back to legacy implementation
+    env = get_gh_env()
+    branch_name = get_branch_name(remediation_id)
+    
+    # Make sure we've pushed the branch first
+    push_branch(branch_name)
+    
+    # Create the PR using the GitHub CLI
+    try:
+        result = subprocess.run(
+            [
+                "gh", "pr", "create",
+                "--title", title,
+                "--body", body,
+                "--base", base_branch,
+                "--label", label
+            ],
+            capture_output=True,
+            text=True,
+            env=env,
+            check=True
+        )
+        
+        # Extract the PR URL from the output
+        url = result.stdout.strip()
+        debug_log(f"Created PR: {url}")
+        return url
+    except Exception as e:
+        log(f"Error creating PR: {e}", is_error=True)
+        error_exit(remediation_id, FailureCategory.GENERATE_PR_FAILURE.value)
+        return ""

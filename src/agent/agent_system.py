@@ -21,10 +21,11 @@ from pathlib import Path
 from typing import List, Optional
 from src.agent.agent_prompts import AgentPrompts
 from src.agent.agent_runner import AgentRunner
+from src.agent.agent_interfaces import AgentRunnerInterface
 from src.utils import log, debug_log, error_exit
 from src.api.contrast_api_client import FailureCategory
 
-class AgentSystem:
+class AgentSystem(AgentRunnerInterface):
     """
     Manages the AI agents for vulnerability fixing and quality assurance.
     """

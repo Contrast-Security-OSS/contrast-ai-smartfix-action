@@ -24,6 +24,9 @@ from enum import Enum
 # Change import to use compatibility layer
 from src.config_compat import USER_AGENT, CONTRAST_HOST, CONTRAST_ORG_ID, CONTRAST_APP_ID, CONTRAST_AUTHORIZATION_KEY, CONTRAST_API_KEY, VERSION, REPO_ROOT
 from src.utils import debug_log, log
+# NOTE: This module provides legacy contrast API functions.
+# New code should use the ContrastApiClient class from src.api.contrast_api_client instead.
+
 import src.telemetry_handler as telemetry_handler
 
 # Define failure categories as an enum to ensure consistency
@@ -44,6 +47,43 @@ def normalize_host(host: str) -> str:
     return host.replace('https://', '').replace('http://', '')
 
 def get_vulnerability_with_prompts(contrast_host, contrast_org_id, contrast_app_id, contrast_auth_key, contrast_api_key, max_open_prs, github_repo_url, vulnerability_severities):
+    """
+    Fetches a vulnerability to process along with pre-populated prompt templates from the new prompt-details endpoint.
+    
+    @deprecated Use ContrastApiClient.get_vulnerability_with_prompts() instead
+    
+    Args:
+        contrast_host: The Contrast Security host URL
+        contrast_org_id: The organization ID
+        contrast_app_id: The application ID
+        contrast_auth_key: The Contrast authorization key
+        contrast_api_key: The Contrast API key
+        max_open_prs: Maximum number of open PRs allowed
+        github_repo_url: The GitHub repository URL
+        vulnerability_severities: List of severity levels to filter by
+    
+    Returns:
+        dict: Contains vulnerability data and prompts, or None if no vulnerability found or error occurred
+        Structure: {
+            'vulnerability': {...},
+            'fixSystemPrompt': '...',
+            'fixUserPrompt': '...',
+            'qaSystemPrompt': '...',
+            'qaUserPrompt': '...'
+        }
+    """
+    try:
+        from src.main import contrast_api_client_obj
+        if contrast_api_client_obj:
+            return contrast_api_client_obj.get_vulnerability_with_prompts(
+                max_open_prs=max_open_prs,
+                github_repo_url=github_repo_url,
+                vulnerability_severities=vulnerability_severities
+            )
+    except (ImportError, AttributeError):
+        pass
+        
+    # Fall back to legacy implementation
     """Fetches a vulnerability to process along with pre-populated prompt templates from the new prompt-details endpoint.
     
     Args:
@@ -140,7 +180,37 @@ def get_vulnerability_with_prompts(contrast_host, contrast_org_id, contrast_app_
         log(f"Unexpected error calling prompt-details API: {e}", is_error=True)
         sys.exit(1)
 
-def notify_remediation_pr_opened(remediation_id: str, pr_number: int, pr_url: str, contrast_host: str, contrast_org_id: str, contrast_app_id: str, contrast_auth_key: str, contrast_api_key: str) -> bool:
+def notify_remediation_pr_opened(remediation_id: str, pr_number: int, pr_url: str, contrast_host: str = CONTRAST_HOST, contrast_org_id: str = CONTRAST_ORG_ID, contrast_app_id: str = CONTRAST_APP_ID, contrast_auth_key: str = CONTRAST_AUTHORIZATION_KEY, contrast_api_key: str = CONTRAST_API_KEY) -> bool:
+    """
+    Notifies the Remediation backend service that a PR has been opened for a remediation.
+
+    @deprecated Use ContrastApiClient.notify_remediation_pr_opened() instead
+    
+    Args:
+        remediation_id: The ID of the remediation.
+        pr_number: The PR number.
+        pr_url: The URL of the PR.
+        contrast_host: The Contrast Security host URL.
+        contrast_org_id: The organization ID.
+        contrast_app_id: The application ID.
+        contrast_auth_key: The Contrast authorization key.
+        contrast_api_key: The Contrast API key.
+
+    Returns:
+        bool: True if the notification was successful, False otherwise.
+    """
+    try:
+        from src.main import contrast_api_client_obj
+        if contrast_api_client_obj:
+            return contrast_api_client_obj.notify_remediation_pr_opened(
+                remediation_id=remediation_id,
+                pr_number=pr_number,
+                pr_url=pr_url
+            )
+    except (ImportError, AttributeError):
+        pass
+        
+    # Fall back to legacy implementation
     """Notifies the Remediation backend service that a PR has been opened for a remediation.
 
     Args:
@@ -205,7 +275,33 @@ def notify_remediation_pr_opened(remediation_id: str, pr_number: int, pr_url: st
         log(f"Error decoding JSON response when notifying Remediation service about PR for remediation {remediation_id}.", is_error=True)
         return False
 
-def notify_remediation_pr_merged(remediation_id: str, contrast_host: str, contrast_org_id: str, contrast_app_id: str, contrast_auth_key: str, contrast_api_key: str) -> bool:
+def notify_remediation_pr_merged(remediation_id: str, contrast_host: str = CONTRAST_HOST, contrast_org_id: str = CONTRAST_ORG_ID, contrast_app_id: str = CONTRAST_APP_ID, contrast_auth_key: str = CONTRAST_AUTHORIZATION_KEY, contrast_api_key: str = CONTRAST_API_KEY) -> bool:
+    """
+    Notifies the Remediation backend service that a PR has been merged for a remediation.
+
+    @deprecated Use ContrastApiClient.notify_remediation_pr_merged() instead
+    
+    Args:
+        remediation_id: The ID of the remediation.
+        contrast_host: The Contrast Security host URL.
+        contrast_org_id: The organization ID.
+        contrast_app_id: The application ID.
+        contrast_auth_key: The Contrast authorization key.
+        contrast_api_key: The Contrast API key.
+
+    Returns:
+        bool: True if the notification was successful, False otherwise.
+    """
+    try:
+        from src.main import contrast_api_client_obj
+        if contrast_api_client_obj:
+            return contrast_api_client_obj.notify_remediation_pr_merged(
+                remediation_id=remediation_id
+            )
+    except (ImportError, AttributeError):
+        pass
+        
+    # Fall back to legacy implementation
     """Notifies the Remediation backend service that a PR has been merged for a remediation.
 
     Args:
@@ -262,7 +358,33 @@ def notify_remediation_pr_merged(remediation_id: str, contrast_host: str, contra
         log(f"Error decoding JSON response when notifying Remediation service about merged PR for remediation {remediation_id}.", is_error=True)
         return False
 
-def notify_remediation_pr_closed(remediation_id: str, contrast_host: str, contrast_org_id: str, contrast_app_id: str, contrast_auth_key: str, contrast_api_key: str) -> bool:
+def notify_remediation_pr_closed(remediation_id: str, contrast_host: str = CONTRAST_HOST, contrast_org_id: str = CONTRAST_ORG_ID, contrast_app_id: str = CONTRAST_APP_ID, contrast_auth_key: str = CONTRAST_AUTHORIZATION_KEY, contrast_api_key: str = CONTRAST_API_KEY) -> bool:
+    """
+    Notifies the Remediation backend service that a PR has been closed without merging for a remediation.
+
+    @deprecated Use ContrastApiClient.notify_remediation_pr_closed() instead
+    
+    Args:
+        remediation_id: The ID of the remediation.
+        contrast_host: The Contrast Security host URL.
+        contrast_org_id: The organization ID.
+        contrast_app_id: The application ID.
+        contrast_auth_key: The Contrast authorization key.
+        contrast_api_key: The Contrast API key.
+
+    Returns:
+        bool: True if the notification was successful, False otherwise.
+    """
+    try:
+        from src.main import contrast_api_client_obj
+        if contrast_api_client_obj:
+            return contrast_api_client_obj.notify_remediation_pr_closed(
+                remediation_id=remediation_id
+            )
+    except (ImportError, AttributeError):
+        pass
+        
+    # Fall back to legacy implementation
     """Notifies the Remediation backend service that a PR has been closed without merging for a remediation.
 
     Args:
@@ -320,6 +442,24 @@ def notify_remediation_pr_closed(remediation_id: str, contrast_host: str, contra
         return False
 
 def send_telemetry_data() -> bool:
+    """
+    Sends the collected telemetry data to the backend.
+
+    @deprecated Use ContrastApiClient.send_telemetry_data() instead
+    
+    Returns:
+        bool: True if sending was successful, False otherwise.
+    """
+    try:
+        from src.main import contrast_api_client_obj
+        if contrast_api_client_obj:
+            return contrast_api_client_obj.send_telemetry_data()
+        else:
+            log("WARNING: contrast_api_client_obj not initialized. Telemetry not sent.", is_warning=True)
+    except (ImportError, AttributeError) as e:
+        log(f"WARNING: Unable to access API client object ({str(e)}). Telemetry not sent.", is_warning=True)
+        
+    # Fall back to legacy implementation
     """Sends the collected telemetry data to the backend.
 
     Args:
@@ -379,6 +519,34 @@ def notify_remediation_failed(
     contrast_auth_key: str = CONTRAST_AUTHORIZATION_KEY,
     contrast_api_key: str = CONTRAST_API_KEY
 ) -> bool:
+    """
+    Notifies the Remediation backend service that a remediation has failed.
+    
+    @deprecated Use ContrastApiClient.notify_remediation_failed() instead
+
+    Args:
+        remediation_id: The ID of the remediation.
+        failure_category: The category of failure (e.g., "INITIAL_BUILD_FAILURE").
+        contrast_host: The Contrast Security host URL.
+        contrast_org_id: The organization ID.
+        contrast_app_id: The application ID.
+        contrast_auth_key: The Contrast authorization key.
+        contrast_api_key: The Contrast API key.
+
+    Returns:
+        bool: True if the notification was successful, False otherwise.
+    """
+    try:
+        from src.main import contrast_api_client_obj
+        if contrast_api_client_obj:
+            return contrast_api_client_obj.notify_remediation_failed(
+                remediation_id=remediation_id,
+                failure_category=failure_category
+            )
+    except (ImportError, AttributeError):
+        pass
+        
+    # Fall back to legacy implementation
     """Notifies the Remediation backend service that a remediation has failed.
 
     Args:

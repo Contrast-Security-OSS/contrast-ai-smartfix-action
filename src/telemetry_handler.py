@@ -7,7 +7,7 @@
 # Contact: support@contrastsecurity.com
 # License: Commercial
 # NOTICE: This Software and the patented inventions embodied within may only be
-# used as part of Contrast Security’s commercial offerings. Even though it is
+# used as part of Contrast Security's commercial offerings. Even though it is
 # made available through public repositories, use of this Software is subject to
 # the applicable End User Licensing Agreement found at
 # https://www.contrastsecurity.com/enduser-terms-0317a or as otherwise agreed
@@ -18,6 +18,10 @@
 #
 
 from src.config_compat import VERSION, CONTRAST_HOST, BUILD_COMMAND, FORMATTING_COMMAND, AGENT_MODEL, ENABLE_FULL_TELEMETRY
+from src.utils import log
+
+# NOTE: This module provides legacy telemetry functions.
+# New code should use the TelemetryHandler class from src.telemetry.telemetry_handler instead.
 
 # Initialize the global telemetry data object
 # This will be populated throughout the script's execution.
@@ -29,7 +33,18 @@ def reset_vuln_specific_telemetry():
     """
     Resets vulnerability-specific telemetry fields to None or empty states.
     This should be called when starting analysis for a new vulnerability.
+    
+    @deprecated Use TelemetryHandler.reset_vuln_specific_telemetry() instead
     """
+    try:
+        from src.main import telemetry_handler_obj
+        if telemetry_handler_obj:
+            telemetry_handler_obj.reset_vuln_specific_telemetry()
+            return
+    except (ImportError, AttributeError):
+        pass
+        
+    # Fall back to legacy implementation
     global _telemetry_data
     if not _telemetry_data:
         return # Telemetry not initialized yet
@@ -50,6 +65,9 @@ def initialize_telemetry():
     """
     Initializes the telemetry data structure with default and placeholder values.
     This should be called once at the beginning of the main script.
+    
+    @deprecated Use TelemetryHandler constructor instead
+    
     Args:
         initial_config_dict: A dictionary representation of the config module's settings.
     """
@@ -115,7 +133,17 @@ def get_telemetry_data():
     
     As of June 2025, the previous 20KB limit for logs has been removed, and either the full log is sent
     or no log is sent, based on the ENABLE_FULL_TELEMETRY setting.
+    
+    @deprecated Use TelemetryHandler.get_telemetry_data() instead
     """
+    try:
+        from src.main import telemetry_handler_obj
+        if telemetry_handler_obj:
+            return telemetry_handler_obj.get_telemetry_data()
+    except (ImportError, AttributeError):
+        pass
+
+    # Fall back to legacy implementation
     import copy
     import re
     
@@ -236,7 +264,17 @@ def update_telemetry(key_path: str, value):
     """
     Updates a specific field in the telemetry data using a dot-separated key path.
     Example: update_telemetry("vulnInfo.vulnId", "CVE-1234")
+    
+    @deprecated Use TelemetryHandler.update_telemetry() instead
     """
+    try:
+        from src.main import telemetry_handler_obj
+        if telemetry_handler_obj:
+            return telemetry_handler_obj.update_telemetry(key_path, value)
+    except (ImportError, AttributeError):
+        pass
+        
+    # Fall back to legacy implementation
     global _telemetry_data
     keys = key_path.split('.')
     data_ptr = _telemetry_data
@@ -253,7 +291,17 @@ def add_log_message(message: str):
     """
     Appends a message to the fullLog in telemetry or to a pre-init buffer.
     Ensures messages are separated by newlines in the log.
+    
+    @deprecated Use TelemetryHandler.add_log_message() instead
     """
+    try:
+        from src.main import telemetry_handler_obj
+        if telemetry_handler_obj:
+            return telemetry_handler_obj.add_log_message(message)
+    except (ImportError, AttributeError):
+        pass
+        
+    # Fall back to legacy implementation
     global _telemetry_data, _pre_init_log_buffer, _telemetry_initialized
 
     if not _telemetry_initialized:
@@ -271,7 +319,19 @@ def add_log_message(message: str):
             _telemetry_data["additionalAttributes"]["fullLog"] = message
 
 def add_agent_event(event_data: dict):
-    """Appends a new agent event to the agentEvents list."""
+    """
+    Appends a new agent event to the agentEvents list.
+    
+    @deprecated Use TelemetryHandler.add_agent_event() instead
+    """
+    try:
+        from src.main import telemetry_handler_obj
+        if telemetry_handler_obj:
+            return telemetry_handler_obj.add_agent_event(event_data)
+    except (ImportError, AttributeError):
+        pass
+        
+    # Fall back to legacy implementation
     global _telemetry_data
     _telemetry_data["agentEvents"].append(event_data)
 
@@ -280,6 +340,8 @@ def create_ai_summary_report(pr_body: str) -> str:
     Creates a concise summary for aiSummaryReport from the PR body content.
     Extracts the most important information while keeping the result under the
     VARCHAR(255) constraint of the database field.
+    
+    @deprecated Use TelemetryHandler.create_ai_summary_report() instead
 
     Args:
         pr_body: The full PR body content
@@ -287,6 +349,14 @@ def create_ai_summary_report(pr_body: str) -> str:
     Returns:
         str: A concise summary optimized for the aiSummaryReport field
     """
+    try:
+        from src.main import telemetry_handler_obj
+        if telemetry_handler_obj:
+            return telemetry_handler_obj.create_ai_summary_report(pr_body)
+    except (ImportError, AttributeError):
+        pass
+        
+    # Fall back to legacy implementation
     import re
     
     # Extract the first heading as the primary fix description
@@ -345,3 +415,37 @@ def create_ai_summary_report(pr_body: str) -> str:
         brief_summary = brief_summary[:max_summary_length - 3] + "..."
         
     return brief_summary
+
+def send_telemetry_data():
+    """
+    Sends telemetry data to the Contrast API.
+    
+    @deprecated Use TelemetryHandler.send_telemetry_data() instead
+    
+    Returns:
+        bool: True if telemetry was sent successfully, False otherwise
+    """
+    # Get the global handler instance from main and delegate
+    try:
+        from src.main import telemetry_handler_obj
+        if telemetry_handler_obj:
+            return telemetry_handler_obj.send_telemetry_data()
+        else:
+            log("WARNING: telemetry_handler_obj not initialized. Telemetry not sent.", is_warning=True)
+    except (ImportError, AttributeError) as e:
+        log(f"WARNING: Unable to access telemetry handler object ({str(e)}). Telemetry not sent.", is_warning=True)
+        
+    # If we failed to use the OO implementation, attempt to check if remediation_id is available
+    remediation_id = None
+    try:
+        if _telemetry_data and "additionalAttributes" in _telemetry_data and "remediationId" in _telemetry_data["additionalAttributes"]:
+            remediation_id = _telemetry_data["additionalAttributes"]["remediationId"]
+    except:
+        pass
+        
+    if not remediation_id:
+        log("WARNING: remediationId not found in telemetry_data.additionalAttributes. Telemetry data not sent.", is_warning=True)
+        return False
+        
+    log("Legacy telemetry module send_telemetry_data called but couldn't delegate to OO implementation", is_warning=True)
+    return True

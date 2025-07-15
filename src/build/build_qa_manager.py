@@ -20,10 +20,11 @@
 import subprocess
 import os
 from pathlib import Path
-from typing import Tuple, List
+from typing import Tuple, List, Optional, TYPE_CHECKING
 from src.utils import log, debug_log, error_exit, run_command
 from src.build_output_analyzer import extract_build_errors
 from src.api.contrast_api_client import FailureCategory
+from src.agent.agent_interfaces import AgentRunnerInterface
 from src.agent.agent_prompts import AgentPrompts
 
 class BuildQaManager:
@@ -138,7 +139,7 @@ class BuildQaManager:
     
     def run_qa_process(
         self,
-        qa_agent_runner,
+        qa_agent_runner: AgentRunnerInterface,
         qa_agent: AgentPrompts, 
         remediation_id: str, 
         build_command: str,

@@ -206,12 +206,13 @@ atexit.register(cleanup_asyncio)
 
 
 # Global variables for object instances
-contrast_client = None
+contrast_api_client_obj = None
 telemetry_handler_obj = None
+git_handler_obj = None
 
 def main():
     """Main orchestration logic using the new object-oriented structure."""
-    global contrast_client, telemetry_handler_obj
+    global contrast_api_client_obj, telemetry_handler_obj, git_handler_obj
     
     start_time = datetime.now()
     log("--- Starting Contrast AI SmartFix Script ---")
@@ -224,9 +225,9 @@ def main():
     # For backward compatibility, initialize the global config module first
     # Most other modules will reference it
 
-    # --- Initialize Telemetry ---
+    # --- Initialize OO Classes ---
     # Create ContrastApiClient for TelemetryHandler
-    contrast_client = ContrastApiClient(
+    contrast_api_client_obj = ContrastApiClient(
         host=config.CONTRAST_HOST,
         org_id=config.CONTRAST_ORG_ID,
         app_id=config.CONTRAST_APP_ID,
@@ -237,8 +238,15 @@ def main():
     
     # Initialize the TelemetryHandler
     telemetry_handler_obj = TelemetryHandler(
-        contrast_api_client=contrast_client,
+        contrast_api_client=contrast_api_client_obj,
         enable_full_telemetry=config.ENABLE_FULL_TELEMETRY
+    )
+    
+    # Initialize the GitHandler
+    git_handler_obj = GitHandler(
+        github_token=config.GITHUB_TOKEN,
+        github_repository=config.GITHUB_REPOSITORY,
+        base_branch=config.BASE_BRANCH
     )
     
     # For backward compatibility
@@ -300,16 +308,16 @@ def main():
 
 def _legacy_main():
     """Legacy main orchestration logic."""
-    global contrast_client, telemetry_handler_obj
+    global contrast_api_client_obj, telemetry_handler_obj, git_handler_obj
     
     start_time = datetime.now()
     log("--- Starting Contrast AI SmartFix Script ---")
     debug_log(f"Start time: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
     
     # Ensure the global objects are initialized
-    if contrast_client is None or telemetry_handler_obj is None:
+    if contrast_api_client_obj is None or telemetry_handler_obj is None or git_handler_obj is None:
         # Create the objects if not already created
-        contrast_client = ContrastApiClient(
+        contrast_api_client_obj = ContrastApiClient(
             host=config.CONTRAST_HOST,
             org_id=config.CONTRAST_ORG_ID,
             app_id=config.CONTRAST_APP_ID,
@@ -319,8 +327,14 @@ def _legacy_main():
         )
         
         telemetry_handler_obj = TelemetryHandler(
-            contrast_api_client=contrast_client,
+            contrast_api_client=contrast_api_client_obj,
             enable_full_telemetry=config.ENABLE_FULL_TELEMETRY
+        )
+        
+        git_handler_obj = GitHandler(
+            github_token=config.GITHUB_TOKEN,
+            github_repository=config.GITHUB_REPOSITORY,
+            base_branch=config.BASE_BRANCH
         )
 
     # --- Use Build Command and Max Attempts/PRs from Config ---
@@ -339,12 +353,7 @@ def _legacy_main():
     max_qa_attempts_setting = config.MAX_QA_ATTEMPTS
     max_open_prs_setting = config.MAX_OPEN_PRS
 
-    # Create GitHandler instance
-    git_handler_obj = GitHandler(
-        github_token=config.GITHUB_TOKEN,
-        github_repository=config.GITHUB_REPOSITORY,
-        base_branch=config.BASE_BRANCH
-    )
+    # GitHandler instance is already created globally
     
     # --- Initial Setup ---
     git_handler_obj.configure_git_user()
@@ -380,18 +389,8 @@ def _legacy_main():
         elapsed_time = current_time - start_time
         if elapsed_time > max_runtime:
             log(f"\n--- Maximum runtime of 3 hours exceeded (actual: {elapsed_time}). Stopping processing. ---")
-            # Create ContrastApiClient if not already created
-            if not 'contrast_client' in locals():
-                contrast_client = ContrastApiClient(
-                    host=config.CONTRAST_HOST,
-                    org_id=config.CONTRAST_ORG_ID,
-                    app_id=config.CONTRAST_APP_ID,
-                    auth_key=config.CONTRAST_AUTHORIZATION_KEY,
-                    api_key=config.CONTRAST_API_KEY,
-                    user_agent=config.USER_AGENT
-                )
-                
-            remediation_notified = contrast_client.notify_remediation_failed(
+            # Use the global ContrastApiClient
+            remediation_notified = contrast_api_client_obj.notify_remediation_failed(
                 remediation_id=remediation_id,
                 failure_category=FailureCategory.EXCEEDED_TIMEOUT.value
             )
@@ -411,17 +410,8 @@ def _legacy_main():
         # --- Fetch Next Vulnerability and Prompts from New API ---
         log("\n::group::--- Fetching next vulnerability and prompts from Contrast API ---")
         
-        # Create an instance of ContrastApiClient
-        contrast_client = ContrastApiClient(
-            host=config.CONTRAST_HOST,
-            org_id=config.CONTRAST_ORG_ID,
-            app_id=config.CONTRAST_APP_ID,
-            auth_key=config.CONTRAST_AUTHORIZATION_KEY,
-            api_key=config.CONTRAST_API_KEY,
-            user_agent=config.USER_AGENT
-        )
-        
-        vulnerability_data = contrast_client.get_vulnerability_with_prompts(
+        # Use the global ContrastApiClient instance
+        vulnerability_data = contrast_api_client_obj.get_vulnerability_with_prompts(
             max_open_prs=max_open_prs_setting,
             github_repo_url=github_repo_url,
             vulnerability_severities=config.VULNERABILITY_SEVERITIES
@@ -566,8 +556,8 @@ def _legacy_main():
                     if pr_number is None:
                         pr_number = 1;
 
-                    # Use the ContrastApiClient instance
-                    remediation_notified = contrast_client.notify_remediation_pr_opened(
+                    # Use the global ContrastApiClient instance
+                    remediation_notified = contrast_api_client_obj.notify_remediation_pr_opened(
                         remediation_id=remediation_id,
                         pr_number=pr_number,
                         pr_url=pr_url
