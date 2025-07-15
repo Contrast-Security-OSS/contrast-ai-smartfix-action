@@ -427,12 +427,11 @@ class TelemetryHandler:
                 return send_telemetry_data()
             return False
             
-        # Get the processed telemetry data
-        telemetry_data = self.get_telemetry_data()
-        
         # Use the contrast_api_client to send the data
         try:
-            result = self.contrast_api_client.send_telemetry_data(telemetry_data)
+            # ContrastApiClient.send_telemetry_data() retrieves telemetry data internally
+            # from the legacy telemetry_handler, so we don't need to get it here
+            result = self.contrast_api_client.send_telemetry_data()
             return result
         except Exception as e:
             log(f"Error sending telemetry data: {e}", is_error=True)
