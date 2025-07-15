@@ -93,6 +93,22 @@ def commit_changes(message: str):
     log(f"Committing changes with message: '{message}'")
     run_command(["git", "commit", "-m", message]) # run_command exits on failure
 
+def get_list_changed_files() -> List[str]:
+    """Gets the list of files changed in the current working directory."""
+    debug_log("Getting list of changed files...")
+    # Use --no-pager to prevent potential hanging
+    # Use --name-only to get just the file paths
+    # Use check=True because if this fails, something is wrong with the git status
+    status_output = run_command(["git", "--no-pager", "status", "--porcelain", "--untracked-files=no"])
+    
+    changed_files = []
+    for line in status_output.splitlines():
+        if line and len(line) >= 3:  # Ensure line has enough length to contain a file path
+            changed_files.append(line[3:])  # Skip the first 3 characters (status codes)
+    
+    debug_log(f"Changed files: {changed_files}")
+    return changed_files
+
 def get_last_commit_changed_files() -> List[str]:
     """Gets the list of files changed in the most recent commit."""
     debug_log("Getting files changed in the last commit...")

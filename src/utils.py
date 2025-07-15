@@ -236,4 +236,11 @@ def error_exit(remediation_id: str, failure_code: Optional[str] = None):
     # Exit with error code
     sys.exit(1)
 
+def singleton(cls):
+    instances = {}
+    def get_instance(*args, **kwargs):
+        if cls not in instances:
+            instances[cls] = cls(*args, **kwargs)
+        return instances[cls]
+    return get_instance
 # %%

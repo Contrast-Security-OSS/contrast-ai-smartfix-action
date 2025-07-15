@@ -370,7 +370,15 @@ def send_telemetry_data() -> bool:
         log(f"Unexpected error sending telemetry: {e}", is_error=True)
         return False
 
-def notify_remediation_failed(remediation_id: str, failure_category: str, contrast_host: str, contrast_org_id: str, contrast_app_id: str, contrast_auth_key: str, contrast_api_key: str) -> bool:
+def notify_remediation_failed(
+    remediation_id: str, 
+    failure_category: str, 
+    contrast_host: str = config.CONTRAST_HOST, 
+    contrast_org_id: str = config.CONTRAST_ORG_ID,
+    contrast_app_id: str = config.CONTRAST_APP_ID,
+    contrast_auth_key: str = config.CONTRAST_AUTHORIZATION_KEY,
+    contrast_api_key: str = config.CONTRAST_API_KEY
+) -> bool:
     """Notifies the Remediation backend service that a remediation has failed.
 
     Args:
