@@ -35,8 +35,13 @@ import src.telemetry_handler as telemetry_handler
 from src.api.contrast_api_client import ContrastApiClient
 from src.telemetry.telemetry_handler import TelemetryHandler
 
+# Global variables for object instances
+contrast_client = None
+telemetry_handler_obj = None
+
 def handle_merged_pr():
     """Handles the logic when a pull request is merged."""
+    global contrast_client, telemetry_handler_obj
     log("--- Handling Merged Contrast AI SmartFix Pull Request ---")
 
     # Get PR event details from environment variables set by GitHub Actions
@@ -108,21 +113,23 @@ def handle_merged_pr():
 
     # Config values already checked through config_compat
     
-    # Create ContrastApiClient
-    contrast_client = ContrastApiClient(
-        host=CONTRAST_HOST,
-        org_id=CONTRAST_ORG_ID,
-        app_id=CONTRAST_APP_ID,
-        auth_key=CONTRAST_AUTHORIZATION_KEY,
-        api_key=CONTRAST_API_KEY,
-        user_agent=USER_AGENT
-    )
+    # Create or reuse ContrastApiClient
+    if contrast_client is None:
+        contrast_client = ContrastApiClient(
+            host=CONTRAST_HOST,
+            org_id=CONTRAST_ORG_ID,
+            app_id=CONTRAST_APP_ID,
+            auth_key=CONTRAST_AUTHORIZATION_KEY,
+            api_key=CONTRAST_API_KEY,
+            user_agent=USER_AGENT
+        )
     
-    # Initialize the TelemetryHandler
-    telemetry_handler_obj = TelemetryHandler(
-        contrast_api_client=contrast_client,
-        enable_full_telemetry=ENABLE_FULL_TELEMETRY
-    )
+    # Initialize the TelemetryHandler if not already initialized
+    if telemetry_handler_obj is None:
+        telemetry_handler_obj = TelemetryHandler(
+            contrast_api_client=contrast_client,
+            enable_full_telemetry=ENABLE_FULL_TELEMETRY
+        )
     
     # Notify the Remediation backend service about the merged PR
     log(f"Notifying Remediation service about merged PR for remediation {remediation_id}...")
