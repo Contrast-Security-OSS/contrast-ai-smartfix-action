@@ -22,6 +22,7 @@ import json
 import sys
 from enum import Enum
 from src.utils import debug_log, log
+import src.telemetry_handler as telemetry_handler
 
 # Define failure categories as an enum to ensure consistency
 class FailureCategory(Enum):
@@ -361,17 +362,18 @@ class ContrastApiClient:
             log(f"Error decoding JSON response when notifying Remediation service about failed remediation {remediation_id}.", is_error=True)
             return False
             
-    def send_telemetry_data(self, telemetry_data):
+    def send_telemetry_data(self):
         """
         Sends the collected telemetry data to the backend.
-        
-        Args:
-            telemetry_data: The telemetry data dictionary
+        Retrieves telemetry data from the telemetry handler and sends it to the API.
             
         Returns:
             bool: True if sending was successful, False otherwise
         """
         debug_log("Sending telemetry data")
+        
+        # Get telemetry data from the telemetry handler
+        telemetry_data = telemetry_handler.get_telemetry_data()
         
         if not telemetry_data:
             log("No telemetry data to send", is_warning=True)

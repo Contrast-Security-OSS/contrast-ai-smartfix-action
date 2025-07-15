@@ -29,10 +29,10 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 # Import using absolute imports
-from src import contrast_api
-from src.config_compat import CONTRAST_HOST, CONTRAST_ORG_ID, CONTRAST_APP_ID, CONTRAST_AUTHORIZATION_KEY, CONTRAST_API_KEY
+from src.config_compat import CONTRAST_HOST, CONTRAST_ORG_ID, CONTRAST_APP_ID, CONTRAST_AUTHORIZATION_KEY, CONTRAST_API_KEY, USER_AGENT
 from src.utils import debug_log, extract_remediation_id_from_branch, log
 import src.telemetry_handler as telemetry_handler
+from src.api.contrast_api_client import ContrastApiClient
 
 def handle_merged_pr():
     """Handles the logic when a pull request is merged."""
@@ -102,15 +102,20 @@ def handle_merged_pr():
 
     # Config values already checked through config_compat
     
+    # Create ContrastApiClient
+    contrast_client = ContrastApiClient(
+        host=CONTRAST_HOST,
+        org_id=CONTRAST_ORG_ID,
+        app_id=CONTRAST_APP_ID,
+        auth_key=CONTRAST_AUTHORIZATION_KEY,
+        api_key=CONTRAST_API_KEY,
+        user_agent=USER_AGENT
+    )
+    
     # Notify the Remediation backend service about the merged PR
     log(f"Notifying Remediation service about merged PR for remediation {remediation_id}...")
-    remediation_notified = contrast_api.notify_remediation_pr_merged(
-        remediation_id=remediation_id,
-        contrast_host=CONTRAST_HOST,
-        contrast_org_id=CONTRAST_ORG_ID,
-        contrast_app_id=CONTRAST_APP_ID,
-        contrast_auth_key=CONTRAST_AUTHORIZATION_KEY,
-        contrast_api_key=CONTRAST_API_KEY
+    remediation_notified = contrast_client.notify_remediation_pr_merged(
+        remediation_id=remediation_id
     )
     
     if remediation_notified:
@@ -119,7 +124,7 @@ def handle_merged_pr():
         log(f"Failed to notify Remediation service about merged PR for remediation {remediation_id}.", is_error=True)
 
     telemetry_handler.update_telemetry("additionalAttributes.prStatus", "MERGED")
-    contrast_api.send_telemetry_data()
+    contrast_client.send_telemetry_data()
 
     log("--- Merged Contrast AI SmartFix Pull Request Handling Complete ---")
 

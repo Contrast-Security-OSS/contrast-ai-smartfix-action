@@ -333,14 +333,20 @@ def _legacy_main():
         elapsed_time = current_time - start_time
         if elapsed_time > max_runtime:
             log(f"\n--- Maximum runtime of 3 hours exceeded (actual: {elapsed_time}). Stopping processing. ---")
-            remediation_notified = contrast_api.notify_remediation_failed(
+            # Create ContrastApiClient if not already created
+            if not 'contrast_client' in locals():
+                contrast_client = ContrastApiClient(
+                    host=config.CONTRAST_HOST,
+                    org_id=config.CONTRAST_ORG_ID,
+                    app_id=config.CONTRAST_APP_ID,
+                    auth_key=config.CONTRAST_AUTHORIZATION_KEY,
+                    api_key=config.CONTRAST_API_KEY,
+                    user_agent=config.USER_AGENT
+                )
+                
+            remediation_notified = contrast_client.notify_remediation_failed(
                 remediation_id=remediation_id,
-                failure_category=contrast_api.FailureCategory.EXCEEDED_TIMEOUT.value,
-                contrast_host=config.CONTRAST_HOST,
-                contrast_org_id=config.CONTRAST_ORG_ID,
-                contrast_app_id=config.CONTRAST_APP_ID,
-                contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
-                contrast_api_key=config.CONTRAST_API_KEY
+                failure_category=FailureCategory.EXCEEDED_TIMEOUT.value
             )
 
             if remediation_notified:
@@ -357,11 +363,21 @@ def _legacy_main():
 
         # --- Fetch Next Vulnerability and Prompts from New API ---
         log("\n::group::--- Fetching next vulnerability and prompts from Contrast API ---")
-
-        vulnerability_data = contrast_api.get_vulnerability_with_prompts(
-            config.CONTRAST_HOST, config.CONTRAST_ORG_ID, config.CONTRAST_APP_ID,
-            config.CONTRAST_AUTHORIZATION_KEY, config.CONTRAST_API_KEY,
-            max_open_prs_setting, github_repo_url, config.VULNERABILITY_SEVERITIES
+        
+        # Create an instance of ContrastApiClient
+        contrast_client = ContrastApiClient(
+            host=config.CONTRAST_HOST,
+            org_id=config.CONTRAST_ORG_ID,
+            app_id=config.CONTRAST_APP_ID,
+            auth_key=config.CONTRAST_AUTHORIZATION_KEY,
+            api_key=config.CONTRAST_API_KEY,
+            user_agent=config.USER_AGENT
+        )
+        
+        vulnerability_data = contrast_client.get_vulnerability_with_prompts(
+            max_open_prs=max_open_prs_setting,
+            github_repo_url=github_repo_url,
+            vulnerability_severities=config.VULNERABILITY_SEVERITIES
         )
         log("\n::endgroup::")
 
@@ -435,7 +451,7 @@ def _legacy_main():
 
         if not remediation_success:
             git_handler.cleanup_branch(new_branch_name)
-            contrast_api.send_telemetry_data()
+            contrast_client.send_telemetry_data()
             continue # Move to the next vulnerability
 
         # --- Git and GitHub Operations ---
@@ -502,15 +518,11 @@ def _legacy_main():
                     if pr_number is None:
                         pr_number = 1;
 
-                    remediation_notified = contrast_api.notify_remediation_pr_opened(
+                    # Use the ContrastApiClient instance
+                    remediation_notified = contrast_client.notify_remediation_pr_opened(
                         remediation_id=remediation_id,
                         pr_number=pr_number,
-                        pr_url=pr_url,
-                        contrast_host=config.CONTRAST_HOST,
-                        contrast_org_id=config.CONTRAST_ORG_ID,
-                        contrast_app_id=config.CONTRAST_APP_ID,
-                        contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
-                        contrast_api_key=config.CONTRAST_API_KEY
+                        pr_url=pr_url
                     )
                     if remediation_notified:
                         log(f"Successfully notified Remediation service about PR for remediation {remediation_id}.")
@@ -525,21 +537,21 @@ def _legacy_main():
                 
                 if not pr_creation_success:
                     log("\n--- PR creation failed ---")
-                    error_exit(remediation_id, contrast_api.FailureCategory.GENERATE_PR_FAILURE.value)
+                    error_exit(remediation_id, FailureCategory.GENERATE_PR_FAILURE.value)
                 
                 processed_one = True # Mark that we successfully processed one
                 log(f"\n--- Successfully processed vulnerability {vuln_uuid}. Continuing to look for next vulnerability... ---")
             except Exception as e:
                 log(f"Error creating PR: {e}")
                 log("\n--- PR creation failed ---")
-                error_exit(remediation_id, contrast_api.FailureCategory.GENERATE_PR_FAILURE.value)
+                error_exit(remediation_id, FailureCategory.GENERATE_PR_FAILURE.value)
         else:
             log("Skipping commit, push, and PR creation as no changes were detected by the agent.")
             # Clean up the branch if no changes were made
             git_handler.cleanup_branch(new_branch_name)
             continue # Try the next vulnerability
 
-        contrast_api.send_telemetry_data()
+        contrast_client.send_telemetry_data()
 
     # Calculate total runtime
     end_time = datetime.now()
