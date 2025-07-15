@@ -205,8 +205,13 @@ def cleanup_asyncio():
 atexit.register(cleanup_asyncio)
 
 
+# Global variables for object instances
+contrast_client = None
+telemetry_handler_obj = None
+
 def main():
     """Main orchestration logic using the new object-oriented structure."""
+    global contrast_client, telemetry_handler_obj
     
     start_time = datetime.now()
     log("--- Starting Contrast AI SmartFix Script ---")
@@ -295,10 +300,28 @@ def main():
 
 def _legacy_main():
     """Legacy main orchestration logic."""
+    global contrast_client, telemetry_handler_obj
     
     start_time = datetime.now()
     log("--- Starting Contrast AI SmartFix Script ---")
     debug_log(f"Start time: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
+    
+    # Ensure the global objects are initialized
+    if contrast_client is None or telemetry_handler_obj is None:
+        # Create the objects if not already created
+        contrast_client = ContrastApiClient(
+            host=config.CONTRAST_HOST,
+            org_id=config.CONTRAST_ORG_ID,
+            app_id=config.CONTRAST_APP_ID,
+            auth_key=config.CONTRAST_AUTHORIZATION_KEY,
+            api_key=config.CONTRAST_API_KEY,
+            user_agent=config.USER_AGENT
+        )
+        
+        telemetry_handler_obj = TelemetryHandler(
+            contrast_api_client=contrast_client,
+            enable_full_telemetry=config.ENABLE_FULL_TELEMETRY
+        )
 
     # --- Use Build Command and Max Attempts/PRs from Config ---
     build_command = config.BUILD_COMMAND
