@@ -299,13 +299,20 @@ def _legacy_main():
     max_qa_attempts_setting = config.MAX_QA_ATTEMPTS
     max_open_prs_setting = config.MAX_OPEN_PRS
 
+    # Create GitHandler instance
+    git_handler_obj = GitHandler(
+        github_token=config.GITHUB_TOKEN,
+        github_repository=config.GITHUB_REPOSITORY,
+        base_branch=config.BASE_BRANCH
+    )
+    
     # --- Initial Setup ---
-    git_handler.configure_git_user()
+    git_handler_obj.configure_git_user()
 
     # Check Open PR Limit
     log("\n::group::--- Checking Open PR Limit ---")
     label_prefix_to_check = "contrast-vuln-id:"
-    current_open_pr_count = git_handler.count_open_prs_with_prefix(label_prefix_to_check)
+    current_open_pr_count = git_handler_obj.count_open_prs_with_prefix(label_prefix_to_check)
     if current_open_pr_count >= max_open_prs_setting:
         log(f"Found {current_open_pr_count} open PR(s) with label prefix '{label_prefix_to_check}'.")
         log(f"This meets or exceeds the configured limit of {max_open_prs_setting}.")
@@ -356,7 +363,7 @@ def _legacy_main():
             break
             
         # Check if we've reached the max PR limit
-        current_open_pr_count = git_handler.count_open_prs_with_prefix(label_prefix_to_check)
+        current_open_pr_count = git_handler_obj.count_open_prs_with_prefix(label_prefix_to_check)
         if current_open_pr_count >= max_open_prs_setting:
             log(f"\n--- Reached max PR limit ({max_open_prs_setting}). Current open PRs: {current_open_pr_count}. Stopping processing. ---")
             break
@@ -402,8 +409,8 @@ def _legacy_main():
         log(f"\n::group::--- Considering Vulnerability: {vuln_title} (UUID: {vuln_uuid}) ---")
 
         # --- Check for Existing PRs ---
-        label_name, _, _ = git_handler.generate_label_details(vuln_uuid)
-        pr_status = git_handler.check_pr_status_for_label(label_name)
+        label_name, _, _ = git_handler_obj.generate_label_details(vuln_uuid)
+        pr_status = git_handler_obj.check_pr_status_for_label(label_name)
 
         # Changed this logic to check only for OPEN PRs for dev purposes
         if pr_status == "OPEN":
@@ -420,9 +427,9 @@ def _legacy_main():
         log(f"\n\033[0;33m Selected vuln to fix: {vuln_title} \033[0m")
 
         # Prepare a clean repository state and branch for the fix
-        new_branch_name = git_handler.get_branch_name(remediation_id)
+        new_branch_name = git_handler_obj.get_branch_name(remediation_id)
         try:
-            git_handler.prepare_feature_branch(remediation_id)
+            git_handler_obj.prepare_feature_branch(remediation_id)
         except SystemExit:
             log(f"Error preparing feature branch {new_branch_name}. Skipping to next vulnerability.")
             continue
@@ -450,35 +457,35 @@ def _legacy_main():
         )
 
         if not remediation_success:
-            git_handler.cleanup_branch(new_branch_name)
+            git_handler_obj.cleanup_branch(new_branch_name)
             contrast_client.send_telemetry_data()
             continue # Move to the next vulnerability
 
         # --- Git and GitHub Operations ---
         log("\n--- Proceeding with Git & GitHub Operations ---")
-        git_handler.stage_changes()
+        git_handler_obj.stage_changes()
 
-        if git_handler.check_status():
-            commit_message = git_handler.generate_commit_message(vuln_title, vuln_uuid)
-            git_handler.commit_changes(commit_message)
+        if git_handler_obj.check_status():
+            commit_message = git_handler_obj.generate_commit_message(vuln_title, vuln_uuid)
+            git_handler_obj.commit_changes(commit_message)
 
             # --- Create Pull Request ---
-            pr_title = git_handler.generate_pr_title(vuln_title)
+            pr_title = git_handler_obj.generate_pr_title(vuln_title)
             # Use the result from fix_agent directly as the base PR body.
             # (extracted from <pr_body> tags) or the full agent summary if extraction fails.
             debug_log("Using agent's output as PR body base.")
 
             # --- Push and Create PR ---
-            git_handler.push_branch(new_branch_name) # Push the final commit (original or amended)
+            git_handler_obj.push_branch(new_branch_name) # Push the final commit (original or amended)
 
-            label_name, label_desc, label_color = git_handler.generate_label_details(vuln_uuid)
-            label_created = git_handler.ensure_label(label_name, label_desc, label_color)
+            label_name, label_desc, label_color = git_handler_obj.generate_label_details(vuln_uuid)
+            label_created = git_handler_obj.ensure_label(label_name, label_desc, label_color)
             
             if not label_created:
                 log(f"Could not create GitHub label '{label_name}'. PR will be created without a label.", is_warning=True)
                 label_name = ""  # Clear label_name to avoid using it in PR creation
 
-            pr_title = git_handler.generate_pr_title(vuln_title)
+            pr_title = git_handler_obj.generate_pr_title(vuln_title)
             # Create a brief summary for the telemetry aiSummaryReport (limited to 255 chars in DB)
             # Generate an optimized summary using the dedicated function in telemetry_handler
             brief_summary = telemetry_handler.create_ai_summary_report(ai_fix_summary_full)
@@ -493,7 +500,7 @@ def _legacy_main():
                 
                 # Try to create the PR using the GitHub CLI
                 log("Attempting to create a pull request...")
-                pr_url = git_handler.create_pr(pr_title, ai_fix_summary_full, remediation_id, config.BASE_BRANCH, label_name)
+                pr_url = git_handler_obj.create_pr(pr_title, ai_fix_summary_full, remediation_id, config.BASE_BRANCH, label_name)
                 
                 if pr_url:
                     pr_creation_success = True
@@ -548,7 +555,7 @@ def _legacy_main():
         else:
             log("Skipping commit, push, and PR creation as no changes were detected by the agent.")
             # Clean up the branch if no changes were made
-            git_handler.cleanup_branch(new_branch_name)
+            git_handler_obj.cleanup_branch(new_branch_name)
             continue # Try the next vulnerability
 
         contrast_client.send_telemetry_data()
