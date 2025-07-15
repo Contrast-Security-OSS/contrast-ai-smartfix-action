@@ -27,7 +27,8 @@ from pathlib import Path
 from typing import Optional
 # Import DEBUG_MODE from config_compat to avoid circular imports
 from src.config_compat import DEBUG_MODE
-import src.telemetry_handler as telemetry_handler # Import for telemetry logging
+
+# We'll use lazy imports for telemetry_handler to avoid circular imports
 
 # Unicode to ASCII fallback mappings for Windows
 UNICODE_FALLBACKS = {
@@ -59,7 +60,13 @@ def safe_print(message, file=None, flush=True):
 
 def log(message: str, is_error: bool = False, is_warning: bool = False):
     """Logs a message to telemetry and prints to stdout/stderr."""
-    telemetry_handler.add_log_message(message)
+    # Lazy import to avoid circular dependency
+    try:
+        import src.telemetry_handler as telemetry_handler
+        telemetry_handler.add_log_message(message)
+    except (ImportError, AttributeError):
+        # During initial import, telemetry_handler might not be fully initialized
+        pass
     if is_error:
         safe_print(message, file=sys.stderr, flush=True)
     elif is_warning:
@@ -73,7 +80,13 @@ def debug_log(*args, **kwargs):
     message = " ".join(map(str, args))
     # Log debug messages to telemetry, possibly with a DEBUG prefix or separate field if needed
     # For now, adding to the main log.
-    telemetry_handler.add_log_message(f"DEBUG: {message}")
+    # Lazy import to avoid circular dependency
+    try:
+        import src.telemetry_handler as telemetry_handler
+        telemetry_handler.add_log_message(f"DEBUG: {message}")
+    except (ImportError, AttributeError):
+        # During initial import, telemetry_handler might not be fully initialized
+        pass
     if DEBUG_MODE:
         # Use safe_print for the combined message rather than direct print of args
         safe_print(message, flush=True)
