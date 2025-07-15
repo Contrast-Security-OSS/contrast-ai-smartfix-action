@@ -29,10 +29,11 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 # Import using absolute imports
-from src.config_compat import CONTRAST_HOST, CONTRAST_ORG_ID, CONTRAST_APP_ID, CONTRAST_AUTHORIZATION_KEY, CONTRAST_API_KEY, USER_AGENT
+from src.config_compat import CONTRAST_HOST, CONTRAST_ORG_ID, CONTRAST_APP_ID, CONTRAST_AUTHORIZATION_KEY, CONTRAST_API_KEY, USER_AGENT, ENABLE_FULL_TELEMETRY
 from src.utils import debug_log, extract_remediation_id_from_branch, log
 import src.telemetry_handler as telemetry_handler
 from src.api.contrast_api_client import ContrastApiClient
+from src.telemetry.telemetry_handler import TelemetryHandler
 
 def handle_merged_pr():
     """Handles the logic when a pull request is merged."""
@@ -79,6 +80,8 @@ def handle_merged_pr():
         sys.exit(1)
     
     debug_log(f"Extracted Remediation ID: {remediation_id}")
+    telemetry_handler_obj.update_telemetry("additionalAttributes.remediationId", remediation_id)
+    # For backward compatibility
     telemetry_handler.update_telemetry("additionalAttributes.remediationId", remediation_id)
     
     # Try to extract vulnerability UUID from PR labels
@@ -94,6 +97,9 @@ def handle_merged_pr():
             if vuln_uuid and vuln_uuid != "unknown":
                 debug_log(f"Extracted Vulnerability UUID from PR label: {vuln_uuid}")
                 break
+    telemetry_handler_obj.update_telemetry("vulnInfo.vulnId", vuln_uuid)
+    telemetry_handler_obj.update_telemetry("vulnInfo.vulnRule", "unknown")
+    # For backward compatibility
     telemetry_handler.update_telemetry("vulnInfo.vulnId", vuln_uuid)
     telemetry_handler.update_telemetry("vulnInfo.vulnRule", "unknown")
     
@@ -112,6 +118,12 @@ def handle_merged_pr():
         user_agent=USER_AGENT
     )
     
+    # Initialize the TelemetryHandler
+    telemetry_handler_obj = TelemetryHandler(
+        contrast_api_client=contrast_client,
+        enable_full_telemetry=ENABLE_FULL_TELEMETRY
+    )
+    
     # Notify the Remediation backend service about the merged PR
     log(f"Notifying Remediation service about merged PR for remediation {remediation_id}...")
     remediation_notified = contrast_client.notify_remediation_pr_merged(
@@ -123,8 +135,11 @@ def handle_merged_pr():
     else:
         log(f"Failed to notify Remediation service about merged PR for remediation {remediation_id}.", is_error=True)
 
+    telemetry_handler_obj.update_telemetry("additionalAttributes.prStatus", "MERGED")
+    # For backward compatibility
     telemetry_handler.update_telemetry("additionalAttributes.prStatus", "MERGED")
-    contrast_client.send_telemetry_data()
+    # Send telemetry using the telemetry handler
+    telemetry_handler_obj.send_telemetry_data()
 
     log("--- Merged Contrast AI SmartFix Pull Request Handling Complete ---")
 

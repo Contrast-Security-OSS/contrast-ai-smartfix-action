@@ -220,6 +220,23 @@ def main():
     # Most other modules will reference it
 
     # --- Initialize Telemetry ---
+    # Create ContrastApiClient for TelemetryHandler
+    contrast_client = ContrastApiClient(
+        host=config.CONTRAST_HOST,
+        org_id=config.CONTRAST_ORG_ID,
+        app_id=config.CONTRAST_APP_ID,
+        auth_key=config.CONTRAST_AUTHORIZATION_KEY,
+        api_key=config.CONTRAST_API_KEY,
+        user_agent=config.USER_AGENT
+    )
+    
+    # Initialize the TelemetryHandler
+    telemetry_handler_obj = TelemetryHandler(
+        contrast_api_client=contrast_client,
+        enable_full_telemetry=config.ENABLE_FULL_TELEMETRY
+    )
+    
+    # For backward compatibility
     telemetry_handler.initialize_telemetry()
     
     # --- Run the main process with the legacy code ---
@@ -458,7 +475,8 @@ def _legacy_main():
 
         if not remediation_success:
             git_handler_obj.cleanup_branch(new_branch_name)
-            contrast_client.send_telemetry_data()
+            # Send telemetry using the telemetry handler
+            telemetry_handler_obj.send_telemetry_data()
             continue # Move to the next vulnerability
 
         # --- Git and GitHub Operations ---
@@ -558,7 +576,8 @@ def _legacy_main():
             git_handler_obj.cleanup_branch(new_branch_name)
             continue # Try the next vulnerability
 
-        contrast_client.send_telemetry_data()
+        # Send telemetry using the telemetry handler
+        telemetry_handler_obj.send_telemetry_data()
 
     # Calculate total runtime
     end_time = datetime.now()
