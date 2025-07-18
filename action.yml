@@ -65,7 +65,6 @@ inputs:
   agent_model:
     description: 'LLM model path to use for the agent'
     required: false
-    default: 'bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0'
   skip_writing_security_test:
     description: 'Whether to attempt writing security tests'
     required: false

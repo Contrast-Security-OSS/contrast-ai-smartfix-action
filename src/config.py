@@ -61,13 +61,22 @@ class Config:
             
         self.RUN_TASK = self._get_env_var("RUN_TASK", required=False, default="generate_fix")
 
+        # --- AI Agent Configuration ---
+        self.CODING_AGENT = self._get_coding_agent()
+        is_smartfix_coding_agent = self.CODING_AGENT == "SMARTFIX"
+
+        default_agent_model = ""
+        if is_smartfix_coding_agent:
+            default_agent_model = "bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0"
+        self.AGENT_MODEL = self._get_env_var("AGENT_MODEL", required=False, default=default_agent_model)
+
         # --- Build and Formatting Configuration ---
-        is_generate_fix_task = self.RUN_TASK == "generate_fix"
+        is_build_command_required = self.RUN_TASK == "generate_fix" and is_smartfix_coding_agent
         # Make BUILD_COMMAND optional in tests
-        if testing and "BUILD_COMMAND" not in env and is_generate_fix_task:
+        if testing and "BUILD_COMMAND" not in env and is_build_command_required:
             self.BUILD_COMMAND = "echo 'Test build command'"
         else:
-            self.BUILD_COMMAND = self._get_env_var("BUILD_COMMAND", required=is_generate_fix_task)
+            self.BUILD_COMMAND = self._get_env_var("BUILD_COMMAND", required=is_build_command_required)
             
         self.FORMATTING_COMMAND = self._get_env_var("FORMATTING_COMMAND", required=False)
 
@@ -101,10 +110,6 @@ class Config:
         # Only check config values in non-testing mode
         if not testing:
             self._check_contrast_config_values_exist()
-
-        # --- AI Agent Configuration ---
-        self.AGENT_MODEL = self._get_env_var("AGENT_MODEL", required=False, default="bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0")
-        self.CODING_AGENT = self._get_coding_agent()
 
         # --- Feature Flags ---
         self.SKIP_WRITING_SECURITY_TEST = self._get_bool_env("SKIP_WRITING_SECURITY_TEST", default=False)
