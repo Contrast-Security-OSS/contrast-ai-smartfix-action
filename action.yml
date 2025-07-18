@@ -90,6 +90,10 @@ inputs:
     description: 'Enable full telemetry, including potentially sensitive data. Defaults to true.'
     required: false
     default: 'true'
+  coding_agent:
+    description: 'Specifies the coding agent to use for generating fixes. Allowed values: SMARTFIX, GITHUB_COPILOT.'
+    required: false
+    default: 'SMARTFIX'
 
 runs:
   using: 'composite'
@@ -380,3 +384,5 @@ runs:
         RUN_TASK: ${{ inputs.run_task }}
         # --- Telemetry Configuration ---
         ENABLE_FULL_TELEMETRY: ${{ inputs.enable_full_telemetry }}
+        # --- Coding Agent ---
+        CODING_AGENT: ${{ inputs.coding_agent }}

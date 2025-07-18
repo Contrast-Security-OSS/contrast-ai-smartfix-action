@@ -154,6 +154,20 @@ CONTRAST_API_KEY = get_env_var("CONTRAST_API_KEY", required=True)
 
 # --- AI Agent Configuration ---
 AGENT_MODEL = get_env_var("AGENT_MODEL", required=False, default="bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0")
+
+def get_coding_agent() -> str:
+    """
+    Retrieves and validates the CODING_AGENT environment variable.
+    """
+    coding_agent = get_env_var("CODING_AGENT", required=False, default="SMARTFIX")
+    valid_agents = ["SMARTFIX", "GITHUB_COPILOT"]
+    if coding_agent.upper() not in valid_agents:
+        log(f"Warning: Invalid CODING_AGENT '{coding_agent}'. Must be one of {valid_agents}. Defaulting to 'SMARTFIX'.", is_warning=True)
+        return "SMARTFIX"
+    return coding_agent.upper()
+
+CODING_AGENT = get_coding_agent()
+
 # --- Test Writing Configuration ---
 SKIP_WRITING_SECURITY_TEST = get_env_var("SKIP_WRITING_SECURITY_TEST", required=False, default="false").lower() == "true"
 # --- QA Configuration ---
@@ -229,6 +243,7 @@ debug_log(f"Debug Mode: {DEBUG_MODE}")
 debug_log(f"Base Branch: {BASE_BRANCH}")
 debug_log(f"Run Task: {RUN_TASK}")
 debug_log(f"Agent Model: {AGENT_MODEL}")
+debug_log(f"Coding Agent: {CODING_AGENT}")
 debug_log(f"Skip Writing Security Test: {SKIP_WRITING_SECURITY_TEST}")
 debug_log(f"Skip QA Review: {SKIP_QA_REVIEW}") # Added debug print
 debug_log(f"Vulnerability Severities: {VULNERABILITY_SEVERITIES}")
