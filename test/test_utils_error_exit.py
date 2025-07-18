@@ -22,29 +22,43 @@ import sys
 import unittest
 from unittest.mock import patch, MagicMock, call
 from contextlib import contextmanager
+import os
+import importlib
+
+# Add project root to path for imports
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # Import the function we want to test
-sys.path.append('src')  # Add src directory to path
-import utils
-import config
-from contrast_api import FailureCategory
+from src import utils
+from src.config import get_config, reset_config
+from src.contrast_api import FailureCategory
 
 class TestErrorExit(unittest.TestCase):
     """Tests for the error_exit function in utils.py"""
     
     def setUp(self):
         """Set up test environment before each test"""
-        # Configure config module for all tests
-        config.CONTRAST_HOST = "test-host"
-        config.CONTRAST_ORG_ID = "test-org"
-        config.CONTRAST_APP_ID = "test-app"
-        config.CONTRAST_AUTHORIZATION_KEY = "test-auth"
-        config.CONTRAST_API_KEY = "test-api"
+        self.env_vars = {
+            'CONTRAST_HOST': 'test-host',
+            'CONTRAST_ORG_ID': 'test-org',
+            'CONTRAST_APP_ID': 'test-app',
+            'CONTRAST_AUTHORIZATION_KEY': 'test-auth',
+            'CONTRAST_API_KEY': 'test-api',
+            'GITHUB_WORKSPACE': '/tmp',
+            'BASE_BRANCH': 'main',
+            'GITHUB_TOKEN': 'mock-token',
+            'GITHUB_REPOSITORY': 'mock/repo',
+            'BUILD_COMMAND': 'echo "Mock build command"',
+            'RUN_TASK': 'generate_fix',
+        }
+        self.env_patcher = patch.dict('os.environ', self.env_vars)
+        self.env_patcher.start()
+        reset_config()  # Reset the config singleton
         
     def tearDown(self):
         """Clean up after each test"""
-        # Reset any changes to the config module
-        pass
+        self.env_patcher.stop()
+        reset_config()
         
     @contextmanager
     def assert_system_exit(self, expected_code=1):
@@ -54,11 +68,11 @@ class TestErrorExit(unittest.TestCase):
         self.assertEqual(cm.exception.code, expected_code)
 
     @patch('sys.exit')
-    @patch('utils.log')  # Directly patch the module function
-    @patch('git_handler.cleanup_branch')
-    @patch('git_handler.get_branch_name')
-    @patch('contrast_api.send_telemetry_data')
-    @patch('contrast_api.notify_remediation_failed')
+    @patch('src.utils.log')  # Directly patch the module function
+    @patch('src.git_handler.cleanup_branch')
+    @patch('src.git_handler.get_branch_name')
+    @patch('src.contrast_api.send_telemetry_data')
+    @patch('src.contrast_api.notify_remediation_failed')
     def test_error_exit_with_failure_code(self, mock_notify, mock_send_telemetry, mock_get_branch,
                                          mock_cleanup, mock_log, mock_exit):
         """Test error_exit when a specific failure code is provided"""
@@ -67,6 +81,7 @@ class TestErrorExit(unittest.TestCase):
         failure_code = FailureCategory.AGENT_FAILURE.value
         mock_notify.return_value = True  # Notification succeeds
         mock_get_branch.return_value = f"smartfix/remediation-{remediation_id}"
+        config = get_config()
         
         # Execute the function
         utils.error_exit(remediation_id, failure_code)
@@ -90,11 +105,11 @@ class TestErrorExit(unittest.TestCase):
         mock_exit.assert_called_once_with(1)
 
     @patch('sys.exit')
-    @patch('utils.log')
-    @patch('git_handler.cleanup_branch')
-    @patch('git_handler.get_branch_name')
-    @patch('contrast_api.send_telemetry_data')
-    @patch('contrast_api.notify_remediation_failed')
+    @patch('src.utils.log')
+    @patch('src.git_handler.cleanup_branch')
+    @patch('src.git_handler.get_branch_name')
+    @patch('src.contrast_api.send_telemetry_data')
+    @patch('src.contrast_api.notify_remediation_failed')
     def test_error_exit_default_failure_code(self, mock_notify, mock_send_telemetry, mock_get_branch, 
                                             mock_cleanup, mock_log, mock_exit):
         """Test error_exit when no failure code is provided (uses default)"""
@@ -103,6 +118,7 @@ class TestErrorExit(unittest.TestCase):
         default_failure_code = FailureCategory.GENERAL_FAILURE.value
         mock_notify.return_value = True
         mock_get_branch.return_value = f"smartfix/remediation-{remediation_id}"
+        config = get_config()
 
         # Execute
         utils.error_exit(remediation_id)

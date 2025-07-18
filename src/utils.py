@@ -25,8 +25,7 @@ import os
 import platform
 from pathlib import Path
 from typing import Optional
-import config # Import config to access DEBUG_MODE
-import telemetry_handler # Import for telemetry logging
+from src.config import get_config
 
 # Unicode to ASCII fallback mappings for Windows
 UNICODE_FALLBACKS = {
@@ -58,6 +57,7 @@ def safe_print(message, file=None, flush=True):
 
 def log(message: str, is_error: bool = False, is_warning: bool = False):
     """Logs a message to telemetry and prints to stdout/stderr."""
+    from src import telemetry_handler # Local import to break circular dependency
     telemetry_handler.add_log_message(message)
     if is_error:
         safe_print(message, file=sys.stderr, flush=True)
@@ -69,6 +69,8 @@ def log(message: str, is_error: bool = False, is_warning: bool = False):
 
 def debug_log(*args, **kwargs):
     """Prints only if DEBUG_MODE is True and logs to telemetry."""
+    config = get_config()
+    from src import telemetry_handler # Local import to break circular dependency
     message = " ".join(map(str, args))
     # Log debug messages to telemetry, possibly with a DEBUG prefix or separate field if needed
     # For now, adding to the main log.
@@ -202,9 +204,10 @@ def error_exit(remediation_id: str, failure_code: Optional[str] = None):
         remediation_id: The ID of the remediation that failed
         failure_code: Optional failure category code, defaults to GENERAL_FAILURE
     """
+    config = get_config()
     # Local imports to avoid circular dependencies
-    from git_handler import cleanup_branch, get_branch_name
-    from contrast_api import FailureCategory, notify_remediation_failed, send_telemetry_data
+    from src.git_handler import cleanup_branch, get_branch_name
+    from src.contrast_api import FailureCategory, notify_remediation_failed, send_telemetry_data
 
     # Set default failure code if none provided
     if not failure_code:

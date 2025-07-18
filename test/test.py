@@ -5,9 +5,14 @@ import unittest
 import sys
 import tempfile
 from unittest.mock import patch, Mock, MagicMock
+import importlib
 
 # Add src directory to Python path for proper imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from src.config import reset_config, get_config  # Import config first
+# Initialize config with testing flag
+_ = get_config(testing=True)
+# Now import main which depends on config
 from src.main import main
 
 class TestSmartFixAction(unittest.TestCase):
@@ -82,6 +87,7 @@ class TestSmartFixAction(unittest.TestCase):
         self.requests_patcher.stop()
         self.version_requests_patcher.stop()
         self.exit_patcher.stop()
+        reset_config()
         
         # Clean up temp directory if it exists
         if hasattr(self, 'temp_home') and os.path.exists(self.temp_home):

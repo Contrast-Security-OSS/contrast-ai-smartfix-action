@@ -30,21 +30,42 @@ import subprocess
 if platform.system() == 'Windows':
     from asyncio import WindowsProactorEventLoopPolicy
 from pathlib import Path
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple, List, Any
 from contextlib import AsyncExitStack
 import re
 import traceback
 
 # Import configurations and utilities
-import config
-from utils import debug_log, log, error_exit # Updated import
-from contrast_api import FailureCategory
-import telemetry_handler # Import for telemetry
+from src.config import get_config
+from src.utils import debug_log, log, error_exit
+from src.contrast_api import FailureCategory
+import src.telemetry_handler as telemetry_handler
 import datetime # For timestamps
 import traceback # For error logging
 
+# Determine if we're in a testing environment
+is_test_env = 'PYTEST_CURRENT_TEST' in os.environ or 'UNITTEST_RUN' in os.environ
+config = get_config(testing=is_test_env)
+
 # --- ADK Setup (Conditional Import) ---
 ADK_AVAILABLE = False
+
+# Define placeholder classes for testing when imports fail
+class MockMCPToolset:
+    """Mock class for MCPToolset when ADK imports fail"""
+    pass
+
+# Set up imports - use real classes if available, otherwise use mocks
+Agent = None
+InMemoryArtifactService = None
+LiteLlm = None
+Runner = None
+InMemorySessionService = None
+MCPToolset = MockMCPToolset
+StdioServerParameters = None
+StdioConnectionParams = None
+genai_types = None
+
 try:
     from google.adk.agents import Agent
     from google.adk.artifacts.in_memory_artifact_service import InMemoryArtifactService
@@ -63,13 +84,15 @@ except ImportError as e:
     # Use telemetry_handler directly for logging traceback if utils.log is not fully available
     telemetry_handler.add_log_message(traceback.format_exc())
     print(traceback.format_exc(), file=sys.stderr)
-    sys.exit(1) # Exit if ADK is not available
+    # Check if we're running in a test environment
+    if not config.testing:  
+        sys.exit(1)  # Only exit in production, not in tests
 
 warnings.filterwarnings('ignore', category=UserWarning)
 library_logger = logging.getLogger("google_adk.google.adk.tools.base_authenticated_tool")
 library_logger.setLevel(logging.ERROR)
 
-async def get_mcp_tools(target_folder: Path, remediation_id: str) -> MCPToolset:
+async def get_mcp_tools(target_folder: Path, remediation_id: str) -> Any:
     """Connects to MCP servers (Filesystem)"""
     debug_log("Attempting to connect to MCP servers...")
     target_folder_str = str(target_folder)
@@ -122,7 +145,7 @@ async def get_mcp_tools(target_folder: Path, remediation_id: str) -> MCPToolset:
     debug_log(f"Total tools from all MCP servers: {len(tools_list)}")
     return fs_tools
 
-async def create_agent(target_folder: Path, remediation_id: str, agent_type: str = "fix", system_prompt: Optional[str] = None) -> Optional[Agent]:
+async def create_agent(target_folder: Path, remediation_id: str, agent_type: str = "fix", system_prompt: Optional[str] = None) -> Optional[Any]:
     """Creates an ADK Agent (either 'fix' or 'qa')."""
     mcp_tools = await get_mcp_tools(target_folder, remediation_id)
     if not mcp_tools:
@@ -380,7 +403,7 @@ def _run_agent_in_event_loop(coroutine_func, *args, **kwargs):
     # Platform-specific setup
     is_windows = platform.system() == 'Windows'
     
-    # On Windows, we must use the WindowsProactorEventLoopPolicy 
+    # On Windows, we must use the WindowsProactorEventLoop 
     # The SelectorEventLoop on Windows doesn't support subprocesses, which are required for MCP
     if is_windows:
         try:

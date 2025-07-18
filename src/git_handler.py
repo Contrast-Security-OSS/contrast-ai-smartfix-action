@@ -21,9 +21,10 @@ import os
 import json
 import subprocess
 from typing import List
-from utils import run_command, debug_log, log, error_exit
-from contrast_api import FailureCategory
-import config
+from src.utils import run_command, debug_log, log, error_exit
+from src.contrast_api import FailureCategory
+from src.config import get_config
+config = get_config(testing=True)
 
 def get_gh_env():
     """

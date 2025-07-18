@@ -27,18 +27,20 @@ from datetime import datetime, timedelta
 from asyncio.proactor_events import _ProactorBasePipeTransport
 
 # Import configurations and utilities
-import config
-from utils import debug_log, log, error_exit
-import telemetry_handler
-from qa_handler import run_build_command
-from version_check import do_version_check
-from build_output_analyzer import extract_build_errors
+from src.config import get_config
+from src.utils import debug_log, log, error_exit
+from src import telemetry_handler
+from src.qa_handler import run_build_command
+from src.version_check import do_version_check
+from src.build_output_analyzer import extract_build_errors
 
 # Import domain-specific handlers
-import contrast_api
-import agent_handler
-import git_handler
-import qa_handler
+from src import contrast_api
+from src import agent_handler
+from src import git_handler
+from src import qa_handler
+
+config = get_config()
 
 # NOTE: Google ADK appears to have issues with asyncio event loop cleanup, and has had attempts to address them in versions 1.4.0-1.5.0
 # Configure warnings to ignore asyncio ResourceWarnings during shutdown
