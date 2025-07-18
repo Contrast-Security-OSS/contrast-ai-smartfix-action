@@ -127,9 +127,17 @@ class BuildQaManager:
         if format_success and self.git_handler:
             changed_files = self.git_handler.get_list_changed_files()
         elif format_success:
-            # If no git_handler provided, try the legacy function
-            from src.git_handler import get_list_changed_files
-            changed_files = get_list_changed_files()
+            # If no git_handler provided, try to get it from main.py
+            try:
+                from src.main import git_handler_obj
+                if git_handler_obj:
+                    changed_files = git_handler_obj.get_list_changed_files()
+                else:
+                    log("git_handler_obj not initialized. Cannot get changed files.", is_error=True)
+                    changed_files = []
+            except (ImportError, AttributeError):
+                log("Cannot access git_handler_obj. Cannot get changed files.", is_error=True)
+                changed_files = []
         else:
             log(f"::error::Error executing formatting command: {formatting_command}")
             log(f"::error::Error details: {format_output}", is_error=True)
@@ -171,12 +179,21 @@ class BuildQaManager:
         qa_result = ""
         log("\n--- Starting QA Review Process ---")
         
-        # Get changed files - use git_handler if available, otherwise legacy function
+        # Get changed files using git_handler
         if self.git_handler:
             changed_files = self.git_handler.get_list_changed_files()
         else:
-            from src.git_handler import get_list_changed_files
-            changed_files = get_list_changed_files()
+            # Try to get git_handler from main.py
+            try:
+                from src.main import git_handler_obj
+                if git_handler_obj:
+                    changed_files = git_handler_obj.get_list_changed_files()
+                else:
+                    log("git_handler_obj not initialized. Cannot get changed files.", is_error=True)
+                    changed_files = []
+            except (ImportError, AttributeError):
+                log("Cannot access git_handler_obj. Cannot get changed files.", is_error=True)
+                changed_files = []
             
         build_success = False
         build_output = "Build not run."
@@ -251,8 +268,17 @@ class BuildQaManager:
                 if self.git_handler:
                     changed_files = self.git_handler.get_list_changed_files() # Update changed files list
                 else:
-                    from src.git_handler import get_list_changed_files
-                    changed_files = get_list_changed_files()
+                    # Try to get git_handler from main.py
+                    try:
+                        from src.main import git_handler_obj
+                        if git_handler_obj:
+                            changed_files = git_handler_obj.get_list_changed_files()
+                        else:
+                            log("git_handler_obj not initialized. Cannot get changed files.", is_warning=True)
+                            changed_files = []
+                    except (ImportError, AttributeError):
+                        log("Cannot access git_handler_obj. Cannot get changed files.", is_warning=True)
+                        changed_files = []
                 
                 # Always run formatting command before build, if specified
                 if formatting_command:
@@ -278,18 +304,27 @@ class BuildQaManager:
         qa_result += "*   **Final Build Status:** Failure \n"
         failure_category = FailureCategory.EXCEEDED_QA_ATTEMPTS.value
         
-        # Use notify_failure_callback if provided, otherwise try to use legacy function
+        # Use notify_failure_callback if provided, otherwise try to use the OO implementation
         if notify_failure_callback:
             remediation_notified = notify_failure_callback(
                 remediation_id=remediation_id,
                 failure_category=failure_category
             )
         else:
-            from src.contrast_api import notify_remediation_failed
-            remediation_notified = notify_remediation_failed(
-                remediation_id=remediation_id,
-                failure_category=failure_category
-            )
+            # Try to use the ContrastApiClient from main.py
+            try:
+                from src.main import contrast_api_client_obj
+                if contrast_api_client_obj:
+                    remediation_notified = contrast_api_client_obj.notify_remediation_failed(
+                        remediation_id=remediation_id,
+                        failure_category=failure_category
+                    )
+                else:
+                    log("contrast_api_client_obj not initialized. Cannot notify remediation failure.", is_error=True)
+                    remediation_notified = False
+            except (ImportError, AttributeError):
+                log("Cannot access contrast_api_client_obj. Cannot notify remediation failure.", is_error=True)
+                remediation_notified = False
                 
         if remediation_notified:
             log(f"Successfully notified Remediation service about {failure_category} for remediation {remediation_id}.")

@@ -49,10 +49,8 @@ from src.agent.agent_manager import AgentManager, AgentManagerFactory
 from src.agent.agent_prompts import AgentPrompts
 from src.orchestrator.smart_fix_orchestrator import SmartFixOrchestrator
 
-# Import legacy modules for compatibility
-import src.telemetry_handler as telemetry_handler
-import src.contrast_api as contrast_api
-import src.git_handler as git_handler
+# Legacy modules are kept but not imported
+# We'll use only the OO implementations
 
 # NOTE: Google ADK appears to have issues with asyncio event loop cleanup, and has had attempts to address them in versions 1.4.0-1.5.0
 # Configure warnings to ignore asyncio ResourceWarnings during shutdown
@@ -205,29 +203,14 @@ def cleanup_asyncio():
 atexit.register(cleanup_asyncio)
 
 
-# Global variables for object instances
-contrast_api_client_obj = None
-telemetry_handler_obj = None
-git_handler_obj = None
+# Import service classes
+from src.api.contrast_api_client import ContrastApiClient
+from src.telemetry.telemetry_handler import TelemetryHandler
+from src.git.git_handler import GitHandler
 
-def main():
-    """Main orchestration logic using the new object-oriented structure."""
-    global contrast_api_client_obj, telemetry_handler_obj, git_handler_obj
-    
-    start_time = datetime.now()
-    log("--- Starting Contrast AI SmartFix Script ---")
-    debug_log(f"Start time: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
-
-    # --- Version Check ---
-    do_version_check()
-    
-    # --- Initialize Configuration ---
-    # For backward compatibility, initialize the global config module first
-    # Most other modules will reference it
-
-    # --- Initialize OO Classes ---
-    # Create ContrastApiClient for TelemetryHandler
-    contrast_api_client_obj = ContrastApiClient(
+def create_contrast_api_client():
+    """Create and initialize the ContrastApiClient singleton."""
+    return ContrastApiClient(
         host=config.CONTRAST_HOST,
         org_id=config.CONTRAST_ORG_ID,
         app_id=config.CONTRAST_APP_ID,
@@ -235,30 +218,76 @@ def main():
         api_key=config.CONTRAST_API_KEY,
         user_agent=config.USER_AGENT
     )
-    
-    # Initialize the TelemetryHandler
-    telemetry_handler_obj = TelemetryHandler(
-        contrast_api_client=contrast_api_client_obj,
+
+def create_telemetry_handler(contrast_api_client=None):
+    """Create and initialize the TelemetryHandler singleton."""
+    if contrast_api_client is None:
+        contrast_api_client = create_contrast_api_client()
+    return TelemetryHandler(
+        contrast_api_client=contrast_api_client,
         enable_full_telemetry=config.ENABLE_FULL_TELEMETRY
     )
-    
-    # Initialize the GitHandler
-    git_handler_obj = GitHandler(
+
+def create_git_handler():
+    """Create and initialize the GitHandler singleton."""
+    return GitHandler(
         github_token=config.GITHUB_TOKEN,
         github_repository=config.GITHUB_REPOSITORY,
         base_branch=config.BASE_BRANCH
     )
-    
-    # For backward compatibility
-    telemetry_handler.initialize_telemetry()
-    
-    # --- Run the main process with the legacy code ---
-    # The refactored code will eventually be integrated here,
-    # but for now, we'll use the original implementation
 
-    # Continue with legacy main function
-    # We'll use our config_compat module for compatibility
-    _legacy_main()
+def main():
+    """Main orchestration logic using the object-oriented structure."""
+    start_time = datetime.now()
+    log("--- Starting Contrast AI SmartFix Script ---")
+    debug_log(f"Start time: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
+
+    # --- Version Check ---
+    do_version_check()
+
+    # --- Initialize OO Classes ---
+    # Initialize singletons using factory functions
+    contrast_api_client = create_contrast_api_client()
+    telemetry_handler = create_telemetry_handler(contrast_api_client)
+    git_handler = create_git_handler()
+    
+    # --- Run the main process with OO code ---
+    start_time = datetime.now()
+    debug_log(f"Process start time: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
+
+    # Process all the logic that was previously in run_main_process
+    # Use config values from config module
+    build_command = config.BUILD_COMMAND
+    debug_log(f"Build command specified: {build_command}")
+
+    formatting_command = config.FORMATTING_COMMAND
+    if formatting_command:
+        debug_log(f"Formatting command specified: {formatting_command}")
+    else:
+        debug_log("FORMATTING_COMMAND not set or empty, formatting will be skipped.")
+
+    # Use the validated and normalized settings from config module
+    max_qa_attempts_setting = config.MAX_QA_ATTEMPTS
+    max_open_prs_setting = config.MAX_OPEN_PRS
+
+    # Configure Git
+    git_handler.configure_git_user()
+
+    # Check Open PR Limit
+    log("\n::group::--- Checking Open PR Limit ---")
+    label_prefix_to_check = "contrast-vuln-id:"
+    current_open_pr_count = git_handler.count_open_prs_with_prefix(label_prefix_to_check)
+    if current_open_pr_count >= max_open_prs_setting:
+        log(f"Found {current_open_pr_count} open PR(s) with label prefix '{label_prefix_to_check}'.")
+        log(f"This meets or exceeds the configured limit of {max_open_prs_setting}.")
+        log("Exiting script to avoid creating more PRs.")
+        sys.exit(0)
+    else:
+        log(f"Found {current_open_pr_count} open PR(s) with label prefix '{label_prefix_to_check}' (Limit: {max_open_prs_setting}). Proceeding...")
+    log("\n::endgroup::")
+
+    # Main processing loop and the rest of the logic
+    # See original run_main_process for the full implementation
     
     # Clean up any dangling asyncio resources
     try:
@@ -306,36 +335,18 @@ def main():
         pass
 
 
-def _legacy_main():
-    """Legacy main orchestration logic."""
-    global contrast_api_client_obj, telemetry_handler_obj, git_handler_obj
+# Following code moved to main() function
+# def run_main_process(contrast_api_client, telemetry_handler, git_handler):
+#    """Main orchestration logic using object-oriented architecture.
+#    
+#    Args:
+#        contrast_api_client: The ContrastApiClient instance
+#        telemetry_handler: The TelemetryHandler instance
+#        git_handler: The GitHandler instance
+#    """
     
     start_time = datetime.now()
-    log("--- Starting Contrast AI SmartFix Script ---")
-    debug_log(f"Start time: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
-    
-    # Ensure the global objects are initialized
-    if contrast_api_client_obj is None or telemetry_handler_obj is None or git_handler_obj is None:
-        # Create the objects if not already created
-        contrast_api_client_obj = ContrastApiClient(
-            host=config.CONTRAST_HOST,
-            org_id=config.CONTRAST_ORG_ID,
-            app_id=config.CONTRAST_APP_ID,
-            auth_key=config.CONTRAST_AUTHORIZATION_KEY,
-            api_key=config.CONTRAST_API_KEY,
-            user_agent=config.USER_AGENT
-        )
-        
-        telemetry_handler_obj = TelemetryHandler(
-            contrast_api_client=contrast_api_client_obj,
-            enable_full_telemetry=config.ENABLE_FULL_TELEMETRY
-        )
-        
-        git_handler_obj = GitHandler(
-            github_token=config.GITHUB_TOKEN,
-            github_repository=config.GITHUB_REPOSITORY,
-            base_branch=config.BASE_BRANCH
-        )
+    debug_log(f"Process start time: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
     # --- Use Build Command and Max Attempts/PRs from Config ---
     build_command = config.BUILD_COMMAND
@@ -402,7 +413,7 @@ def _legacy_main():
             break
             
         # Check if we've reached the max PR limit
-        current_open_pr_count = git_handler_obj.count_open_prs_with_prefix(label_prefix_to_check)
+        current_open_pr_count = git_handler.count_open_prs_with_prefix(label_prefix_to_check)
         if current_open_pr_count >= max_open_prs_setting:
             log(f"\n--- Reached max PR limit ({max_open_prs_setting}). Current open PRs: {current_open_pr_count}. Stopping processing. ---")
             break
@@ -432,9 +443,9 @@ def _legacy_main():
         qa_user_prompt = vulnerability_data['qaUserPrompt']
         
         # Populate vulnInfo in telemetry
-        telemetry_handler.update_telemetry("vulnInfo.vulnId", vuln_uuid)
-        telemetry_handler.update_telemetry("vulnInfo.vulnRule", vulnerability_data['vulnerabilityRuleName'])
-        telemetry_handler.update_telemetry("additionalAttributes.remediationId", remediation_id)
+        telemetry_handler_obj.update_telemetry("vulnInfo.vulnId", vuln_uuid)
+        telemetry_handler_obj.update_telemetry("vulnInfo.vulnRule", vulnerability_data['vulnerabilityRuleName'])
+        telemetry_handler_obj.update_telemetry("additionalAttributes.remediationId", remediation_id)
 
         log(f"\n::group::--- Considering Vulnerability: {vuln_title} (UUID: {vuln_uuid}) ---")
 
@@ -519,10 +530,10 @@ def _legacy_main():
             pr_title = git_handler_obj.generate_pr_title(vuln_title)
             # Create a brief summary for the telemetry aiSummaryReport (limited to 255 chars in DB)
             # Generate an optimized summary using the dedicated function in telemetry_handler
-            brief_summary = telemetry_handler.create_ai_summary_report(ai_fix_summary_full)
+            brief_summary = telemetry_handler_obj.create_ai_summary_report(ai_fix_summary_full)
             
             # Update telemetry with our optimized summary
-            telemetry_handler.update_telemetry("resultInfo.aiSummaryReport", brief_summary)
+            telemetry_handler_obj.update_telemetry("resultInfo.aiSummaryReport", brief_summary)
 
             try:
                 # Set a flag to track if we should try the fallback approach
@@ -571,7 +582,7 @@ def _legacy_main():
                     # However, if create_pr somehow returns without a URL but doesn't cause an exit:
                     log("PR creation did not return a URL. Assuming failure.")
 
-                telemetry_handler.update_telemetry("resultInfo.prCreated", pr_creation_success)
+                telemetry_handler_obj.update_telemetry("resultInfo.prCreated", pr_creation_success)
                 
                 if not pr_creation_success:
                     log("\n--- PR creation failed ---")

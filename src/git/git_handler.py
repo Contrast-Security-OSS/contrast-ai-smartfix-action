@@ -26,6 +26,9 @@ from src.utils import debug_log, log, error_exit, run_command
 from src.api.contrast_api_client import FailureCategory
 import src.git_handler as legacy_git_handler
 
+from src.utils import singleton
+
+@singleton
 class GitHandler:
     """
     Handles all Git and GitHub operations for the SmartFix workflow.

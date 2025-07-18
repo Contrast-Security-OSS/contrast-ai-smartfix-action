@@ -29,7 +29,8 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
     
 from src.utils import debug_log, log
-import src.telemetry_handler as telemetry_handler
+# Legacy telemetry module is no longer used
+# import src.telemetry_handler as telemetry_handler
 
 # Define failure categories as an enum to ensure consistency
 class FailureCategory(Enum):
@@ -44,6 +45,9 @@ class FailureCategory(Enum):
     EXCEEDED_AGENT_EVENTS = "EXCEEDED_AGENT_EVENTS"
     INVALID_LLM_CONFIG = "INVALID_LLM_CONFIG"
 
+from src.utils import singleton
+
+@singleton
 class ContrastApiClient:
     """
     Client for interacting with the Contrast Security API.
@@ -379,8 +383,17 @@ class ContrastApiClient:
         """
         debug_log("Sending telemetry data")
         
-        # Get telemetry data from the telemetry handler
-        telemetry_data = telemetry_handler.get_telemetry_data()
+        # Get telemetry data using the TelemetryHandler singleton
+        try:
+            from src.telemetry.telemetry_handler import TelemetryHandler
+            telemetry_handler = TelemetryHandler()
+            telemetry_data = telemetry_handler.get_telemetry_data()
+            if not telemetry_data:
+                log("No telemetry data available. Cannot send telemetry data.", is_warning=True)
+                return False
+        except Exception as e:
+            log(f"Failed to access TelemetryHandler: {e}. Cannot send telemetry data.", is_warning=True)
+            return False
         
         if not telemetry_data:
             log("No telemetry data to send", is_warning=True)

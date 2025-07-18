@@ -34,7 +34,7 @@ from typing import Optional, Tuple, List
 #import src.telemetry_handler as telemetry_handler
 
 from src.utils import debug_log, log, error_exit
-from src.contrast_api import FailureCategory
+from src.api.contrast_api_client import FailureCategory
 from src.agent.agent_prompts import AgentPrompts
 
 try:

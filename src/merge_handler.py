@@ -31,17 +31,17 @@ if project_root not in sys.path:
 # Import using absolute imports
 from src.config_compat import CONTRAST_HOST, CONTRAST_ORG_ID, CONTRAST_APP_ID, CONTRAST_AUTHORIZATION_KEY, CONTRAST_API_KEY, USER_AGENT, ENABLE_FULL_TELEMETRY
 from src.utils import debug_log, extract_remediation_id_from_branch, log
-import src.telemetry_handler as telemetry_handler
+# Import singleton classes
+from src.telemetry.telemetry_handler import TelemetryHandler
 from src.api.contrast_api_client import ContrastApiClient
 from src.telemetry.telemetry_handler import TelemetryHandler
 
 # Global variables for object instances
 contrast_client = None
-telemetry_handler_obj = None
 
 def handle_merged_pr():
     """Handles the logic when a pull request is merged."""
-    global contrast_client, telemetry_handler_obj
+    global contrast_client
     log("--- Handling Merged Contrast AI SmartFix Pull Request ---")
     
     # Create or reuse ContrastApiClient - Do this at the beginning
@@ -54,8 +54,8 @@ def handle_merged_pr():
         user_agent=USER_AGENT
     )
     
-    # Initialize the TelemetryHandler - Do this at the beginning
-    telemetry_handler_obj = TelemetryHandler(
+    # Initialize the TelemetryHandler singleton - Do this at the beginning
+    telemetry_handler = TelemetryHandler(
         contrast_api_client=contrast_client,
         enable_full_telemetry=ENABLE_FULL_TELEMETRY
     )
@@ -101,9 +101,8 @@ def handle_merged_pr():
         sys.exit(1)
     
     debug_log(f"Extracted Remediation ID: {remediation_id}")
-    telemetry_handler_obj.update_telemetry("additionalAttributes.remediationId", remediation_id)
-    # For backward compatibility
     telemetry_handler.update_telemetry("additionalAttributes.remediationId", remediation_id)
+    # Legacy compatibility removed
     
     # Try to extract vulnerability UUID from PR labels
     labels = pull_request.get("labels", [])
@@ -118,11 +117,9 @@ def handle_merged_pr():
             if vuln_uuid and vuln_uuid != "unknown":
                 debug_log(f"Extracted Vulnerability UUID from PR label: {vuln_uuid}")
                 break
-    telemetry_handler_obj.update_telemetry("vulnInfo.vulnId", vuln_uuid)
-    telemetry_handler_obj.update_telemetry("vulnInfo.vulnRule", "unknown")
-    # For backward compatibility
     telemetry_handler.update_telemetry("vulnInfo.vulnId", vuln_uuid)
     telemetry_handler.update_telemetry("vulnInfo.vulnRule", "unknown")
+    # Legacy compatibility removed
     
     if vuln_uuid == "unknown":
         debug_log("Could not extract vulnerability UUID from PR labels. Telemetry may be incomplete.")
@@ -140,12 +137,8 @@ def handle_merged_pr():
             user_agent=USER_AGENT
         )
     
-    # Initialize the TelemetryHandler if not already initialized
-    if telemetry_handler_obj is None:
-        telemetry_handler_obj = TelemetryHandler(
-            contrast_api_client=contrast_client,
-            enable_full_telemetry=ENABLE_FULL_TELEMETRY
-        )
+    # Get the TelemetryHandler singleton - it should already be initialized above
+    telemetry_handler = TelemetryHandler()
     
     # Notify the Remediation backend service about the merged PR
     log(f"Notifying Remediation service about merged PR for remediation {remediation_id}...")
@@ -158,11 +151,10 @@ def handle_merged_pr():
     else:
         log(f"Failed to notify Remediation service about merged PR for remediation {remediation_id}.", is_error=True)
 
-    telemetry_handler_obj.update_telemetry("additionalAttributes.prStatus", "MERGED")
-    # For backward compatibility
     telemetry_handler.update_telemetry("additionalAttributes.prStatus", "MERGED")
+    # Legacy compatibility removed
     # Send telemetry using the telemetry handler
-    telemetry_handler_obj.send_telemetry_data()
+    telemetry_handler.send_telemetry_data()
 
     log("--- Merged Contrast AI SmartFix Pull Request Handling Complete ---")
 

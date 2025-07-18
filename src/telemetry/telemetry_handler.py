@@ -32,9 +32,13 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
     
 from src.utils import debug_log, log
-import src.telemetry_handler as legacy_telemetry_handler
+# Legacy telemetry module is no longer used
+# import src.telemetry_handler as legacy_telemetry_handler
 from src.config_compat import VERSION, CONTRAST_HOST, BUILD_COMMAND, FORMATTING_COMMAND, AGENT_MODEL, ENABLE_FULL_TELEMETRY
 
+from src.utils import singleton
+
+@singleton
 class TelemetryHandler:
     """
     Manages the collection and sending of telemetry data.
@@ -60,9 +64,7 @@ class TelemetryHandler:
         Returns:
             dict: The initialized telemetry data structure
         """
-        # For backward compatibility, initialize the legacy telemetry
-        if hasattr(legacy_telemetry_handler, 'initialize_telemetry'):
-            legacy_telemetry_handler.initialize_telemetry()
+        # No longer initializing legacy telemetry
         
         # Create a comprehensive telemetry structure
         telemetry_data = {
@@ -123,9 +125,7 @@ class TelemetryHandler:
             key_path: The path to the key in dot notation (e.g., "vulnInfo.vulnId")
             value: The value to set
         """
-        # For backward compatibility, update the legacy implementation
-        if hasattr(legacy_telemetry_handler, 'update_telemetry'):
-            legacy_telemetry_handler.update_telemetry(key_path, value)
+        # No longer updating legacy telemetry
         
         # Update our local copy
         parts = key_path.split('.')
@@ -142,9 +142,7 @@ class TelemetryHandler:
     
     def reset_vuln_specific_telemetry(self) -> None:
         """Resets vulnerability-specific telemetry data."""
-        # For backward compatibility, use the legacy implementation
-        if hasattr(legacy_telemetry_handler, 'reset_vuln_specific_telemetry'):
-            legacy_telemetry_handler.reset_vuln_specific_telemetry()
+        # No longer resetting legacy telemetry
         
         # Reset in our local copy
         self.telemetry_data["vulnInfo"] = {
@@ -172,9 +170,7 @@ class TelemetryHandler:
         Args:
             message: The log message to add
         """
-        # For backward compatibility, use the legacy implementation
-        if hasattr(legacy_telemetry_handler, 'add_log_message'):
-            legacy_telemetry_handler.add_log_message(message)
+        # No longer adding logs to legacy telemetry
         
         # Add to our local log messages list
         self.log_messages.append(message)
@@ -199,9 +195,7 @@ class TelemetryHandler:
         Args:
             event_data: The agent event data
         """
-        # For backward compatibility, use the legacy implementation
-        if hasattr(legacy_telemetry_handler, 'add_agent_event'):
-            legacy_telemetry_handler.add_agent_event(event_data)
+        # No longer adding agent events to legacy telemetry
         
         # Add to our local copy
         if "agentEvents" not in self.telemetry_data:
@@ -322,11 +316,7 @@ class TelemetryHandler:
         else:
             debug_log(f"Telemetry payload size: {json_size_kb:.2f}KB (fullLog is excluded per ENABLE_FULL_TELEMETRY=false setting)")
         
-        # For backward compatibility, use the legacy implementation
-        if hasattr(legacy_telemetry_handler, 'get_telemetry_data'):
-            legacy_data = legacy_telemetry_handler.get_telemetry_data()
-            # We return our processed version as it's more complete and handles JSON serializability
-            # This ensures consistent data whether clients use the legacy or new implementation
+        # No longer getting data from legacy telemetry
         
         return telemetry_copy
     
@@ -403,11 +393,7 @@ class TelemetryHandler:
         if len(brief_summary) > max_summary_length:
             brief_summary = brief_summary[:max_summary_length - 3] + "..."
         
-        # For backward compatibility, use the legacy implementation if available
-        if hasattr(legacy_telemetry_handler, 'create_ai_summary_report'):
-            legacy_summary = legacy_telemetry_handler.create_ai_summary_report(ai_fix_summary_full)
-            # We return our processed version as it follows the latest algorithm
-            # This ensures consistent data whether clients use the legacy or new implementation
+        # No longer creating summary from legacy telemetry
             
         return brief_summary
     
@@ -421,10 +407,7 @@ class TelemetryHandler:
         # Make sure we have a contrast_api_client
         if not self.contrast_api_client:
             debug_log("No contrast_api_client provided to TelemetryHandler. Cannot send telemetry data.")
-            # For backward compatibility, use the legacy implementation
-            if hasattr(legacy_telemetry_handler, 'send_telemetry_data'):
-                from src.contrast_api import send_telemetry_data
-                return send_telemetry_data()
+            # No longer using legacy telemetry for sending data
             return False
             
         # Use the contrast_api_client to send the data

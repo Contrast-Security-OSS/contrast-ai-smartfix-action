@@ -129,8 +129,21 @@ class AgentManager:
         
         # Create a notify_failure_callback for QA to use
         def notify_failure_callback(remediation_id, failure_category):
-            from src.contrast_api import notify_remediation_failed
-            return notify_remediation_failed(remediation_id, failure_category)
+            # Use the ContrastApiClient singleton
+            try:
+                from src.api.contrast_api_client import ContrastApiClient
+                contrast_api_client = ContrastApiClient()
+                if hasattr(contrast_api_client, 'notify_remediation_failed'):
+                    return contrast_api_client.notify_remediation_failed(
+                        remediation_id=remediation_id,
+                        failure_category=failure_category
+                    )
+                else:
+                    log("ContrastApiClient instance doesn't have notify_remediation_failed method.", is_error=True)
+                    return False
+            except Exception as e:
+                log(f"ContrastApiClient not initialized or error: {e}. Cannot notify remediation failure.", is_error=True)
+                return False
         
         # Run the QA process
         qa_success, qa_result = self.build_qa_manager.run_qa_process(
