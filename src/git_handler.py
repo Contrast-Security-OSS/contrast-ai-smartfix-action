@@ -381,4 +381,54 @@ def cleanup_branch(branch_name: str):
     run_command(["git", "branch", "-D", branch_name], check=False)
     log("Branch cleanup completed.")
 
+def find_issue_with_label(label: str) -> int:
+    """
+    Searches for a GitHub issue with a specific label.
+    
+    Args:
+        label: The label to search for
+        
+    Returns:
+        int: The issue number if found, None otherwise
+    """
+    log(f"Searching for GitHub issue with label: {label}")
+    gh_env = get_gh_env()
+    
+    issue_list_command = [
+        "gh", "issue", "list",
+        "--repo", config.GITHUB_REPOSITORY,
+        "--label", label,
+        "--state", "open",
+        "--limit", "1", # Limit to 1 result to get the newest/first one
+        "--json", "number,createdAt",
+        "--sort", "created-desc" # Sort by creation date descending (newest first)
+    ]
+    
+    try:
+        issue_list_output = run_command(issue_list_command, env=gh_env, check=False)
+        
+        if not issue_list_output:
+            debug_log(f"No issues found with label: {label}")
+            return None
+            
+        issues_data = json.loads(issue_list_output)
+        
+        if not issues_data:
+            debug_log(f"No issues found with label: {label}")
+            return None
+        
+        # Get the first (newest) issue
+        issue_number = issues_data[0].get("number")
+        if issue_number:
+            debug_log(f"Found issue #{issue_number} with label: {label}")
+            return issue_number
+        
+        return None
+    except json.JSONDecodeError:
+        log(f"Could not parse JSON output from gh issue list: {issue_list_output}", is_error=True)
+        return None
+    except Exception as e:
+        log(f"Error searching for GitHub issue with label: {e}", is_error=True)
+        return None
+
 # %%
