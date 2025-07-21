@@ -325,15 +325,15 @@ runs:
         if [ "${{ inputs.run_task }}" = "merge" ]; then
           echo "🚀 STARTING CONTRAST AI SMARTFIX (Task: merge)"
           echo "================================================================"
-          python "${{ github.action_path }}/src/merge_handler.py"
+          PYTHONPATH="${{ github.action_path }}" python "${{ github.action_path }}/src/merge_handler.py"
         elif [ "${{ inputs.run_task }}" = "closed" ]; then
           echo "🚀 STARTING CONTRAST AI SMARTFIX (Task: closed)"
           echo "================================================================"
-          python "${{ github.action_path }}/src/closed_handler.py"
+          PYTHONPATH="${{ github.action_path }}" python "${{ github.action_path }}/src/closed_handler.py"
         else
           echo "🚀 STARTING CONTRAST AI SMARTFIX (Task: generate_fix)"
           echo "================================================================"
-          python "${{ github.action_path }}/src/main.py"
+          PYTHONPATH="${{ github.action_path }}" python "${{ github.action_path }}/src/main.py"
         fi
         echo ""
         
