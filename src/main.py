@@ -41,6 +41,7 @@ from src import git_handler
 from src import qa_handler
 
 config = get_config()
+telemetry_handler.initialize_telemetry()
 
 # NOTE: Google ADK appears to have issues with asyncio event loop cleanup, and has had attempts to address them in versions 1.4.0-1.5.0
 # Configure warnings to ignore asyncio ResourceWarnings during shutdown
