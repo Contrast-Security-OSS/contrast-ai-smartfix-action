@@ -43,9 +43,7 @@ import src.telemetry_handler as telemetry_handler
 import datetime # For timestamps
 import traceback # For error logging
 
-# Determine if we're in a testing environment
-is_test_env = 'PYTEST_CURRENT_TEST' in os.environ or 'UNITTEST_RUN' in os.environ
-config = get_config(testing=is_test_env)
+config = get_config()
 
 # --- ADK Setup (Conditional Import) ---
 ADK_AVAILABLE = False
