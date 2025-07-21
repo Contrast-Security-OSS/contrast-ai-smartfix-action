@@ -401,7 +401,7 @@ def _run_agent_in_event_loop(coroutine_func, *args, **kwargs):
     # Platform-specific setup
     is_windows = platform.system() == 'Windows'
     
-    # On Windows, we must use the WindowsProactorEventLoop 
+    # On Windows, we must use the WindowsProactorEventLoopPolicy
     # The SelectorEventLoop on Windows doesn't support subprocesses, which are required for MCP
     if is_windows:
         try:
