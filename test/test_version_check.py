@@ -137,16 +137,18 @@ class TestVersionCheck(unittest.TestCase):
         result = check_for_newer_version(version_obj, "v1.1.0")
         self.assertEqual(result, "v1.1.0")
 
+    @patch.dict('os.environ', {}, clear=True)
     def test_do_version_check_no_refs(self):
         """Test do_version_check when no reference environment variables are set."""
-        # No environment variables set
+        # Using patch.dict to ensure environment variables are cleared
         do_version_check()
         # Check that the appropriate debug_log message was called
         self.mock_debug_log.assert_any_call("Warning: Neither GITHUB_ACTION_REF nor GITHUB_REF environment variables are set. Version checking is skipped.")
 
+    @patch.dict('os.environ', {'GITHUB_SHA': 'abcdef1234567890abcdef1234567890abcdef12'}, clear=True)
     def test_do_version_check_with_sha_only(self):
         """Test do_version_check when only GITHUB_SHA is available."""
-        os.environ["GITHUB_SHA"] = "abcdef1234567890abcdef1234567890abcdef12"
+        # Using patch.dict to mock only GITHUB_SHA
         do_version_check()
         # Check that the appropriate debug_log message was called
         self.mock_debug_log.assert_any_call("Running from SHA: abcdef1234567890abcdef1234567890abcdef12. No ref found for version check, using SHA.")
