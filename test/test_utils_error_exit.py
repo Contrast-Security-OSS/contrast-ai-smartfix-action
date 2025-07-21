@@ -81,7 +81,7 @@ class TestErrorExit(unittest.TestCase):
         failure_code = FailureCategory.AGENT_FAILURE.value
         mock_notify.return_value = True  # Notification succeeds
         mock_get_branch.return_value = f"smartfix/remediation-{remediation_id}"
-        config = get_config()
+        config = get_config(testing=True)
         
         # Execute the function
         utils.error_exit(remediation_id, failure_code)
@@ -118,7 +118,7 @@ class TestErrorExit(unittest.TestCase):
         default_failure_code = FailureCategory.GENERAL_FAILURE.value
         mock_notify.return_value = True
         mock_get_branch.return_value = f"smartfix/remediation-{remediation_id}"
-        config = get_config()
+        config = get_config(testing=True)
 
         # Execute
         utils.error_exit(remediation_id)

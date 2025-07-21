@@ -24,7 +24,7 @@ from typing import List
 from src.utils import run_command, debug_log, log, error_exit
 from src.contrast_api import FailureCategory
 from src.config import get_config
-config = get_config(testing=True)
+config = get_config()
 
 def get_gh_env():
     """

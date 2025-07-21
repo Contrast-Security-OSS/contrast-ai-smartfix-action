@@ -25,7 +25,7 @@ from src.config import get_config
 from src.utils import debug_log, log
 from src import telemetry_handler
 
-config = get_config(testing=True)
+config = get_config()
 
 # Define failure categories as an enum to ensure consistency
 class FailureCategory(Enum):

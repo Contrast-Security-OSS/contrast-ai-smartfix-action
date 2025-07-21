@@ -12,6 +12,9 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from src.config import reset_config, get_config
 from src.version_check import get_latest_repo_version, check_for_newer_version, do_version_check, normalize_version, safe_parse_version
 
+# Initialize config with testing=True for tests
+_ = get_config(testing=True)
+
 class TestVersionCheck(unittest.TestCase):
     """Test the version checking functionality."""
 
