@@ -96,7 +96,8 @@ class TestExternalCodingAgent(unittest.TestCase):
         
     @patch('src.git_handler.find_issue_with_label')
     @patch('src.external_coding_agent.debug_log')
-    def test_generate_fixes_with_external_agent(self, mock_debug_log, mock_find_issue):
+    @patch('src.external_coding_agent.log')
+    def test_generate_fixes_with_external_agent(self, mock_log, mock_debug_log, mock_find_issue):
         """Test generate_fixes returns True when CODING_AGENT is not SMARTFIX"""
         # Set CODING_AGENT to GITHUB_COPILOT
         self.config.CODING_AGENT = "GITHUB_COPILOT"
@@ -113,15 +114,17 @@ class TestExternalCodingAgent(unittest.TestCase):
         # Assert that result is True
         self.assertTrue(result)
         
+        # Assert that log was called with the expected message
+        mock_log.assert_any_call("--- Generating fix with external coding agent ---")
+        
         # Assert that debug_log was called with the expected messages
-        # Check that the first call contains the expected message
-        self.assertEqual(mock_debug_log.call_args_list[0].args[0], "External coding agent will generate fixes")
-        # Verify there's a call about creating a new GitHub issue
-        mock_debug_log.assert_any_call("TODO: Need to create a new GitHub issue for this vulnerability")
+        # Check that log is called with the updated message
+        mock_debug_log.assert_any_call("No GitHub issue found with label contrast-vuln-id:VULN-1234-FAKE-ABCD")
     
     @patch('src.git_handler.find_issue_with_label')
     @patch('src.external_coding_agent.debug_log')
-    def test_generate_fixes_with_existing_issue(self, mock_debug_log, mock_find_issue):
+    @patch('src.external_coding_agent.log')
+    def test_generate_fixes_with_existing_issue(self, mock_log, mock_debug_log, mock_find_issue):
         """Test generate_fixes when an existing GitHub issue is found"""
         # Set CODING_AGENT to GITHUB_COPILOT
         self.config.CODING_AGENT = "GITHUB_COPILOT"
@@ -138,8 +141,11 @@ class TestExternalCodingAgent(unittest.TestCase):
         # Assert that result is True
         self.assertTrue(result)
         
-        # Verify there's a call about updating the existing issue
-        mock_debug_log.assert_any_call("TODO: Need to update the existing issue with fix details")
+        # Assert that log was called with the expected message
+        mock_log.assert_any_call("--- Generating fix with external coding agent ---")
+        
+        # Verify there's a call about finding an existing issue
+        mock_debug_log.assert_any_call("Found existing GitHub issue #42 with label contrast-vuln-id:VULN-1234-FAKE-ABCD")
 
 if __name__ == '__main__':
     unittest.main()

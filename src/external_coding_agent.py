@@ -55,23 +55,26 @@ class ExternalCodingAgent:
             debug_log("SMARTFIX agent detected, ExternalCodingAgent.generate_fixes returning False")
             return False
         
-        debug_log("External coding agent will generate fixes")
+        log("--- Generating fix with external coding agent ---")
         
         # Hard-coded vulnerability label for now, will be passed as argument later
         vulnerability_label = "contrast-vuln-id:VULN-1234-FAKE-ABCD"
+        remediation_label = "contrast-remediation-id:REM-1234-FAKE-ABCD"
         
         # Use git_handler to find if there's an existing issue with this label
         issue_number = git_handler.find_issue_with_label(vulnerability_label)
         
         if issue_number:
-            log(f"Found existing GitHub issue #{issue_number} with label {vulnerability_label}")
-            # TODO: Update the existing issue with new information about the vulnerability fix
-            debug_log("TODO: Need to update the existing issue with fix details")
+            debug_log(f"Found existing GitHub issue #{issue_number} with label {vulnerability_label}")
+            # call: git_handler.reset_issue(issue_number, remediation_label))
         else:
-            log(f"No GitHub issue found with label {vulnerability_label}")
-            # TODO: Create a new GitHub issue for this vulnerability
-            debug_log("TODO: Need to create a new GitHub issue for this vulnerability")
+            debug_log(f"No GitHub issue found with label {vulnerability_label}")
+            # call: issue_number = git_handler.create_issue(vulnerability_label, remediation_label)
         
+        # find PR for this issue: pr_number = git_handler.find_pr_for_issue(issue_number)
+        # notify API of open PR
+        # update telemetry
+
         return True
     
     # Additional methods will be implemented later
