@@ -60,16 +60,18 @@ class ExternalCodingAgent:
         # Hard-coded vulnerability label for now, will be passed as argument later
         vulnerability_label = "contrast-vuln-id:VULN-1234-FAKE-ABCD"
         remediation_label = "contrast-remediation-id:REM-1234-FAKE-ABCD"
+        issue_title = "Fake Vulnerability Title"
+        issue_body = "This is a fake issue body for testing purposes."
         
         # Use git_handler to find if there's an existing issue with this label
         issue_number = git_handler.find_issue_with_label(vulnerability_label)
         
         if issue_number:
             debug_log(f"Found existing GitHub issue #{issue_number} with label {vulnerability_label}")
-            # call: git_handler.reset_issue(issue_number, remediation_label))
+            git_handler.reset_issue(issue_number, remediation_label)
         else:
             debug_log(f"No GitHub issue found with label {vulnerability_label}")
-            # call: issue_number = git_handler.create_issue(vulnerability_label, remediation_label)
+            issue_number = git_handler.create_issue(issue_title, issue_body, vulnerability_label, remediation_label)
         
         # find PR for this issue: pr_number = git_handler.find_pr_for_issue(issue_number)
         # notify API of open PR

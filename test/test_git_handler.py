@@ -125,5 +125,118 @@ class TestGitHandler(unittest.TestCase):
         self.assertIsNone(result)
         mock_log.assert_any_call("Error searching for GitHub issue with label: Mock error", is_error=True)
 
+    @patch('src.git_handler.run_command')
+    @patch('src.git_handler.ensure_label')
+    @patch('src.git_handler.log')
+    def test_create_issue_success(self, mock_log, mock_ensure_label, mock_run_command):
+        """Test creating a GitHub issue when successful"""
+        # Setup
+        title = "Test Issue Title"
+        body = "Test issue body"
+        vuln_label = "contrast-vuln-id:VULN-1234"
+        remediation_label = "contrast-remediation-id:REM-5678"
+        
+        # Mock successful issue creation with URL returned
+        mock_run_command.return_value = "https://github.com/mock/repo/issues/42"
+        mock_ensure_label.return_value = True
+        
+        # Initialize config with testing=True
+        _ = get_config(testing=True)
+        
+        # Execute
+        result = git_handler.create_issue(title, body, vuln_label, remediation_label)
+        
+        # Assert
+        mock_run_command.assert_called_once()
+        self.assertEqual(42, result)  # Should extract issue number 42 from URL
+        mock_log.assert_any_call("Successfully created issue: https://github.com/mock/repo/issues/42")
+        mock_log.assert_any_call("Issue number extracted: 42")
+
+    @patch('src.git_handler.run_command')
+    @patch('src.git_handler.ensure_label')
+    @patch('src.git_handler.log')
+    def test_create_issue_failure(self, mock_log, mock_ensure_label, mock_run_command):
+        """Test creating a GitHub issue when it fails"""
+        # Setup
+        title = "Test Issue Title"
+        body = "Test issue body"
+        vuln_label = "contrast-vuln-id:VULN-1234"
+        remediation_label = "contrast-remediation-id:REM-5678"
+        
+        # Mock failure during issue creation
+        mock_run_command.side_effect = Exception("Mock error")
+        mock_ensure_label.return_value = True
+        
+        # Initialize config with testing=True
+        _ = get_config(testing=True)
+        
+        # Execute
+        result = git_handler.create_issue(title, body, vuln_label, remediation_label)
+        
+        # Assert
+        mock_run_command.assert_called_once()
+        self.assertIsNone(result)
+        mock_log.assert_any_call("Failed to create GitHub issue: Mock error", is_error=True)
+
+    @patch('src.git_handler.run_command')
+    @patch('src.git_handler.ensure_label')
+    @patch('src.git_handler.log')
+    @patch('src.git_handler.debug_log')
+    def test_reset_issue_success(self, mock_debug_log, mock_log, mock_ensure_label, mock_run_command):
+        """Test resetting a GitHub issue when successful"""
+        # Setup
+        issue_number = 42
+        remediation_label = "contrast-remediation-id:REM-5678"
+        
+        # Mock successful issue view with labels
+        mock_run_command.side_effect = [
+            # First call - issue view response
+            json.dumps({"labels": [{"name": "contrast-vuln-id:VULN-1234"}, {"name": "contrast-remediation-id:OLD-REM"}]}),
+            # Second call - remove label response
+            "",
+            # Third call - add label response
+            "",
+            # Fourth call - unassign response
+            "",
+            # Fifth call - reassign response
+            ""
+        ]
+        mock_ensure_label.return_value = True
+        
+        # Initialize config with testing=True
+        _ = get_config(testing=True)
+        
+        # Execute
+        result = git_handler.reset_issue(issue_number, remediation_label)
+        
+        # Assert
+        self.assertEqual(mock_run_command.call_count, 5)  # Should call run_command 5 times
+        self.assertTrue(result)
+        mock_log.assert_any_call("Removed existing remediation labels from issue #42")
+        mock_log.assert_any_call("Added new remediation label to issue #42")
+        mock_log.assert_any_call("Reassigned issue #42 to @Copilot")
+        
+    @patch('src.git_handler.run_command')
+    @patch('src.git_handler.log')
+    def test_reset_issue_failure(self, mock_log, mock_run_command):
+        """Test resetting a GitHub issue when it fails"""
+        # Setup
+        issue_number = 42
+        remediation_label = "contrast-remediation-id:REM-5678"
+        
+        # Mock failure during issue view
+        mock_run_command.side_effect = Exception("Mock error")
+        
+        # Initialize config with testing=True
+        _ = get_config(testing=True)
+        
+        # Execute
+        result = git_handler.reset_issue(issue_number, remediation_label)
+        
+        # Assert
+        mock_run_command.assert_called_once()
+        self.assertFalse(result)
+        mock_log.assert_any_call("Failed to reset issue #42: Mock error", is_error=True)
+
 if __name__ == '__main__':
     unittest.main()

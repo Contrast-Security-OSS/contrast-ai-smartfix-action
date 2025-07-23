@@ -381,6 +381,56 @@ def cleanup_branch(branch_name: str):
     run_command(["git", "branch", "-D", branch_name], check=False)
     log("Branch cleanup completed.")
 
+def create_issue(title: str, body: str, vuln_label: str, remediation_label: str) -> int:
+    """
+    Creates a GitHub issue with the specified title, body, and labels.
+    
+    Args:
+        title: The title of the issue
+        body: The body content of the issue
+        vuln_label: The vulnerability label (contrast-vuln-id:*)
+        remediation_label: The remediation label (contrast-remediation-id:*)
+        
+    Returns:
+        int: The issue number if created successfully, None otherwise
+    """
+    log(f"Creating GitHub issue with title: {title}")
+    gh_env = get_gh_env()
+    
+    # Ensure both labels exist
+    ensure_label(vuln_label, "Vulnerability identified by Contrast", "ff0000")  # Red
+    ensure_label(remediation_label, "Remediation ID for Contrast vulnerability", "0075ca")  # Blue
+    
+    # Format labels for the command
+    labels = f"{vuln_label},{remediation_label}"
+    
+    issue_command = [
+        "gh", "issue", "create",
+        "--repo", config.GITHUB_REPOSITORY,
+        "--title", title,
+        "--body", body,
+        "--label", labels
+    ]
+    
+    try:
+        # Run the command and capture the output (issue URL)
+        issue_url = run_command(issue_command, env=gh_env, check=True)
+        log(f"Successfully created issue: {issue_url}")
+        
+        # Extract the issue number from the URL
+        # URL format is typically: https://github.com/owner/repo/issues/123
+        try:
+            issue_number = int(os.path.basename(issue_url.strip()))
+            log(f"Issue number extracted: {issue_number}")
+            return issue_number
+        except ValueError:
+            log(f"Could not extract issue number from URL: {issue_url}", is_error=True)
+            return None
+            
+    except Exception as e:
+        log(f"Failed to create GitHub issue: {e}", is_error=True)
+        return None
+
 def find_issue_with_label(label: str) -> int:
     """
     Searches for a GitHub issue with a specific label.
@@ -430,5 +480,101 @@ def find_issue_with_label(label: str) -> int:
     except Exception as e:
         log(f"Error searching for GitHub issue with label: {e}", is_error=True)
         return None
+
+def reset_issue(issue_number: int, remediation_label: str) -> bool:
+    """
+    Resets a GitHub issue by:
+    1. Removing all existing labels that start with "contrast-remediation-id:"
+    2. Adding the specified remediation label
+    3. Unassigning the @Copilot user and reassigning the issue to @Copilot
+    
+    Args:
+        issue_number: The issue number to reset
+        remediation_label: The new remediation label to add
+        
+    Returns:
+        bool: True if the issue was successfully reset, False otherwise
+    """
+    log(f"Resetting GitHub issue #{issue_number}")
+    gh_env = get_gh_env()
+    
+    try:
+        # First, get the current labels for the issue
+        issue_info_command = [
+            "gh", "issue", "view",
+            "--repo", config.GITHUB_REPOSITORY,
+            str(issue_number),
+            "--json", "labels"
+        ]
+        
+        issue_info = run_command(issue_info_command, env=gh_env, check=True)
+        
+        try:
+            labels_data = json.loads(issue_info)
+            current_labels = [label["name"] for label in labels_data.get("labels", [])]
+            debug_log(f"Current labels on issue #{issue_number}: {current_labels}")
+            
+            # Find any remediation labels to remove
+            labels_to_remove = [label for label in current_labels 
+                               if label.startswith("contrast-remediation-id:")]
+            
+            if labels_to_remove:
+                debug_log(f"Labels to remove: {labels_to_remove}")
+                
+                # Remove the old remediation labels
+                remove_label_command = [
+                    "gh", "issue", "edit",
+                    "--repo", config.GITHUB_REPOSITORY,
+                    str(issue_number),
+                    "--remove-label", ",".join(labels_to_remove)
+                ]
+                
+                run_command(remove_label_command, env=gh_env, check=True)
+                log(f"Removed existing remediation labels from issue #{issue_number}")
+        except json.JSONDecodeError:
+            debug_log(f"Could not parse issue info JSON: {issue_info}")
+        except Exception as e:
+            log(f"Error processing current issue labels: {e}", is_error=True)
+        
+        # Ensure the remediation label exists
+        ensure_label(remediation_label, "Remediation ID for Contrast vulnerability", "0075ca")
+        
+        # Add the new remediation label
+        add_label_command = [
+            "gh", "issue", "edit",
+            "--repo", config.GITHUB_REPOSITORY,
+            str(issue_number),
+            "--add-label", remediation_label
+        ]
+        
+        run_command(add_label_command, env=gh_env, check=True)
+        log(f"Added new remediation label to issue #{issue_number}")
+        
+        # Unassign from @Copilot (if assigned)
+        unassign_command = [
+            "gh", "issue", "edit",
+            "--repo", config.GITHUB_REPOSITORY,
+            str(issue_number),
+            "--remove-assignee", "Copilot"
+        ]
+        
+        # Don't check here as it might not be assigned
+        run_command(unassign_command, env=gh_env, check=False)
+        
+        # Reassign to @Copilot
+        assign_command = [
+            "gh", "issue", "edit",
+            "--repo", config.GITHUB_REPOSITORY,
+            str(issue_number),
+            "--add-assignee", "Copilot"
+        ]
+        
+        run_command(assign_command, env=gh_env, check=True)
+        log(f"Reassigned issue #{issue_number} to @Copilot")
+        
+        return True
+    except Exception as e:
+        log(f"Failed to reset issue #{issue_number}: {e}", is_error=True)
+        return False
 
 # %%
