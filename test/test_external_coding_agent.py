@@ -75,6 +75,42 @@ class TestExternalCodingAgent(unittest.TestCase):
         
         # Assert that log was called with the expected message
         mock_log.assert_called_once_with(f"Initialized ExternalCodingAgent")
+        
+    @patch('src.external_coding_agent.debug_log')
+    def test_generate_fixes_with_smartfix(self, mock_debug_log):
+        """Test generate_fixes returns False when CODING_AGENT is SMARTFIX"""
+        # Set CODING_AGENT to SMARTFIX
+        self.config.CODING_AGENT = "SMARTFIX"
+        
+        # Create an ExternalCodingAgent object
+        agent = ExternalCodingAgent(self.config)
+        
+        # Call generate_fixes
+        result = agent.generate_fixes()
+        
+        # Assert that result is False
+        self.assertFalse(result)
+        
+        # Assert that debug_log was called with the expected message
+        mock_debug_log.assert_called_once_with("SMARTFIX agent detected, ExternalCodingAgent.generate_fixes returning False")
+        
+    @patch('src.external_coding_agent.debug_log')
+    def test_generate_fixes_with_external_agent(self, mock_debug_log):
+        """Test generate_fixes returns True when CODING_AGENT is not SMARTFIX"""
+        # Set CODING_AGENT to GITHUB_COPILOT
+        self.config.CODING_AGENT = "GITHUB_COPILOT"
+        
+        # Create an ExternalCodingAgent object
+        agent = ExternalCodingAgent(self.config)
+        
+        # Call generate_fixes
+        result = agent.generate_fixes()
+        
+        # Assert that result is True
+        self.assertTrue(result)
+        
+        # Assert that debug_log was called with the expected message
+        mock_debug_log.assert_called_once_with("External coding agent will generate fixes")
 
 if __name__ == '__main__':
     unittest.main()

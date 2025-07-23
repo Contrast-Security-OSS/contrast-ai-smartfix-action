@@ -43,6 +43,18 @@ class ExternalCodingAgent:
         self.config = config
         log(f"Initialized ExternalCodingAgent")
     
-    # Additional methods will be implemented later
+    def generate_fixes(self) -> bool:
+        """
+        Generate fixes for vulnerabilities.
+        
+        Returns:
+            bool: False if the CODING_AGENT is SMARTFIX, True otherwise
+        """
+        if hasattr(self.config, 'CODING_AGENT') and self.config.CODING_AGENT == "SMARTFIX":
+            debug_log("SMARTFIX agent detected, ExternalCodingAgent.generate_fixes returning False")
+            return False
+        
+        debug_log("External coding agent will generate fixes")
+        return True
     
-    # Methods to be implemented later as needed
+    # Additional methods will be implemented later
