@@ -94,11 +94,15 @@ class TestExternalCodingAgent(unittest.TestCase):
         # Assert that debug_log was called with the expected message
         mock_debug_log.assert_called_once_with("SMARTFIX agent detected, ExternalCodingAgent.generate_fixes returning False")
         
+    @patch('src.git_handler.find_issue_with_label')
     @patch('src.external_coding_agent.debug_log')
-    def test_generate_fixes_with_external_agent(self, mock_debug_log):
+    def test_generate_fixes_with_external_agent(self, mock_debug_log, mock_find_issue):
         """Test generate_fixes returns True when CODING_AGENT is not SMARTFIX"""
         # Set CODING_AGENT to GITHUB_COPILOT
         self.config.CODING_AGENT = "GITHUB_COPILOT"
+        
+        # Mock the find_issue_with_label to return None (no issue found)
+        mock_find_issue.return_value = None
         
         # Create an ExternalCodingAgent object
         agent = ExternalCodingAgent(self.config)
@@ -109,8 +113,33 @@ class TestExternalCodingAgent(unittest.TestCase):
         # Assert that result is True
         self.assertTrue(result)
         
-        # Assert that debug_log was called with the expected message
-        mock_debug_log.assert_called_once_with("External coding agent will generate fixes")
+        # Assert that debug_log was called with the expected messages
+        # Check that the first call contains the expected message
+        self.assertEqual(mock_debug_log.call_args_list[0].args[0], "External coding agent will generate fixes")
+        # Verify there's a call about creating a new GitHub issue
+        mock_debug_log.assert_any_call("TODO: Need to create a new GitHub issue for this vulnerability")
+    
+    @patch('src.git_handler.find_issue_with_label')
+    @patch('src.external_coding_agent.debug_log')
+    def test_generate_fixes_with_existing_issue(self, mock_debug_log, mock_find_issue):
+        """Test generate_fixes when an existing GitHub issue is found"""
+        # Set CODING_AGENT to GITHUB_COPILOT
+        self.config.CODING_AGENT = "GITHUB_COPILOT"
+        
+        # Mock the find_issue_with_label to return an issue number
+        mock_find_issue.return_value = 42
+        
+        # Create an ExternalCodingAgent object
+        agent = ExternalCodingAgent(self.config)
+        
+        # Call generate_fixes
+        result = agent.generate_fixes()
+        
+        # Assert that result is True
+        self.assertTrue(result)
+        
+        # Verify there's a call about updating the existing issue
+        mock_debug_log.assert_any_call("TODO: Need to update the existing issue with fix details")
 
 if __name__ == '__main__':
     unittest.main()
