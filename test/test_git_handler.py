@@ -239,5 +239,77 @@ class TestGitHandler(unittest.TestCase):
         self.assertFalse(result)
         mock_log.assert_any_call("Failed to reset issue #42: Mock error", is_error=True)
 
+    @patch('src.git_handler.log')
+    @patch('src.git_handler.debug_log')
+    @patch('src.git_handler.run_command')
+    def test_find_pr_for_issue_found(self, mock_run_command, mock_debug_log, mock_log):
+        """Test finding a PR for an issue when the PR exists"""
+        # Setup
+        issue_number = 42
+        pr_data = [
+            {
+                "number": 123,
+                "url": "https://github.com/mock/repo/pull/123",
+                "title": "Fix bug for issue #42",
+                "headRefName": "copilot/fix-42",
+                "baseRefName": "main",
+                "state": "OPEN"
+            }
+        ]
+        mock_run_command.return_value = json.dumps(pr_data)
+        
+        # Initialize config with testing=True
+        _ = get_config(testing=True)
+        
+        # Execute
+        result = git_handler.find_pr_for_issue(issue_number)
+        
+        # Assert
+        self.assertEqual(result, pr_data[0])
+        mock_run_command.assert_called_once()
+        mock_log.assert_any_call("Searching for open PR related to issue #42")
+        mock_log.assert_any_call("Found open PR #123 for issue #42: Fix bug for issue #42")
+
+    @patch('src.git_handler.log')
+    @patch('src.git_handler.debug_log')
+    @patch('src.git_handler.run_command')
+    def test_find_pr_for_issue_not_found(self, mock_run_command, mock_debug_log, mock_log):
+        """Test finding a PR for an issue when no PR exists"""
+        # Setup
+        issue_number = 42
+        mock_run_command.return_value = "[]"
+        
+        # Initialize config with testing=True
+        _ = get_config(testing=True)
+        
+        # Execute
+        result = git_handler.find_pr_for_issue(issue_number)
+        
+        # Assert
+        self.assertIsNone(result)
+        mock_run_command.assert_called_once()
+        mock_log.assert_any_call("Searching for open PR related to issue #42")
+        mock_debug_log.assert_any_call("No open PRs found for issue #42")
+
+    @patch('src.git_handler.log')
+    @patch('src.git_handler.run_command')
+    def test_find_pr_for_issue_error(self, mock_run_command, mock_log):
+        """Test finding a PR for an issue when an error occurs"""
+        # Setup
+        issue_number = 42
+        mock_run_command.side_effect = Exception("Mock error")
+        
+        # Initialize config with testing=True
+        _ = get_config(testing=True)
+        
+        # Execute
+        result = git_handler.find_pr_for_issue(issue_number)
+        
+        # Assert
+        self.assertIsNone(result)
+        mock_run_command.assert_called_once()
+        mock_log.assert_any_call("Searching for open PR related to issue #42")
+        mock_log.assert_any_call("Error searching for PRs related to issue #42: Mock error", is_error=True)
+
 if __name__ == '__main__':
     unittest.main()

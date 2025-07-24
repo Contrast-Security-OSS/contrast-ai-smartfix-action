@@ -579,4 +579,62 @@ def reset_issue(issue_number: int, remediation_label: str) -> bool:
         log(f"Failed to reset issue #{issue_number}: {e}", is_error=True)
         return False
 
+def find_pr_for_issue(issue_number: int) -> dict:
+    """
+    Finds an open pull request associated with the given issue number.
+    Specifically looks for PRs with branch names matching the pattern 'copilot/fix-{issue_number}'.
+    
+    Args:
+        issue_number: The issue number to find a PR for
+        
+    Returns:
+        dict: A dictionary with PR information (number, url, title) if found, None otherwise
+    """
+    log(f"Searching for open PR related to issue #{issue_number}")
+    gh_env = get_gh_env()
+    
+    # Use a search pattern that matches PRs with branch names following the 'copilot/fix-{issue_number}' pattern
+    # IDEA: Whenever we start supporting other coding agents the proper branch prefix will need to be passed in
+    search_pattern = f"head:copilot/fix-{issue_number}"
+    
+    pr_list_command = [
+        "gh", "pr", "list",
+        "--repo", config.GITHUB_REPOSITORY,
+        "--state", "open",
+        "--search", search_pattern,
+        "--limit", "1", # Limit to 1 result as we only need the first match
+        "--json", "number,url,title,headRefName,baseRefName,state"
+    ]
+    
+    try:
+        pr_list_output = run_command(pr_list_command, env=gh_env, check=False)
+        
+        if not pr_list_output or pr_list_output.strip() == "[]":
+            debug_log(f"No open PRs found for issue #{issue_number}")
+            return None
+            
+        prs_data = json.loads(pr_list_output)
+        
+        if not prs_data:
+            debug_log(f"No open PRs found for issue #{issue_number}")
+            return None
+        
+        # Get the first matching PR
+        pr_info = prs_data[0]
+        pr_number = pr_info.get("number")
+        pr_url = pr_info.get("url")
+        pr_title = pr_info.get("title")
+        
+        if pr_number and pr_url:
+            log(f"Found open PR #{pr_number} for issue #{issue_number}: {pr_title}")
+            return pr_info
+        
+        return None
+    except json.JSONDecodeError:
+        log(f"Could not parse JSON output from gh pr list: {pr_list_output}", is_error=True)
+        return None
+    except Exception as e:
+        log(f"Error searching for PRs related to issue #{issue_number}: {e}", is_error=True)
+        return None
+
 # %%
