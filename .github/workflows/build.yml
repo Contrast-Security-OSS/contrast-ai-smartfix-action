@@ -37,7 +37,7 @@ jobs:
           echo ""
           echo "📦 Installing Python packages using uv..."
           echo "📎 Using lockfile for deterministic installation"
-          uv pip sync --system ${{ github.action_path }}/src/requirements.lock > /tmp/uv-output.log || (cat /tmp/uv-output.log && exit 1)
+          uv pip sync --system ${{ github.workspace }}/src/requirements.lock > /tmp/uv-output.log || (cat /tmp/uv-output.log && exit 1)
           echo "✅ Python dependencies installed successfully"
 
       - name: Run tests
