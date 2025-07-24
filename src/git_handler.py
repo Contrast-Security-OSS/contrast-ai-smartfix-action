@@ -490,6 +490,8 @@ def reset_issue(issue_number: int, remediation_label: str) -> bool:
     2. Adding the specified remediation label
     3. Unassigning the @Copilot user and reassigning the issue to @Copilot
     
+    The reset will not occur if there's an open PR for the issue.
+    
     Args:
         issue_number: The issue number to reset
         remediation_label: The new remediation label to add
@@ -498,6 +500,15 @@ def reset_issue(issue_number: int, remediation_label: str) -> bool:
         bool: True if the issue was successfully reset, False otherwise
     """
     log(f"Resetting GitHub issue #{issue_number}")
+    
+    # First check if there's an open PR for this issue
+    open_pr = find_open_pr_for_issue(issue_number)
+    if open_pr:
+        pr_number = open_pr.get("number")
+        pr_url = open_pr.get("url")
+        log(f"Cannot reset issue #{issue_number} because it has an open PR #{pr_number}: {pr_url}", is_error=True)
+        return False
+    
     gh_env = get_gh_env()
     
     try:
@@ -579,7 +590,7 @@ def reset_issue(issue_number: int, remediation_label: str) -> bool:
         log(f"Failed to reset issue #{issue_number}: {e}", is_error=True)
         return False
 
-def find_pr_for_issue(issue_number: int) -> dict:
+def find_open_pr_for_issue(issue_number: int) -> dict:
     """
     Finds an open pull request associated with the given issue number.
     Specifically looks for PRs with branch names matching the pattern 'copilot/fix-{issue_number}'.

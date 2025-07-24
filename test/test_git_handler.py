@@ -180,14 +180,18 @@ class TestGitHandler(unittest.TestCase):
         mock_log.assert_any_call("Failed to create GitHub issue: Mock error", is_error=True)
 
     @patch('src.git_handler.run_command')
+    @patch('src.git_handler.find_open_pr_for_issue')
     @patch('src.git_handler.ensure_label')
     @patch('src.git_handler.log')
     @patch('src.git_handler.debug_log')
-    def test_reset_issue_success(self, mock_debug_log, mock_log, mock_ensure_label, mock_run_command):
+    def test_reset_issue_success(self, mock_debug_log, mock_log, mock_ensure_label, mock_find_open_pr, mock_run_command):
         """Test resetting a GitHub issue when successful"""
         # Setup
         issue_number = 42
         remediation_label = "contrast-remediation-id:REM-5678"
+        
+        # Mock that no open PR exists
+        mock_find_open_pr.return_value = None
         
         # Mock successful issue view with labels
         mock_run_command.side_effect = [
@@ -224,8 +228,6 @@ class TestGitHandler(unittest.TestCase):
         # Setup
         issue_number = 42
         remediation_label = "contrast-remediation-id:REM-5678"
-        
-        # Mock failure during issue view
         mock_run_command.side_effect = Exception("Mock error")
         
         # Initialize config with testing=True
@@ -239,10 +241,39 @@ class TestGitHandler(unittest.TestCase):
         self.assertFalse(result)
         mock_log.assert_any_call("Failed to reset issue #42: Mock error", is_error=True)
 
+    @patch('src.git_handler.find_open_pr_for_issue')
     @patch('src.git_handler.log')
-    @patch('src.git_handler.debug_log')
+    def test_reset_issue_with_open_pr(self, mock_log, mock_find_open_pr):
+        """Test resetting a GitHub issue when an open PR exists"""
+        # Setup
+        issue_number = 42
+        remediation_label = "contrast-remediation-id:REM-5678"
+        
+        # Mock that an open PR exists
+        mock_find_open_pr.return_value = {
+            "number": 123,
+            "url": "https://github.com/mock/repo/pull/123",
+            "title": "Fix for issue #42"
+        }
+        
+        # Initialize config with testing=True
+        _ = get_config(testing=True)
+        
+        # Execute
+        result = git_handler.reset_issue(issue_number, remediation_label)
+        
+        # Assert
+        mock_find_open_pr.assert_called_once_with(issue_number)
+        self.assertFalse(result)
+        mock_log.assert_any_call(
+            "Cannot reset issue #42 because it has an open PR #123: https://github.com/mock/repo/pull/123", 
+            is_error=True
+        )
+
     @patch('src.git_handler.run_command')
-    def test_find_pr_for_issue_found(self, mock_run_command, mock_debug_log, mock_log):
+    @patch('src.git_handler.debug_log')
+    @patch('src.git_handler.log')
+    def test_find_open_pr_for_issue_found(self, mock_log, mock_debug_log, mock_run_command):
         """Test finding a PR for an issue when the PR exists"""
         # Setup
         issue_number = 42
@@ -262,7 +293,7 @@ class TestGitHandler(unittest.TestCase):
         _ = get_config(testing=True)
         
         # Execute
-        result = git_handler.find_pr_for_issue(issue_number)
+        result = git_handler.find_open_pr_for_issue(issue_number)
         
         # Assert
         self.assertEqual(result, pr_data[0])
@@ -270,10 +301,10 @@ class TestGitHandler(unittest.TestCase):
         mock_log.assert_any_call("Searching for open PR related to issue #42")
         mock_log.assert_any_call("Found open PR #123 for issue #42: Fix bug for issue #42")
 
-    @patch('src.git_handler.log')
-    @patch('src.git_handler.debug_log')
     @patch('src.git_handler.run_command')
-    def test_find_pr_for_issue_not_found(self, mock_run_command, mock_debug_log, mock_log):
+    @patch('src.git_handler.debug_log')
+    @patch('src.git_handler.log')
+    def test_find_open_pr_for_issue_not_found(self, mock_log, mock_debug_log, mock_run_command):
         """Test finding a PR for an issue when no PR exists"""
         # Setup
         issue_number = 42
@@ -283,7 +314,7 @@ class TestGitHandler(unittest.TestCase):
         _ = get_config(testing=True)
         
         # Execute
-        result = git_handler.find_pr_for_issue(issue_number)
+        result = git_handler.find_open_pr_for_issue(issue_number)
         
         # Assert
         self.assertIsNone(result)
@@ -291,9 +322,9 @@ class TestGitHandler(unittest.TestCase):
         mock_log.assert_any_call("Searching for open PR related to issue #42")
         mock_debug_log.assert_any_call("No open PRs found for issue #42")
 
-    @patch('src.git_handler.log')
     @patch('src.git_handler.run_command')
-    def test_find_pr_for_issue_error(self, mock_run_command, mock_log):
+    @patch('src.git_handler.log')
+    def test_find_open_pr_for_issue_error(self, mock_log, mock_run_command):
         """Test finding a PR for an issue when an error occurs"""
         # Setup
         issue_number = 42
@@ -303,7 +334,7 @@ class TestGitHandler(unittest.TestCase):
         _ = get_config(testing=True)
         
         # Execute
-        result = git_handler.find_pr_for_issue(issue_number)
+        result = git_handler.find_open_pr_for_issue(issue_number)
         
         # Assert
         self.assertIsNone(result)
