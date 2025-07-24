@@ -409,13 +409,15 @@ def create_issue(title: str, body: str, vuln_label: str, remediation_label: str)
         "--repo", config.GITHUB_REPOSITORY,
         "--title", title,
         "--body", body,
-        "--label", labels
+        "--label", labels,
+        "--assignee", "Copilot"  # Assign to @Copilot user
     ]
     
     try:
         # Run the command and capture the output (issue URL)
         issue_url = run_command(issue_command, env=gh_env, check=True)
         log(f"Successfully created issue: {issue_url}")
+        log(f"Issue assigned to @Copilot")
         
         # Extract the issue number from the URL
         # URL format is typically: https://github.com/owner/repo/issues/123

@@ -151,6 +151,7 @@ class TestGitHandler(unittest.TestCase):
         self.assertEqual(42, result)  # Should extract issue number 42 from URL
         mock_log.assert_any_call("Successfully created issue: https://github.com/mock/repo/issues/42")
         mock_log.assert_any_call("Issue number extracted: 42")
+        mock_log.assert_any_call("Issue assigned to @Copilot")
 
     @patch('src.git_handler.run_command')
     @patch('src.git_handler.ensure_label')
