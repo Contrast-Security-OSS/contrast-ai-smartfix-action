@@ -48,22 +48,6 @@ config = get_config()
 # --- ADK Setup (Conditional Import) ---
 ADK_AVAILABLE = False
 
-# Define placeholder classes for testing when imports fail
-class MockMCPToolset:
-    """Mock class for MCPToolset when ADK imports fail"""
-    pass
-
-# Set up imports - use real classes if available, otherwise use mocks
-Agent = None
-InMemoryArtifactService = None
-LiteLlm = None
-Runner = None
-InMemorySessionService = None
-MCPToolset = MockMCPToolset
-StdioServerParameters = None
-StdioConnectionParams = None
-genai_types = None
-
 try:
     from google.adk.agents import Agent
     from google.adk.artifacts.in_memory_artifact_service import InMemoryArtifactService
@@ -90,7 +74,7 @@ warnings.filterwarnings('ignore', category=UserWarning)
 library_logger = logging.getLogger("google_adk.google.adk.tools.base_authenticated_tool")
 library_logger.setLevel(logging.ERROR)
 
-async def get_mcp_tools(target_folder: Path, remediation_id: str) -> Any:
+async def get_mcp_tools(target_folder: Path, remediation_id: str) -> MCPToolset:
     """Connects to MCP servers (Filesystem)"""
     debug_log("Attempting to connect to MCP servers...")
     target_folder_str = str(target_folder)
@@ -143,7 +127,7 @@ async def get_mcp_tools(target_folder: Path, remediation_id: str) -> Any:
     debug_log(f"Total tools from all MCP servers: {len(tools_list)}")
     return fs_tools
 
-async def create_agent(target_folder: Path, remediation_id: str, agent_type: str = "fix", system_prompt: Optional[str] = None) -> Optional[Any]:
+async def create_agent(target_folder: Path, remediation_id: str, agent_type: str = "fix", system_prompt: Optional[str] = None) -> Optional[Agent]:
     """Creates an ADK Agent (either 'fix' or 'qa')."""
     mcp_tools = await get_mcp_tools(target_folder, remediation_id)
     if not mcp_tools:
