@@ -230,8 +230,9 @@ def error_exit(remediation_id: str, failure_code: Optional[str] = None):
         log(f"Failed to notify Remediation service about {failure_code} for remediation {remediation_id}.", is_warning=True)
 
     # Attempt to clean up any branches - continue even if this fails
-    branch_name = get_branch_name(remediation_id)
-    cleanup_branch(branch_name)
+    if config.CODING_AGENT == 'SMARTFIX':
+        branch_name = get_branch_name(remediation_id)
+        cleanup_branch(branch_name)
 
     # Always attempt to send final telemetry
     send_telemetry_data()
