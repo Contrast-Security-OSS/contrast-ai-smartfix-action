@@ -21,11 +21,11 @@ import os
 import json
 import sys
 
-# Assuming contrast_api.py is in the same directory or PYTHONPATH is set up
-import contrast_api
-import config # To access Contrast API credentials and other configs
-from utils import debug_log, extract_remediation_id_from_branch, log
-import telemetry_handler
+# Import from src package to ensure correct module resolution
+from src import contrast_api
+from src.config import get_config  # Using get_config function instead of direct import
+from src.utils import debug_log, extract_remediation_id_from_branch, log
+import src.telemetry_handler as telemetry_handler
 
 def handle_merged_pr():
     """Handles the logic when a pull request is merged."""
@@ -93,10 +93,11 @@ def handle_merged_pr():
     if vuln_uuid == "unknown":
         debug_log("Could not extract vulnerability UUID from PR labels. Telemetry may be incomplete.")
 
-    config.check_contrast_config_values_exist()
     
     # Notify the Remediation backend service about the merged PR
     log(f"Notifying Remediation service about merged PR for remediation {remediation_id}...")
+    # Get config instance using the canonical OO approach
+    config = get_config()
     remediation_notified = contrast_api.notify_remediation_pr_merged(
         remediation_id=remediation_id,
         contrast_host=config.CONTRAST_HOST,

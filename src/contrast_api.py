@@ -21,9 +21,11 @@ import requests
 import json
 import sys
 from enum import Enum
-import config
-from utils import debug_log, log
-import telemetry_handler
+from src.config import get_config
+from src.utils import debug_log, log
+from src import telemetry_handler
+
+config = get_config()
 
 # Define failure categories as an enum to ensure consistency
 class FailureCategory(Enum):
@@ -329,7 +331,7 @@ def send_telemetry_data() -> bool:
     """
     telemetry_data = telemetry_handler.get_telemetry_data()
 
-    if not config.CONTRAST_HOST or not config.CONTRAST_ORG_ID or not config.CONTRAST_APP_ID or not config.CONTRAST_AUTHORIZATION_KEY or not config.CONTRAST_API_KEY:
+    if not all([config.CONTRAST_HOST, config.CONTRAST_ORG_ID, config.CONTRAST_APP_ID, config.CONTRAST_AUTHORIZATION_KEY, config.CONTRAST_API_KEY]):
         log("Telemetry endpoint configuration is incomplete. Skipping telemetry send.", is_warning=True)
         return False
 

@@ -5,9 +5,15 @@ import io
 import tempfile
 import contextlib
 from unittest.mock import patch, MagicMock
+import importlib
 
 # Add src directory to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+# Initialize config with testing flag first
+from src.config import reset_config, get_config
+_ = get_config(testing=True)
+# Import modules to be tested AFTER config initialization
 from src.main import main
 
 class TestMain(unittest.TestCase):
@@ -79,6 +85,7 @@ class TestMain(unittest.TestCase):
         self.api_patcher.stop()
         self.requests_patcher.stop() 
         self.exit_patcher.stop()
+        reset_config()
         
         # Clean up temp directory
         if hasattr(self, 'temp_dir') and os.path.exists(self.temp_dir):
@@ -93,7 +100,7 @@ class TestMain(unittest.TestCase):
         
         # Create a proper patch for the function as imported in main.py
         # Note: main.py imports from version_check directly, not src.version_check
-        with patch('version_check.get_latest_repo_version') as mock_get_latest:
+        with patch('src.version_check.get_latest_repo_version') as mock_get_latest:
             # Setup version check mocks
             mock_get_latest.return_value = "v1.0.0"
             
@@ -111,13 +118,17 @@ class TestMain(unittest.TestCase):
     def test_main_without_action_ref(self):
         """Test main function without GITHUB_ACTION_REF."""
         # Ensure no GITHUB_ACTION_REF is set
-        if 'GITHUB_ACTION_REF' in os.environ:
-            del os.environ['GITHUB_ACTION_REF']
-            
-        # Run main and capture output
-        with io.StringIO() as buf, contextlib.redirect_stdout(buf):
-            main()
-            output = buf.getvalue()
+        test_env = self.env_vars.copy()
+        if 'GITHUB_ACTION_REF' in test_env:
+            del test_env['GITHUB_ACTION_REF']
+        if 'GITHUB_REF' in test_env:
+            del test_env['GITHUB_REF']
+
+        with patch.dict('os.environ', test_env, clear=True):
+            # Run main and capture output
+            with io.StringIO() as buf, contextlib.redirect_stdout(buf):
+                main()
+                output = buf.getvalue()
         
         # Verify warning about missing environment variables is present (updated for new message format)
         self.assertIn("Warning: Neither GITHUB_ACTION_REF nor GITHUB_REF environment variables are set", output)

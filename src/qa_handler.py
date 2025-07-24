@@ -23,12 +23,12 @@ from pathlib import Path
 from typing import Tuple, List, Optional
 
 # Import configurations and utilities
-import config
-from utils import debug_log, run_command, log, error_exit
-import agent_handler
-import git_handler
-import telemetry_handler
-from build_output_analyzer import extract_build_errors
+from src.config import get_config
+from src.utils import debug_log, run_command, log, error_exit
+from src import agent_handler
+from src import git_handler
+from src import telemetry_handler
+from src.build_output_analyzer import extract_build_errors
 
 def run_build_command(command: str, repo_root: Path, remediation_id: str) -> Tuple[bool, str]:
     """
@@ -152,6 +152,7 @@ def run_qa_loop(
         - List[str]: A log of QA summaries.
     """
     log("\n--- Starting QA Review Process ---")
+    config = get_config()
     qa_attempts = 0
     build_success = False
     build_output = "Build not run."

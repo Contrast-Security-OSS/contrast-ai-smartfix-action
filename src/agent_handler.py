@@ -22,29 +22,29 @@ import warnings
 
 import asyncio
 import sys
-import os
 import platform
-import subprocess
 
 # Explicitly import Windows-specific event loop policy to ensure proper subprocess support
 if platform.system() == 'Windows':
     from asyncio import WindowsProactorEventLoopPolicy
 from pathlib import Path
-from typing import Optional, Tuple, List
-from contextlib import AsyncExitStack
+from typing import Optional, List
 import re
 import traceback
 
 # Import configurations and utilities
-import config
-from utils import debug_log, log, error_exit # Updated import
-from contrast_api import FailureCategory
-import telemetry_handler # Import for telemetry
+from src.config import get_config
+from src.utils import debug_log, log, error_exit
+from src.contrast_api import FailureCategory
+import src.telemetry_handler as telemetry_handler
 import datetime # For timestamps
 import traceback # For error logging
 
+config = get_config()
+
 # --- ADK Setup (Conditional Import) ---
 ADK_AVAILABLE = False
+
 try:
     from google.adk.agents import Agent
     from google.adk.artifacts.in_memory_artifact_service import InMemoryArtifactService
@@ -63,7 +63,9 @@ except ImportError as e:
     # Use telemetry_handler directly for logging traceback if utils.log is not fully available
     telemetry_handler.add_log_message(traceback.format_exc())
     print(traceback.format_exc(), file=sys.stderr)
-    sys.exit(1) # Exit if ADK is not available
+    # Check if we're running in a test environment
+    if not config.testing:  
+        sys.exit(1)  # Only exit in production, not in tests
 
 warnings.filterwarnings('ignore', category=UserWarning)
 library_logger = logging.getLogger("google_adk.google.adk.tools.base_authenticated_tool")
@@ -380,7 +382,7 @@ def _run_agent_in_event_loop(coroutine_func, *args, **kwargs):
     # Platform-specific setup
     is_windows = platform.system() == 'Windows'
     
-    # On Windows, we must use the WindowsProactorEventLoopPolicy 
+    # On Windows, we must use the WindowsProactorEventLoopPolicy
     # The SelectorEventLoop on Windows doesn't support subprocesses, which are required for MCP
     if is_windows:
         try:

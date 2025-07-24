@@ -1,8 +1,9 @@
 import os
 import requests
 from packaging.version import parse as parse_version, Version
-from utils import debug_log, log
-import config
+from src.utils import debug_log, log
+from src.config import get_config
+config = get_config()
 
 HEX_CHARS = "0123456789abcdef"
 ACTION_REPO_URL = "https://github.com/Contrast-Security-OSS/contrast-ai-smartfix-action"

@@ -17,7 +17,7 @@
 # #L%
 #
 
-import config # To access VERSION and other config values as needed
+from src.config import get_config
 
 # Initialize the global telemetry data object
 # This will be populated throughout the script's execution.
@@ -53,6 +53,7 @@ def initialize_telemetry():
         initial_config_dict: A dictionary representation of the config module's settings.
     """
     global _telemetry_data, _pre_init_log_buffer, _telemetry_initialized
+    config = get_config()
 
     _telemetry_data = {
         "teamServerHost": config.CONTRAST_HOST,
@@ -188,6 +189,7 @@ def get_telemetry_data():
     truncate_large_text_fields(telemetry_copy, field_limits["defaultTextLength"])
     
     # Control what telemetry data is sent based on ENABLE_FULL_TELEMETRY setting
+    config = get_config()
     if not config.ENABLE_FULL_TELEMETRY:
         # When full telemetry is disabled:
         # 1. Remove sensitive command fields

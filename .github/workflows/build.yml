@@ -15,15 +15,31 @@ jobs:
         with:
           python-version: '3.11'
           cache: 'pip' # Enable built-in pip caching
-      - name: Cache pip dependencies
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('src/requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
-      - name: Install dependencies
-        run: pip install -r src/requirements.txt
+
+      # Install uv tool for dependency management
+      - name: Install uv
+        shell: bash
+        run: |
+          echo ""
+          echo "📦 Installing uv package manager..."
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            pip install uv==0.7.15 > uv-install.log || (cat uv-install.log && exit 1)
+          else
+            pip install uv==0.7.15 > /tmp/uv-install.log || (cat /tmp/uv-install.log && exit 1)
+          fi
+          echo "✅ uv installed successfully"
+
+      # Install dependencies using uv (Linux/macOS)
+      - name: Install dependencies with uv
+        if: runner.os == 'Linux' || runner.os == 'macOS'
+        shell: bash
+        run: |
+          echo ""
+          echo "📦 Installing Python packages using uv..."
+          echo "📎 Using lockfile for deterministic installation"
+          uv pip sync --system ${{ github.workspace }}/src/requirements.lock > /tmp/uv-output.log || (cat /tmp/uv-output.log && exit 1)
+          echo "✅ Python dependencies installed successfully"
+
       - name: Run tests
         run: PYTHONPATH=${{ github.workspace }}/src python -m unittest discover -s test -p "test*.py"
         env:
