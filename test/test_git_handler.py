@@ -20,7 +20,7 @@
 
 import sys
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 import os
 import json
 
@@ -221,14 +221,16 @@ class TestGitHandler(unittest.TestCase):
         mock_log.assert_any_call("Added new remediation label to issue #42")
         mock_log.assert_any_call("Reassigned issue #42 to @Copilot")
         
+    @patch('src.git_handler.find_open_pr_for_issue')
     @patch('src.git_handler.run_command')
     @patch('src.git_handler.log')
-    def test_reset_issue_failure(self, mock_log, mock_run_command):
+    def test_reset_issue_failure(self, mock_log, mock_run_command, mock_find_pr):
         """Test resetting a GitHub issue when it fails"""
         # Setup
         issue_number = 42
         remediation_label = "contrast-remediation-id:REM-5678"
         mock_run_command.side_effect = Exception("Mock error")
+        mock_find_pr.return_value = None  # No open PR exists
         
         # Initialize config with testing=True
         _ = get_config(testing=True)
