@@ -22,16 +22,13 @@ import warnings
 
 import asyncio
 import sys
-import os
 import platform
-import subprocess
 
 # Explicitly import Windows-specific event loop policy to ensure proper subprocess support
 if platform.system() == 'Windows':
     from asyncio import WindowsProactorEventLoopPolicy
 from pathlib import Path
-from typing import Optional, Tuple, List, Any
-from contextlib import AsyncExitStack
+from typing import Optional, List
 import re
 import traceback
 
