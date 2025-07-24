@@ -94,6 +94,7 @@ class TestExternalCodingAgent(unittest.TestCase):
         # Assert that debug_log was called with the expected message
         mock_debug_log.assert_called_once_with("SMARTFIX agent detected, ExternalCodingAgent.generate_fixes returning False")
         
+    @patch('src.external_coding_agent.error_exit')
     @patch('src.git_handler.find_issue_with_label')
     @patch('src.git_handler.create_issue')
     @patch('src.git_handler.find_open_pr_for_issue')
@@ -104,12 +105,12 @@ class TestExternalCodingAgent(unittest.TestCase):
     @patch('src.external_coding_agent.log')
     def test_generate_fixes_with_external_agent_pr_created(self, mock_log, mock_debug_log, mock_update_telemetry, 
                                                          mock_sleep, mock_notify, mock_find_pr, mock_create_issue, 
-                                                         mock_find_issue):
+                                                         mock_find_issue, mock_error_exit):
         """Test generate_fixes when PR is created successfully"""
         # Set CODING_AGENT to GITHUB_COPILOT
         self.config.CODING_AGENT = "GITHUB_COPILOT"
         
-        # Mock the find_issue_with_label to return an issue number
+        # Configure mocks
         mock_find_issue.return_value = 42
         
         # Mock the find_open_pr_for_issue to return PR info on first call
@@ -142,6 +143,7 @@ class TestExternalCodingAgent(unittest.TestCase):
         mock_update_telemetry.assert_any_call("additionalAttributes.prNumber", 123)
         mock_update_telemetry.assert_any_call("additionalAttributes.prUrl", "https://github.com/owner/repo/pull/123")
 
+    @patch('src.external_coding_agent.error_exit')
     @patch('src.git_handler.find_issue_with_label')
     @patch('src.git_handler.create_issue')
     @patch('src.git_handler.find_open_pr_for_issue')
@@ -150,12 +152,12 @@ class TestExternalCodingAgent(unittest.TestCase):
     @patch('src.external_coding_agent.debug_log')
     @patch('src.external_coding_agent.log')
     def test_generate_fixes_with_external_agent_pr_timeout(self, mock_log, mock_debug_log, mock_update_telemetry, 
-                                                         mock_sleep, mock_find_pr, mock_create_issue, mock_find_issue):
+                                                         mock_sleep, mock_find_pr, mock_create_issue, mock_find_issue, mock_error_exit):
         """Test generate_fixes when PR creation times out"""
         # Set CODING_AGENT to GITHUB_COPILOT
         self.config.CODING_AGENT = "GITHUB_COPILOT"
         
-        # Mock the find_issue_with_label to return an issue number
+        # Configure mock
         mock_find_issue.return_value = 42
         
         # Mock the find_open_pr_for_issue to always return None (no PR found)

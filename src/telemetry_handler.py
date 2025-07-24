@@ -220,14 +220,13 @@ def get_telemetry_data():
     # Calculate total size of the JSON payload
     json_data = json.dumps(debug_copy, default=str)
     json_size_kb = len(json_data) / 1024
-    
-    from utils import debug_log
+
     
     # Adjust debug message based on whether fullLog is being sent
     if config.ENABLE_FULL_TELEMETRY:
-        debug_log(f"Telemetry payload size: {json_size_kb:.2f}KB (fullLog is being sent in its entirety)")
+        print(f"Telemetry payload size: {json_size_kb:.2f}KB (fullLog is being sent in its entirety)")
     else:
-        debug_log(f"Telemetry payload size: {json_size_kb:.2f}KB (fullLog is excluded per ENABLE_FULL_TELEMETRY=false setting)")
+        print(f"Telemetry payload size: {json_size_kb:.2f}KB (fullLog is excluded per ENABLE_FULL_TELEMETRY=false setting)")
     # Uncomment the following line if you need to see the full structure
     # debug_log(json.dumps(debug_copy, indent=2, default=str))
 
