@@ -19,7 +19,7 @@
 
 import time
 from typing import Optional
-from src.utils import log, debug_log
+from src.utils import log, debug_log, error_exit
 from src.contrast_api import FailureCategory, notify_remediation_pr_opened
 from src.config import Config
 from src import git_handler
@@ -56,7 +56,7 @@ class ExternalCodingAgent:
         
         # Hard-coded vulnerability label for now, will be passed as argument later
         vulnerability_label = f"contrast-vuln-id:VULN-{vuln_uuid}"
-        remediation_label = f"contrast-remediation-id:REM-{remediation_id}"
+        remediation_label = f"contrast-rem-id:{remediation_id}"
         issue_title = vuln_title
         issue_body = "This is a fake issue body for testing purposes."
         
@@ -65,10 +65,15 @@ class ExternalCodingAgent:
         
         if issue_number:
             debug_log(f"Found existing GitHub issue #{issue_number} with label {vulnerability_label}")
-            git_handler.reset_issue(issue_number, remediation_label)
+            if not git_handler.reset_issue(issue_number, remediation_label):
+                log(f"Failed to reset issue #{issue_number} with labels {vulnerability_label}, {remediation_label}", is_error=True)
+                error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
         else:
             debug_log(f"No GitHub issue found with label {vulnerability_label}")
             issue_number = git_handler.create_issue(issue_title, issue_body, vulnerability_label, remediation_label)
+            if not issue_number:
+                log(f"Failed to create issue with labels {vulnerability_label}, {remediation_label}", is_error=True)
+                error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
         
         telemetry_handler.update_telemetry("additionalAttributes.githubIssueNumber", issue_number)
 

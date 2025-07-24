@@ -134,7 +134,7 @@ class TestGitHandler(unittest.TestCase):
         title = "Test Issue Title"
         body = "Test issue body"
         vuln_label = "contrast-vuln-id:VULN-1234"
-        remediation_label = "contrast-remediation-id:REM-5678"
+        remediation_label = "contrast-rem-id:5678"
         
         # Mock successful issue creation with URL returned
         mock_run_command.return_value = "https://github.com/mock/repo/issues/42"
@@ -162,7 +162,7 @@ class TestGitHandler(unittest.TestCase):
         title = "Test Issue Title"
         body = "Test issue body"
         vuln_label = "contrast-vuln-id:VULN-1234"
-        remediation_label = "contrast-remediation-id:REM-5678"
+        remediation_label = "contrast-rem-id:5678"
         
         # Mock failure during issue creation
         mock_run_command.side_effect = Exception("Mock error")
@@ -188,7 +188,7 @@ class TestGitHandler(unittest.TestCase):
         """Test resetting a GitHub issue when successful"""
         # Setup
         issue_number = 42
-        remediation_label = "contrast-remediation-id:REM-5678"
+        remediation_label = "contrast-rem-id:5678"
         
         # Mock that no open PR exists
         mock_find_open_pr.return_value = None
@@ -228,7 +228,7 @@ class TestGitHandler(unittest.TestCase):
         """Test resetting a GitHub issue when it fails"""
         # Setup
         issue_number = 42
-        remediation_label = "contrast-remediation-id:REM-5678"
+        remediation_label = "contrast-rem-id:5678"
         mock_run_command.side_effect = Exception("Mock error")
         mock_find_pr.return_value = None  # No open PR exists
         
@@ -249,7 +249,7 @@ class TestGitHandler(unittest.TestCase):
         """Test resetting a GitHub issue when an open PR exists"""
         # Setup
         issue_number = 42
-        remediation_label = "contrast-remediation-id:REM-5678"
+        remediation_label = "contrast-rem-id:5678"
         
         # Mock that an open PR exists
         mock_find_open_pr.return_value = {

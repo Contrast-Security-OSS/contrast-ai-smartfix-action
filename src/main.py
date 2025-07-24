@@ -350,7 +350,7 @@ def main():
                 log(f"\n--- External Coding Agent successfully generated fixes ---")
                 processed_one = True
                 contrast_api.send_telemetry_data()
-                continue  # Skip the built-in SmartFix code and PR creation
+            continue  # Skip the built-in SmartFix code and PR creation
 
         # --- Run AI Fix Agent (SmartFix) ---
         ai_fix_summary_full = agent_handler.run_ai_fix_agent(
