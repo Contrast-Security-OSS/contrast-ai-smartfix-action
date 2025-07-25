@@ -344,7 +344,7 @@ def main():
 
         # --- Check if we need to use the external coding agent ---
         if config.CODING_AGENT != "SMARTFIX":
-            log(f"\n--- Using External Coding Agent ({config.CODING_AGENT}) ---")
+            log(f"\n::group::--- Using External Coding Agent ({config.CODING_AGENT}) ---")
             external_agent = ExternalCodingAgent(config)
             if external_agent.generate_fixes(vuln_uuid, remediation_id, vuln_title):
                 log(f"\n\n--- External Coding Agent successfully generated fixes ---")

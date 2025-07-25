@@ -131,7 +131,6 @@ class TestExternalCodingAgent(unittest.TestCase):
         self.assertTrue(result)
         
         # Verify log calls
-        mock_debug_log.assert_any_call("--- Generating fix with external coding agent ---")
         mock_log.assert_any_call(f"Waiting for external agent to create a PR for issue #42")
         mock_log.assert_any_call(f"External agent created PR #123 at https://github.com/owner/repo/pull/123")
         
@@ -184,7 +183,6 @@ class TestExternalCodingAgent(unittest.TestCase):
             agent._poll_for_pr = original_poll_for_pr
         
         # Verify log calls
-        mock_debug_log.assert_any_call("--- Generating fix with external coding agent ---")
         mock_log.assert_any_call(f"Waiting for external agent to create a PR for issue #42")
         mock_log.assert_any_call("External agent failed to create a PR within the timeout period", is_error=True)
         
@@ -241,9 +239,6 @@ class TestExternalCodingAgent(unittest.TestCase):
         finally:
             # Restore original method
             agent._poll_for_pr = original_poll_for_pr
-        
-        # Verify that log was called with the expected message
-        mock_debug_log.assert_any_call("--- Generating fix with external coding agent ---")
         
         # Verify there's a call about finding an existing issue
         mock_debug_log.assert_any_call("Found existing GitHub issue #42 with label contrast-vuln-id:VULN-1234-FAKE-ABCD")

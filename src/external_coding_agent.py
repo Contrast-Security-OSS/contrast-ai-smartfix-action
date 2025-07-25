@@ -52,7 +52,7 @@ class ExternalCodingAgent:
             debug_log("SMARTFIX agent detected, ExternalCodingAgent.generate_fixes returning False")
             return False
         
-        debug_log("--- Generating fix with external coding agent ---")
+        log(f"\n::group::--- Using External Coding Agent ({self.config.CODING_AGENT}) ---")
         
         # Hard-coded vulnerability label for now, will be passed as argument later
         vulnerability_label = f"contrast-vuln-id:VULN-{vuln_uuid}"
@@ -84,6 +84,7 @@ class ExternalCodingAgent:
         # Poll for a PR to be created by the external agent (100 attempts, 5 seconds apart = ~8.3 minutes max)
         pr_info = self._poll_for_pr(issue_number, remediation_id, vulnerability_label, remediation_label, max_attempts=100, sleep_seconds=5)
 
+        log("\n::endgroup::")
         if pr_info:
             pr_number = pr_info.get("number")
             pr_url = pr_info.get("url")
