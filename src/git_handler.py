@@ -568,7 +568,7 @@ def reset_issue(issue_number: int, remediation_label: str) -> bool:
             "gh", "issue", "edit",
             "--repo", config.GITHUB_REPOSITORY,
             str(issue_number),
-            "--remove-assignee", "copilot-swe-agent"
+            "--remove-assignee", "BOT_kgDOC9w8XQ"
         ]
         
         # Don't check here as it might not be assigned
@@ -579,7 +579,7 @@ def reset_issue(issue_number: int, remediation_label: str) -> bool:
             "gh", "issue", "edit",
             "--repo", config.GITHUB_REPOSITORY,
             str(issue_number),
-            "--add-assignee", "copilot-swe-agent"
+            "--add-assignee", "BOT_kgDOC9w8XQ"
         ]
         
         run_command(assign_command, env=gh_env, check=True)
