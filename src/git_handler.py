@@ -453,7 +453,7 @@ def find_issue_with_label(label: str) -> int:
         "--state", "open",
         "--limit", "1", # Limit to 1 result to get the newest/first one
         "--json", "number,createdAt",
-        "--sort", "created-desc" # Sort by creation date descending (newest first)
+        #"--sort", "created-desc" # Sort by creation date descending (newest first)
     ]
     
     try:
