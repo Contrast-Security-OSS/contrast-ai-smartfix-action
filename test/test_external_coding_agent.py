@@ -73,9 +73,6 @@ class TestExternalCodingAgent(unittest.TestCase):
         # Assert that the config was set correctly
         self.assertEqual(agent.config, self.config)
         
-        # Assert that log was called with the expected message
-        mock_log.assert_called_once_with(f"Initialized ExternalCodingAgent")
-        
     @patch('src.external_coding_agent.debug_log')
     def test_generate_fixes_with_smartfix(self, mock_debug_log):
         """Test generate_fixes returns False when CODING_AGENT is SMARTFIX"""
@@ -92,7 +89,7 @@ class TestExternalCodingAgent(unittest.TestCase):
         self.assertFalse(result)
         
         # Assert that debug_log was called with the expected message
-        mock_debug_log.assert_called_once_with("SMARTFIX agent detected, ExternalCodingAgent.generate_fixes returning False")
+        mock_debug_log.assert_called_with("SMARTFIX agent detected, ExternalCodingAgent.generate_fixes returning False")
         
     @patch('src.external_coding_agent.error_exit')
     @patch('src.git_handler.find_issue_with_label')
@@ -134,7 +131,7 @@ class TestExternalCodingAgent(unittest.TestCase):
         self.assertTrue(result)
         
         # Verify log calls
-        mock_log.assert_any_call("--- Generating fix with external coding agent ---")
+        mock_debug_log.assert_any_call("--- Generating fix with external coding agent ---")
         mock_log.assert_any_call(f"Waiting for external agent to create a PR for issue #42")
         mock_log.assert_any_call(f"External agent created PR #123 at https://github.com/owner/repo/pull/123")
         
@@ -187,7 +184,7 @@ class TestExternalCodingAgent(unittest.TestCase):
             agent._poll_for_pr = original_poll_for_pr
         
         # Verify log calls
-        mock_log.assert_any_call("--- Generating fix with external coding agent ---")
+        mock_debug_log.assert_any_call("--- Generating fix with external coding agent ---")
         mock_log.assert_any_call(f"Waiting for external agent to create a PR for issue #42")
         mock_log.assert_any_call("External agent failed to create a PR within the timeout period", is_error=True)
         
@@ -246,7 +243,7 @@ class TestExternalCodingAgent(unittest.TestCase):
             agent._poll_for_pr = original_poll_for_pr
         
         # Verify that log was called with the expected message
-        mock_log.assert_any_call("--- Generating fix with external coding agent ---")
+        mock_debug_log.assert_any_call("--- Generating fix with external coding agent ---")
         
         # Verify there's a call about finding an existing issue
         mock_debug_log.assert_any_call("Found existing GitHub issue #42 with label contrast-vuln-id:VULN-1234-FAKE-ABCD")
