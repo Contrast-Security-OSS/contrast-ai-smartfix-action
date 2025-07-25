@@ -410,7 +410,7 @@ def create_issue(title: str, body: str, vuln_label: str, remediation_label: str)
         "--title", title,
         "--body", body,
         "--label", labels,
-        "--assignee", "@copilot"  # Assign to @Copilot user
+        #"--assignee", "@copilot"  # Assign to @Copilot user
     ]
     
     try:
@@ -424,6 +424,14 @@ def create_issue(title: str, body: str, vuln_label: str, remediation_label: str)
         try:
             issue_number = int(os.path.basename(issue_url.strip()))
             log(f"Issue number extracted: {issue_number}")
+            edit_issue_command = [
+                "gh", "issue", "edit",
+                str(issue_number),
+                "--repo", config.GITHUB_REPOSITORY,
+                "--add-assignee", "@copilot"  # Assign to @Copilot user
+            ]
+            edit_issue_url = run_command(edit_issue_command, env=gh_env, check=True)
+            log(f"Successfully edited issue: {edit_issue_url}")
             return issue_number
         except ValueError:
             log(f"Could not extract issue number from URL: {issue_url}", is_error=True)
