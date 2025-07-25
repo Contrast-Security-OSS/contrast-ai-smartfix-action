@@ -56,7 +56,7 @@ class ExternalCodingAgent:
         
         # Hard-coded vulnerability label for now, will be passed as argument later
         vulnerability_label = f"contrast-vuln-id:VULN-{vuln_uuid}"
-        remediation_label = f"contrast-rem-id:{remediation_id}"
+        remediation_label = f"smartfix-id:{remediation_id}"
         issue_title = vuln_title
         issue_body = "This is a fake issue body for testing purposes."
         
