@@ -397,6 +397,27 @@ def create_issue(title: str, body: str, vuln_label: str, remediation_label: str)
     log(f"Creating GitHub issue with title: {title}")
     gh_env = get_gh_env()
     
+    # Get list of assignable users
+    try:
+        owner, repo = config.GITHUB_REPOSITORY.split('/')
+        assignable_users_command = [
+            "gh", "api", "graphql", "-f",
+            f"query=query {{ repository(owner:\"{owner}\", name:\"{repo}\") {{ assignableUsers(first: 100) {{ nodes {{ login }} }} }} }}"
+        ]
+        assignable_users_output = run_command(assignable_users_command, env=gh_env, check=False)
+        
+        if assignable_users_output:
+            try:
+                users_data = json.loads(assignable_users_output)
+                assignable_users = [node["login"] for node in users_data.get("data", {}).get("repository", {}).get("assignableUsers", {}).get("nodes", [])]
+                log(f"Available assignable users: {assignable_users}")
+            except (json.JSONDecodeError, KeyError) as e:
+                log(f"Could not parse assignable users data: {e}")
+        else:
+            log("No assignable users data returned")
+    except Exception as e:
+        log(f"Error getting assignable users: {e}")
+    
     # Ensure both labels exist
     ensure_label(vuln_label, "Vulnerability identified by Contrast", "ff0000")  # Red
     ensure_label(remediation_label, "Remediation ID for Contrast vulnerability", "0075ca")  # Blue
