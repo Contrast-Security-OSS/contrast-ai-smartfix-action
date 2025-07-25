@@ -417,7 +417,6 @@ def create_issue(title: str, body: str, vuln_label: str, remediation_label: str)
         # Run the command and capture the output (issue URL)
         issue_url = run_command(issue_command, env=gh_env, check=True)
         log(f"Successfully created issue: {issue_url}")
-        log(f"Issue assigned to @Copilot")
         
         # Extract the issue number from the URL
         # URL format is typically: https://github.com/owner/repo/issues/123
@@ -432,6 +431,7 @@ def create_issue(title: str, body: str, vuln_label: str, remediation_label: str)
             ]
             edit_issue_url = run_command(edit_issue_command, env=gh_env, check=True)
             log(f"Successfully edited issue: {edit_issue_url}")
+            log(f"Issue assigned to @Copilot")
             return issue_number
         except ValueError:
             log(f"Could not extract issue number from URL: {issue_url}", is_error=True)
