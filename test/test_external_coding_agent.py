@@ -97,6 +97,7 @@ class TestExternalCodingAgent(unittest.TestCase):
     @patch('src.external_coding_agent.error_exit')
     @patch('src.git_handler.find_issue_with_label')
     @patch('src.git_handler.create_issue')
+    @patch('src.git_handler.add_labels_to_pr')
     @patch('src.git_handler.find_open_pr_for_issue')
     @patch('src.external_coding_agent.notify_remediation_pr_opened')
     @patch('src.external_coding_agent.time.sleep')  # Mock sleep to speed up tests
@@ -104,7 +105,7 @@ class TestExternalCodingAgent(unittest.TestCase):
     @patch('src.external_coding_agent.debug_log')
     @patch('src.external_coding_agent.log')
     def test_generate_fixes_with_external_agent_pr_created(self, mock_log, mock_debug_log, mock_update_telemetry, 
-                                                         mock_sleep, mock_notify, mock_find_pr, mock_create_issue, 
+                                                         mock_sleep, mock_notify, mock_find_pr, mock_add_labels, mock_create_issue, 
                                                          mock_find_issue, mock_error_exit):
         """Test generate_fixes when PR is created successfully"""
         # Set CODING_AGENT to GITHUB_COPILOT
@@ -121,6 +122,7 @@ class TestExternalCodingAgent(unittest.TestCase):
         }
         mock_find_pr.return_value = pr_info
         mock_notify.return_value = True
+        mock_add_labels.return_value = True
         
         # Create an ExternalCodingAgent object
         agent = ExternalCodingAgent(self.config)
@@ -179,7 +181,7 @@ class TestExternalCodingAgent(unittest.TestCase):
             self.assertFalse(result)
             
             # Verify _poll_for_pr was called with the right parameters
-            mock_poll_for_pr.assert_called_once_with(42, "1REM-FAKE-ABCD", max_attempts=100, sleep_seconds=5)
+            mock_poll_for_pr.assert_called_once_with(42, "1REM-FAKE-ABCD", 'contrast-vuln-id:VULN-1234-FAKE-ABCD', 'smartfix-id:1REM-FAKE-ABCD', max_attempts=100, sleep_seconds=5)
         finally:
             # Restore original method
             agent._poll_for_pr = original_poll_for_pr
@@ -238,7 +240,7 @@ class TestExternalCodingAgent(unittest.TestCase):
             self.assertTrue(result)
             
             # Verify poll was called correctly
-            mock_poll_for_pr.assert_called_once_with(42, "1REM-FAKE-ABCD", max_attempts=100, sleep_seconds=5)
+            mock_poll_for_pr.assert_called_once_with(42, "1REM-FAKE-ABCD", 'contrast-vuln-id:VULN-1234-FAKE-ABCD', 'smartfix-id:1REM-FAKE-ABCD', max_attempts=100, sleep_seconds=5)
         finally:
             # Restore original method
             agent._poll_for_pr = original_poll_for_pr
@@ -252,12 +254,13 @@ class TestExternalCodingAgent(unittest.TestCase):
         # Verify reset_issue was called
         mock_reset_issue.assert_called_once_with(42, "smartfix-id:1REM-FAKE-ABCD")
 
+    @patch('src.git_handler.add_labels_to_pr')
     @patch('src.git_handler.find_open_pr_for_issue')
     @patch('src.external_coding_agent.notify_remediation_pr_opened')
     @patch('src.external_coding_agent.time.sleep')  # Mock sleep to speed up tests
     @patch('src.external_coding_agent.log')
     @patch('src.external_coding_agent.debug_log')
-    def test_poll_for_pr_found_immediately(self, mock_debug_log, mock_log, mock_sleep, mock_notify, mock_find_pr):
+    def test_poll_for_pr_found_immediately(self, mock_debug_log, mock_log, mock_sleep, mock_notify, mock_find_pr, mock_add_labels):
         """Test _poll_for_pr when PR is found on first attempt"""
         # Configure mocks
         pr_info = {
@@ -267,11 +270,12 @@ class TestExternalCodingAgent(unittest.TestCase):
         }
         mock_find_pr.return_value = pr_info
         mock_notify.return_value = True
+        mock_add_labels.return_value = True
         
         agent = ExternalCodingAgent(self.config)
         # Use very small max_attempts and sleep_seconds to speed up tests
-        result = agent._poll_for_pr(issue_number=456, remediation_id="REM-789", max_attempts=3, sleep_seconds=0.01)
-        
+        result = agent._poll_for_pr(issue_number=456, remediation_id="REM-789", vulnerability_label="contrast-vuln-id:VULN-1234-FAKE-ABCD", remediation_label="smartfix-id:1REM-FAKE-ABCD", max_attempts=3, sleep_seconds=0.01)
+
         # Verify results
         self.assertEqual(result, pr_info)
         mock_find_pr.assert_called_once_with(456)
@@ -288,12 +292,13 @@ class TestExternalCodingAgent(unittest.TestCase):
         # Sleep should not be called since we found the PR on first attempt
         mock_sleep.assert_not_called()
     
+    @patch('src.git_handler.add_labels_to_pr')
     @patch('src.git_handler.find_open_pr_for_issue')
     @patch('src.external_coding_agent.notify_remediation_pr_opened')
     @patch('src.external_coding_agent.time.sleep')
     @patch('src.external_coding_agent.log')
     @patch('src.external_coding_agent.debug_log')
-    def test_poll_for_pr_found_after_retries(self, mock_debug_log, mock_log, mock_sleep, mock_notify, mock_find_pr):
+    def test_poll_for_pr_found_after_retries(self, mock_debug_log, mock_log, mock_sleep, mock_notify, mock_find_pr, mock_add_labels):
         """Test _poll_for_pr when PR is found after several attempts"""
         # Configure mocks
         pr_info = {
@@ -304,15 +309,17 @@ class TestExternalCodingAgent(unittest.TestCase):
         # Return None twice, then return PR info
         mock_find_pr.side_effect = [None, None, pr_info]
         mock_notify.return_value = True
+        mock_add_labels.return_value = True
         
         agent = ExternalCodingAgent(self.config)
         # Use very small max_attempts and sleep_seconds to speed up tests
-        result = agent._poll_for_pr(issue_number=456, remediation_id="REM-789", max_attempts=3, sleep_seconds=0.01)
+        result = agent._poll_for_pr(issue_number=456, remediation_id="REM-789", vulnerability_label="contrast-vuln-id:VULN-12345", remediation_label="smartfix-id:remediation-67890", max_attempts=3, sleep_seconds=0.01)
         
         # Verify results
         self.assertEqual(result, pr_info)
         self.assertEqual(mock_find_pr.call_count, 3)
         mock_notify.assert_called_once()
+        mock_add_labels.assert_called_once_with(123, ["contrast-vuln-id:VULN-12345", "smartfix-id:remediation-67890"])
         # Sleep should be called twice (after first and second attempts)
         self.assertEqual(mock_sleep.call_count, 2)
         for call in mock_sleep.call_args_list:
@@ -330,7 +337,7 @@ class TestExternalCodingAgent(unittest.TestCase):
         
         agent = ExternalCodingAgent(self.config)
         # Use very small max_attempts and sleep_seconds to speed up tests
-        result = agent._poll_for_pr(issue_number=456, remediation_id="REM-789", max_attempts=3, sleep_seconds=0.01)
+        result = agent._poll_for_pr(issue_number=456, remediation_id="REM-789", vulnerability_label="contrast-vuln-id:VULN-12345", remediation_label="smartfix-id:remediation-67890", max_attempts=3, sleep_seconds=0.01)
         
         # Verify results
         self.assertIsNone(result)
@@ -341,12 +348,13 @@ class TestExternalCodingAgent(unittest.TestCase):
         for call in mock_sleep.call_args_list:
             self.assertEqual(call[0][0], 0.01)  # Verify sleep called with 0.01 seconds
     
+    @patch('src.git_handler.add_labels_to_pr')
     @patch('src.git_handler.find_open_pr_for_issue')
     @patch('src.external_coding_agent.notify_remediation_pr_opened')
     @patch('src.external_coding_agent.time.sleep')
     @patch('src.external_coding_agent.log')
     @patch('src.external_coding_agent.debug_log')
-    def test_poll_for_pr_notification_failure(self, mock_debug_log, mock_log, mock_sleep, mock_notify, mock_find_pr):
+    def test_poll_for_pr_notification_failure(self, mock_debug_log, mock_log, mock_sleep, mock_notify, mock_find_pr, mock_add_labels):
         """Test _poll_for_pr when PR is found but notification fails"""
         # Configure mocks
         pr_info = {
@@ -356,14 +364,16 @@ class TestExternalCodingAgent(unittest.TestCase):
         }
         mock_find_pr.return_value = pr_info
         mock_notify.return_value = False  # Notification fails
+        mock_add_labels.return_value = True
         
         agent = ExternalCodingAgent(self.config)
         # Use very small max_attempts and sleep_seconds to speed up tests
-        result = agent._poll_for_pr(issue_number=456, remediation_id="REM-789", max_attempts=3, sleep_seconds=0.01)
+        result = agent._poll_for_pr(issue_number=456, remediation_id="REM-789", vulnerability_label="contrast-vuln-id:VULN-12345", remediation_label="smartfix-id:remediation-67890", max_attempts=3, sleep_seconds=0.01)
         
         # Verify results
         self.assertEqual(result, pr_info)  # Still returns PR info even if notification fails
         mock_notify.assert_called_once()
+        mock_add_labels.assert_called_once_with(123, ["contrast-vuln-id:VULN-12345", "smartfix-id:remediation-67890"])
         mock_find_pr.assert_called_once()
         # No sleep calls needed
         mock_sleep.assert_not_called()

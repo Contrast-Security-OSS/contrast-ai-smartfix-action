@@ -82,8 +82,8 @@ class ExternalCodingAgent:
         telemetry_handler.update_telemetry("additionalAttributes.codingAgent", "EXTERNAL")
         
         # Poll for a PR to be created by the external agent (100 attempts, 5 seconds apart = ~8.3 minutes max)
-        pr_info = self._poll_for_pr(issue_number, remediation_id, max_attempts=100, sleep_seconds=5)
-        
+        pr_info = self._poll_for_pr(issue_number, remediation_id, vulnerability_label, remediation_label, max_attempts=100, sleep_seconds=5)
+
         if pr_info:
             pr_number = pr_info.get("number")
             pr_url = pr_info.get("url")
@@ -100,7 +100,7 @@ class ExternalCodingAgent:
             telemetry_handler.update_telemetry("resultInfo.failureCategory", FailureCategory.AGENT_FAILURE.name)
             return False
 
-    def _poll_for_pr(self, issue_number: int, remediation_id: str, max_attempts: int = 100, sleep_seconds: int = 5) -> Optional[dict]:
+    def _poll_for_pr(self, issue_number: int, remediation_id: str, vulnerability_label: str, remediation_label:str, max_attempts: int = 100, sleep_seconds: int = 5) -> Optional[dict]:
         """
         Poll for a PR to be created by the external agent.
         
@@ -123,6 +123,14 @@ class ExternalCodingAgent:
             if pr_info:
                 pr_number = pr_info.get("number")
                 pr_url = pr_info.get("url")
+
+                # Add vulnerability and remediation labels to the PR
+                labels_to_add = [vulnerability_label, remediation_label]
+                if git_handler.add_labels_to_pr(pr_number, labels_to_add):
+                    debug_log(f"Successfully added labels to PR #{pr_number}: {labels_to_add}")
+                else:
+                    log(f"Failed to add labels to PR #{pr_number}", is_error=True)
+                    return None
                 
                 log(f"Found PR #{pr_number} for issue #{issue_number} after {attempt} attempts")
                 

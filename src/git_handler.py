@@ -706,4 +706,48 @@ def find_open_pr_for_issue(issue_number: int) -> dict:
         log(f"Error searching for PRs related to issue #{issue_number}: {e}", is_error=True)
         return None
 
+def add_labels_to_pr(pr_number: int, labels: List[str]) -> bool:
+    """
+    Add labels to an existing pull request.
+    
+    Args:
+        pr_number: The PR number to add labels to
+        labels: List of label names to add
+        
+    Returns:
+        bool: True if labels were successfully added, False otherwise
+    """
+    if not labels:
+        debug_log("No labels provided to add to PR")
+        return True
+    
+    log(f"Adding labels to PR #{pr_number}: {labels}")
+    gh_env = get_gh_env()
+    
+    # First ensure all labels exist
+    for label_name in labels:
+        if label_name.startswith("contrast-vuln-id:"):
+            ensure_label(label_name, "Vulnerability identified by Contrast", "ff0000")  # Red
+        elif label_name.startswith("smartfix-id:"):
+            ensure_label(label_name, "Remediation ID for Contrast vulnerability", "0075ca")  # Blue
+        else:
+            # For other labels, use default description and color
+            ensure_label(label_name, "Label added by Contrast AI SmartFix", "cccccc")  # Gray
+    
+    # Add labels to the PR
+    add_labels_command = [
+        "gh", "pr", "edit",
+        "--repo", config.GITHUB_REPOSITORY,
+        str(pr_number),
+        "--add-label", ",".join(labels)
+    ]
+    
+    try:
+        run_command(add_labels_command, env=gh_env, check=True)
+        log(f"Successfully added labels to PR #{pr_number}: {labels}")
+        return True
+    except Exception as e:
+        log(f"Failed to add labels to PR #{pr_number}: {e}", is_error=True)
+        return False
+
 # %%

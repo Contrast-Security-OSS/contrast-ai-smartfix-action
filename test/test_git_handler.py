@@ -20,6 +20,7 @@
 
 import sys
 import unittest
+import unittest.mock
 from unittest.mock import patch
 import os
 import json
@@ -343,6 +344,119 @@ class TestGitHandler(unittest.TestCase):
         mock_run_command.assert_called_once()
         mock_log.assert_any_call("Searching for open PR related to issue #42")
         mock_log.assert_any_call("Error searching for PRs related to issue #42: Mock error", is_error=True)
+
+    @patch('src.git_handler.ensure_label')
+    @patch('src.git_handler.run_command')
+    @patch('src.git_handler.log')
+    @patch('src.git_handler.debug_log')
+    def test_add_labels_to_pr_success(self, mock_debug_log, mock_log, mock_run_command, mock_ensure_label):
+        """Test successfully adding labels to a PR"""
+        # Setup
+        pr_number = 123
+        labels = ["contrast-vuln-id:VULN-12345", "smartfix-id:remediation-67890"]
+        mock_ensure_label.return_value = True
+        mock_run_command.return_value = ""  # Successful command returns empty string
+        
+        # Initialize config with testing=True
+        _ = get_config(testing=True)
+        
+        # Execute
+        result = git_handler.add_labels_to_pr(pr_number, labels)
+        
+        # Assert
+        self.assertTrue(result)
+        
+        # Verify ensure_label was called for each label with correct parameters
+        expected_ensure_calls = [
+            unittest.mock.call("contrast-vuln-id:VULN-12345", "Vulnerability identified by Contrast", "ff0000"),
+            unittest.mock.call("smartfix-id:remediation-67890", "Remediation ID for Contrast vulnerability", "0075ca")
+        ]
+        mock_ensure_label.assert_has_calls(expected_ensure_calls, any_order=True)
+        
+        # Verify run_command was called with correct gh pr edit command
+        mock_run_command.assert_called_once()
+        call_args = mock_run_command.call_args[0][0]  # First argument (command list)
+        self.assertEqual(call_args[0:5], ["gh", "pr", "edit", "--repo", "mock/repo-for-testing"])
+        self.assertEqual(call_args[5], "123")
+        self.assertEqual(call_args[6:8], ["--add-label", "contrast-vuln-id:VULN-12345,smartfix-id:remediation-67890"])
+        
+        mock_log.assert_any_call("Adding labels to PR #123: ['contrast-vuln-id:VULN-12345', 'smartfix-id:remediation-67890']")
+        mock_log.assert_any_call("Successfully added labels to PR #123: ['contrast-vuln-id:VULN-12345', 'smartfix-id:remediation-67890']")
+
+    @patch('src.git_handler.ensure_label')
+    @patch('src.git_handler.run_command')
+    @patch('src.git_handler.log')
+    @patch('src.git_handler.debug_log')
+    def test_add_labels_to_pr_empty_labels(self, mock_debug_log, mock_log, mock_run_command, mock_ensure_label):
+        """Test adding empty labels list to a PR"""
+        # Setup
+        pr_number = 123
+        labels = []
+        
+        # Initialize config with testing=True
+        _ = get_config(testing=True)
+        
+        # Execute
+        result = git_handler.add_labels_to_pr(pr_number, labels)
+        
+        # Assert
+        self.assertTrue(result)
+        mock_ensure_label.assert_not_called()
+        mock_run_command.assert_not_called()
+        mock_debug_log.assert_called_with("No labels provided to add to PR")
+
+    @patch('src.git_handler.ensure_label')
+    @patch('src.git_handler.run_command')
+    @patch('src.git_handler.log')
+    @patch('src.git_handler.debug_log')
+    def test_add_labels_to_pr_with_custom_label(self, mock_debug_log, mock_log, mock_run_command, mock_ensure_label):
+        """Test adding labels including a custom label type"""
+        # Setup
+        pr_number = 456
+        labels = ["contrast-vuln-id:VULN-99999", "custom-label"]
+        mock_ensure_label.return_value = True
+        mock_run_command.return_value = ""
+        
+        # Initialize config with testing=True
+        _ = get_config(testing=True)
+        
+        # Execute
+        result = git_handler.add_labels_to_pr(pr_number, labels)
+        
+        # Assert
+        self.assertTrue(result)
+        
+        # Verify ensure_label was called with correct parameters for different label types
+        expected_ensure_calls = [
+            unittest.mock.call("contrast-vuln-id:VULN-99999", "Vulnerability identified by Contrast", "ff0000"),
+            unittest.mock.call("custom-label", "Label added by Contrast AI SmartFix", "cccccc")
+        ]
+        mock_ensure_label.assert_has_calls(expected_ensure_calls, any_order=True)
+
+    @patch('src.git_handler.ensure_label')
+    @patch('src.git_handler.run_command')
+    @patch('src.git_handler.log')
+    @patch('src.git_handler.debug_log')
+    def test_add_labels_to_pr_command_failure(self, mock_debug_log, mock_log, mock_run_command, mock_ensure_label):
+        """Test adding labels to a PR when the gh command fails"""
+        # Setup
+        pr_number = 789
+        labels = ["test-label"]
+        mock_ensure_label.return_value = True
+        mock_run_command.side_effect = Exception("Command failed")
+        
+        # Initialize config with testing=True
+        _ = get_config(testing=True)
+        
+        # Execute
+        result = git_handler.add_labels_to_pr(pr_number, labels)
+        
+        # Assert
+        self.assertFalse(result)
+        mock_ensure_label.assert_called_once_with("test-label", "Label added by Contrast AI SmartFix", "cccccc")
+        mock_run_command.assert_called_once()
+        mock_log.assert_any_call("Adding labels to PR #789: ['test-label']")
+        mock_log.assert_any_call("Failed to add labels to PR #789: Command failed", is_error=True)
 
 if __name__ == '__main__':
     unittest.main()
