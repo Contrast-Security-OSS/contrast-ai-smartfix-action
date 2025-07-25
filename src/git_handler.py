@@ -157,7 +157,7 @@ def ensure_label(label_name: str, description: str, color: str) -> bool:
             labels = json.loads(list_output)
             existing_label_names = [label.get("name") for label in labels]
             if label_name in existing_label_names:
-                log(f"Label '{label_name}' already exists.")
+                debug_log(f"Label '{label_name}' already exists.")
                 return True
         except json.JSONDecodeError:
             debug_log(f"Could not parse label list JSON: {list_output}")
@@ -184,7 +184,7 @@ def ensure_label(label_name: str, description: str, color: str) -> bool:
         )
         
         if process.returncode == 0:
-            log(f"Label '{label_name}' created successfully.")
+            debug_log(f"Label '{label_name}' created successfully.")
             return True
         else:
             # Check for "already exists" type of error which is OK
