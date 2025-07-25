@@ -462,7 +462,7 @@ def create_issue(title: str, body: str, vuln_label: str, remediation_label: str)
         "--title", title,
         "--body", body,
         "--label", labels,
-        "--assignee", "copilot-swe-agent"  # Assign to @Copilot user
+        "--assignee", "@copilot"  # Assign to @Copilot user
     ]
     
     try:
@@ -626,7 +626,7 @@ def reset_issue(issue_number: int, remediation_label: str) -> bool:
             "gh", "issue", "edit",
             "--repo", config.GITHUB_REPOSITORY,
             str(issue_number),
-            "--remove-assignee", "copilot-swe-agent"
+            "--remove-assignee", "@copilot"
         ]
         
         # Don't check here as it might not be assigned
@@ -637,7 +637,7 @@ def reset_issue(issue_number: int, remediation_label: str) -> bool:
             "gh", "issue", "edit",
             "--repo", config.GITHUB_REPOSITORY,
             str(issue_number),
-            "--add-assignee", "copilot-swe-agent"
+            "--add-assignee", "@copilot"
         ]
         
         run_command(assign_command, env=gh_env, check=True)
