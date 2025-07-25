@@ -137,7 +137,7 @@ def ensure_label(label_name: str, description: str, color: str) -> bool:
     Returns:
         bool: True if label exists or was successfully created, False otherwise
     """
-    log(f"Ensuring GitHub label exists: {label_name}")
+    debug_log(f"Ensuring GitHub label exists: {label_name}")
     if len(label_name) > 50:
         log(f"Label name '{label_name}' exceeds GitHub's 50-character limit.", is_error=True)
         return False
@@ -547,7 +547,7 @@ def reset_issue(issue_number: int, remediation_label: str) -> bool:
                 ]
                 
                 run_command(remove_label_command, env=gh_env, check=True)
-                log(f"Removed existing remediation labels from issue #{issue_number}")
+                debug_log(f"Removed existing remediation labels from issue #{issue_number}")
         except json.JSONDecodeError:
             debug_log(f"Could not parse issue info JSON: {issue_info}")
         except Exception as e:
@@ -605,7 +605,7 @@ def find_open_pr_for_issue(issue_number: int) -> dict:
     Returns:
         dict: A dictionary with PR information (number, url, title) if found, None otherwise
     """
-    log(f"Searching for open PR related to issue #{issue_number}")
+    debug_log(f"Searching for open PR related to issue #{issue_number}")
     gh_env = get_gh_env()
     
     # Use a search pattern that matches PRs with branch names following the 'copilot/fix-{issue_number}' pattern

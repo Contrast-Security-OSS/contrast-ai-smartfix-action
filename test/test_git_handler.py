@@ -218,7 +218,7 @@ class TestGitHandler(unittest.TestCase):
         # Assert
         self.assertEqual(mock_run_command.call_count, 5)  # Should call run_command 5 times
         self.assertTrue(result)
-        mock_log.assert_any_call("Removed existing remediation labels from issue #42")
+        mock_debug_log.assert_any_call("Removed existing remediation labels from issue #42")
         mock_log.assert_any_call("Added new remediation label to issue #42")
         mock_log.assert_any_call("Reassigned issue #42 to @Copilot")
         
@@ -301,7 +301,7 @@ class TestGitHandler(unittest.TestCase):
         # Assert
         self.assertEqual(result, pr_data[0])
         mock_run_command.assert_called_once()
-        mock_log.assert_any_call("Searching for open PR related to issue #42")
+        mock_debug_log.assert_any_call("Searching for open PR related to issue #42")
         mock_log.assert_any_call("Found open PR #123 for issue #42: Fix bug for issue #42")
 
     @patch('src.git_handler.run_command')
@@ -322,12 +322,13 @@ class TestGitHandler(unittest.TestCase):
         # Assert
         self.assertIsNone(result)
         mock_run_command.assert_called_once()
-        mock_log.assert_any_call("Searching for open PR related to issue #42")
+        mock_debug_log.assert_any_call("Searching for open PR related to issue #42")
         mock_debug_log.assert_any_call("No open PRs found for issue #42")
 
+    @patch('src.git_handler.debug_log')
     @patch('src.git_handler.run_command')
     @patch('src.git_handler.log')
-    def test_find_open_pr_for_issue_error(self, mock_log, mock_run_command):
+    def test_find_open_pr_for_issue_error(self, mock_log, mock_run_command, mock_debug_log):
         """Test finding a PR for an issue when an error occurs"""
         # Setup
         issue_number = 42
@@ -342,7 +343,7 @@ class TestGitHandler(unittest.TestCase):
         # Assert
         self.assertIsNone(result)
         mock_run_command.assert_called_once()
-        mock_log.assert_any_call("Searching for open PR related to issue #42")
+        mock_debug_log.assert_any_call("Searching for open PR related to issue #42")
         mock_log.assert_any_call("Error searching for PRs related to issue #42: Mock error", is_error=True)
 
     @patch('src.git_handler.config')
