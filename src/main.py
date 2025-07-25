@@ -347,7 +347,7 @@ def main():
             log(f"\n--- Using External Coding Agent ({config.CODING_AGENT}) ---")
             external_agent = ExternalCodingAgent(config)
             if external_agent.generate_fixes(vuln_uuid, remediation_id, vuln_title):
-                log(f"\n--- External Coding Agent successfully generated fixes ---")
+                log(f"\n\n--- External Coding Agent successfully generated fixes ---")
                 processed_one = True
                 contrast_api.send_telemetry_data()
             continue  # Skip the built-in SmartFix code and PR creation

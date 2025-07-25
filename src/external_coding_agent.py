@@ -39,7 +39,7 @@ class ExternalCodingAgent:
             config: The application configuration object
         """
         self.config = config
-        log(f"Initialized ExternalCodingAgent")
+        debug_log(f"Initialized ExternalCodingAgent")
     
     def generate_fixes(self, vuln_uuid: str, remediation_id: str, vuln_title: str) -> bool:
         """
@@ -52,7 +52,7 @@ class ExternalCodingAgent:
             debug_log("SMARTFIX agent detected, ExternalCodingAgent.generate_fixes returning False")
             return False
         
-        log("--- Generating fix with external coding agent ---")
+        debug_log("--- Generating fix with external coding agent ---")
         
         # Hard-coded vulnerability label for now, will be passed as argument later
         vulnerability_label = f"contrast-vuln-id:VULN-{vuln_uuid}"
@@ -113,7 +113,7 @@ class ExternalCodingAgent:
         Returns:
             Optional[dict]: PR information if found, None if not found after max attempts
         """
-        log(f"Polling for PR creation for issue #{issue_number}, max {max_attempts} attempts with {sleep_seconds}s interval")
+        debug_log(f"Polling for PR creation for issue #{issue_number}, max {max_attempts} attempts with {sleep_seconds}s interval")
         
         for attempt in range(1, max_attempts + 1):
             debug_log(f"Polling attempt {attempt}/{max_attempts} for PR related to issue #{issue_number}")
@@ -132,7 +132,7 @@ class ExternalCodingAgent:
                     log(f"Failed to add labels to PR #{pr_number}", is_error=True)
                     return None
                 
-                log(f"Found PR #{pr_number} for issue #{issue_number} after {attempt} attempts")
+                debug_log(f"Found PR #{pr_number} for issue #{issue_number} after {attempt} attempts")
                 
                 # Notify the Remediation backend about the PR
                 success = notify_remediation_pr_opened(
