@@ -100,7 +100,7 @@ class ExternalCodingAgent:
             telemetry_handler.update_telemetry("resultInfo.failureCategory", FailureCategory.AGENT_FAILURE.name)
             return False
 
-    def _poll_for_pr(self, issue_number: int, remediation_id: str, max_attempts: int = 100, sleep_seconds: int = 5) -> Optional[dict]:
+    def _poll_for_pr(self, issue_number: int, remediation_id: str, max_attempts: int = 500, sleep_seconds: int = 20) -> Optional[dict]:
         """
         Poll for a PR to be created by the external agent.
         
