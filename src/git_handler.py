@@ -503,8 +503,9 @@ def find_issue_with_label(label: str) -> int:
         "--repo", config.GITHUB_REPOSITORY,
         "--label", label,
         "--state", "open",
-        "--limit", "10", # Get more results to ensure we can sort properly
-        "--json", "number,createdAt"
+        "--limit", "1", # Limit to 1 result to get the newest/first one
+        "--json", "number,createdAt",
+        "--sort", "created-desc" # Sort by creation date descending (newest first)
     ]
     
     try:
@@ -520,9 +521,8 @@ def find_issue_with_label(label: str) -> int:
             debug_log(f"No issues found with label: {label}")
             return None
         
-        # Sort issues by creation date (newest first) and get the first one
-        sorted_issues = sorted(issues_data, key=lambda x: x.get('createdAt', ''), reverse=True)
-        issue_number = sorted_issues[0].get("number")
+        # Get the first (newest) issue
+        issue_number = issues_data[0].get("number")
         if issue_number:
             debug_log(f"Found issue #{issue_number} with label: {label}")
             return issue_number
