@@ -24,13 +24,13 @@ import sys
 # Import from src package to ensure correct module resolution
 from src import contrast_api
 from src.config import get_config  # Using get_config function instead of direct import
-from src.utils import debug_log, extract_remediation_id_from_branch, extract_remediation_id_from_labels, log
+from src.utils import debug_log, extract_remediation_id_from_branch, log
 import src.telemetry_handler as telemetry_handler
 
 def handle_merged_pr():
     """Handles the logic when a pull request is merged."""
     telemetry_handler.initialize_telemetry()
-    
+
     log("--- Handling Merged Contrast AI SmartFix Pull Request ---")
 
     # Get PR event details from environment variables set by GitHub Actions
