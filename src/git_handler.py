@@ -410,7 +410,7 @@ def create_issue(title: str, body: str, vuln_label: str, remediation_label: str)
         "--title", title,
         "--body", body,
         "--label", labels,
-        "--assignee", "@me"  # Assign to @Copilot user
+        "--assignee", "dougj-contrast"  # Assign to @Copilot user
     ]
     
     try:
