@@ -462,7 +462,7 @@ def create_issue(title: str, body: str, vuln_label: str, remediation_label: str)
         "--title", title,
         "--body", body,
         "--label", labels,
-        "--assignee", "copilot"  # Assign to @Copilot user
+        "--assignee", "copilot-swe-agent"  # Assign to @Copilot user
     ]
     
     try:
@@ -580,9 +580,9 @@ def reset_issue(issue_number: int, remediation_label: str) -> bool:
             debug_log(f"Current labels on issue #{issue_number}: {current_labels}")
             
             # Find any remediation labels to remove
-            labels_to_remove = [label for label in current_labels 
-                               if label.startswith("contrast-remediation-id:")]
-            
+            labels_to_remove = [label for label in current_labels
+                               if label.startswith("smartfix-id:")]
+
             if labels_to_remove:
                 debug_log(f"Labels to remove: {labels_to_remove}")
                 
@@ -626,7 +626,7 @@ def reset_issue(issue_number: int, remediation_label: str) -> bool:
             "gh", "issue", "edit",
             "--repo", config.GITHUB_REPOSITORY,
             str(issue_number),
-            "--remove-assignee", "copilot"
+            "--remove-assignee", "copilot-swe-agent"
         ]
         
         # Don't check here as it might not be assigned
@@ -637,7 +637,7 @@ def reset_issue(issue_number: int, remediation_label: str) -> bool:
             "gh", "issue", "edit",
             "--repo", config.GITHUB_REPOSITORY,
             str(issue_number),
-            "--add-assignee", "copilot"
+            "--add-assignee", "copilot-swe-agent"
         ]
         
         run_command(assign_command, env=gh_env, check=True)
