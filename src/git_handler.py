@@ -444,10 +444,10 @@ def create_issue(title: str, body: str, vuln_label: str, remediation_label: str)
     gh_env = get_gh_env()
     
     # Get the contrast-swe-agent bot ID
-    bot_id = get_contrast_swe_agent_id()
-    if not bot_id:
-        log("Error: Could not find @copilot bot ID. Cannot create issue.", is_error=True)
-        return None
+    #bot_id = get_contrast_swe_agent_id()
+    #if not bot_id:
+    #    log("Error: Could not find @copilot bot ID. Cannot create issue.", is_error=True)
+    #    return None
     
     # Ensure both labels exist
     ensure_label(vuln_label, "Vulnerability identified by Contrast", "ff0000")  # Red
@@ -462,7 +462,7 @@ def create_issue(title: str, body: str, vuln_label: str, remediation_label: str)
         "--title", title,
         "--body", body,
         "--label", labels,
-        "--assignee", bot_id  # Assign to @Copilot user
+        "--assignee", "copilot"  # Assign to @Copilot user
     ]
     
     try:
@@ -616,17 +616,17 @@ def reset_issue(issue_number: int, remediation_label: str) -> bool:
         log(f"Added new remediation label to issue #{issue_number}")
         
         # Get the contrast-swe-agent bot ID for assignment operations
-        bot_id = get_contrast_swe_agent_id()
-        if not bot_id:
-            log("Error: Could not find @Copilot bot ID. Cannot create issue.", is_error=True)
-            return None
+        #bot_id = get_contrast_swe_agent_id()
+        #if not bot_id:
+        #    log("Error: Could not find @Copilot bot ID. Cannot create issue.", is_error=True)
+        #    return None
 
         # Unassign from @Copilot (if assigned)
         unassign_command = [
             "gh", "issue", "edit",
             "--repo", config.GITHUB_REPOSITORY,
             str(issue_number),
-            "--remove-assignee", bot_id
+            "--remove-assignee", "copilot"
         ]
         
         # Don't check here as it might not be assigned
@@ -637,7 +637,7 @@ def reset_issue(issue_number: int, remediation_label: str) -> bool:
             "gh", "issue", "edit",
             "--repo", config.GITHUB_REPOSITORY,
             str(issue_number),
-            "--add-assignee", bot_id
+            "--add-assignee", "copilot"
         ]
         
         run_command(assign_command, env=gh_env, check=True)
