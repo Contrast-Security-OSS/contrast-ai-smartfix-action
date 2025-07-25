@@ -410,7 +410,7 @@ def create_issue(title: str, body: str, vuln_label: str, remediation_label: str)
         "--title", title,
         "--body", body,
         "--label", labels,
-        "--assignee", "copilot-swe-agent"  # Assign to @Copilot user
+        "--assignee", "@copilot"  # Assign to @Copilot user
     ]
     
     try:
