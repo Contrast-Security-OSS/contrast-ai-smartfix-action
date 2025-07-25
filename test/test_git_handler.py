@@ -345,17 +345,21 @@ class TestGitHandler(unittest.TestCase):
         mock_log.assert_any_call("Searching for open PR related to issue #42")
         mock_log.assert_any_call("Error searching for PRs related to issue #42: Mock error", is_error=True)
 
+    @patch('src.git_handler.config')
     @patch('src.git_handler.ensure_label')
     @patch('src.git_handler.run_command')
     @patch('src.git_handler.log')
     @patch('src.git_handler.debug_log')
-    def test_add_labels_to_pr_success(self, mock_debug_log, mock_log, mock_run_command, mock_ensure_label):
+    def test_add_labels_to_pr_success(self, mock_debug_log, mock_log, mock_run_command, mock_ensure_label, mock_config):
         """Test successfully adding labels to a PR"""
         # Setup
         pr_number = 123
         labels = ["contrast-vuln-id:VULN-12345", "smartfix-id:remediation-67890"]
         mock_ensure_label.return_value = True
         mock_run_command.return_value = ""  # Successful command returns empty string
+        
+        # Mock config to use test repository
+        mock_config.GITHUB_REPOSITORY = "mock/repo"
         
         # Initialize config with testing=True
         _ = get_config(testing=True)
@@ -376,7 +380,7 @@ class TestGitHandler(unittest.TestCase):
         # Verify run_command was called with correct gh pr edit command
         mock_run_command.assert_called_once()
         call_args = mock_run_command.call_args[0][0]  # First argument (command list)
-        self.assertEqual(call_args[0:5], ["gh", "pr", "edit", "--repo", "mock/repo-for-testing"])
+        self.assertEqual(call_args[0:5], ["gh", "pr", "edit", "--repo", "mock/repo"])
         self.assertEqual(call_args[5], "123")
         self.assertEqual(call_args[6:8], ["--add-label", "contrast-vuln-id:VULN-12345,smartfix-id:remediation-67890"])
         
