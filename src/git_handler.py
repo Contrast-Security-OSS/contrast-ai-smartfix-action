@@ -435,7 +435,7 @@ def create_issue(title: str, body: str, vuln_label: str, remediation_label: str)
         title: The title of the issue
         body: The body content of the issue
         vuln_label: The vulnerability label (contrast-vuln-id:*)
-        remediation_label: The remediation label (contrast-remediation-id:*)
+        remediation_label: The remediation label (smartfix-id:*)
         
     Returns:
         int: The issue number if created successfully, None otherwise
@@ -538,7 +538,7 @@ def find_issue_with_label(label: str) -> int:
 def reset_issue(issue_number: int, remediation_label: str) -> bool:
     """
     Resets a GitHub issue by:
-    1. Removing all existing labels that start with "contrast-remediation-id:"
+    1. Removing all existing labels that start with "smartfix-id:"
     2. Adding the specified remediation label
     3. Unassigning the @Copilot user and reassigning the issue to @Copilot
     
