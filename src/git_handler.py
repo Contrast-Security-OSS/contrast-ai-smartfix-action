@@ -386,47 +386,6 @@ def cleanup_branch(branch_name: str):
     run_command(["git", "branch", "-D", branch_name], check=False)
     log("Branch cleanup completed.")
 
-def get_contrast_swe_agent_id() -> str:
-    """
-    Gets the ID of the contrast-swe-agent bot from GitHub's suggested actors.
-    
-    Returns:
-        str: The bot ID if found, None otherwise
-    """
-    gh_env = get_gh_env()
-    
-    try:
-        owner, repo = config.GITHUB_REPOSITORY.split('/')
-        suggested_actors_command = [
-            "gh", "api", "graphql", "-f",
-            f"query=query {{ repository(owner:\"{owner}\", name:\"{repo}\") {{ suggestedActors(capabilities: [CAN_BE_ASSIGNED], first: 100) {{ nodes {{ login __typename ... on Bot {{ id }} ... on User {{ id }} }} }} }} }}"
-        ]
-        actors_output = run_command(suggested_actors_command, env=gh_env, check=False)
-        
-        if actors_output:
-            try:
-                actors_data = json.loads(actors_output)
-                actors = actors_data.get("data", {}).get("repository", {}).get("suggestedActors", {}).get("nodes", [])
-                
-                for actor in actors:
-                    if actor.get("login") == "contrast-swe-agent":
-                        actor_id = actor.get("id")
-                        if actor_id:
-                            log(f"Found contrast-swe-agent with ID: {actor_id}")
-                            return actor_id
-                        
-                log("contrast-swe-agent not found in suggested actors")
-                return None
-            except (json.JSONDecodeError, KeyError) as e:
-                log(f"Could not parse suggested actors data: {e}")
-                return None
-        else:
-            log("No suggested actors data returned")
-            return None
-    except Exception as e:
-        log(f"Error getting suggested actors: {e}")
-        return None
-
 def create_issue(title: str, body: str, vuln_label: str, remediation_label: str) -> int:
     """
     Creates a GitHub issue with the specified title, body, and labels.
@@ -442,12 +401,6 @@ def create_issue(title: str, body: str, vuln_label: str, remediation_label: str)
     """
     log(f"Creating GitHub issue with title: {title}")
     gh_env = get_gh_env()
-    
-    # Get the contrast-swe-agent bot ID
-    #bot_id = get_contrast_swe_agent_id()
-    #if not bot_id:
-    #    log("Error: Could not find @copilot bot ID. Cannot create issue.", is_error=True)
-    #    return None
     
     # Ensure both labels exist
     ensure_label(vuln_label, "Vulnerability identified by Contrast", "ff0000")  # Red
@@ -504,8 +457,7 @@ def find_issue_with_label(label: str) -> int:
         "--label", label,
         "--state", "open",
         "--limit", "1", # Limit to 1 result to get the newest/first one
-        "--json", "number,createdAt",
-        "--sort", "created-desc" # Sort by creation date descending (newest first)
+        "--json", "number,createdAt"
     ]
     
     try:
@@ -614,12 +566,6 @@ def reset_issue(issue_number: int, remediation_label: str) -> bool:
         
         run_command(add_label_command, env=gh_env, check=True)
         log(f"Added new remediation label to issue #{issue_number}")
-        
-        # Get the contrast-swe-agent bot ID for assignment operations
-        #bot_id = get_contrast_swe_agent_id()
-        #if not bot_id:
-        #    log("Error: Could not find @Copilot bot ID. Cannot create issue.", is_error=True)
-        #    return None
 
         # Unassign from @Copilot (if assigned)
         unassign_command = [
