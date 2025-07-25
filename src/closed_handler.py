@@ -29,6 +29,8 @@ import src.telemetry_handler as telemetry_handler
 
 def handle_closed_pr():
     """Handles the logic when a pull request is closed without merging."""
+    telemetry_handler.initialize_telemetry()
+    
     log("--- Handling Closed (Unmerged) Contrast AI SmartFix Pull Request ---")
 
     # Get PR event details from environment variables set by GitHub Actions
