@@ -37,10 +37,6 @@ def get_gh_env():
     gh_env = os.environ.copy()
     gh_env["GITHUB_TOKEN"] = config.GITHUB_TOKEN
     
-    # Debug logging to help troubleshoot repository access issues
-    debug_log(f"Using GitHub repository: {config.GITHUB_REPOSITORY}")
-    debug_log(f"GitHub token length: {len(config.GITHUB_TOKEN) if config.GITHUB_TOKEN else 0}")
-    
     return gh_env
 
 def configure_git_user():
