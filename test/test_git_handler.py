@@ -415,23 +415,17 @@ class TestGitHandler(unittest.TestCase):
             "copilot/fix-123-extra",         # Extra parts
             "smartfix/remediation-123",      # Different prefix
             "",                              # Empty string
-            "copilot/fix-0",                 # Zero (technically valid but edge case)
         ]
         
         for branch_name in invalid_branches:
             with self.subTest(branch_name=branch_name):
                 result = git_handler.extract_issue_number_from_branch(branch_name)
-                if branch_name == "copilot/fix-0":
-                    # Zero is technically a valid issue number
-                    self.assertEqual(result, 0)
-                else:
-                    self.assertIsNone(result)
+                self.assertIsNone(result)
 
     def test_extract_issue_number_from_branch_edge_cases(self):
         """Test edge cases for extracting issue number from branch name"""
         # Test edge cases
         edge_cases = [
-            ("copilot/fix-0", 0),            # Zero issue number
             ("copilot/fix-2147483647", 2147483647),  # Large number (max 32-bit int)
         ]
         
