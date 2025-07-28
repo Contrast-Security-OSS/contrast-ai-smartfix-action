@@ -54,7 +54,7 @@ class ExternalCodingAgent:
         
         log(f"\n::group::--- Using External Coding Agent ({self.config.CODING_AGENT}) ---")
         telemetry_handler.update_telemetry("additionalAttributes.codingAgent", "EXTERNAL-COPILOT")
-        
+
         # Hard-coded vulnerability label for now, will be passed as argument later
         vulnerability_label = f"contrast-vuln-id:VULN-{vuln_uuid}"
         remediation_label = f"smartfix-id:{remediation_id}"
@@ -76,7 +76,7 @@ class ExternalCodingAgent:
                 log(f"Failed to create issue with labels {vulnerability_label}, {remediation_label}", is_error=True)
                 error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
         
-        telemetry_handler.update_telemetry("additionalAttributes.githubIssueNumber", issue_number)
+        telemetry_handler.update_telemetry("additionalAttributes.externalIssueNumber", issue_number)
 
         # Poll for PR creation by the external agent
         log(f"Waiting for external agent to create a PR for issue #{issue_number}")

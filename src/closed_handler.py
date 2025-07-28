@@ -78,7 +78,7 @@ def handle_closed_pr():
         # Extract GitHub issue number from branch name
         issue_number = extract_issue_number_from_branch(branch_name)
         if issue_number:
-            telemetry_handler.update_telemetry("additionalAttributes.githubIssueNumber", issue_number)
+            telemetry_handler.update_telemetry("additionalAttributes.externalIssueNumber", issue_number)
             debug_log(f"Extracted GitHub issue number from branch name: {issue_number}")
         else:
             debug_log(f"Could not extract issue number from branch name: {branch_name}")
