@@ -39,6 +39,7 @@ from src import contrast_api
 from src import agent_handler
 from src import git_handler
 from src import qa_handler
+from src.external_coding_agent import ExternalCodingAgent
 
 config = get_config()
 telemetry_handler.initialize_telemetry()
@@ -341,7 +342,16 @@ def main():
             log(f"Build output:\n{error_analysis}")
             error_exit(remediation_id, contrast_api.FailureCategory.INITIAL_BUILD_FAILURE.value) # Exit if the build is broken, no point in proceeding
 
-        # --- Run AI Fix Agent ---
+        # --- Check if we need to use the external coding agent ---
+        if config.CODING_AGENT != "SMARTFIX":
+            external_agent = ExternalCodingAgent(config)
+            if external_agent.generate_fixes(vuln_uuid, remediation_id, vuln_title):
+                log(f"\n\n--- External Coding Agent successfully generated fixes ---")
+                processed_one = True
+                contrast_api.send_telemetry_data()
+            continue  # Skip the built-in SmartFix code and PR creation
+
+        # --- Run AI Fix Agent (SmartFix) ---
         ai_fix_summary_full = agent_handler.run_ai_fix_agent(
             config.REPO_ROOT, fix_system_prompt, fix_user_prompt, remediation_id
         )

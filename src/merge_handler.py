@@ -29,6 +29,8 @@ import src.telemetry_handler as telemetry_handler
 
 def handle_merged_pr():
     """Handles the logic when a pull request is merged."""
+    telemetry_handler.initialize_telemetry()
+
     log("--- Handling Merged Contrast AI SmartFix Pull Request ---")
 
     # Get PR event details from environment variables set by GitHub Actions
@@ -63,11 +65,24 @@ def handle_merged_pr():
     
     debug_log(f"Branch name: {branch_name}")
 
-    # Extract remediation ID from branch name
-    remediation_id = extract_remediation_id_from_branch(branch_name)
+    # Extract remediation ID from branch name or PR labels
+    remediation_id = None
+    
+    # Check if this is a branch created by external agent (e.g., GitHub Copilot)
+    if branch_name.startswith("copilot/fix"):
+        debug_log("Branch appears to be created by external agent. Extracting remediation ID from PR labels.")
+        # Get labels from the PR
+        labels = pull_request.get("labels", [])
+        remediation_id = extract_remediation_id_from_labels(labels)
+    else:
+        # Use original method for branches created by SmartFix
+        remediation_id = extract_remediation_id_from_branch(branch_name)
     
     if not remediation_id:
-        log(f"Error: Could not extract remediation ID from branch name: {branch_name}", is_error=True)
+        if branch_name.startswith("copilot/fix"):
+            log(f"Error: Could not extract remediation ID from PR labels for external agent branch: {branch_name}", is_error=True)
+        else:
+            log(f"Error: Could not extract remediation ID from branch name: {branch_name}", is_error=True)
         # If we can't find the remediation ID, we can't proceed with the new approach
         sys.exit(1)
     

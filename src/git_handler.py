@@ -36,6 +36,7 @@ def get_gh_env():
     """
     gh_env = os.environ.copy()
     gh_env["GITHUB_TOKEN"] = config.GITHUB_TOKEN
+    
     return gh_env
 
 def configure_git_user():
@@ -132,7 +133,7 @@ def ensure_label(label_name: str, description: str, color: str) -> bool:
     Returns:
         bool: True if label exists or was successfully created, False otherwise
     """
-    log(f"Ensuring GitHub label exists: {label_name}")
+    debug_log(f"Ensuring GitHub label exists: {label_name}")
     if len(label_name) > 50:
         log(f"Label name '{label_name}' exceeds GitHub's 50-character limit.", is_error=True)
         return False
@@ -152,7 +153,7 @@ def ensure_label(label_name: str, description: str, color: str) -> bool:
             labels = json.loads(list_output)
             existing_label_names = [label.get("name") for label in labels]
             if label_name in existing_label_names:
-                log(f"Label '{label_name}' already exists.")
+                debug_log(f"Label '{label_name}' already exists.")
                 return True
         except json.JSONDecodeError:
             debug_log(f"Could not parse label list JSON: {list_output}")
@@ -179,7 +180,7 @@ def ensure_label(label_name: str, description: str, color: str) -> bool:
         )
         
         if process.returncode == 0:
-            log(f"Label '{label_name}' created successfully.")
+            debug_log(f"Label '{label_name}' created successfully.")
             return True
         else:
             # Check for "already exists" type of error which is OK
@@ -380,5 +381,315 @@ def cleanup_branch(branch_name: str):
     run_command(["git", "checkout", config.BASE_BRANCH], check=False)
     run_command(["git", "branch", "-D", branch_name], check=False)
     log("Branch cleanup completed.")
+
+def create_issue(title: str, body: str, vuln_label: str, remediation_label: str) -> int:
+    """
+    Creates a GitHub issue with the specified title, body, and labels.
+    
+    Args:
+        title: The title of the issue
+        body: The body content of the issue
+        vuln_label: The vulnerability label (contrast-vuln-id:*)
+        remediation_label: The remediation label (smartfix-id:*)
+        
+    Returns:
+        int: The issue number if created successfully, None otherwise
+    """
+    log(f"Creating GitHub issue with title: {title}")
+    gh_env = get_gh_env()
+    
+    # Ensure both labels exist
+    ensure_label(vuln_label, "Vulnerability identified by Contrast", "ff0000")  # Red
+    ensure_label(remediation_label, "Remediation ID for Contrast vulnerability", "0075ca")  # Blue
+    
+    # Format labels for the command
+    labels = f"{vuln_label},{remediation_label}"
+    
+    issue_command = [
+        "gh", "issue", "create",
+        "--repo", config.GITHUB_REPOSITORY,
+        "--title", title,
+        "--body", body,
+        "--label", labels,
+        "--assignee", "@copilot"  # Assign to @Copilot user
+    ]
+    
+    try:
+        # Run the command and capture the output (issue URL)
+        issue_url = run_command(issue_command, env=gh_env, check=True)
+        log(f"Successfully created issue: {issue_url}")
+        log(f"Issue assigned to @Copilot")
+        
+        # Extract the issue number from the URL
+        # URL format is typically: https://github.com/owner/repo/issues/123
+        try:
+            issue_number = int(os.path.basename(issue_url.strip()))
+            log(f"Issue number extracted: {issue_number}")
+            return issue_number
+        except ValueError:
+            log(f"Could not extract issue number from URL: {issue_url}", is_error=True)
+            return None
+            
+    except Exception as e:
+        log(f"Failed to create GitHub issue: {e}", is_error=True)
+        return None
+
+def find_issue_with_label(label: str) -> int:
+    """
+    Searches for a GitHub issue with a specific label.
+    
+    Args:
+        label: The label to search for
+        
+    Returns:
+        int: The issue number if found, None otherwise
+    """
+    log(f"Searching for GitHub issue with label: {label}")
+    gh_env = get_gh_env()
+    
+    issue_list_command = [
+        "gh", "issue", "list",
+        "--repo", config.GITHUB_REPOSITORY,
+        "--label", label,
+        "--state", "open",
+        "--limit", "1", # Limit to 1 result to get the newest/first one
+        "--json", "number,createdAt"
+    ]
+    
+    try:
+        issue_list_output = run_command(issue_list_command, env=gh_env, check=False)
+        
+        if not issue_list_output:
+            debug_log(f"No issues found with label: {label}")
+            return None
+            
+        issues_data = json.loads(issue_list_output)
+        
+        if not issues_data:
+            debug_log(f"No issues found with label: {label}")
+            return None
+        
+        # Get the first (newest) issue
+        issue_number = issues_data[0].get("number")
+        if issue_number:
+            debug_log(f"Found issue #{issue_number} with label: {label}")
+            return issue_number
+        
+        return None
+    except json.JSONDecodeError:
+        log(f"Could not parse JSON output from gh issue list: {issue_list_output}", is_error=True)
+        return None
+    except Exception as e:
+        log(f"Error searching for GitHub issue with label: {e}", is_error=True)
+        return None
+
+def reset_issue(issue_number: int, remediation_label: str) -> bool:
+    """
+    Resets a GitHub issue by:
+    1. Removing all existing labels that start with "smartfix-id:"
+    2. Adding the specified remediation label
+    3. Unassigning the @Copilot user and reassigning the issue to @Copilot
+    
+    The reset will not occur if there's an open PR for the issue.
+    
+    Args:
+        issue_number: The issue number to reset
+        remediation_label: The new remediation label to add
+        
+    Returns:
+        bool: True if the issue was successfully reset, False otherwise
+    """
+    log(f"Resetting GitHub issue #{issue_number}")
+    
+    # First check if there's an open PR for this issue
+    open_pr = find_open_pr_for_issue(issue_number)
+    if open_pr:
+        pr_number = open_pr.get("number")
+        pr_url = open_pr.get("url")
+        log(f"Cannot reset issue #{issue_number} because it has an open PR #{pr_number}: {pr_url}", is_error=True)
+        return False
+    
+    gh_env = get_gh_env()
+    
+    try:
+        # First, get the current labels for the issue
+        issue_info_command = [
+            "gh", "issue", "view",
+            "--repo", config.GITHUB_REPOSITORY,
+            str(issue_number),
+            "--json", "labels"
+        ]
+        
+        issue_info = run_command(issue_info_command, env=gh_env, check=True)
+        
+        try:
+            labels_data = json.loads(issue_info)
+            current_labels = [label["name"] for label in labels_data.get("labels", [])]
+            debug_log(f"Current labels on issue #{issue_number}: {current_labels}")
+            
+            # Find any remediation labels to remove
+            labels_to_remove = [label for label in current_labels
+                               if label.startswith("smartfix-id:")]
+
+            if labels_to_remove:
+                debug_log(f"Labels to remove: {labels_to_remove}")
+                
+                # Remove the old remediation labels
+                remove_label_command = [
+                    "gh", "issue", "edit",
+                    "--repo", config.GITHUB_REPOSITORY,
+                    str(issue_number),
+                    "--remove-label", ",".join(labels_to_remove)
+                ]
+                
+                run_command(remove_label_command, env=gh_env, check=True)
+                debug_log(f"Removed existing remediation labels from issue #{issue_number}")
+        except json.JSONDecodeError:
+            debug_log(f"Could not parse issue info JSON: {issue_info}")
+        except Exception as e:
+            log(f"Error processing current issue labels: {e}", is_error=True)
+        
+        # Ensure the remediation label exists
+        ensure_label(remediation_label, "Remediation ID for Contrast vulnerability", "0075ca")
+        
+        # Add the new remediation label
+        add_label_command = [
+            "gh", "issue", "edit",
+            "--repo", config.GITHUB_REPOSITORY,
+            str(issue_number),
+            "--add-label", remediation_label
+        ]
+        
+        run_command(add_label_command, env=gh_env, check=True)
+        log(f"Added new remediation label to issue #{issue_number}")
+
+        # Unassign from @Copilot (if assigned)
+        unassign_command = [
+            "gh", "issue", "edit",
+            "--repo", config.GITHUB_REPOSITORY,
+            str(issue_number),
+            "--remove-assignee", "@copilot"
+        ]
+        
+        # Don't check here as it might not be assigned
+        run_command(unassign_command, env=gh_env, check=False)
+        
+        # Reassign to @Copilot
+        assign_command = [
+            "gh", "issue", "edit",
+            "--repo", config.GITHUB_REPOSITORY,
+            str(issue_number),
+            "--add-assignee", "@copilot"
+        ]
+        
+        run_command(assign_command, env=gh_env, check=True)
+        log(f"Reassigned issue #{issue_number} to @Copilot")
+        
+        return True
+    except Exception as e:
+        log(f"Failed to reset issue #{issue_number}: {e}", is_error=True)
+        return False
+
+def find_open_pr_for_issue(issue_number: int) -> dict:
+    """
+    Finds an open pull request associated with the given issue number.
+    Specifically looks for PRs with branch names matching the pattern 'copilot/fix-{issue_number}'.
+    
+    Args:
+        issue_number: The issue number to find a PR for
+        
+    Returns:
+        dict: A dictionary with PR information (number, url, title) if found, None otherwise
+    """
+    debug_log(f"Searching for open PR related to issue #{issue_number}")
+    gh_env = get_gh_env()
+    
+    # Use a search pattern that matches PRs with branch names following the 'copilot/fix-{issue_number}' pattern
+    # IDEA: Whenever we start supporting other coding agents the proper branch prefix will need to be passed in
+    search_pattern = f"head:copilot/fix-{issue_number}"
+
+    pr_list_command = [
+        "gh", "pr", "list",
+        "--repo", config.GITHUB_REPOSITORY,
+        "--state", "open",
+        "--search", search_pattern,
+        "--limit", "1", # Limit to 1 result as we only need the first match
+        "--json", "number,url,title,headRefName,baseRefName,state"
+    ]
+    
+    try:
+        pr_list_output = run_command(pr_list_command, env=gh_env, check=False)
+        
+        if not pr_list_output or pr_list_output.strip() == "[]":
+            debug_log(f"No open PRs found for issue #{issue_number}")
+            return None
+            
+        prs_data = json.loads(pr_list_output)
+        
+        if not prs_data:
+            debug_log(f"No open PRs found for issue #{issue_number}")
+            return None
+        
+        # Get the first matching PR
+        pr_info = prs_data[0]
+        pr_number = pr_info.get("number")
+        pr_url = pr_info.get("url")
+        pr_title = pr_info.get("title")
+        
+        if pr_number and pr_url:
+            log(f"Found open PR #{pr_number} for issue #{issue_number}: {pr_title}")
+            return pr_info
+        
+        return None
+    except json.JSONDecodeError:
+        log(f"Could not parse JSON output from gh pr list: {pr_list_output}", is_error=True)
+        return None
+    except Exception as e:
+        log(f"Error searching for PRs related to issue #{issue_number}: {e}", is_error=True)
+        return None
+
+def add_labels_to_pr(pr_number: int, labels: List[str]) -> bool:
+    """
+    Add labels to an existing pull request.
+    
+    Args:
+        pr_number: The PR number to add labels to
+        labels: List of label names to add
+        
+    Returns:
+        bool: True if labels were successfully added, False otherwise
+    """
+    if not labels:
+        debug_log("No labels provided to add to PR")
+        return True
+    
+    log(f"Adding labels to PR #{pr_number}: {labels}")
+    gh_env = get_gh_env()
+    
+    # First ensure all labels exist
+    for label_name in labels:
+        if label_name.startswith("contrast-vuln-id:"):
+            ensure_label(label_name, "Vulnerability identified by Contrast", "ff0000")  # Red
+        elif label_name.startswith("smartfix-id:"):
+            ensure_label(label_name, "Remediation ID for Contrast vulnerability", "0075ca")  # Blue
+        else:
+            # For other labels, use default description and color
+            ensure_label(label_name, "Label added by Contrast AI SmartFix", "cccccc")  # Gray
+    
+    # Add labels to the PR
+    add_labels_command = [
+        "gh", "pr", "edit",
+        "--repo", config.GITHUB_REPOSITORY,
+        str(pr_number),
+        "--add-label", ",".join(labels)
+    ]
+    
+    try:
+        run_command(add_labels_command, env=gh_env, check=True)
+        log(f"Successfully added labels to PR #{pr_number}: {labels}")
+        return True
+    except Exception as e:
+        log(f"Failed to add labels to PR #{pr_number}: {e}", is_error=True)
+        return False
 
 # %%

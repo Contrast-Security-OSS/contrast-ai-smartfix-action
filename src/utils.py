@@ -94,6 +94,24 @@ def extract_remediation_id_from_branch(branch_name: str) -> Optional[str]:
         return match.group(1)
     return None
 
+def extract_remediation_id_from_labels(labels: list) -> Optional[str]:
+    """Extracts the remediation ID from PR labels.
+    
+    Args:
+        labels: List of label objects from PR, each with a 'name' field
+        
+    Returns:
+        str: The remediation ID if found, or None if not found
+    """
+    for label in labels:
+        label_name = label.get("name", "")
+        if label_name.startswith("smartfix-id:"):
+            # Extract ID from label format "smartfix-id:{remediation_id}"
+            parts = label_name.split("smartfix-id:")
+            if len(parts) > 1:
+                return parts[1]
+    return None
+
 # Define custom exception for command errors
 class CommandExecutionError(Exception):
     """Custom exception for errors during command execution."""
@@ -230,8 +248,9 @@ def error_exit(remediation_id: str, failure_code: Optional[str] = None):
         log(f"Failed to notify Remediation service about {failure_code} for remediation {remediation_id}.", is_warning=True)
 
     # Attempt to clean up any branches - continue even if this fails
-    branch_name = get_branch_name(remediation_id)
-    cleanup_branch(branch_name)
+    if config.CODING_AGENT == 'SMARTFIX':
+        branch_name = get_branch_name(remediation_id)
+        cleanup_branch(branch_name)
 
     # Always attempt to send final telemetry
     send_telemetry_data()
