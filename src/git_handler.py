@@ -20,7 +20,7 @@
 import os
 import json
 import subprocess
-from typing import List
+from typing import List, Optional
 from src.utils import run_command, debug_log, log, error_exit
 from src.contrast_api import FailureCategory
 from src.config import get_config
@@ -650,6 +650,25 @@ def find_open_pr_for_issue(issue_number: int) -> dict:
         return None
     except Exception as e:
         log(f"Error searching for PRs related to issue #{issue_number}: {e}", is_error=True)
+        return None
+
+def extract_issue_number_from_branch(branch_name: str) -> Optional[int]:
+    """
+    Extracts the GitHub issue number from a branch name with format 'copilot/fix-<issue_number>'.
+    
+    Args:
+        branch_name: The branch name to extract the issue number from
+        
+    Returns:
+        Optional[int]: The issue number if found and valid, None otherwise
+    """
+    if not branch_name.startswith("copilot/fix-"):
+        return None
+        
+    try:
+        issue_number = int(branch_name.split("copilot/fix-")[1])
+        return issue_number
+    except (IndexError, ValueError):
         return None
 
 def add_labels_to_pr(pr_number: int, labels: List[str]) -> bool:

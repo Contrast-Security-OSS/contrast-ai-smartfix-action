@@ -53,6 +53,7 @@ class ExternalCodingAgent:
             return False
         
         log(f"\n::group::--- Using External Coding Agent ({self.config.CODING_AGENT}) ---")
+        telemetry_handler.update_telemetry("additionalAttributes.codingAgent", "EXTERNAL-COPILOT")
         
         # Hard-coded vulnerability label for now, will be passed as argument later
         vulnerability_label = f"contrast-vuln-id:VULN-{vuln_uuid}"
@@ -79,7 +80,6 @@ class ExternalCodingAgent:
 
         # Poll for PR creation by the external agent
         log(f"Waiting for external agent to create a PR for issue #{issue_number}")
-        telemetry_handler.update_telemetry("additionalAttributes.codingAgent", "EXTERNAL")
         
         # Poll for a PR to be created by the external agent (100 attempts, 5 seconds apart = ~8.3 minutes max)
         pr_info = self._poll_for_pr(issue_number, remediation_id, vulnerability_label, remediation_label, max_attempts=100, sleep_seconds=5)

@@ -25,6 +25,7 @@ import sys
 from src import contrast_api
 from src.config import get_config  # Using get_config function instead of direct import
 from src.utils import debug_log, extract_remediation_id_from_branch, extract_remediation_id_from_labels, log
+from src.git_handler import extract_issue_number_from_branch
 import src.telemetry_handler as telemetry_handler
 
 def handle_closed_pr():
@@ -65,18 +66,27 @@ def handle_closed_pr():
     
     debug_log(f"Branch name: {branch_name}")
 
+    labels = pull_request.get("labels", [])
+
     # Extract remediation ID from branch name or PR labels
     remediation_id = None
     
     # Check if this is a branch created by external agent (e.g., GitHub Copilot)
     if branch_name.startswith("copilot/fix"):
         debug_log("Branch appears to be created by external agent. Extracting remediation ID from PR labels.")
-        # Get labels from the PR
-        labels = pull_request.get("labels", [])
         remediation_id = extract_remediation_id_from_labels(labels)
+        # Extract GitHub issue number from branch name
+        issue_number = extract_issue_number_from_branch(branch_name)
+        if issue_number:
+            telemetry_handler.update_telemetry("additionalAttributes.githubIssueNumber", issue_number)
+            debug_log(f"Extracted GitHub issue number from branch name: {issue_number}")
+        else:
+            debug_log(f"Could not extract issue number from branch name: {branch_name}")
+        telemetry_handler.update_telemetry("additionalAttributes.codingAgent", "EXTERNAL-COPILOT")
     else:
         # Use original method for branches created by SmartFix
         remediation_id = extract_remediation_id_from_branch(branch_name)
+        telemetry_handler.update_telemetry("additionalAttributes.codingAgent", "INTERNAL-SMARTFIX")
     
     if not remediation_id:
         if branch_name.startswith("copilot/fix"):
@@ -90,7 +100,6 @@ def handle_closed_pr():
     telemetry_handler.update_telemetry("additionalAttributes.remediationId", remediation_id)
     
     # Try to extract vulnerability UUID from PR labels
-    labels = pull_request.get("labels", [])
     vuln_uuid = "unknown"
     
     for label in labels:
