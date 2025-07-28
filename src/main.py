@@ -276,28 +276,52 @@ def main():
             log(f"\n--- Reached max PR limit ({max_open_prs_setting}). Current open PRs: {current_open_pr_count}. Stopping processing. ---")
             break
 
-        # --- Fetch Next Vulnerability and Prompts from New API ---
-        log("\n::group::--- Fetching next vulnerability and prompts from Contrast API ---")
+        # --- Fetch Next Vulnerability Data from API ---
+        if config.CODING_AGENT == "SMARTFIX":
+            # For SMARTFIX, get vulnerability with prompts
+            log("\n::group::--- Fetching next vulnerability and prompts from Contrast API ---")
+            vulnerability_data = contrast_api.get_vulnerability_with_prompts(
+                config.CONTRAST_HOST, config.CONTRAST_ORG_ID, config.CONTRAST_APP_ID,
+                config.CONTRAST_AUTHORIZATION_KEY, config.CONTRAST_API_KEY,
+                max_open_prs_setting, github_repo_url, config.VULNERABILITY_SEVERITIES
+            )
+            log("\n::endgroup::")
 
-        vulnerability_data = contrast_api.get_vulnerability_with_prompts(
-            config.CONTRAST_HOST, config.CONTRAST_ORG_ID, config.CONTRAST_APP_ID,
-            config.CONTRAST_AUTHORIZATION_KEY, config.CONTRAST_API_KEY,
-            max_open_prs_setting, github_repo_url, config.VULNERABILITY_SEVERITIES
-        )
-        log("\n::endgroup::")
+            if not vulnerability_data:
+                log("No more vulnerabilities found to process or API error occurred. Stopping processing.")
+                break
 
-        if not vulnerability_data:
-            log("No more vulnerabilities found to process or API error occurred. Stopping processing.")
-            break
+            # Extract vulnerability details and prompts from the response
+            vuln_uuid = vulnerability_data['vulnerabilityUuid']
+            vuln_title = vulnerability_data['vulnerabilityTitle']
+            remediation_id = vulnerability_data['remediationId']
+            fix_system_prompt = vulnerability_data['fixSystemPrompt']
+            fix_user_prompt = vulnerability_data['fixUserPrompt']
+            qa_system_prompt = vulnerability_data['qaSystemPrompt']
+            qa_user_prompt = vulnerability_data['qaUserPrompt']
+        else:
+            # For external coding agents (like GITHUB_COPILOT), get vulnerability details
+            log("\n::group::--- Fetching next vulnerability details from Contrast API ---")
+            vulnerability_data = contrast_api.get_vulnerability_details(
+                config.CONTRAST_HOST, config.CONTRAST_ORG_ID, config.CONTRAST_APP_ID,
+                config.CONTRAST_AUTHORIZATION_KEY, config.CONTRAST_API_KEY,
+                github_repo_url, max_open_prs_setting, config.VULNERABILITY_SEVERITIES
+            )
+            log("\n::endgroup::")
 
-        # Extract vulnerability details and prompts from the response
-        vuln_uuid = vulnerability_data['vulnerabilityUuid']
-        vuln_title = vulnerability_data['vulnerabilityTitle']
-        remediation_id = vulnerability_data['remediationId']
-        fix_system_prompt = vulnerability_data['fixSystemPrompt']
-        fix_user_prompt = vulnerability_data['fixUserPrompt']
-        qa_system_prompt = vulnerability_data['qaSystemPrompt']
-        qa_user_prompt = vulnerability_data['qaUserPrompt']
+            if not vulnerability_data:
+                log("No more vulnerabilities found to process or API error occurred. Stopping processing.")
+                break
+
+            # Extract vulnerability details from the response (no prompts for external agents)
+            vuln_uuid = vulnerability_data['vulnerabilityUuid']
+            vuln_title = vulnerability_data['vulnerabilityTitle']
+            remediation_id = vulnerability_data['remediationId']
+            # No prompts available for external coding agents
+            fix_system_prompt = None
+            fix_user_prompt = None
+            qa_system_prompt = None
+            qa_user_prompt = None
         
         # Populate vulnInfo in telemetry
         telemetry_handler.update_telemetry("vulnInfo.vulnId", vuln_uuid)
@@ -345,7 +369,10 @@ def main():
         # --- Check if we need to use the external coding agent ---
         if config.CODING_AGENT != "SMARTFIX":
             external_agent = ExternalCodingAgent(config)
-            if external_agent.generate_fixes(vuln_uuid, remediation_id, vuln_title):
+            # Assemble the issue body from vulnerability details
+            issue_body = external_agent.assemble_issue_body(vulnerability_data)
+            # Pass the assembled issue body to generate_fixes()
+            if external_agent.generate_fixes(vuln_uuid, remediation_id, vuln_title, issue_body):
                 log(f"\n\n--- External Coding Agent successfully generated fixes ---")
                 processed_one = True
                 contrast_api.send_telemetry_data()
@@ -605,3 +632,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# %%

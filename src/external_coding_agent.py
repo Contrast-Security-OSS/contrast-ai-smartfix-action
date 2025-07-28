@@ -41,9 +41,74 @@ class ExternalCodingAgent:
         self.config = config
         debug_log(f"Initialized ExternalCodingAgent")
     
-    def generate_fixes(self, vuln_uuid: str, remediation_id: str, vuln_title: str) -> bool:
+    def assemble_issue_body(self, vulnerability_details: dict) -> str:
+        """
+        Assembles a GitHub Issue body from vulnerability details.
+        
+        Args:
+            vulnerability_details: Dictionary containing vulnerability information
+            
+        Returns:
+            str: Formatted GitHub Issue body for the vulnerability
+        """
+        # Extract key details with safe fallbacks
+        vuln_title = vulnerability_details.get('vulnerabilityTitle', 'Unknown Vulnerability')
+        vuln_uuid = vulnerability_details.get('vulnerabilityUuid', 'Unknown UUID')
+        vuln_rule = vulnerability_details.get('vulnerabilityRuleName', 'Unknown Rule')
+        vuln_severity = vulnerability_details.get('vulnerabilitySeverity', 'Unknown Severity')
+        vuln_status = vulnerability_details.get('vulnerabilityStatus', 'Unknown Status')
+        vuln_overview = vulnerability_details.get('vulnerabilityOverviewStory', 'No overview available')
+        vuln_events = vulnerability_details.get('vulnerabilityEventsSummary', 'No event details available')
+        vuln_http_details = vulnerability_details.get('vulnerabilityHttpRequestDetails', 'No HTTP request details available')
+        
+        # Assemble the issue body
+        issue_body = f"""
+# Contrast AI SmartFix Issue Report
+
+This PR addresses a vulnerability identified by the Contrast Security platform (ID: [{vuln_uuid}](https://{self.config.CONTRAST_HOST}/Contrast/static/ng/index.html#/{self.config.CONTRAST_ORG_ID}/applications/{self.config.CONTRAST_APP_ID}/vulns/{vuln_uuid})).
+        
+# Security Vulnerability: {vuln_title}
+
+## Vulnerability Details
+
+**Rule:** {vuln_rule}  
+**Severity:** {vuln_severity}  
+**Status:** {vuln_status}  
+
+## Overview
+
+{vuln_overview}
+
+## Technical Details
+
+### Event Summary
+```
+{vuln_events}
+```
+
+### HTTP Request Details
+```
+{vuln_http_details}
+```
+
+## Action Required
+
+Please review this security vulnerability and implement appropriate fixes to address the identified issue.
+
+**Important:** If you cannot find the vulnerability, then take no actions (corrective or otherwise). Simply report that the vulnerability was not found."""
+
+        debug_log(f"Assembled issue body with {len(issue_body)} characters")
+        return issue_body
+    
+    def generate_fixes(self, vuln_uuid: str, remediation_id: str, vuln_title: str, issue_body: str = None) -> bool:
         """
         Generate fixes for vulnerabilities.
+        
+        Args:
+            vuln_uuid: The vulnerability UUID
+            remediation_id: The remediation ID
+            vuln_title: The vulnerability title
+            issue_body: The issue body content (optional, uses default if not provided)
         
         Returns:
             bool: False if the CODING_AGENT is SMARTFIX, True otherwise
@@ -55,11 +120,15 @@ class ExternalCodingAgent:
         log(f"\n::group::--- Using External Coding Agent ({self.config.CODING_AGENT}) ---")
         telemetry_handler.update_telemetry("additionalAttributes.codingAgent", "EXTERNAL-COPILOT")
 
-        # Hard-coded vulnerability label for now, will be passed as argument later
+        # Generate labels and issue details
         vulnerability_label = f"contrast-vuln-id:VULN-{vuln_uuid}"
         remediation_label = f"smartfix-id:{remediation_id}"
         issue_title = vuln_title
-        issue_body = "This is a fake issue body for testing purposes."
+        
+        # Use the provided issue_body or fall back to default
+        if issue_body is None:
+            log(f"Failed to generate issue body for vulnerability id {vuln_uuid}", is_error=True)
+            error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
         
         # Use git_handler to find if there's an existing issue with this label
         issue_number = git_handler.find_issue_with_label(vulnerability_label)
