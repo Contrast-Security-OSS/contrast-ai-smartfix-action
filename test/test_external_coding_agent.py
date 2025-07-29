@@ -83,7 +83,7 @@ class TestExternalCodingAgent(unittest.TestCase):
         agent = ExternalCodingAgent(self.config)
         
         # Call generate_fixes
-        result = agent.generate_fixes("1234-FAKE-ABCD", "1REM-FAKE-ABCD", "Fake Vulnerability Title")
+        result = agent.generate_fixes("1234-FAKE-ABCD", "1REM-FAKE-ABCD", "Fake Vulnerability Title", "Fake issue body.")
         
         # Assert that result is False
         self.assertFalse(result)
@@ -125,7 +125,7 @@ class TestExternalCodingAgent(unittest.TestCase):
         agent = ExternalCodingAgent(self.config)
         
         # Call generate_fixes
-        result = agent.generate_fixes("1234-FAKE-ABCD", "1REM-FAKE-ABCD", "Fake Vulnerability Title")
+        result = agent.generate_fixes("1234-FAKE-ABCD", "1REM-FAKE-ABCD", "Fake Vulnerability Title", "Fake issue body.")
 
         # Assert that result is True
         self.assertTrue(result)
@@ -171,7 +171,7 @@ class TestExternalCodingAgent(unittest.TestCase):
         
         try:
             # Call generate_fixes
-            result = agent.generate_fixes("1234-FAKE-ABCD", "1REM-FAKE-ABCD", "Fake Vulnerability Title")
+            result = agent.generate_fixes("1234-FAKE-ABCD", "1REM-FAKE-ABCD", "Fake Vulnerability Title", "Fake issue body.")
 
             # Assert that result is False when PR is not created
             self.assertFalse(result)
@@ -229,7 +229,7 @@ class TestExternalCodingAgent(unittest.TestCase):
         
         try:
             # Call generate_fixes
-            result = agent.generate_fixes("1234-FAKE-ABCD", "1REM-FAKE-ABCD", "Fake Vulnerability Title")
+            result = agent.generate_fixes("1234-FAKE-ABCD", "1REM-FAKE-ABCD", "Fake Vulnerability Title", "Fake issue body.")
 
             # Assert that result is True
             self.assertTrue(result)

@@ -434,3 +434,102 @@ def notify_remediation_failed(remediation_id: str, failure_category: str, contra
     except json.JSONDecodeError:
         log(f"Error decoding JSON response when notifying Remediation service about failed remediation {remediation_id}.", is_error=True)
         return False
+
+def get_vulnerability_details(contrast_host: str, contrast_org_id: str, contrast_app_id: str, contrast_auth_key: str, contrast_api_key: str, github_repo_url: str, max_pull_requests: int = 5, severities: list = None) -> dict:
+    """Gets vulnerability remediation details from the Contrast API.
+    
+    Args:
+        contrast_host: The Contrast Security host URL
+        contrast_org_id: The organization ID
+        contrast_app_id: The application ID
+        contrast_auth_key: The Contrast authorization key
+        contrast_api_key: The Contrast API key
+        github_repo_url: The GitHub repository URL
+        max_pull_requests: Maximum number of pull requests (default: 5)
+        severities: List of vulnerability severities to filter by (default: ["CRITICAL", "HIGH"])
+        
+    Returns:
+        dict: Contains vulnerability remediation details or None if no vulnerability found
+        Structure: {
+            'remediationId': '...',
+            'vulnerabilityUuid': '...',
+            'vulnerabilityTitle': '...',
+            'vulnerabilityRuleName': '...',
+            'vulnerabilityStatus': '...',
+            'vulnerabilitySeverity': '...',
+            'vulnerabilityOverviewStory': '...',
+            'vulnerabilityEventsSummary': '...',
+            'vulnerabilityHttpRequestDetails': '...'
+        }
+    """
+    if severities is None:
+        severities = ["CRITICAL", "HIGH"]
+        
+    debug_log("\n--- Fetching vulnerability details from remediation-details API ---")
+    
+    api_url = f"https://{normalize_host(contrast_host)}/api/v4/aiml-remediation/organizations/{contrast_org_id}/applications/{contrast_app_id}/remediation-details"
+    debug_log(f"API URL: {api_url}")
+    
+    headers = {
+        "Authorization": contrast_auth_key,
+        "API-Key": contrast_api_key,
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": config.USER_AGENT
+    }
+    
+    payload = {
+        "teamserverHost": f"https://{normalize_host(contrast_host)}",
+        "repoRootDir": str(config.REPO_ROOT),
+        "repoUrl": github_repo_url,
+        "maxPullRequests": max_pull_requests,
+        "severities": severities
+    }
+    
+    debug_log(f"Request payload: {json.dumps(payload, indent=2)}")
+    
+    try:
+        debug_log(f"Making POST request to: {api_url}")
+        response = requests.post(api_url, headers=headers, json=payload, timeout=30)
+        
+        debug_log(f"Remediation-details API Response Status Code: {response.status_code}")
+        
+        # Handle different status codes
+        if response.status_code == 204:
+            log("No vulnerabilities found that need remediation (204 No Content).")
+            return None
+        elif response.status_code == 409:
+            log("At or over the maximum PR limit (409 Conflict).")
+            return None
+        elif response.status_code == 200:
+            response_json = response.json()
+            debug_log(f"Successfully received vulnerability details from API")
+            debug_log(f"Response keys: {list(response_json.keys())}")
+            
+            # Validate that we have required components
+            required_keys = ['remediationId', 'vulnerabilityUuid', 'vulnerabilityTitle']
+            missing_keys = [key for key in required_keys if key not in response_json]
+            
+            if missing_keys:
+                log(f"Warning: Missing some keys in API response: {missing_keys}")
+            
+            # Log a summary without exposing sensitive details
+            debug_log(f"Vulnerability UUID: {response_json.get('vulnerabilityUuid', 'Unknown')}")
+            debug_log(f"Vulnerability Title: {response_json.get('vulnerabilityTitle', 'Unknown')}")
+            debug_log(f"Vulnerability Severity: {response_json.get('vulnerabilitySeverity', 'Unknown')}")
+            debug_log(f"Remediation ID: {response_json.get('remediationId', 'Unknown')}")
+            
+            return response_json
+        else:
+            log(f"Unexpected status code {response.status_code} from remediation-details API: {response.text}", is_error=True)
+            return None
+            
+    except requests.exceptions.RequestException as e:
+        log(f"Error fetching vulnerability details: {e}", is_error=True)
+        return None
+    except json.JSONDecodeError:
+        log("Error decoding JSON response from remediation-details API.", is_error=True)
+        return None
+    except Exception as e:
+        log(f"Unexpected error calling remediation-details API: {e}", is_error=True)
+        return None

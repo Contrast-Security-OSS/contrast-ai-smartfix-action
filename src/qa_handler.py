@@ -256,4 +256,3 @@ def run_qa_loop(
         log(f"\n\u274c Build failed after {qa_attempts} QA attempts.")
 
     return build_success, changed_files, build_command, qa_summary_log
-# %%

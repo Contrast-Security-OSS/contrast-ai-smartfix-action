@@ -143,5 +143,3 @@ def handle_closed_pr():
 
 if __name__ == "__main__":
     handle_closed_pr()
-
-# %%
