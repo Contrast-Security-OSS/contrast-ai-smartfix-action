@@ -675,6 +675,7 @@ def extract_issue_number_from_branch(branch_name: str) -> Optional[int]:
                 return issue_number
         except ValueError:
             # This shouldn't happen since \d+ only matches digits, but being safe
+            debug_log(f"Failed to convert extracted issue number '{match.group(1)}' to int")
             pass
     
     return None
