@@ -65,7 +65,7 @@ class ExternalCodingAgent:
         issue_body = f"""
 # Contrast AI SmartFix Issue Report
 
-This PR addresses a vulnerability identified by the Contrast Security platform (ID: [{vuln_uuid}](https://{self.config.CONTRAST_HOST}/Contrast/static/ng/index.html#/{self.config.CONTRAST_ORG_ID}/applications/{self.config.CONTRAST_APP_ID}/vulns/{vuln_uuid})).
+This Issue should address a vulnerability identified by the Contrast Security platform (ID: [{vuln_uuid}](https://{self.config.CONTRAST_HOST}/Contrast/static/ng/index.html#/{self.config.CONTRAST_ORG_ID}/applications/{self.config.CONTRAST_APP_ID}/vulns/{vuln_uuid})).
         
 # Security Vulnerability: {vuln_title}
 
@@ -231,5 +231,3 @@ Please review this security vulnerability and implement appropriate fixes to add
         return None
     
     # Additional methods will be implemented later
-
-# %%

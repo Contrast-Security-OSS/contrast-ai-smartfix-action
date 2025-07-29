@@ -810,5 +810,3 @@ if platform.system() == "Windows":
                  return #ignore this error
              raise
         asyncio.BaseEventLoop._check_closed = _patched_loop_check_closed
-
-# %%

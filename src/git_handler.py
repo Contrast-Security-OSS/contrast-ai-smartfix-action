@@ -723,5 +723,3 @@ def add_labels_to_pr(pr_number: int, labels: List[str]) -> bool:
     except Exception as e:
         log(f"Failed to add labels to PR #{pr_number}: {e}", is_error=True)
         return False
-
-# %%
