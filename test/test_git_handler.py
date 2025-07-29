@@ -388,6 +388,52 @@ class TestGitHandler(unittest.TestCase):
         mock_log.assert_any_call("Adding labels to PR #123: ['contrast-vuln-id:VULN-12345', 'smartfix-id:remediation-67890']")
         mock_log.assert_any_call("Successfully added labels to PR #123: ['contrast-vuln-id:VULN-12345', 'smartfix-id:remediation-67890']")
 
+    def test_extract_issue_number_from_branch_success(self):
+        """Test extracting issue number from valid copilot branch name"""
+        # Test cases with valid branch names
+        test_cases = [
+            ("copilot/fix-123", 123),
+            ("copilot/fix-1", 1),
+            ("copilot/fix-999999", 999999),
+            ("copilot/fix-42", 42),
+        ]
+        
+        for branch_name, expected_issue_number in test_cases:
+            with self.subTest(branch_name=branch_name):
+                result = git_handler.extract_issue_number_from_branch(branch_name)
+                self.assertEqual(result, expected_issue_number)
+
+    def test_extract_issue_number_from_branch_invalid(self):
+        """Test extracting issue number from invalid branch names"""
+        # Test cases with invalid branch names
+        invalid_branches = [
+            "main",                           # Wrong branch name
+            "feature/new-feature",           # Wrong branch name
+            "copilot/fix-",                  # Missing issue number
+            "copilot/fix-abc",               # Non-numeric issue number
+            "copilot/fix-123abc",            # Invalid format
+            "copilot/fix-123-extra",         # Extra parts
+            "smartfix/remediation-123",      # Different prefix
+            "",                              # Empty string
+        ]
+        
+        for branch_name in invalid_branches:
+            with self.subTest(branch_name=branch_name):
+                result = git_handler.extract_issue_number_from_branch(branch_name)
+                self.assertIsNone(result)
+
+    def test_extract_issue_number_from_branch_edge_cases(self):
+        """Test edge cases for extracting issue number from branch name"""
+        # Test edge cases
+        edge_cases = [
+            ("copilot/fix-2147483647", 2147483647),  # Large number (max 32-bit int)
+        ]
+        
+        for branch_name, expected_issue_number in edge_cases:
+            with self.subTest(branch_name=branch_name):
+                result = git_handler.extract_issue_number_from_branch(branch_name)
+                self.assertEqual(result, expected_issue_number)
+
     @patch('src.git_handler.ensure_label')
     @patch('src.git_handler.run_command')
     @patch('src.git_handler.log')

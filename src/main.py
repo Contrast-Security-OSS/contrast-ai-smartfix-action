@@ -351,6 +351,8 @@ def main():
                 contrast_api.send_telemetry_data()
             continue  # Skip the built-in SmartFix code and PR creation
 
+        telemetry_handler.update_telemetry("additionalAttributes.codingAgent", "INTERNAL-SMARTFIX")
+
         # --- Run AI Fix Agent (SmartFix) ---
         ai_fix_summary_full = agent_handler.run_ai_fix_agent(
             config.REPO_ROOT, fix_system_prompt, fix_user_prompt, remediation_id

@@ -135,7 +135,7 @@ class TestExternalCodingAgent(unittest.TestCase):
         mock_log.assert_any_call(f"External agent created PR #123 at https://github.com/owner/repo/pull/123")
         
         # Verify telemetry updates
-        mock_update_telemetry.assert_any_call("additionalAttributes.codingAgent", "EXTERNAL")
+        mock_update_telemetry.assert_any_call("additionalAttributes.codingAgent", "EXTERNAL-COPILOT")
         mock_update_telemetry.assert_any_call("resultInfo.prCreated", True)
         mock_update_telemetry.assert_any_call("additionalAttributes.prStatus", "OPEN")
         mock_update_telemetry.assert_any_call("additionalAttributes.prNumber", 123)
@@ -187,7 +187,7 @@ class TestExternalCodingAgent(unittest.TestCase):
         mock_log.assert_any_call("External agent failed to create a PR within the timeout period", is_error=True)
         
         # Verify telemetry updates
-        mock_update_telemetry.assert_any_call("additionalAttributes.codingAgent", "EXTERNAL")
+        mock_update_telemetry.assert_any_call("additionalAttributes.codingAgent", "EXTERNAL-COPILOT")
         mock_update_telemetry.assert_any_call("resultInfo.prCreated", False)
         mock_update_telemetry.assert_any_call("resultInfo.failureReason", "PR creation timeout")
         mock_update_telemetry.assert_any_call("resultInfo.failureCategory", "AGENT_FAILURE")

@@ -20,7 +20,8 @@
 import os
 import json
 import subprocess
-from typing import List
+import re
+from typing import List, Optional
 from src.utils import run_command, debug_log, log, error_exit
 from src.contrast_api import FailureCategory
 from src.config import get_config
@@ -647,6 +648,37 @@ def find_open_pr_for_issue(issue_number: int) -> dict:
     except Exception as e:
         log(f"Error searching for PRs related to issue #{issue_number}: {e}", is_error=True)
         return None
+
+def extract_issue_number_from_branch(branch_name: str) -> Optional[int]:
+    """
+    Extracts the GitHub issue number from a branch name with format 'copilot/fix-<issue_number>'.
+    
+    Args:
+        branch_name: The branch name to extract the issue number from
+        
+    Returns:
+        Optional[int]: The issue number if found and valid, None otherwise
+    """
+    if not branch_name:
+        return None
+    
+    # Use regex to match the exact pattern: copilot/fix-<number>
+    # This ensures we only match the expected format and extract just the number
+    pattern = r'^copilot/fix-(\d+)$'
+    match = re.match(pattern, branch_name)
+    
+    if match:
+        try:
+            issue_number = int(match.group(1))
+            # Validate that it's a positive number (GitHub issue numbers start from 1)
+            if issue_number > 0:
+                return issue_number
+        except ValueError:
+            # This shouldn't happen since \d+ only matches digits, but being safe
+            debug_log(f"Failed to convert extracted issue number '{match.group(1)}' to int")
+            pass
+    
+    return None
 
 def add_labels_to_pr(pr_number: int, labels: List[str]) -> bool:
     """
