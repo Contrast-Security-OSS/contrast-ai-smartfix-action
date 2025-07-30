@@ -95,6 +95,35 @@ if platform.system() == 'Windows':
     except (ImportError, AttributeError) as e:
         debug_log(f"Could not patch _ProactorBasePipeTransport: {str(e)}")
 
+    # Add a specific fix for BaseSubprocessTransport.__del__ on Windows
+    try:
+        from asyncio.base_subprocess import BaseSubprocessTransport
+        
+        # Store the original __del__ method
+        _original_subprocess_del = BaseSubprocessTransport.__del__
+        
+        # Define a safe replacement for __del__
+        def _patched_subprocess_del(self):
+            try:
+                # Check if the event loop is closed or finalizing
+                if hasattr(self, '_loop') and (self._loop.is_closed() or sys.is_finalizing()):
+                    # Skip the original __del__ which would trigger the error
+                    return
+
+                # Otherwise use the original __del__ implementation
+                _original_subprocess_del(self)
+            except (AttributeError, RuntimeError, ImportError, TypeError, ValueError):
+                # Catch and ignore all attribute, runtime, or value errors during shutdown
+                # ValueError specifically handles "I/O operation on closed pipe"
+                pass
+        
+        # Apply the patch to the __del__ method
+        BaseSubprocessTransport.__del__ = _patched_subprocess_del
+        
+        debug_log("Successfully patched BaseSubprocessTransport.__del__ for Windows")
+    except (ImportError, AttributeError) as e:
+        debug_log(f"Could not patch BaseSubprocessTransport: {str(e)}")
+
 def cleanup_asyncio():
     """
     Cleanup function registered with atexit to properly handle asyncio resources during shutdown.
