@@ -24,9 +24,26 @@ Welcome to Contrast AI SmartFix\! SmartFix is an AI-powered agent that automatic
 * **GitHub Token Permissions:** The GitHub token must have `contents: write` and `pull-requests: write` permissions. These permissions must be explicitly set in your workflow file.  Note, SmartFix uses the internal GitHub token for Actions; you do not need to create a Personal Access Token (PAT).
 * **LLM Access:** Ensure that you have access to one of our recommended LLMs for use with SmartFix.  If using an AWS Bedrock model, please see Amazon's User Guide on [model access](https://docs.aws.amazon.com/bedrock/latest/userguide/model-access-modify.html).
 
+### Coding Agent
+
+SmartFix supports two distinct coding agents for vulnerability remediation:
+
+* **SmartFix Agent (Recommended):** Uses Contrast vulnerability data with a team of agentic AIs to analyze, fix, and validate vulnerability remediations. This agent creates a complete fix, ensures your project builds successfully, and verifies that existing tests continue to pass. Requires API keys for your preferred LLM provider.
+
+* **GitHub Copilot Agent (Beta):** Leverages GitHub Copilot for vulnerability fixes through GitHub Issues. SmartFix creates a detailed GitHub Issue with vulnerability information and assigns it to GitHub Copilot for resolution. Copilot then attempts the fix and creates a Pull Request.
+
+**GitHub Copilot Requirements:**
+* GitHub repository with **Issues** and **GitHub Copilot** enabled
+* GitHub Personal Access Token (PAT) with:
+  * `meta` (read permissions)  
+  * `pulls` (read-write permissions)
+  * `issues` (read-write permissions)
+
 ### Installation and Configuration
 
-SmartFix is configured as a GitHub Action. Add a workflow file (e.g., `.github/workflows/smartfix.yml`) to your repository following the below example.  A full workflow example is also available at [https://github.com/Contrast-Security-OSS/contrast-ai-smartfix-action/blob/main/contrast-ai-smartfix.yml.template](https://github.com/Contrast-Security-OSS/contrast-ai-smartfix-action/blob/main/contrast-ai-smartfix.yml.template):
+SmartFix is configured as a GitHub Action. Add a workflow file (e.g., `.github/workflows/smartfix.yml`) to your repository following the below example.  A full workflow example is also available at [https://github.com/Contrast-Security-OSS/contrast-ai-smartfix-action/blob/main/contrast-ai-smartfix.yml.template](https://github.com/Contrast-Security-OSS/contrast-ai-smartfix-action/blob/main/contrast-ai-smartfix.yml.template).  
+
+The following is sample workflow file for using the SmartFix Coding Agent.  (An example variation for the GitHub Coding Agent is next, below):
 
 ```
 name: Contrast AI SmartFix
@@ -104,7 +121,7 @@ jobs:
   handle_pr_merge:
     name: Handle PR Merge
     runs-on: ubuntu-latest
-    if: github.event.pull_request.merged == true && contains(github.event.pull_request.head.ref, 'smartfix/remediation-')
+    if: github.event.pull_request.merged == true && contains(join(github.event.pull_request.labels.*.name), 'contrast-vuln-id:VULN-')
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -129,7 +146,7 @@ jobs:
   handle_pr_closed:
     name: Handle PR Close
     runs-on: ubuntu-latest
-    if: github.event.pull_request.merged == false && contains(github.event.pull_request.head.ref, 'smartfix/remediation-')
+    if: github.event.pull_request.merged == false && contains(join(github.event.pull_request.labels.*.name), 'contrast-vuln-id:VULN-')
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -161,9 +178,53 @@ jobs:
 * The optional `formatting_command` will be run after SmartFix makes code changes to resolve the vulnerability and prior to any subsequent `build_command` invocations.  We recommend supplying a `formatting_command` to fix code style issues in your project as it is an easy way to correct a common class of build-breaking problems.
 * **Suggestion:** Setup an API-only service user named “Contrast AI SmartFix” in your Organization Settings in your Contrast SaaS instance.  At a minimum, it should have the “View Organization” permission and “Edit Application” permission for this application.  This service user’s `contrast_authorization_key` value and the Organization’s `contrast_api_key` value should be used in the workflow.
 
-### Supported LLMs (Bring Your Own LLM \- BYOLLM)
+### Installation and Configuration for GitHub Copilot Coding Agent
 
-For the Early Access release, SmartFix uses a "Bring Your Own LLM" (BYOLLM) model. You provide the credentials for your preferred LLM provider.
+This is an example variation of the workflow file for use with the GitHub Copilot Coding Agent:
+```
+  # The beginning of the workflow file is the same as the previous example.
+
+  # Use a variation of this 'generate_fixes' job in order to run with the GitHub Copilot Coding Agent
+  generate_fixes:
+    name: Generate Fixes
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    steps:
+      # When using GitHub Copilot, it is unnecessary to authenticate with an LLM API
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          
+      - name: Run Contrast AI SmartFix - Generate Fixes Action
+        uses: Contrast-Security-OSS/contrast-ai-smartfix-action@v1 # Replace with the latest version
+        with:
+          # Contrast Configuration
+          contrast_host: ${{ vars.CONTRAST_HOST }} # The host name of your Contrast SaaS instance, e.g. 'app.contrastsecurity.com'
+          contrast_org_id: ${{ vars.CONTRAST_ORG_ID }} # The UUID of your Contrast organization
+          contrast_app_id: ${{ vars.CONTRAST_APP_ID }} # The UUID that is specific to the application in this repository.
+          contrast_authorization_key: ${{ secrets.CONTRAST_AUTHORIZATION_KEY }} 
+          contrast_api_key: ${{ secrets.CONTRAST_API_KEY }}
+
+          # GitHub Configuration
+          github_token: ${{ secrets.PAT_TOKEN }} # Necessary for creating Issues and assigning to Copilot.  This token should have read permission for metadata and read-write permission for issues and pulls.  A best practice is to have an GitHub Organization service account create the PAT (an Organization admin may need to approve it)
+          base_branch: '${{ github.event.repository.default_branch }}' # This will default to your repo default branch (other common base branches are 'main', 'master' or 'develop')
+          coding_agent: 'GITHUB_COPILOT' # Specify the use of GitHub Copilot instead of the default SmartFix internal coding agent
+
+          # Required Runtime Configuration
+          build_command: 'mvn clean install' # Or the build command appropriate for your project.  SmartFix will use this command to ensure that its changes work correctly with your project.
+
+          # Other Optional Inputs (see action.yml for defaults and more options)
+          # formatting_command: 'mvn spotless:apply' # Or the command appropriate for your project to correct the formatting of SmartFix's changes.  This ensures that SmartFix follows your coding standards.
+          # max_open_prs: 5 # This is the maximum limit for the number of PRs that SmartFix will have open at single time
+
+  # The Closed and Merge Handler jobs remain the same as the previous example as well.
+```
+
+### Supported LLMs (Bring Your Own LLM \- BYOLLM) for the SmartFix Coding Agent
+
+SmartFix uses a "Bring Your Own LLM" (BYOLLM) model. You provide the credentials for your preferred LLM provider.
 
 * **Recommended:** **Anthropic Claude Sonnet (e.g., Claude 3.7 Sonnet via AWS Bedrock or direct Anthropic API)**. This model has been extensively tested.  
   * Option 1 - Direct Anthropic API:
@@ -180,7 +241,7 @@ For the Early Access release, SmartFix uses a "Bring Your Own LLM" (BYOLLM) mode
 
 Refer to the `action.yml` file within the SmartFix GitHub Action repository and LiteLLM documentation for specific `agent_model` strings and required credentials for other models/providers.  The LiteLLM documentation can be found at https://docs.litellm.ai/docs/providers/.
 
-### Agent Model values
+### Agent Model Config Values
 
 Here are several recommended `agent_model` values:
 
@@ -190,7 +251,8 @@ Here are several recommended `agent_model` values:
 
 ### Supported Languages
 
-* **Java, .NET, Go, Python, Node:** Java applications have received the most testing so far, but we have also had good results for .NET, Go, Python, and Node projects.
+* **Java, Python:** SmartFix regularly produces good fixes for a variety Java and Python testing projects (using a variety of project platforms such, as Maven, Gradle, Django, Flask, and WSGI).  SmartFix officially supports Java and Python.
+* **.NET, Go, Node:** Java and Python applications have received the most testing so far, but we have also had good results for .NET, Go, and Node projects.
 * **Other Languages:** While it might work for other languages (such as Ruby, and PHP), comprehensive testing is in progress. Use with caution for non-Java projects.
 
 ### Supported GitHub Runners
@@ -239,6 +301,7 @@ SmartFix focuses on remediating:
 
 ## Key Features
 
+* **Support for Multiple Coding Agents**: Choose to use either the internal SmartFix coding agent or GitHub Copilot to remediate your project's vulnerabilities
 * **Bring Your Own LLM (BYOLLM):** Flexibility to use your preferred LLM provider and model.  
 * **Configurable PR Throttling:** Control the volume of automated PRs using `max_open_prs`.  
 * **Build Command Integration:** You must provide a `build_command` to allow the agent to ensure changes can build. Ideally, this command will run the tests as well so the agent can ensure it doesn't break existing tests.  
