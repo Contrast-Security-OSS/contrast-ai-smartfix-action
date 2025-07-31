@@ -594,7 +594,7 @@ def run_qa_agent(build_output: str, changed_files: List[str], build_command: str
     debug_log(f"Repo Root for QA Agent Tools: {repo_root}")
     debug_log(f"Build Command Used: {build_command}")
     debug_log(f"Files Changed by Fix Agent: {changed_files}")
-    debug_log(f"Build Output Provided (truncated):\n---\n{tail_string(build_output, 1000)}...\n---")
+    debug_log(f"Build Output Provided (truncated):\n---\n{tail_string(build_output, 1000)}\n---")
     
     # Format QA history if available
     qa_history_section = ""
