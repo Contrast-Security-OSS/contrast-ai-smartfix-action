@@ -377,6 +377,20 @@ def main():
         log("\n::endgroup::")
         log(f"\n\033[0;33m Selected vuln to fix: {vuln_title} \033[0m")
 
+        # --- Check if we need to use the external coding agent ---
+        if config.CODING_AGENT != "SMARTFIX":
+            external_agent = ExternalCodingAgent(config)
+            # Assemble the issue body from vulnerability details
+            issue_body = external_agent.assemble_issue_body(vulnerability_data)
+            # Pass the assembled issue body to generate_fixes()
+            if external_agent.generate_fixes(vuln_uuid, remediation_id, vuln_title, issue_body):
+                log(f"\n\n--- External Coding Agent successfully generated fixes ---")
+                processed_one = True
+                contrast_api.send_telemetry_data()
+            continue  # Skip the built-in SmartFix code and PR creation
+
+        telemetry_handler.update_telemetry("additionalAttributes.codingAgent", "INTERNAL-SMARTFIX")
+
         # Prepare a clean repository state and branch for the fix
         new_branch_name = git_handler.get_branch_name(remediation_id)
         try:
@@ -394,20 +408,6 @@ def main():
             log("\n❌ Build is broken ❌ -- No fix attempted.")
             log(f"Build output:\n{error_analysis}")
             error_exit(remediation_id, contrast_api.FailureCategory.INITIAL_BUILD_FAILURE.value) # Exit if the build is broken, no point in proceeding
-
-        # --- Check if we need to use the external coding agent ---
-        if config.CODING_AGENT != "SMARTFIX":
-            external_agent = ExternalCodingAgent(config)
-            # Assemble the issue body from vulnerability details
-            issue_body = external_agent.assemble_issue_body(vulnerability_data)
-            # Pass the assembled issue body to generate_fixes()
-            if external_agent.generate_fixes(vuln_uuid, remediation_id, vuln_title, issue_body):
-                log(f"\n\n--- External Coding Agent successfully generated fixes ---")
-                processed_one = True
-                contrast_api.send_telemetry_data()
-            continue  # Skip the built-in SmartFix code and PR creation
-
-        telemetry_handler.update_telemetry("additionalAttributes.codingAgent", "INTERNAL-SMARTFIX")
 
         # --- Run AI Fix Agent (SmartFix) ---
         ai_fix_summary_full = agent_handler.run_ai_fix_agent(
