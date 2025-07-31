@@ -19,7 +19,7 @@
 
 import time
 from typing import Optional
-from src.utils import log, debug_log, error_exit
+from src.utils import log, debug_log, error_exit, tail_string
 from src.contrast_api import FailureCategory, notify_remediation_pr_opened
 from src.config import Config
 from src import git_handler
@@ -57,9 +57,11 @@ class ExternalCodingAgent:
         vuln_rule = vulnerability_details.get('vulnerabilityRuleName', 'Unknown Rule')
         vuln_severity = vulnerability_details.get('vulnerabilitySeverity', 'Unknown Severity')
         vuln_status = vulnerability_details.get('vulnerabilityStatus', 'Unknown Status')
-        vuln_overview = vulnerability_details.get('vulnerabilityOverviewStory', 'No overview available')
-        vuln_events = vulnerability_details.get('vulnerabilityEventsSummary', 'No event details available')
-        vuln_http_details = vulnerability_details.get('vulnerabilityHttpRequestDetails', 'No HTTP request details available')
+
+        # Tail large fields to reasonable limits to prevent GitHub's 64k character limit
+        vuln_overview = tail_string(vulnerability_details.get('vulnerabilityOverviewStory', 'No overview available'), 8000)
+        vuln_events = tail_string(vulnerability_details.get('vulnerabilityEventsSummary', 'No event details available'), 20000)
+        vuln_http_details = tail_string(vulnerability_details.get('vulnerabilityHttpRequestDetails', 'No HTTP request details available'), 4000)
         
         # Assemble the issue body
         issue_body = f"""

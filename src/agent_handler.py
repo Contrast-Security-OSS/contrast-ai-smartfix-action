@@ -34,7 +34,7 @@ import traceback
 
 # Import configurations and utilities
 from src.config import get_config
-from src.utils import debug_log, log, error_exit
+from src.utils import debug_log, log, error_exit, tail_string
 from src.contrast_api import FailureCategory
 import src.telemetry_handler as telemetry_handler
 import datetime # For timestamps
@@ -303,7 +303,7 @@ async def process_agent_run(runner, session, user_query, remediation_id: str, ag
         
         if is_asyncio_error:
             # For asyncio-related errors, log at debug level and don't consider it a failure
-            debug_log(f"Ignoring expected asyncio error during agent execution: {error_message[:100]}...")
+            debug_log(f"Ignoring expected asyncio error during agent execution: {tail_string(error_message, 100)}...")
         else:
             # For other errors, log normally
             log(f"Error during agent execution: {error_message}", is_error=True)
@@ -594,7 +594,7 @@ def run_qa_agent(build_output: str, changed_files: List[str], build_command: str
     debug_log(f"Repo Root for QA Agent Tools: {repo_root}")
     debug_log(f"Build Command Used: {build_command}")
     debug_log(f"Files Changed by Fix Agent: {changed_files}")
-    debug_log(f"Build Output Provided (truncated):\n---\n{build_output[-1000:]}...\n---")
+    debug_log(f"Build Output Provided (truncated):\n---\n{tail_string(build_output, 1000)}...\n---")
     
     # Format QA history if available
     qa_history_section = ""
