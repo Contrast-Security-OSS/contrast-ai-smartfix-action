@@ -140,7 +140,11 @@ async def create_agent(target_folder: Path, remediation_id: str, agent_type: str
     agent_name = f"contrast_{agent_type}_agent"
 
     try:
-        model_instance = LiteLlm(model=config.AGENT_MODEL, stream_options={"include_usage": True})
+        model_instance = LiteLlm(
+            model=config.AGENT_MODEL,
+            temperature=0.07,  # Set low temperature for more deterministic output
+            stream_options={"include_usage": True}
+        )
         root_agent = Agent(
             model=model_instance,
             name=agent_name,
