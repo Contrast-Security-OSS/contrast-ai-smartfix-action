@@ -106,7 +106,7 @@ if platform.system() == 'Windows':
         def _patched_subprocess_del(self):
             try:
                 # Check if the event loop is closed or finalizing
-                if hasattr(self, '_loop') and (self._loop.is_closed() or sys.is_finalizing()):
+                if hasattr(self, '_loop') and self._loop is not None and (self._loop.is_closed() or sys.is_finalizing()):
                     # Skip the original __del__ which would trigger the error
                     return
 
