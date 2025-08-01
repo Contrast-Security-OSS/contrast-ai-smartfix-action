@@ -27,6 +27,28 @@ from pathlib import Path
 from typing import Optional
 from src.config import get_config
 
+def tail_string(text: str, max_length: int, prefix: str = "...[Content truncated]...\n") -> str:
+    """Tail a string to a maximum length, keeping the end portion.
+    
+    Args:
+        text: The string to truncate
+        max_length: Maximum length of the resulting string
+        prefix: Optional prefix to add when truncating (default: "...[Content truncated]...\n")
+        
+    Returns:
+        str: The original string if within max_length, or truncated string with prefix indicator
+    """
+    if len(text) <= max_length:
+        return text
+    
+    # Calculate how much of the original text we can keep after accounting for the prefix
+    remaining_length = max_length - len(prefix)
+    if remaining_length <= 0:
+        # If prefix is too long, just return the prefix truncated to max_length
+        return prefix[:max_length]
+    
+    return prefix + text[-remaining_length:]
+
 # Unicode to ASCII fallback mappings for Windows
 UNICODE_FALLBACKS = {
     '\u274c': 'X',  # ❌ -> X

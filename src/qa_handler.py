@@ -24,7 +24,7 @@ from typing import Tuple, List, Optional
 
 # Import configurations and utilities
 from src.config import get_config
-from src.utils import debug_log, run_command, log, error_exit
+from src.utils import debug_log, run_command, log, error_exit, tail_string
 from src import agent_handler
 from src import git_handler
 from src import telemetry_handler
@@ -196,7 +196,7 @@ def run_qa_loop(
         max_output_length = 15000 # Adjust as needed
         truncated_output = build_output
         if len(build_output) > max_output_length:
-            truncated_output = "...build output may be cut off prior to here...\n" + build_output[-max_output_length:]
+            truncated_output = tail_string(build_output, max_output_length, prefix="...build output may be cut off prior to here...\n")
 
         # Run QA agent
         qa_summary = agent_handler.run_qa_agent(
