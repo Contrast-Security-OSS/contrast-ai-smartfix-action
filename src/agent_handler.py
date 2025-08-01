@@ -142,7 +142,7 @@ async def create_agent(target_folder: Path, remediation_id: str, agent_type: str
     try:
         model_instance = LiteLlm(
             model=config.AGENT_MODEL,
-            temperature=0.07,  # Set low temperature for more deterministic output
+            temperature=0.7,  # Set low temperature for more deterministic output
             stream_options={"include_usage": True}
         )
         root_agent = Agent(
