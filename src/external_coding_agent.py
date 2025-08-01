@@ -58,12 +58,17 @@ class ExternalCodingAgent:
         vuln_severity = vulnerability_details.get('vulnerabilitySeverity', 'Unknown Severity')
         vuln_status = vulnerability_details.get('vulnerabilityStatus', 'Unknown Status')
 
-        # Tail large fields to reasonable limits to prevent GitHub's 64k character limit
-        vuln_overview = tail_string(vulnerability_details.get('vulnerabilityOverviewStory', 'No overview available'), 8000)
-        vuln_events = tail_string(vulnerability_details.get('vulnerabilityEventsSummary', 'No event details available'), 20000)
-        vuln_http_details = tail_string(vulnerability_details.get('vulnerabilityHttpRequestDetails', 'No HTTP request details available'), 4000)
+        # Get raw values first to check if they're empty
+        raw_overview = vulnerability_details.get('vulnerabilityOverviewStory', '')
+        raw_events = vulnerability_details.get('vulnerabilityEventsSummary', '')
+        raw_http_details = vulnerability_details.get('vulnerabilityHttpRequestDetails', '')
+
+        # Tail large fields to reasonable limits to prevent GitHub's 64k character limit (only if they have content)
+        vuln_overview = tail_string(raw_overview, 8000) if raw_overview.strip() else None
+        vuln_events = tail_string(raw_events, 20000) if raw_events.strip() else None
+        vuln_http_details = tail_string(raw_http_details, 4000) if raw_http_details.strip() else None
         
-        # Assemble the issue body
+        # Start building the issue body
         issue_body = f"""
 # Contrast AI SmartFix Issue Report
 
@@ -75,23 +80,42 @@ This issue should address a vulnerability identified by the Contrast Security pl
 
 **Rule:** {vuln_rule}  
 **Severity:** {vuln_severity}  
-**Status:** {vuln_status}  
+**Status:** {vuln_status}  """
+
+        # Add overview section only if content is available
+        if vuln_overview:
+            issue_body += f"""
 
 ## Overview
 
-{vuln_overview}
+{vuln_overview}"""
 
-## Technical Details
+        # Add technical details section only if we have event summary or HTTP details
+        if vuln_events or vuln_http_details:
+            issue_body += """
+
+## Technical Details"""
+            
+            # Add event summary subsection only if content is available
+            if vuln_events:
+                issue_body += f"""
 
 ### Event Summary
 ```
 {vuln_events}
-```
+```"""
+            
+            # Add HTTP request details subsection only if content is available
+            if vuln_http_details:
+                issue_body += f"""
 
 ### HTTP Request Details
 ```
 {vuln_http_details}
-```
+```"""
+
+        # Add the action required section
+        issue_body += """
 
 ## Action Required
 

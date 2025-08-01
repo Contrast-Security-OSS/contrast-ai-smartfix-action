@@ -370,5 +370,219 @@ class TestExternalCodingAgent(unittest.TestCase):
         # No sleep calls needed
         mock_sleep.assert_not_called()
 
+    def test_assemble_issue_body_with_all_data(self):
+        """Test assemble_issue_body with all vulnerability data present"""
+        agent = ExternalCodingAgent(self.config)
+        
+        vulnerability_details = {
+            'vulnerabilityTitle': 'SQL Injection Vulnerability',
+            'vulnerabilityUuid': '12345-abcde-67890',
+            'vulnerabilityRuleName': 'SQL-INJECTION',
+            'vulnerabilitySeverity': 'HIGH',
+            'vulnerabilityStatus': 'OPEN',
+            'vulnerabilityOverviewStory': 'This is a detailed overview of the SQL injection vulnerability',
+            'vulnerabilityEventsSummary': 'Event 1: User input detected\nEvent 2: SQL query executed\nEvent 3: Database accessed',
+            'vulnerabilityHttpRequestDetails': 'POST /api/users HTTP/1.1\nHost: example.com\nContent-Type: application/json\n\n{"username": "admin\' OR 1=1--"}'
+        }
+        
+        result = agent.assemble_issue_body(vulnerability_details)
+        
+        # Verify all sections are present
+        self.assertIn('# Contrast AI SmartFix Issue Report', result)
+        self.assertIn('# Security Vulnerability: SQL Injection Vulnerability', result)
+        self.assertIn('**Rule:** SQL-INJECTION', result)
+        self.assertIn('**Severity:** HIGH', result)
+        self.assertIn('**Status:** OPEN', result)
+        self.assertIn('## Overview', result)
+        self.assertIn('This is a detailed overview of the SQL injection vulnerability', result)
+        self.assertIn('## Technical Details', result)
+        self.assertIn('### Event Summary', result)
+        self.assertIn('Event 1: User input detected', result)
+        self.assertIn('### HTTP Request Details', result)
+        self.assertIn('POST /api/users HTTP/1.1', result)
+        self.assertIn('## Action Required', result)
+
+    def test_assemble_issue_body_with_empty_overview(self):
+        """Test assemble_issue_body when overview is empty"""
+        agent = ExternalCodingAgent(self.config)
+        
+        vulnerability_details = {
+            'vulnerabilityTitle': 'XSS Vulnerability',
+            'vulnerabilityUuid': '12345-abcde-67890',
+            'vulnerabilityRuleName': 'XSS',
+            'vulnerabilitySeverity': 'MEDIUM',
+            'vulnerabilityStatus': 'OPEN',
+            'vulnerabilityOverviewStory': '',  # Empty overview
+            'vulnerabilityEventsSummary': 'Event 1: Script injection detected',
+            'vulnerabilityHttpRequestDetails': 'GET /search?q=<script>alert(1)</script> HTTP/1.1'
+        }
+        
+        result = agent.assemble_issue_body(vulnerability_details)
+        
+        # Verify overview section is not present
+        self.assertNotIn('## Overview', result)
+        self.assertIn('## Technical Details', result)
+        self.assertIn('### Event Summary', result)
+        self.assertIn('### HTTP Request Details', result)
+
+    def test_assemble_issue_body_with_empty_events_and_http(self):
+        """Test assemble_issue_body when events and HTTP details are empty"""
+        agent = ExternalCodingAgent(self.config)
+        
+        vulnerability_details = {
+            'vulnerabilityTitle': 'Path Traversal',
+            'vulnerabilityUuid': '12345-abcde-67890',
+            'vulnerabilityRuleName': 'PATH-TRAVERSAL',
+            'vulnerabilitySeverity': 'LOW',
+            'vulnerabilityStatus': 'CONFIRMED',
+            'vulnerabilityOverviewStory': 'This vulnerability allows directory traversal attacks',
+            'vulnerabilityEventsSummary': '',  # Empty events
+            'vulnerabilityHttpRequestDetails': ''  # Empty HTTP details
+        }
+        
+        result = agent.assemble_issue_body(vulnerability_details)
+        
+        # Verify overview section is present but technical details section is not
+        self.assertIn('## Overview', result)
+        self.assertIn('This vulnerability allows directory traversal attacks', result)
+        self.assertNotIn('## Technical Details', result)
+        self.assertNotIn('### Event Summary', result)
+        self.assertNotIn('### HTTP Request Details', result)
+
+    def test_assemble_issue_body_with_all_empty_optional_fields(self):
+        """Test assemble_issue_body when all optional fields are empty"""
+        agent = ExternalCodingAgent(self.config)
+        
+        vulnerability_details = {
+            'vulnerabilityTitle': 'Buffer Overflow',
+            'vulnerabilityUuid': '12345-abcde-67890',
+            'vulnerabilityRuleName': 'BUFFER-OVERFLOW',
+            'vulnerabilitySeverity': 'CRITICAL',
+            'vulnerabilityStatus': 'NEW',
+            'vulnerabilityOverviewStory': '',  # Empty
+            'vulnerabilityEventsSummary': '',  # Empty
+            'vulnerabilityHttpRequestDetails': ''  # Empty
+        }
+        
+        result = agent.assemble_issue_body(vulnerability_details)
+        
+        # Verify only basic sections are present
+        self.assertIn('# Security Vulnerability: Buffer Overflow', result)
+        self.assertIn('**Rule:** BUFFER-OVERFLOW', result)
+        self.assertIn('**Severity:** CRITICAL', result)
+        self.assertIn('**Status:** NEW', result)
+        self.assertNotIn('## Overview', result)
+        self.assertNotIn('## Technical Details', result)
+        self.assertNotIn('### Event Summary', result)
+        self.assertNotIn('### HTTP Request Details', result)
+        self.assertIn('## Action Required', result)
+
+    def test_assemble_issue_body_with_whitespace_only_fields(self):
+        """Test assemble_issue_body when optional fields contain only whitespace"""
+        agent = ExternalCodingAgent(self.config)
+        
+        vulnerability_details = {
+            'vulnerabilityTitle': 'CSRF Vulnerability',
+            'vulnerabilityUuid': '12345-abcde-67890',
+            'vulnerabilityRuleName': 'CSRF',
+            'vulnerabilitySeverity': 'MEDIUM',
+            'vulnerabilityStatus': 'OPEN',
+            'vulnerabilityOverviewStory': '   \n   \t   ',  # Whitespace only
+            'vulnerabilityEventsSummary': '\n\n\n',  # Newlines only
+            'vulnerabilityHttpRequestDetails': '    '  # Spaces only
+        }
+        
+        result = agent.assemble_issue_body(vulnerability_details)
+        
+        # Verify sections with whitespace-only content are not included
+        self.assertNotIn('## Overview', result)
+        self.assertNotIn('## Technical Details', result)
+        self.assertNotIn('### Event Summary', result)
+        self.assertNotIn('### HTTP Request Details', result)
+
+    @patch('src.external_coding_agent.tail_string')
+    def test_assemble_issue_body_with_very_long_data(self, mock_tail_string):
+        """Test assemble_issue_body with very long vulnerability data that needs truncation"""
+        agent = ExternalCodingAgent(self.config)
+        
+        # Create very long strings
+        long_overview = 'A' * 10000  # 10k characters
+        long_events = 'B' * 25000    # 25k characters
+        long_http = 'C' * 5000       # 5k characters
+        
+        vulnerability_details = {
+            'vulnerabilityTitle': 'Large Data Vulnerability',
+            'vulnerabilityUuid': '12345-abcde-67890',
+            'vulnerabilityRuleName': 'LARGE-DATA',
+            'vulnerabilitySeverity': 'HIGH',
+            'vulnerabilityStatus': 'OPEN',
+            'vulnerabilityOverviewStory': long_overview,
+            'vulnerabilityEventsSummary': long_events,
+            'vulnerabilityHttpRequestDetails': long_http
+        }
+        
+        # Configure mock to return truncated versions
+        mock_tail_string.side_effect = lambda text, max_len, prefix="...[Content truncated]...\n": f"TRUNCATED_{text[:10]}_{max_len}"
+        
+        result = agent.assemble_issue_body(vulnerability_details)
+        
+        # Verify tail_string was called with correct parameters
+        expected_calls = [
+            unittest.mock.call(long_overview, 8000),
+            unittest.mock.call(long_events, 20000),
+            unittest.mock.call(long_http, 4000)
+        ]
+        mock_tail_string.assert_has_calls(expected_calls, any_order=False)
+        
+        # Verify truncated content appears in result
+        self.assertIn('TRUNCATED_AAAAAAAAAA_8000', result)
+        self.assertIn('TRUNCATED_BBBBBBBBBB_20000', result)
+        self.assertIn('TRUNCATED_CCCCCCCCCC_4000', result)
+
+    def test_assemble_issue_body_with_missing_fields(self):
+        """Test assemble_issue_body when some fields are missing from the dictionary"""
+        agent = ExternalCodingAgent(self.config)
+        
+        vulnerability_details = {
+            'vulnerabilityTitle': 'Incomplete Data Vulnerability',
+            'vulnerabilityUuid': '12345-abcde-67890',
+            # Missing some fields intentionally
+            'vulnerabilityOverviewStory': 'This vulnerability has incomplete data',
+            # Missing vulnerabilityEventsSummary and vulnerabilityHttpRequestDetails
+        }
+        
+        result = agent.assemble_issue_body(vulnerability_details)
+        
+        # Verify default values are used for missing fields
+        self.assertIn('**Rule:** Unknown Rule', result)
+        self.assertIn('**Severity:** Unknown Severity', result)
+        self.assertIn('**Status:** Unknown Status', result)
+        self.assertIn('## Overview', result)
+        self.assertIn('This vulnerability has incomplete data', result)
+        # Technical details section should not be present since events and HTTP are missing
+        self.assertNotIn('## Technical Details', result)
+
+    def test_assemble_issue_body_character_count_logging(self):
+        """Test that assemble_issue_body logs the character count"""
+        with patch('src.external_coding_agent.debug_log') as mock_debug_log:
+            agent = ExternalCodingAgent(self.config)
+            
+            vulnerability_details = {
+                'vulnerabilityTitle': 'Test Vulnerability',
+                'vulnerabilityUuid': '12345-abcde-67890',
+                'vulnerabilityRuleName': 'TEST',
+                'vulnerabilitySeverity': 'LOW',
+                'vulnerabilityStatus': 'OPEN',
+                'vulnerabilityOverviewStory': 'Short overview',
+                'vulnerabilityEventsSummary': 'Short events',
+                'vulnerabilityHttpRequestDetails': 'Short HTTP details'
+            }
+            
+            result = agent.assemble_issue_body(vulnerability_details)
+            
+            # Verify debug_log was called with character count
+            expected_length = len(result)
+            mock_debug_log.assert_called_with(f"Assembled issue body with {expected_length} characters")
+
 if __name__ == '__main__':
     unittest.main()
