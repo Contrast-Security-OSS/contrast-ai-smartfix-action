@@ -1,0 +1,45 @@
+[flake8]
+# Configuration for flake8 Python linter
+
+# Maximum line length
+max-line-length = 180
+
+# Exclude directories and files from linting
+exclude = 
+    .git,
+    __pycache__,
+    .venv,
+    venv,
+    env,
+    .env,
+    build,
+    dist,
+    *.egg-info
+
+# Ignore specific error codes
+ignore = 
+    # E203: whitespace before ':' (conflicts with black formatter)
+    E203,
+    # W503: line break before binary operator (conflicts with black formatter)
+    W503,
+    # E501: line too long (we set max-line-length instead)
+    # E501
+
+# Select specific error codes to check (optional - if not specified, checks most things)
+select = 
+    E,   # pycodestyle errors
+    W,   # pycodestyle warnings
+    F,   # pyflakes
+    C,   # mccabe complexity
+
+# Maximum complexity allowed
+max-complexity = 15
+
+# Show the source code for each error
+show-source = True
+
+# Count the number of occurrences of each error/warning code
+statistics = True
+
+# Enable showing the pep8 source for each error
+show-pep8 = True

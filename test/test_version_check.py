@@ -1,7 +1,6 @@
 import unittest
 import os
 import sys
-import io
 from unittest.mock import patch, MagicMock
 from packaging.version import Version
 
@@ -9,11 +8,12 @@ from packaging.version import Version
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # Import with testing=True to avoid requiring environment variables
-from src.config import reset_config, get_config
-from src.version_check import get_latest_repo_version, check_for_newer_version, do_version_check, normalize_version, safe_parse_version
+from src.config import reset_config, get_config  # noqa: E402
+from src.version_check import get_latest_repo_version, check_for_newer_version, do_version_check, normalize_version, safe_parse_version  # noqa: E402
 
 # Initialize config with testing=True for tests
 _ = get_config(testing=True)
+
 
 class TestVersionCheck(unittest.TestCase):
     """Test the version checking functionality."""
@@ -37,16 +37,16 @@ class TestVersionCheck(unittest.TestCase):
 
         self.requests_patcher = patch('src.version_check.requests')
         self.mock_requests = self.requests_patcher.start()
-        
+
         # Set up mock exceptions
         self.mock_requests.exceptions = MagicMock()
         self.mock_requests.exceptions.RequestException = Exception
-        
+
         # Set up a default mock response
         self.mock_response = MagicMock()
         self.mock_response.json.return_value = [
-            {'name': 'v1.0.0'}, 
-            {'name': 'v1.1.0'}, 
+            {'name': 'v1.0.0'},
+            {'name': 'v1.1.0'},
             {'name': '2.0.0'}
         ]
         self.mock_response.raise_for_status.return_value = None
@@ -55,10 +55,10 @@ class TestVersionCheck(unittest.TestCase):
         # Reset debug_log and log mocks before each test
         self.log_patcher = patch('src.version_check.log')
         self.mock_log = self.log_patcher.start()
-        
+
         self.debug_log_patcher = patch('src.version_check.debug_log')
         self.mock_debug_log = self.debug_log_patcher.start()
-        
+
     def tearDown(self):
         # Clean up all patches
         self.env_patcher.stop()
@@ -92,8 +92,8 @@ class TestVersionCheck(unittest.TestCase):
         """Test that versions with 'v' prefix are handled correctly."""
         # Change mock response to only have v-prefixed tags
         self.mock_response.json.return_value = [
-            {'name': 'v1.0.0'}, 
-            {'name': 'v2.0.0'}, 
+            {'name': 'v1.0.0'},
+            {'name': 'v2.0.0'},
             {'name': 'v1.5.2'}
         ]
         result = get_latest_repo_version("https://github.com/user/repo")
@@ -132,7 +132,7 @@ class TestVersionCheck(unittest.TestCase):
         """Test version comparison with mixed format (with/without v prefix)."""
         result = check_for_newer_version("1.0.0", "v1.1.0")
         self.assertEqual(result, "v1.1.0")
-        
+
     def test_check_for_newer_version_with_version_object(self):
         """Test check_for_newer_version with a Version object as first parameter."""
         from packaging.version import parse
@@ -162,16 +162,16 @@ class TestVersionCheck(unittest.TestCase):
         # Setup environment and mocks
         os.environ["GITHUB_REF"] = "refs/tags/v1.0.0"
         mock_get_latest.return_value = "v2.0.0"
-        
+
         # Reset mocks before test
         self.mock_log.reset_mock()
-        
+
         do_version_check()
-        
+
         # Check debug print calls for messages that use debug_log
         self.mock_debug_log.assert_any_call("Current action version: v1.0.0")
         self.mock_debug_log.assert_any_call("Latest version available in repo: v2.0.0")
-        
+
         # Check that the log function was called with the newer version message
         self.mock_log.assert_any_call("INFO: A newer version of this action is available (v2.0.0).")
 
@@ -182,9 +182,9 @@ class TestVersionCheck(unittest.TestCase):
         os.environ["GITHUB_ACTION_REF"] = "refs/tags/v2.0.0"
         os.environ["GITHUB_REF"] = "refs/tags/v1.0.0"  # This should be ignored
         mock_get_latest.return_value = "v2.0.0"
-        
+
         do_version_check()
-        
+
         # Check that the debug_log was called with the correct version from GITHUB_ACTION_REF
         self.mock_debug_log.assert_any_call("Current action version: v2.0.0")
 
@@ -192,9 +192,9 @@ class TestVersionCheck(unittest.TestCase):
     def test_do_version_check_sha_ref(self, mock_get_latest):
         """Test with a SHA reference instead of a version tag."""
         os.environ["GITHUB_ACTION_REF"] = "abcdef1234567890abcdef1234567890abcdef12"
-        
+
         do_version_check()
-        
+
         # Check debug_log calls
         self.mock_debug_log.assert_any_call("Running action from SHA: abcdef1234567890abcdef1234567890abcdef12. Skipping version comparison against tags.")
         mock_get_latest.assert_not_called()
@@ -203,12 +203,13 @@ class TestVersionCheck(unittest.TestCase):
     def test_do_version_check_unparseable_version(self, mock_get_latest):
         """Test with a reference that can't be parsed as a version."""
         os.environ["GITHUB_REF"] = "refs/heads/main"
-        
+
         do_version_check()
-        
+
         # Check debug_log calls
         self.mock_debug_log.assert_any_call("Running from branch 'main'. Version checking is only meaningful when using release tags.")
         mock_get_latest.assert_not_called()
+
 
 if __name__ == '__main__':
     unittest.main()
