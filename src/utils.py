@@ -1,4 +1,4 @@
-#-
+# -
 # #%L
 # Contrast AI SmartFix
 # %%
@@ -21,35 +21,36 @@ import os
 import subprocess
 import sys
 import re
-import os
 import platform
-from pathlib import Path
 from typing import Optional
 from src.config import get_config
 
+
 def tail_string(text: str, max_length: int, prefix: str = "...[Content truncated]...\n") -> str:
     """Tail a string to a maximum length, keeping the end portion.
-    
+
     Args:
         text: The string to truncate
         max_length: Maximum length of the resulting string
         prefix: Optional prefix to add when truncating (default: "...[Content truncated]...\n")
-        
+
     Returns:
         str: The original string if within max_length, or truncated string with prefix indicator
     """
     if len(text) <= max_length:
         return text
-    
+
     # Calculate how much of the original text we can keep after accounting for the prefix
     remaining_length = max_length - len(prefix)
     if remaining_length <= 0:
         # If prefix is too long, just return the prefix truncated to max_length
         return prefix[:max_length]
-    
+
     return prefix + text[-remaining_length:]
 
 # Unicode to ASCII fallback mappings for Windows
+
+
 UNICODE_FALLBACKS = {
     '\u274c': 'X',  # ❌ -> X
     '❌': 'X',  # ❌ -> X
@@ -59,8 +60,9 @@ UNICODE_FALLBACKS = {
     '🔑': '',    # 🔑 -> ''
     '🛠️': '',   # 🛠️ -> ''
     '💡': '',   # 💡 -> ''
-    '🚀': '', # 🚀 -> ''
+    '🚀': '',  # 🚀 -> ''
 }
+
 
 def safe_print(message, file=None, flush=True):
     """Safely print message, handling encoding issues on Windows."""
@@ -70,16 +72,17 @@ def safe_print(message, file=None, flush=True):
         # On Windows, replace Unicode chars with ASCII equivalents
         for unicode_char, ascii_fallback in UNICODE_FALLBACKS.items():
             message = message.replace(unicode_char, ascii_fallback)
-        
+
         # Replace any remaining problematic Unicode characters with '?'
         if platform.system() == 'Windows':
             message = ''.join([c if ord(c) < 128 else '?' for c in message])
-            
+
         print(message, file=file, flush=flush)
+
 
 def log(message: str, is_error: bool = False, is_warning: bool = False):
     """Logs a message to telemetry and prints to stdout/stderr."""
-    from src import telemetry_handler # Local import to break circular dependency
+    from src import telemetry_handler  # Local import to break circular dependency
     telemetry_handler.add_log_message(message)
     if is_error:
         safe_print(message, file=sys.stderr, flush=True)
@@ -89,10 +92,11 @@ def log(message: str, is_error: bool = False, is_warning: bool = False):
     else:
         safe_print(message, flush=True)
 
+
 def debug_log(*args, **kwargs):
     """Prints only if DEBUG_MODE is True and logs to telemetry."""
     config = get_config()
-    from src import telemetry_handler # Local import to break circular dependency
+    from src import telemetry_handler  # Local import to break circular dependency
     message = " ".join(map(str, args))
     # Log debug messages to telemetry, possibly with a DEBUG prefix or separate field if needed
     # For now, adding to the main log.
@@ -101,12 +105,13 @@ def debug_log(*args, **kwargs):
         # Use safe_print for the combined message rather than direct print of args
         safe_print(message, flush=True)
 
+
 def extract_remediation_id_from_branch(branch_name: str) -> Optional[str]:
     """Extracts the remediation ID from a branch name.
-    
+
     Args:
         branch_name: Branch name in format 'smartfix/remediation-{remediation_id}'
-        
+
     Returns:
         str: The remediation ID if found, or None if not found
     """
@@ -116,12 +121,13 @@ def extract_remediation_id_from_branch(branch_name: str) -> Optional[str]:
         return match.group(1)
     return None
 
+
 def extract_remediation_id_from_labels(labels: list) -> Optional[str]:
     """Extracts the remediation ID from PR labels.
-    
+
     Args:
         labels: List of label objects from PR, each with a 'name' field
-        
+
     Returns:
         str: The remediation ID if found, or None if not found
     """
@@ -134,7 +140,10 @@ def extract_remediation_id_from_labels(labels: list) -> Optional[str]:
                 return parts[1]
     return None
 
+
 # Define custom exception for command errors
+
+
 class CommandExecutionError(Exception):
     """Custom exception for errors during command execution."""
     def __init__(self, message, return_code, command, stdout=None, stderr=None):
@@ -144,20 +153,21 @@ class CommandExecutionError(Exception):
         self.stdout = stdout
         self.stderr = stderr
 
+
 def run_command(command, env=None, check=True):
     """
     Runs a shell command and returns its stdout.
     Prints command, stdout/stderr based on DEBUG_MODE.
     Exits on error if check=True.
-    
+
     Args:
         command: List of command and arguments to run
         env: Optional environment variables dictionary
         check: Whether to exit on command failure
-        
+
     Returns:
         str: Command stdout output
-        
+
     Raises:
         SystemExit: If check=True and command fails
     """
@@ -167,20 +177,20 @@ def run_command(command, env=None, check=True):
         if env and env.get('GITHUB_TOKEN'):
             # Don't print the actual token
             options_text += ", GITHUB_TOKEN=***"
-            
+
         debug_log(f"::group::Running command: {' '.join(command)}")
         debug_log(f"  {options_text}")
-        
+
         # Merge with current environment to preserve essential variables like PATH
         full_env = os.environ.copy()
         if env:
             full_env.update(env)
-            
+
         # Set encoding and error handling for better robustness
         process = subprocess.run(
-            command, 
-            capture_output=True, 
-            text=True, 
+            command,
+            capture_output=True,
+            text=True,
             encoding='utf-8',
             errors='replace',
             check=False,  # We'll handle errors ourselves
@@ -195,23 +205,22 @@ def run_command(command, env=None, check=True):
                 debug_log(f"  Command stdout (truncated):\n---\n{stdout_text[:500]}...\n...{stdout_text[-500:]}\n---")
             else:
                 debug_log(f"  Command stdout:\n---\n{stdout_text}\n---")
-                
+
         if process.stderr:
             # Always print stderr if it's not empty, as it often indicates warnings/errors
             stderr_text = process.stderr.strip()
-            
+
             # Use new log function for stderr
             if process.returncode != 0:
                 if len(stderr_text) > 1000:
                     log(f"  Command stderr (truncated):\n---\n{stderr_text[:500]}...\n...{stderr_text[-500:]}\n---", is_error=True)
                 else:
                     log(f"  Command stderr:\n---\n{stderr_text}\n---", is_error=True)
-            elif stderr_text: # Log as debug if there's stderr but command was successful
+            elif stderr_text:  # Log as debug if there's stderr but command was successful
                 if len(stderr_text) > 1000:
                     debug_log(f"  Command stderr (truncated):\n---\n{stderr_text[:500]}...\n...{stderr_text[-500:]}\n---")
                 else:
                     debug_log(f"  Command stderr:\n---\n{stderr_text}\n---")
-
 
         if check and process.returncode != 0:
             error_message_for_log = f"Error: Command failed with return code {process.returncode}: {' '.join(command)}"
@@ -226,7 +235,7 @@ def run_command(command, env=None, check=True):
                 stderr=error_details
             )
 
-        return process.stdout.strip() if process.stdout else "" # Return stdout or empty string
+        return process.stdout.strip() if process.stdout else ""  # Return stdout or empty string
     finally:
         debug_log("::endgroup::")
 
@@ -234,12 +243,12 @@ def run_command(command, env=None, check=True):
 def error_exit(remediation_id: str, failure_code: Optional[str] = None):
     """
     Cleans up a branch (if provided), sends telemetry, and exits with code 1.
-    
+
     This function handles the graceful shutdown of the SmartFix workflow when an
-    error occurs. It attempts to notify the Remediation service, clean up the 
-    Git branch, and send telemetry data before exiting. If any step fails with an 
+    error occurs. It attempts to notify the Remediation service, clean up the
+    Git branch, and send telemetry data before exiting. If any step fails with an
     exception, the function will catch it, log it, and continue with the next step.
-    
+
     Args:
         remediation_id: The ID of the remediation that failed
         failure_code: Optional failure category code, defaults to GENERAL_FAILURE

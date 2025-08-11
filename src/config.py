@@ -1,4 +1,4 @@
-#-
+# -
 # #%L
 # Contrast AI SmartFix
 # %%
@@ -23,7 +23,7 @@ import json
 from pathlib import Path
 from typing import Optional, Any, Dict, List
 
-# Local import for logging to avoid circular dependency with utils
+
 def _log_config_message(message: str, is_error: bool = False, is_warning: bool = False):
     """A minimal logger for use only within the config module before full logging is set up."""
     # This function should have no dependencies on other project modules
@@ -32,9 +32,11 @@ def _log_config_message(message: str, is_error: bool = False, is_warning: bool =
     else:
         print(message)
 
+
 class ConfigurationError(Exception):
     """Custom exception for configuration errors."""
     pass
+
 
 class Config:
     """
@@ -52,13 +54,13 @@ class Config:
 
         # --- Core Settings ---
         self.DEBUG_MODE = self._get_bool_env("DEBUG_MODE", default=False)
-        
+
         # Check for testing flag to make BASE_BRANCH optional in tests
         if testing and "BASE_BRANCH" not in env:
             self.BASE_BRANCH = "main"  # Default for tests
         else:
             self.BASE_BRANCH = self._get_env_var("BASE_BRANCH", required=True)
-            
+
         self.RUN_TASK = self._get_env_var("RUN_TASK", required=False, default="generate_fix")
 
         # --- AI Agent Configuration ---
@@ -77,7 +79,7 @@ class Config:
             self.BUILD_COMMAND = "echo 'Test build command'"
         else:
             self.BUILD_COMMAND = self._get_env_var("BUILD_COMMAND", required=is_build_command_required)
-            
+
         self.FORMATTING_COMMAND = self._get_env_var("FORMATTING_COMMAND", required=False)
 
         # --- Validated and normalized settings ---
@@ -106,7 +108,7 @@ class Config:
             self.CONTRAST_APP_ID = self._get_env_var("CONTRAST_APP_ID", required=True)
             self.CONTRAST_AUTHORIZATION_KEY = self._get_env_var("CONTRAST_AUTHORIZATION_KEY", required=True)
             self.CONTRAST_API_KEY = self._get_env_var("CONTRAST_API_KEY", required=True)
-            
+
         # Only check config values in non-testing mode
         if not testing:
             self._check_contrast_config_values_exist()
@@ -120,14 +122,14 @@ class Config:
         self.VULNERABILITY_SEVERITIES = self._parse_and_validate_severities(
             self._get_env_var("VULNERABILITY_SEVERITIES", required=False, default='["CRITICAL", "HIGH"]')
         )
-        
+
         # --- Paths ---
         if testing:
             # For tests, default to /tmp if GITHUB_WORKSPACE not set
             self.REPO_ROOT = Path(self._get_env_var("GITHUB_WORKSPACE", required=False, default="/tmp")).resolve()
         else:
             self.REPO_ROOT = Path(self._get_env_var("GITHUB_WORKSPACE", required=True)).resolve()
-            
+
         self.SCRIPT_DIR = Path(__file__).parent.resolve()
 
         if not testing:
@@ -175,19 +177,19 @@ class Config:
         try:
             if not json_str:
                 return default_severities
-            
+
             severities = json.loads(json_str)
-            
+
             if not isinstance(severities, list):
                 _log_config_message(f"Vulnerability_severities must be a list, got {type(severities)}. Using default.", is_warning=True)
                 return default_severities
-            
+
             validated = [s.upper() for s in severities if s.upper() in valid_severities]
-            
+
             if not validated:
                 _log_config_message(f"No valid severity levels provided. Using default: {default_severities}", is_warning=True)
                 return default_severities
-                
+
             return validated
         except json.JSONDecodeError:
             _log_config_message(f"Error parsing vulnerability_severities JSON: {json_str}. Using default.", is_error=True)
@@ -212,7 +214,10 @@ class Config:
 # --- Global Singleton Instance ---
 # This is the single source of truth for configuration in the application.
 # It is instantiated once when the module is imported.
+
+
 _config_instance: Optional[Config] = None
+
 
 def get_config(testing: bool = False) -> Config:
     """
@@ -220,7 +225,7 @@ def get_config(testing: bool = False) -> Config:
     This function ensures that the Config is instantiated only when first needed,
     which is crucial for testing environments where environment variables are
     patched at runtime.
-    
+
     Args:
         testing: If True, uses testing defaults for missing environment variables.
                 This should only be used in tests.
@@ -236,6 +241,7 @@ def get_config(testing: bool = False) -> Config:
             _log_config_message(f"A module required for configuration could not be imported: {e}", is_error=True)
             sys.exit(1)
     return _config_instance
+
 
 def reset_config():
     """For testing purposes only. Resets the config singleton."""
