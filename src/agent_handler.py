@@ -86,7 +86,7 @@ async def get_mcp_tools(target_folder: Path, remediation_id: str) -> MCPToolset:
                     command='npx',
                     args=[
                         '-y',  # Arguments for the command
-                        '@modelcontextprotocol/server-filesystem@2025.7.1',
+                        'github:codemaestroai/filesystem-mcp',
                         target_folder_str,
                     ],
                 ),
