@@ -51,7 +51,7 @@ try:
     from google.adk.models.lite_llm import LiteLlm
     from google.adk.runners import Runner
     from google.adk.sessions import InMemorySessionService
-    from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset, StdioServerParameters, StdioConnectionParams
+    from kgoogle.ad.tools.mcp_tool.mcp_toolset import MCPToolset, StdioServerParameters, StdioConnectionParams
     from google.genai import types as genai_types
     ADK_AVAILABLE = True
     debug_log("ADK libraries loaded successfully.")
@@ -142,7 +142,7 @@ async def create_agent(target_folder: Path, remediation_id: str, agent_type: str
     try:
         model_instance = LiteLlm(
             model=config.AGENT_MODEL,
-            temperature=0.1,  # Set low temperature for more deterministic output
+            temperature=0.2,  # Set low temperature for more deterministic output
             #seed=42,  # The random seed for reproducibility (not supported by bedrock or anthropic)
             stream_options={"include_usage": True}
         )
