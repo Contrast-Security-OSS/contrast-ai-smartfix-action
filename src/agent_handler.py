@@ -51,7 +51,7 @@ try:
     from google.adk.models.lite_llm import LiteLlm
     from google.adk.runners import Runner
     from google.adk.sessions import InMemorySessionService
-    from kgoogle.ad.tools.mcp_tool.mcp_toolset import MCPToolset, StdioServerParameters, StdioConnectionParams
+    from google.ad.tools.mcp_tool.mcp_toolset import MCPToolset, StdioServerParameters, StdioConnectionParams
     from google.genai import types as genai_types
     ADK_AVAILABLE = True
     debug_log("ADK libraries loaded successfully.")
