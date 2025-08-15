@@ -136,11 +136,12 @@ class TestGitHandler(unittest.TestCase):
         self.assertIsNone(result)
         mock_log.assert_any_call("Error searching for GitHub issue with label: Mock error", is_error=True)
 
+    @patch('src.git_handler.debug_log')
     @patch('src.git_handler.check_issues_enabled')
     @patch('src.git_handler.run_command')
     @patch('src.git_handler.ensure_label')
     @patch('src.git_handler.log')
-    def test_create_issue_success(self, mock_log, mock_ensure_label, mock_run_command, mock_check_issues):
+    def test_create_issue_success(self, mock_log, mock_ensure_label, mock_run_command, mock_check_issues, mock_debug_log):
         """Test creating a GitHub issue when successful"""
         # Setup
         title = "Test Issue Title"
@@ -148,8 +149,11 @@ class TestGitHandler(unittest.TestCase):
         vuln_label = "contrast-vuln-id:VULN-1234"
         remediation_label = "smartfix-id:5678"
 
-        # Mock successful issue creation with URL returned
-        mock_run_command.return_value = "https://github.com/mock/repo/issues/42"
+        # Mock successful issue creation with URL returned, then successful assignment
+        mock_run_command.side_effect = [
+            "https://github.com/mock/repo/issues/42",  # Issue creation response
+            ""  # Assignment response (empty string indicates success)
+        ]
         mock_ensure_label.return_value = True
         mock_check_issues.return_value = True
 
@@ -161,11 +165,11 @@ class TestGitHandler(unittest.TestCase):
 
         # Assert
         mock_check_issues.assert_called_once()
-        mock_run_command.assert_called_once()
+        self.assertEqual(mock_run_command.call_count, 2)  # Should call run_command twice (create + assign)
         self.assertEqual(42, result)  # Should extract issue number 42 from URL
         mock_log.assert_any_call("Successfully created issue: https://github.com/mock/repo/issues/42")
         mock_log.assert_any_call("Issue number extracted: 42")
-        mock_log.assert_any_call("Issue assigned to @Copilot")
+        mock_debug_log.assert_any_call("Issue assigned to @Copilot")
 
     @patch('src.git_handler.check_issues_enabled')
     @patch('src.git_handler.run_command')
@@ -239,7 +243,7 @@ class TestGitHandler(unittest.TestCase):
         self.assertTrue(result)
         mock_debug_log.assert_any_call("Removed existing remediation labels from issue #42")
         mock_log.assert_any_call("Added new remediation label to issue #42")
-        mock_log.assert_any_call("Reassigned issue #42 to @Copilot")
+        mock_debug_log.assert_any_call("Reassigned issue #42 to @Copilot")
 
     @patch('src.git_handler.check_issues_enabled')
     @patch('src.git_handler.find_open_pr_for_issue')
