@@ -72,6 +72,36 @@ def get_pr_changed_files_count(pr_number: int) -> int:
         return -1
 
 
+def check_issues_enabled() -> bool:
+    """Check if GitHub Issues are enabled for the repository.
+
+    Returns:
+        bool: True if Issues are enabled, False if disabled
+    """
+    try:
+        # Try to list issues - this will fail if Issues are disabled
+        result = run_command(['gh', 'issue', 'list', '--repo', config.GITHUB_REPOSITORY, '--limit', '1'],
+                             env=get_gh_env(), check=False)
+
+        # If the command succeeded, Issues are enabled
+        if result is not None:
+            debug_log("GitHub Issues are enabled for this repository")
+            return True
+        else:
+            debug_log("GitHub Issues appear to be disabled for this repository")
+            return False
+
+    except Exception as e:
+        error_message = str(e).lower()
+        if "issues are disabled" in error_message:
+            debug_log("GitHub Issues are disabled for this repository")
+            return False
+        else:
+            # If it's a different error, assume Issues are enabled but there's another problem
+            debug_log(f"Error checking if Issues are enabled, assuming they are: {e}")
+            return True
+
+
 def configure_git_user():
     """Configures git user email and name."""
     log("Configuring Git user...")
@@ -445,6 +475,12 @@ def create_issue(title: str, body: str, vuln_label: str, remediation_label: str)
         int: The issue number if created successfully, None otherwise
     """
     log(f"Creating GitHub issue with title: {title}")
+
+    # Check if Issues are enabled for this repository
+    if not check_issues_enabled():
+        log("GitHub Issues are disabled for this repository. Cannot create issue.", is_error=True)
+        return None
+
     gh_env = get_gh_env()
 
     # Ensure both labels exist
@@ -495,6 +531,12 @@ def find_issue_with_label(label: str) -> int:
         int: The issue number if found, None otherwise
     """
     log(f"Searching for GitHub issue with label: {label}")
+
+    # Check if Issues are enabled for this repository
+    if not check_issues_enabled():
+        log("GitHub Issues are disabled for this repository. Cannot search for issues.", is_error=True)
+        return None
+
     gh_env = get_gh_env()
 
     issue_list_command = [
@@ -551,6 +593,11 @@ def reset_issue(issue_number: int, remediation_label: str) -> bool:
         bool: True if the issue was successfully reset, False otherwise
     """
     log(f"Resetting GitHub issue #{issue_number}")
+
+    # Check if Issues are enabled for this repository
+    if not check_issues_enabled():
+        log("GitHub Issues are disabled for this repository. Cannot reset issue.", is_error=True)
+        return False
 
     # First check if there's an open PR for this issue
     open_pr = find_open_pr_for_issue(issue_number)
