@@ -178,6 +178,3 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
-
-# SmartFix Testing Harness Planning Documents
-SmartFix-Testing-Harness-Planning*
