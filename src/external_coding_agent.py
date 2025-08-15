@@ -163,16 +163,21 @@ Please review this security vulnerability and implement appropriate fixes to add
         # Use git_handler to find if there's an existing issue with this label
         issue_number = git_handler.find_issue_with_label(vulnerability_label)
 
-        if issue_number:
-            debug_log(f"Found existing GitHub issue #{issue_number} with label {vulnerability_label}")
-            if not git_handler.reset_issue(issue_number, remediation_label):
-                log(f"Failed to reset issue #{issue_number} with labels {vulnerability_label}, {remediation_label}", is_error=True)
-                error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
-        else:
+        if issue_number is None:
+            # Check if this is because Issues are disabled
+            if not git_handler.check_issues_enabled():
+                log("GitHub Issues are disabled for this repository. External coding agent requires Issues to be enabled.", is_error=True)
+                error_exit(remediation_id, FailureCategory.GIT_COMMAND_FAILURE.value)
+
             debug_log(f"No GitHub issue found with label {vulnerability_label}")
             issue_number = git_handler.create_issue(issue_title, issue_body, vulnerability_label, remediation_label)
             if not issue_number:
                 log(f"Failed to create issue with labels {vulnerability_label}, {remediation_label}", is_error=True)
+                error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
+        else:
+            debug_log(f"Found existing GitHub issue #{issue_number} with label {vulnerability_label}")
+            if not git_handler.reset_issue(issue_number, remediation_label):
+                log(f"Failed to reset issue #{issue_number} with labels {vulnerability_label}, {remediation_label}", is_error=True)
                 error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
 
         telemetry_handler.update_telemetry("additionalAttributes.externalIssueNumber", issue_number)
