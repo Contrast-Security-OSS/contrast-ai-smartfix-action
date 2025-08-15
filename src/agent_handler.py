@@ -86,7 +86,7 @@ async def get_mcp_tools(target_folder: Path, remediation_id: str) -> MCPToolset:
                     command='npx',
                     args=[
                         '-y',  # Arguments for the command
-                        '@modelcontextprotocol/server-filesystem@2025.1.14',
+                        '@modelcontextprotocol/server-filesystem@2025.7.1',
                         target_folder_str,
                     ],
                 ),
@@ -141,7 +141,12 @@ async def create_agent(target_folder: Path, remediation_id: str, agent_type: str
     agent_name = f"contrast_{agent_type}_agent"
 
     try:
-        model_instance = LiteLlm(model=config.AGENT_MODEL, stream_options={"include_usage": True})
+        model_instance = LiteLlm(
+            model=config.AGENT_MODEL,
+            temperature=0.2,  # Set low temperature for more deterministic output
+            #seed=42, # The random seed for reproducibility (not supported by bedrock/anthropic atm call throws error)
+            stream_options={"include_usage": True}
+        )
         root_agent = Agent(
             model=model_instance,
             name=agent_name,
