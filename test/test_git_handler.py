@@ -510,6 +510,116 @@ class TestGitHandler(unittest.TestCase):
         mock_log.assert_any_call("Adding labels to PR #789: ['test-label']")
         mock_log.assert_any_call("Failed to add labels to PR #789: Command failed", is_error=True)
 
+    @patch('src.git_handler.run_command')
+    @patch('src.git_handler.get_gh_env')
+    @patch('src.git_handler.debug_log')
+    def test_get_pr_changed_files_count_success(self, mock_debug_log, mock_get_gh_env, mock_run_command):
+        """Test get_pr_changed_files_count when gh command succeeds"""
+        from src.config import get_config
+
+        # Setup
+        mock_get_gh_env.return_value = {'GITHUB_TOKEN': 'mock-token'}
+        mock_run_command.return_value = "3"
+
+        # Initialize config with testing=True
+        _ = get_config(testing=True)
+
+        # Execute
+        result = git_handler.get_pr_changed_files_count(123)
+
+        # Assert
+        self.assertEqual(result, 3)
+        mock_run_command.assert_called_once_with(
+            ['gh', 'pr', 'view', '123', '--json', 'changedFiles', '--jq', '.changedFiles'],
+            env={'GITHUB_TOKEN': 'mock-token'},
+            check=False
+        )
+        mock_debug_log.assert_called_with("PR 123 has 3 changed files")
+
+    @patch('src.git_handler.run_command')
+    @patch('src.git_handler.get_gh_env')
+    @patch('src.git_handler.debug_log')
+    def test_get_pr_changed_files_count_zero_files(self, mock_debug_log, mock_get_gh_env, mock_run_command):
+        """Test get_pr_changed_files_count when PR has zero changed files"""
+        from src.config import get_config
+
+        # Setup
+        mock_get_gh_env.return_value = {'GITHUB_TOKEN': 'mock-token'}
+        mock_run_command.return_value = "0"
+
+        # Initialize config with testing=True
+        _ = get_config(testing=True)
+
+        # Execute
+        result = git_handler.get_pr_changed_files_count(456)
+
+        # Assert
+        self.assertEqual(result, 0)
+        mock_debug_log.assert_called_with("PR 456 has 0 changed files")
+
+    @patch('src.git_handler.run_command')
+    @patch('src.git_handler.get_gh_env')
+    @patch('src.git_handler.debug_log')
+    def test_get_pr_changed_files_count_command_failure(self, mock_debug_log, mock_get_gh_env, mock_run_command):
+        """Test get_pr_changed_files_count when gh command fails"""
+        from src.config import get_config
+
+        # Setup
+        mock_get_gh_env.return_value = {'GITHUB_TOKEN': 'mock-token'}
+        mock_run_command.return_value = None
+
+        # Initialize config with testing=True
+        _ = get_config(testing=True)
+
+        # Execute
+        result = git_handler.get_pr_changed_files_count(789)
+
+        # Assert
+        self.assertEqual(result, -1)
+        mock_debug_log.assert_called_with("Failed to get changed files count for PR 789")
+
+    @patch('src.git_handler.run_command')
+    @patch('src.git_handler.get_gh_env')
+    @patch('src.git_handler.debug_log')
+    def test_get_pr_changed_files_count_invalid_response(self, mock_debug_log, mock_get_gh_env, mock_run_command):
+        """Test get_pr_changed_files_count when gh returns invalid data"""
+        from src.config import get_config
+
+        # Setup
+        mock_get_gh_env.return_value = {'GITHUB_TOKEN': 'mock-token'}
+        mock_run_command.return_value = "invalid_number"
+
+        # Initialize config with testing=True
+        _ = get_config(testing=True)
+
+        # Execute
+        result = git_handler.get_pr_changed_files_count(101112)
+
+        # Assert
+        self.assertEqual(result, -1)
+        mock_debug_log.assert_called_with("Invalid response from gh command for PR 101112: invalid_number")
+
+    @patch('src.git_handler.run_command')
+    @patch('src.git_handler.get_gh_env')
+    @patch('src.git_handler.debug_log')
+    def test_get_pr_changed_files_count_exception(self, mock_debug_log, mock_get_gh_env, mock_run_command):
+        """Test get_pr_changed_files_count when an exception occurs"""
+        from src.config import get_config
+
+        # Setup
+        mock_get_gh_env.return_value = {'GITHUB_TOKEN': 'mock-token'}
+        mock_run_command.side_effect = Exception("Network error")
+
+        # Initialize config with testing=True
+        _ = get_config(testing=True)
+
+        # Execute
+        result = git_handler.get_pr_changed_files_count(131415)
+
+        # Assert
+        self.assertEqual(result, -1)
+        mock_debug_log.assert_called_with("Error getting changed files count for PR 131415: Network error")
+
 
 if __name__ == '__main__':
     unittest.main()

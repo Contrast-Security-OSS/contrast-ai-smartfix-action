@@ -42,6 +42,36 @@ def get_gh_env():
     return gh_env
 
 
+def get_pr_changed_files_count(pr_number: int) -> int:
+    """Get the number of changed files in a PR using GitHub CLI.
+
+    Args:
+        pr_number: The PR number to check
+
+    Returns:
+        int: Number of changed files, or -1 if there was an error
+    """
+    try:
+        result = run_command(['gh', 'pr', 'view', str(pr_number), '--json', 'changedFiles', '--jq', '.changedFiles'],
+                             env=get_gh_env(), check=False)
+        if result is None:
+            debug_log(f"Failed to get changed files count for PR {pr_number}")
+            return -1
+
+        # Parse the result as an integer
+        try:
+            count = int(result.strip())
+            debug_log(f"PR {pr_number} has {count} changed files")
+            return count
+        except ValueError:
+            debug_log(f"Invalid response from gh command for PR {pr_number}: {result}")
+            return -1
+
+    except Exception as e:
+        debug_log(f"Error getting changed files count for PR {pr_number}: {e}")
+        return -1
+
+
 def configure_git_user():
     """Configures git user email and name."""
     log("Configuring Git user...")
