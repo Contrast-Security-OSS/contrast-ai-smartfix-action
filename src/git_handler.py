@@ -45,7 +45,7 @@ def get_gh_env():
 def log_copilot_assignment_error(issue_number: int, error: Exception, remediation_label: str):
     """
     Logs a standardized error message for Copilot assignment failures and exits.
-    
+
     Args:
         issue_number: The issue number that failed assignment
         error: The exception that occurred
@@ -58,7 +58,7 @@ def log_copilot_assignment_error(issue_number: int, error: Exception, remediatio
     log("  - @Copilot user doesn't exist in this repository")
     log("  - Insufficient permissions to assign users")
     log("  - Repository settings restricting assignments")
-    
+
     # Extract remediation_id from the remediation_label (format: "smartfix-id:REMEDIATION_ID")
     remediation_id = remediation_label.replace("smartfix-id:", "") if remediation_label.startswith("smartfix-id:") else "unknown"
     error_exit(remediation_id, FailureCategory.GIT_COMMAND_FAILURE.value)
@@ -531,7 +531,7 @@ def create_issue(title: str, body: str, vuln_label: str, remediation_label: str)
         try:
             issue_number = int(os.path.basename(issue_url.strip()))
             log(f"Issue number extracted: {issue_number}")
-            
+
             # Now try to assign to @copilot separately
             assign_command = [
                 "gh", "issue", "edit",
@@ -539,13 +539,13 @@ def create_issue(title: str, body: str, vuln_label: str, remediation_label: str)
                 str(issue_number),
                 "--add-assignee", "@copilot"
             ]
-            
+
             try:
                 run_command(assign_command, env=gh_env, check=True)
                 debug_log("Issue assigned to @Copilot")
             except Exception as assign_error:
                 log_copilot_assignment_error(issue_number, assign_error, remediation_label)
-            
+
             return issue_number
         except ValueError:
             log(f"Could not extract issue number from URL: {issue_url}", is_error=True)
