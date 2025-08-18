@@ -251,8 +251,8 @@ Here are several recommended `agent_model` values:
 
 ### Supported Languages
 
-* **Java, Python, .NET, NodeJS:** SmartFix regularly produces good fixes for a variety of Java, Python, .NET, and NodeJS testing projects (using a variety of project platforms, such as Maven, Gradle, Django, Flask, WSGI, Razor Pages, and Express).  SmartFix officially supports Java, Python, .NET, and NodeJS.
-* **Go:** Java, Python, .NET, and NodeJS applications have received the most testing so far, but we have also had some good results for Go projects.
+* **Java, Python, .NET, Node.js:** SmartFix regularly produces good fixes for a variety of Java, Python, .NET, and Node.js testing projects (using a variety of project platforms, such as Maven, Gradle, Django, Flask, WSGI, Razor Pages, and Express).  SmartFix officially supports Java, Python, .NET, and Node.js.
+* **Go:** Java, Python, .NET, and Node.js applications have received the most testing so far, but we have also had some good results for Go projects.
 * **Other Languages:** While it might work for other languages (such as Ruby, and PHP), comprehensive testing is in progress. Use with caution for non-officially-supported projects.
 
 ### Supported GitHub Runners
