@@ -179,6 +179,5 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
-# ai coding files
+# assistant planning files
 /ai-dev
-SmartFix-Testing-Harness-Planning*
