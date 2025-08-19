@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-#-
+# -
 # #%L
 # Contrast AI SmartFix
 # %%
@@ -48,24 +48,25 @@ TEST_ENV_VARS = {
 os.environ.update(TEST_ENV_VARS)
 
 # Import with testing=True
-from src.config import get_config, reset_config
-from src import git_handler
+from src.config import get_config, reset_config  # noqa: E402
+from src import git_handler  # noqa: E402
+
 
 class TestGitHandler(unittest.TestCase):
     """Tests for functions in git_handler.py"""
-    
+
     def setUp(self):
         """Set up test environment before each test"""
         # Use the shared TEST_ENV_VARS for consistent environment setup
         self.env_patcher = patch.dict('os.environ', TEST_ENV_VARS)
         self.env_patcher.start()
         reset_config()  # Reset the config singleton
-        
+
     def tearDown(self):
         """Clean up after each test"""
         self.env_patcher.stop()
         reset_config()
-    
+
     @patch('src.git_handler.run_command')
     @patch('src.git_handler.log')
     @patch('src.git_handler.debug_log')
@@ -75,18 +76,18 @@ class TestGitHandler(unittest.TestCase):
         label = "test-label"
         mock_response = json.dumps([{"number": 42, "createdAt": "2025-07-21T12:00:00Z"}])
         mock_run_command.return_value = mock_response
-        
+
         # Initialize config with testing=True
         _ = get_config(testing=True)
-        
+
         # Execute
         result = git_handler.find_issue_with_label(label)
-        
+
         # Assert
         mock_run_command.assert_called_once()
         self.assertEqual(42, result)
         mock_debug_log.assert_any_call("Found issue #42 with label: test-label")
-    
+
     @patch('src.git_handler.run_command')
     @patch('src.git_handler.log')
     @patch('src.git_handler.debug_log')
@@ -95,18 +96,18 @@ class TestGitHandler(unittest.TestCase):
         # Setup
         label = "test-label"
         mock_run_command.return_value = json.dumps([])
-        
+
         # Initialize config with testing=True
         _ = get_config(testing=True)
-        
+
         # Execute
         result = git_handler.find_issue_with_label(label)
-        
+
         # Assert
         mock_run_command.assert_called_once()
         self.assertIsNone(result)
         mock_debug_log.assert_any_call("No issues found with label: test-label")
-    
+
     @patch('src.git_handler.run_command')
     @patch('src.git_handler.log')
     def test_find_issue_with_label_error(self, mock_log, mock_run_command):
@@ -114,13 +115,13 @@ class TestGitHandler(unittest.TestCase):
         # Setup
         label = "test-label"
         mock_run_command.side_effect = Exception("Mock error")
-        
+
         # Initialize config with testing=True
         _ = get_config(testing=True)
-        
+
         # Execute
         result = git_handler.find_issue_with_label(label)
-        
+
         # Assert
         mock_run_command.assert_called_once()
         self.assertIsNone(result)
@@ -136,17 +137,17 @@ class TestGitHandler(unittest.TestCase):
         body = "Test issue body"
         vuln_label = "contrast-vuln-id:VULN-1234"
         remediation_label = "smartfix-id:5678"
-        
+
         # Mock successful issue creation with URL returned
         mock_run_command.return_value = "https://github.com/mock/repo/issues/42"
         mock_ensure_label.return_value = True
-        
+
         # Initialize config with testing=True
         _ = get_config(testing=True)
-        
+
         # Execute
         result = git_handler.create_issue(title, body, vuln_label, remediation_label)
-        
+
         # Assert
         mock_run_command.assert_called_once()
         self.assertEqual(42, result)  # Should extract issue number 42 from URL
@@ -164,17 +165,17 @@ class TestGitHandler(unittest.TestCase):
         body = "Test issue body"
         vuln_label = "contrast-vuln-id:VULN-1234"
         remediation_label = "smartfix-id:5678"
-        
+
         # Mock failure during issue creation
         mock_run_command.side_effect = Exception("Mock error")
         mock_ensure_label.return_value = True
-        
+
         # Initialize config with testing=True
         _ = get_config(testing=True)
-        
+
         # Execute
         result = git_handler.create_issue(title, body, vuln_label, remediation_label)
-        
+
         # Assert
         mock_run_command.assert_called_once()
         self.assertIsNone(result)
@@ -190,10 +191,10 @@ class TestGitHandler(unittest.TestCase):
         # Setup
         issue_number = 42
         remediation_label = "smartfix-id:5678"
-        
+
         # Mock that no open PR exists
         mock_find_open_pr.return_value = None
-        
+
         # Mock successful issue view with labels
         mock_run_command.side_effect = [
             # First call - issue view response
@@ -208,20 +209,20 @@ class TestGitHandler(unittest.TestCase):
             ""
         ]
         mock_ensure_label.return_value = True
-        
+
         # Initialize config with testing=True
         _ = get_config(testing=True)
-        
+
         # Execute
         result = git_handler.reset_issue(issue_number, remediation_label)
-        
+
         # Assert
         self.assertEqual(mock_run_command.call_count, 5)  # Should call run_command 5 times
         self.assertTrue(result)
         mock_debug_log.assert_any_call("Removed existing remediation labels from issue #42")
         mock_log.assert_any_call("Added new remediation label to issue #42")
         mock_log.assert_any_call("Reassigned issue #42 to @Copilot")
-        
+
     @patch('src.git_handler.find_open_pr_for_issue')
     @patch('src.git_handler.run_command')
     @patch('src.git_handler.log')
@@ -232,13 +233,13 @@ class TestGitHandler(unittest.TestCase):
         remediation_label = "smartfix-id:5678"
         mock_run_command.side_effect = Exception("Mock error")
         mock_find_pr.return_value = None  # No open PR exists
-        
+
         # Initialize config with testing=True
         _ = get_config(testing=True)
-        
+
         # Execute
         result = git_handler.reset_issue(issue_number, remediation_label)
-        
+
         # Assert
         mock_run_command.assert_called_once()
         self.assertFalse(result)
@@ -251,25 +252,25 @@ class TestGitHandler(unittest.TestCase):
         # Setup
         issue_number = 42
         remediation_label = "smartfix-id:5678"
-        
+
         # Mock that an open PR exists
         mock_find_open_pr.return_value = {
             "number": 123,
             "url": "https://github.com/mock/repo/pull/123",
             "title": "Fix for issue #42"
         }
-        
+
         # Initialize config with testing=True
         _ = get_config(testing=True)
-        
+
         # Execute
         result = git_handler.reset_issue(issue_number, remediation_label)
-        
+
         # Assert
         mock_find_open_pr.assert_called_once_with(issue_number)
         self.assertFalse(result)
         mock_log.assert_any_call(
-            "Cannot reset issue #42 because it has an open PR #123: https://github.com/mock/repo/pull/123", 
+            "Cannot reset issue #42 because it has an open PR #123: https://github.com/mock/repo/pull/123",
             is_error=True
         )
 
@@ -291,13 +292,13 @@ class TestGitHandler(unittest.TestCase):
             }
         ]
         mock_run_command.return_value = json.dumps(pr_data)
-        
+
         # Initialize config with testing=True
         _ = get_config(testing=True)
-        
+
         # Execute
         result = git_handler.find_open_pr_for_issue(issue_number)
-        
+
         # Assert
         self.assertEqual(result, pr_data[0])
         mock_run_command.assert_called_once()
@@ -312,13 +313,13 @@ class TestGitHandler(unittest.TestCase):
         # Setup
         issue_number = 42
         mock_run_command.return_value = "[]"
-        
+
         # Initialize config with testing=True
         _ = get_config(testing=True)
-        
+
         # Execute
         result = git_handler.find_open_pr_for_issue(issue_number)
-        
+
         # Assert
         self.assertIsNone(result)
         mock_run_command.assert_called_once()
@@ -333,13 +334,13 @@ class TestGitHandler(unittest.TestCase):
         # Setup
         issue_number = 42
         mock_run_command.side_effect = Exception("Mock error")
-        
+
         # Initialize config with testing=True
         _ = get_config(testing=True)
-        
+
         # Execute
         result = git_handler.find_open_pr_for_issue(issue_number)
-        
+
         # Assert
         self.assertIsNone(result)
         mock_run_command.assert_called_once()
@@ -358,33 +359,33 @@ class TestGitHandler(unittest.TestCase):
         labels = ["contrast-vuln-id:VULN-12345", "smartfix-id:remediation-67890"]
         mock_ensure_label.return_value = True
         mock_run_command.return_value = ""  # Successful command returns empty string
-        
+
         # Mock config to use test repository
         mock_config.GITHUB_REPOSITORY = "mock/repo"
-        
+
         # Initialize config with testing=True
         _ = get_config(testing=True)
-        
+
         # Execute
         result = git_handler.add_labels_to_pr(pr_number, labels)
-        
+
         # Assert
         self.assertTrue(result)
-        
+
         # Verify ensure_label was called for each label with correct parameters
         expected_ensure_calls = [
             unittest.mock.call("contrast-vuln-id:VULN-12345", "Vulnerability identified by Contrast", "ff0000"),
             unittest.mock.call("smartfix-id:remediation-67890", "Remediation ID for Contrast vulnerability", "0075ca")
         ]
         mock_ensure_label.assert_has_calls(expected_ensure_calls, any_order=True)
-        
+
         # Verify run_command was called with correct gh pr edit command
         mock_run_command.assert_called_once()
         call_args = mock_run_command.call_args[0][0]  # First argument (command list)
         self.assertEqual(call_args[0:5], ["gh", "pr", "edit", "--repo", "mock/repo"])
         self.assertEqual(call_args[5], "123")
         self.assertEqual(call_args[6:8], ["--add-label", "contrast-vuln-id:VULN-12345,smartfix-id:remediation-67890"])
-        
+
         mock_log.assert_any_call("Adding labels to PR #123: ['contrast-vuln-id:VULN-12345', 'smartfix-id:remediation-67890']")
         mock_log.assert_any_call("Successfully added labels to PR #123: ['contrast-vuln-id:VULN-12345', 'smartfix-id:remediation-67890']")
 
@@ -397,7 +398,7 @@ class TestGitHandler(unittest.TestCase):
             ("copilot/fix-999999", 999999),
             ("copilot/fix-42", 42),
         ]
-        
+
         for branch_name, expected_issue_number in test_cases:
             with self.subTest(branch_name=branch_name):
                 result = git_handler.extract_issue_number_from_branch(branch_name)
@@ -416,7 +417,7 @@ class TestGitHandler(unittest.TestCase):
             "smartfix/remediation-123",      # Different prefix
             "",                              # Empty string
         ]
-        
+
         for branch_name in invalid_branches:
             with self.subTest(branch_name=branch_name):
                 result = git_handler.extract_issue_number_from_branch(branch_name)
@@ -428,7 +429,7 @@ class TestGitHandler(unittest.TestCase):
         edge_cases = [
             ("copilot/fix-2147483647", 2147483647),  # Large number (max 32-bit int)
         ]
-        
+
         for branch_name, expected_issue_number in edge_cases:
             with self.subTest(branch_name=branch_name):
                 result = git_handler.extract_issue_number_from_branch(branch_name)
@@ -443,13 +444,13 @@ class TestGitHandler(unittest.TestCase):
         # Setup
         pr_number = 123
         labels = []
-        
+
         # Initialize config with testing=True
         _ = get_config(testing=True)
-        
+
         # Execute
         result = git_handler.add_labels_to_pr(pr_number, labels)
-        
+
         # Assert
         self.assertTrue(result)
         mock_ensure_label.assert_not_called()
@@ -467,16 +468,16 @@ class TestGitHandler(unittest.TestCase):
         labels = ["contrast-vuln-id:VULN-99999", "custom-label"]
         mock_ensure_label.return_value = True
         mock_run_command.return_value = ""
-        
+
         # Initialize config with testing=True
         _ = get_config(testing=True)
-        
+
         # Execute
         result = git_handler.add_labels_to_pr(pr_number, labels)
-        
+
         # Assert
         self.assertTrue(result)
-        
+
         # Verify ensure_label was called with correct parameters for different label types
         expected_ensure_calls = [
             unittest.mock.call("contrast-vuln-id:VULN-99999", "Vulnerability identified by Contrast", "ff0000"),
@@ -495,19 +496,20 @@ class TestGitHandler(unittest.TestCase):
         labels = ["test-label"]
         mock_ensure_label.return_value = True
         mock_run_command.side_effect = Exception("Command failed")
-        
+
         # Initialize config with testing=True
         _ = get_config(testing=True)
-        
+
         # Execute
         result = git_handler.add_labels_to_pr(pr_number, labels)
-        
+
         # Assert
         self.assertFalse(result)
         mock_ensure_label.assert_called_once_with("test-label", "Label added by Contrast AI SmartFix", "cccccc")
         mock_run_command.assert_called_once()
         mock_log.assert_any_call("Adding labels to PR #789: ['test-label']")
         mock_log.assert_any_call("Failed to add labels to PR #789: Command failed", is_error=True)
+
 
 if __name__ == '__main__':
     unittest.main()

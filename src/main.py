@@ -1,4 +1,4 @@
-#-
+# -
 # #%L
 # Contrast AI SmartFix
 # %%
@@ -46,15 +46,16 @@ telemetry_handler.initialize_telemetry()
 
 # NOTE: Google ADK appears to have issues with asyncio event loop cleanup, and has had attempts to address them in versions 1.4.0-1.5.0
 # Configure warnings to ignore asyncio ResourceWarnings during shutdown
-warnings.filterwarnings("ignore", category=ResourceWarning, 
+warnings.filterwarnings("ignore", category=ResourceWarning,
                         message="unclosed.*<asyncio.sslproto._SSLProtocolTransport.*")
-warnings.filterwarnings("ignore", category=ResourceWarning, 
+warnings.filterwarnings("ignore", category=ResourceWarning,
                         message="unclosed transport")
-warnings.filterwarnings("ignore", category=ResourceWarning, 
+warnings.filterwarnings("ignore", category=ResourceWarning,
                         message="unclosed.*<asyncio.*")
 
 # Patch asyncio to handle event loop closed errors during shutdown
 _original_loop_check_closed = asyncio.base_events.BaseEventLoop._check_closed
+
 
 def _patched_loop_check_closed(self):
     try:
@@ -63,17 +64,18 @@ def _patched_loop_check_closed(self):
         if "Event loop is closed" in str(e):
             return  # Suppress the error
         raise
+
+
 asyncio.BaseEventLoop._check_closed = _patched_loop_check_closed
+
 
 # Add a specific fix for _ProactorBasePipeTransport.__del__ on Windows
 if platform.system() == 'Windows':
     # Import the specific module that contains ProactorBasePipeTransport
     try:
-        from asyncio.proactor_events import _ProactorBasePipeTransport
-        
         # Store the original __del__ method
         _original_pipe_del = _ProactorBasePipeTransport.__del__
-        
+
         # Define a safe replacement for __del__
         def _patched_pipe_del(self):
             try:
@@ -87,10 +89,10 @@ if platform.system() == 'Windows':
             except (AttributeError, RuntimeError, ImportError, TypeError):
                 # Catch and ignore all attribute or runtime errors during shutdown
                 pass
-        
+
         # Apply the patch to the __del__ method
         _ProactorBasePipeTransport.__del__ = _patched_pipe_del
-        
+
         debug_log("Successfully patched _ProactorBasePipeTransport.__del__ for Windows")
     except (ImportError, AttributeError) as e:
         debug_log(f"Could not patch _ProactorBasePipeTransport: {str(e)}")
@@ -98,10 +100,10 @@ if platform.system() == 'Windows':
     # Add a specific fix for BaseSubprocessTransport.__del__ on Windows
     try:
         from asyncio.base_subprocess import BaseSubprocessTransport
-        
+
         # Store the original __del__ method
         _original_subprocess_del = BaseSubprocessTransport.__del__
-        
+
         # Define a safe replacement for __del__
         def _patched_subprocess_del(self):
             try:
@@ -116,15 +118,16 @@ if platform.system() == 'Windows':
                 # Catch and ignore all attribute, runtime, or value errors during shutdown
                 # ValueError specifically handles "I/O operation on closed pipe"
                 pass
-        
+
         # Apply the patch to the __del__ method
         BaseSubprocessTransport.__del__ = _patched_subprocess_del
-        
+
         debug_log("Successfully patched BaseSubprocessTransport.__del__ for Windows")
     except (ImportError, AttributeError) as e:
         debug_log(f"Could not patch BaseSubprocessTransport: {str(e)}")
 
-def cleanup_asyncio():
+
+def cleanup_asyncio():  # noqa: C901
     """
     Cleanup function registered with atexit to properly handle asyncio resources during shutdown.
     This helps prevent the "Event loop is closed" errors during program exit.
@@ -136,61 +139,61 @@ def cleanup_asyncio():
         class DummyStderr:
             def write(self, *args, **kwargs):
                 pass
-            
+
             def flush(self):
                 pass
-        
+
         # Only on Windows do we need the more aggressive error suppression
         if platform.system() == 'Windows':
             sys.stderr = DummyStderr()
-            
+
             # Windows-specific: ensure the proactor event loop resources are properly cleaned
             try:
                 # Try to access the global WindowsProactorEventLoopPolicy
                 loop_policy = asyncio.get_event_loop_policy()
-                
+
                 # If we have any running loops, close them properly
                 try:
                     loop = loop_policy.get_event_loop()
                     if not loop.is_closed():
                         if loop.is_running():
                             loop.stop()
-                        
+
                         # Cancel all tasks
                         pending = asyncio.all_tasks(loop)
                         if pending:
                             for task in pending:
                                 task.cancel()
-                            
+
                             # Give tasks a chance to respond to cancellation with a timeout
                             try:
                                 loop.run_until_complete(asyncio.wait_for(
-                                    asyncio.gather(*pending, return_exceptions=True), 
+                                    asyncio.gather(*pending, return_exceptions=True),
                                     timeout=1.0
                                 ))
                             except (asyncio.CancelledError, asyncio.TimeoutError, Exception):
                                 pass
-                        
+
                         # Close transports and other resources
                         try:
                             loop.run_until_complete(loop.shutdown_asyncgens())
                         except Exception:
                             pass
-                            
+
                         try:
                             loop.close()
                         except Exception:
                             pass
                 except Exception:
                     pass
-                    
+
                 # Force garbage collection to ensure __del__ methods are called
                 try:
                     import gc
                     gc.collect()
                 except Exception:
                     pass
-                    
+
             except Exception:
                 pass  # Ignore any errors during Windows-specific cleanup
         else:
@@ -199,17 +202,17 @@ def cleanup_asyncio():
                 loop = asyncio.get_event_loop()
                 if loop.is_running():
                     loop.stop()
-                
+
                 # Cancel all tasks
                 pending = asyncio.all_tasks(loop)
                 if pending:
                     for task in pending:
                         task.cancel()
-                    
+
                     # Give tasks a chance to respond to cancellation
                     if not loop.is_closed():
                         loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
-                
+
                 # Close the loop
                 if not loop.is_closed():
                     loop.run_until_complete(loop.shutdown_asyncgens())
@@ -220,12 +223,14 @@ def cleanup_asyncio():
         # Restore stderr
         sys.stderr = original_stderr
 
+
 # Register the cleanup function
 atexit.register(cleanup_asyncio)
 
-def main():
+
+def main():  # noqa: C901
     """Main orchestration logic."""
-    
+
     start_time = datetime.now()
     log("--- Starting Contrast AI SmartFix Script ---")
     debug_log(f"Start time: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
@@ -236,7 +241,6 @@ def main():
     # --- Use Build Command and Max Attempts/PRs from Config ---
     build_command = config.BUILD_COMMAND
     debug_log(f"Build command specified: {build_command}")
-
 
     formatting_command = config.FORMATTING_COMMAND
     if formatting_command:
@@ -269,7 +273,7 @@ def main():
     # --- Main Processing Loop ---
     processed_one = False
     max_runtime = timedelta(hours=3)  # Set maximum runtime to 3 hours
-    
+
     # Construct GitHub repository URL (used for each API call)
     github_repo_url = f"https://github.com/{config.GITHUB_REPOSITORY}"
     debug_log(f"GitHub repository URL: {github_repo_url}")
@@ -298,7 +302,7 @@ def main():
             else:
                 log(f"Failed to notify Remediation service about exceeded timeout for remediation {remediation_id}.", is_warning=True)
             break
-            
+
         # Check if we've reached the max PR limit
         current_open_pr_count = git_handler.count_open_prs_with_prefix(label_prefix_to_check)
         if current_open_pr_count >= max_open_prs_setting:
@@ -351,7 +355,7 @@ def main():
             fix_user_prompt = None
             qa_system_prompt = None
             qa_user_prompt = None
-        
+
         # Populate vulnInfo in telemetry
         telemetry_handler.update_telemetry("vulnInfo.vulnId", vuln_uuid)
         telemetry_handler.update_telemetry("vulnInfo.vulnRule", vulnerability_data['vulnerabilityRuleName'])
@@ -377,6 +381,20 @@ def main():
         log("\n::endgroup::")
         log(f"\n\033[0;33m Selected vuln to fix: {vuln_title} \033[0m")
 
+        # --- Check if we need to use the external coding agent ---
+        if config.CODING_AGENT != "SMARTFIX":
+            external_agent = ExternalCodingAgent(config)
+            # Assemble the issue body from vulnerability details
+            issue_body = external_agent.assemble_issue_body(vulnerability_data)
+            # Pass the assembled issue body to generate_fixes()
+            if external_agent.generate_fixes(vuln_uuid, remediation_id, vuln_title, issue_body):
+                log("\n\n--- External Coding Agent successfully generated fixes ---")
+                processed_one = True
+                contrast_api.send_telemetry_data()
+            continue  # Skip the built-in SmartFix code and PR creation
+
+        telemetry_handler.update_telemetry("additionalAttributes.codingAgent", "INTERNAL-SMARTFIX")
+
         # Prepare a clean repository state and branch for the fix
         new_branch_name = git_handler.get_branch_name(remediation_id)
         try:
@@ -393,21 +411,7 @@ def main():
             error_analysis = extract_build_errors(prefix_build_output)
             log("\n❌ Build is broken ❌ -- No fix attempted.")
             log(f"Build output:\n{error_analysis}")
-            error_exit(remediation_id, contrast_api.FailureCategory.INITIAL_BUILD_FAILURE.value) # Exit if the build is broken, no point in proceeding
-
-        # --- Check if we need to use the external coding agent ---
-        if config.CODING_AGENT != "SMARTFIX":
-            external_agent = ExternalCodingAgent(config)
-            # Assemble the issue body from vulnerability details
-            issue_body = external_agent.assemble_issue_body(vulnerability_data)
-            # Pass the assembled issue body to generate_fixes()
-            if external_agent.generate_fixes(vuln_uuid, remediation_id, vuln_title, issue_body):
-                log(f"\n\n--- External Coding Agent successfully generated fixes ---")
-                processed_one = True
-                contrast_api.send_telemetry_data()
-            continue  # Skip the built-in SmartFix code and PR creation
-
-        telemetry_handler.update_telemetry("additionalAttributes.codingAgent", "INTERNAL-SMARTFIX")
+            error_exit(remediation_id, contrast_api.FailureCategory.INITIAL_BUILD_FAILURE.value)  # Exit if the build is broken, no point in proceeding
 
         # --- Run AI Fix Agent (SmartFix) ---
         ai_fix_summary_full = agent_handler.run_ai_fix_agent(
@@ -429,7 +433,6 @@ def main():
             commit_message = git_handler.generate_commit_message(vuln_title, vuln_uuid)
             git_handler.commit_changes(commit_message)
             initial_changed_files = git_handler.get_last_commit_changed_files()
-            
 
             if not config.SKIP_QA_REVIEW and build_command:
                 debug_log("Proceeding with QA Review as SKIP_QA_REVIEW is false and BUILD_COMMAND is provided.")
@@ -458,12 +461,12 @@ def main():
                     if not used_build_command:
                         qa_section += " (BUILD_COMMAND not provided)\n"
                     qa_section += "\n*   **Final Build Status:** Skipped\n"
-                
+
                 # Skip PR creation if QA was run and the build is failing
                 # or if the QA agent encountered an error (detected by checking qa_summary_log entries)
                 if (used_build_command and not build_success) or any(s.startswith("Error during QA agent execution:") for s in qa_summary_log):
                     failure_category = ""
-                    
+
                     if any(s.startswith("Error during QA agent.execution:") for s in qa_summary_log):
                         log("\n--- Skipping PR creation as QA Agent encountered an error ---")
                         failure_category = contrast_api.FailureCategory.QA_AGENT_FAILURE.value
@@ -472,7 +475,7 @@ def main():
                         # Check if we've exhausted all retry attempts
                         if len(qa_summary_log) >= max_qa_attempts_setting:
                             failure_category = contrast_api.FailureCategory.EXCEEDED_QA_ATTEMPTS.value
-                    
+
                     # Notify the Remediation service about the failed remediation if we have a failure category
                     if failure_category:
                         remediation_notified = contrast_api.notify_remediation_failed(
@@ -484,7 +487,7 @@ def main():
                             contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
                             contrast_api_key=config.CONTRAST_API_KEY
                         )
-                        
+
                         if remediation_notified:
                             log(f"Successfully notified Remediation service about {failure_category} for remediation {remediation_id}.")
                         else:
@@ -492,10 +495,10 @@ def main():
 
                     git_handler.cleanup_branch(new_branch_name)
                     contrast_api.send_telemetry_data()
-                    continue # Move to the next vulnerability
+                    continue  # Move to the next vulnerability
 
-            else: # QA is skipped
-                qa_section = "" # Ensure qa_section is empty if QA is skipped
+            else:  # QA is skipped
+                qa_section = ""  # Ensure qa_section is empty if QA is skipped
                 if config.SKIP_QA_REVIEW:
                     log("Skipping QA Review based on SKIP_QA_REVIEW setting.")
                 elif not build_command:
@@ -510,11 +513,11 @@ def main():
             debug_log("Using agent's output (processed by agent_handler) as PR body base.")
 
             # --- Push and Create PR ---
-            git_handler.push_branch(new_branch_name) # Push the final commit (original or amended)
+            git_handler.push_branch(new_branch_name)  # Push the final commit (original or amended)
 
             label_name, label_desc, label_color = git_handler.generate_label_details(vuln_uuid)
             label_created = git_handler.ensure_label(label_name, label_desc, label_color)
-            
+
             if not label_created:
                 log(f"Could not create GitHub label '{label_name}'. PR will be created without a label.", is_warning=True)
                 label_name = ""  # Clear label_name to avoid using it in PR creation
@@ -522,32 +525,32 @@ def main():
             pr_title = git_handler.generate_pr_title(vuln_title)
 
             updated_pr_body = pr_body_base + qa_section
-            
+
             # Create a brief summary for the telemetry aiSummaryReport (limited to 255 chars in DB)
             # Generate an optimized summary using the dedicated function in telemetry_handler
             brief_summary = telemetry_handler.create_ai_summary_report(updated_pr_body)
-            
+
             # Update telemetry with our optimized summary
             telemetry_handler.update_telemetry("resultInfo.aiSummaryReport", brief_summary)
 
             try:
                 # Set a flag to track if we should try the fallback approach
                 pr_creation_success = False
-                pr_url = "" # Initialize pr_url
-                
+                pr_url = ""  # Initialize pr_url
+
                 # Try to create the PR using the GitHub CLI
                 log("Attempting to create a pull request...")
                 pr_url = git_handler.create_pr(pr_title, updated_pr_body, remediation_id, config.BASE_BRANCH, label_name)
-                
+
                 if pr_url:
                     pr_creation_success = True
-                    
+
                     # Extract PR number from PR URL
                     # PR URL format is like: https://github.com/org/repo/pull/123
                     pr_number = None
                     try:
                         # Use a more robust method to extract the PR number
-                        
+
                         pr_match = re.search(r'/pull/(\d+)', pr_url)
                         debug_log(f"Extracting PR number from URL '{pr_url}', match object: {pr_match}")
                         if pr_match:
@@ -557,10 +560,10 @@ def main():
                             log(f"Could not find PR number pattern in URL: {pr_url}", is_warning=True)
                     except (ValueError, IndexError, AttributeError) as e:
                         log(f"Could not extract PR number from URL: {pr_url} - Error: {str(e)}")
-                    
+
                     # Notify the Remediation backend service about the PR
                     if pr_number is None:
-                        pr_number = 1;
+                        pr_number = 1
 
                     remediation_notified = contrast_api.notify_remediation_pr_opened(
                         remediation_id=remediation_id,
@@ -583,12 +586,12 @@ def main():
                     log("PR creation did not return a URL. Assuming failure.")
 
                 telemetry_handler.update_telemetry("resultInfo.prCreated", pr_creation_success)
-                
+
                 if not pr_creation_success:
                     log("\n--- PR creation failed ---")
                     error_exit(remediation_id, contrast_api.FailureCategory.GENERATE_PR_FAILURE.value)
-                
-                processed_one = True # Mark that we successfully processed one
+
+                processed_one = True  # Mark that we successfully processed one
                 log(f"\n--- Successfully processed vulnerability {vuln_uuid}. Continuing to look for next vulnerability... ---")
             except Exception as e:
                 log(f"Error creating PR: {e}")
@@ -598,7 +601,7 @@ def main():
             log("Skipping commit, push, and PR creation as no changes were detected by the agent.")
             # Clean up the branch if no changes were made
             git_handler.cleanup_branch(new_branch_name)
-            continue # Try the next vulnerability
+            continue  # Try the next vulnerability
 
         contrast_api.send_telemetry_data()
 
@@ -612,7 +615,7 @@ def main():
         log("\n--- Finished processing vulnerabilities. At least one vulnerability was successfully processed. ---")
 
     log(f"\n--- Script finished (total runtime: {total_runtime}) ---")
-    
+
     # Clean up any dangling asyncio resources
     try:
         # Force asyncio resource cleanup before exit
@@ -626,26 +629,26 @@ def main():
                         task.cancel()
                     except Exception:
                         pass
-                
+
                 # Give tasks a chance to respond to cancellation
                 try:
                     # Wait with a timeout to prevent hanging
                     loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
                 except (asyncio.CancelledError, Exception):
                     pass
-            
+
             try:
                 # Shut down asyncgens
                 loop.run_until_complete(loop.shutdown_asyncgens())
             except Exception:
                 pass
-                
+
             try:
                 # Close the loop
                 loop.close()
             except Exception:
                 pass
-                
+
         # On Windows, specifically force garbage collection
         if platform.system() == 'Windows':
             try:
