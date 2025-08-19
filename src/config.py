@@ -49,7 +49,7 @@ class Config:
         self.testing = testing
 
         # --- Preset ---
-        self.VERSION = "v1.0.7"
+        self.VERSION = "v1.0.8"
         self.USER_AGENT = f"contrast-smart-fix {self.VERSION}"
 
         # --- Core Settings ---
