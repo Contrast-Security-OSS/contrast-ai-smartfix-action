@@ -47,7 +47,6 @@ ADK_AVAILABLE = False
 try:
     from google.adk.agents import Agent
     from google.adk.artifacts.in_memory_artifact_service import InMemoryArtifactService
-    from google.adk.models.lite_llm import LiteLlm
     from src.extensions.extended_litellm import ExtendedLiteLlm
     from google.adk.runners import Runner
     from google.adk.sessions import InMemorySessionService
