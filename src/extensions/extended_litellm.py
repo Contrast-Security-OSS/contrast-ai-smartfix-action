@@ -185,6 +185,14 @@ class ExtendedLiteLlm(LiteLlm):
         """Add cache_control to messages for Anthropic-style providers."""
         debug_log(f"Adding Anthropic-style cache control to {len(messages)} messages")
 
+        # Log all message roles first to understand the structure
+        for i, message in enumerate(messages):
+            if hasattr(message, 'role'):
+                role = getattr(message, 'role')
+                debug_log(f"Message {i} has role: '{role}'")
+            else:
+                debug_log(f"Message {i} has NO role attribute - type: {type(message)}")
+
         # For Anthropic models, we need to modify the system message
         # According to LiteLLM docs, cache_control should be on the last content item
         cache_applied = False
@@ -231,6 +239,8 @@ class ExtendedLiteLlm(LiteLlm):
                                 }
                                 cache_applied = True
                                 debug_log("Converted first string item to text with cache control")
+                else:
+                    debug_log(f"System message at index {i} has no content attribute")
 
                 # Only modify the first system message we find
                 if cache_applied:
@@ -256,6 +266,10 @@ class ExtendedLiteLlm(LiteLlm):
                     if role == 'system' and content:
                         content_preview = str(content)[:100] + "..." if len(str(content)) > 100 else str(content)
                         debug_log(f"  System message preview: {content_preview}")
+                else:
+                    # Log the full object structure if no role attribute
+                    debug_log(f"Message {i}: NO ROLE ATTRIBUTE - type={type(msg)}, attributes={dir(msg)}")
+                    debug_log(f"Message {i}: str representation: {str(msg)[:200]}...")
 
     def _verify_cache_control_applied(self, kwargs: Dict[str, Any]) -> None:
         """Verify that cache control was successfully applied to messages."""
