@@ -237,9 +237,9 @@ class ExtendedLiteLlm(LiteLlm):
                     break
 
         if cache_applied:
-            debug_log(f"✅ Successfully applied cache control to system message")
+            debug_log(f"[OK] Successfully applied cache control to system message")
         else:
-            debug_log(f"⚠️ WARNING: Could not find suitable system message to apply cache control")
+            debug_log(f"[!] WARNING: Could not find suitable system message to apply cache control")
 
     async def generate_content_async(
         self, llm_request: LlmRequest, stream: bool = False
@@ -255,37 +255,52 @@ class ExtendedLiteLlm(LiteLlm):
 
         async def cached_acompletion(**kwargs):
             """Wrapper that adds caching before calling completion."""
-            debug_log(f"🚨 cached_acompletion wrapper called for model: {self.model}")
+            debug_log(f">>> cached_acompletion wrapper called for model: {self.model}")
             debug_log(f"cache_system_instruction: {self.cache_system_instruction}")
             debug_log(f"_supports_caching(): {self._supports_caching()}")
 
             if self.cache_system_instruction and self._supports_caching():
-                debug_log(f"✅ Applying cache control to completion args for model: {self.model}")
+                debug_log(f"[OK] Applying cache control to completion args for model: {self.model}")
                 debug_log(f"Completion args keys: {list(kwargs.keys())}")
+
                 if 'messages' in kwargs:
                     debug_log(f"Number of messages: {len(kwargs['messages'])}")
                     for i, msg in enumerate(kwargs['messages']):
                         if hasattr(msg, 'role'):
-                            debug_log(f"Message {i}: role={msg.role}, content_type={type(getattr(msg, 'content', None))}")
+                            role = getattr(msg, 'role', 'unknown')
+                            content = getattr(msg, 'content', None)
+                            content_type = type(content)
+                            debug_log(f"Message {i}: role={role}, content_type={content_type}")
 
-                # Store original messages for comparison
-                original_messages_str = str(kwargs.get('messages', []))[:200] + "..."
-                debug_log(f"Messages before cache control: {original_messages_str}")
+                            # Log first 100 chars of content for system messages
+                            if role == 'system' and content:
+                                content_preview = str(content)[:100] + "..." if len(str(content)) > 100 else str(content)
+                                debug_log(f"  System message preview: {content_preview}")
 
+                # Apply cache control
                 self._add_cache_control(kwargs)
 
-                # Check if messages were modified
-                modified_messages_str = str(kwargs.get('messages', []))[:200] + "..."
-                debug_log(f"Messages after cache control: {modified_messages_str}")
+                # Verify cache control was applied
+                if 'messages' in kwargs:
+                    for i, msg in enumerate(kwargs['messages']):
+                        if hasattr(msg, 'role') and getattr(msg, 'role') == 'system':
+                            content = getattr(msg, 'content', None)
+                            debug_log(f"After cache control - System message {i} content type: {type(content)}")
+                            if isinstance(content, list) and len(content) > 0:
+                                for j, item in enumerate(content):
+                                    if isinstance(item, dict) and 'cache_control' in item:
+                                        debug_log(f"  [OK] Found cache_control in content item {j}: {item.get('cache_control')}")
+                                    else:
+                                        debug_log(f"  [X] No cache_control in content item {j}: {type(item)}")
 
-                debug_log(f"✅ Applied prompt caching to model call: {self.model}")
+                debug_log(f"[OK] Applied prompt caching to model call: {self.model}")
             else:
-                debug_log(f"❌ Skipping cache control - cache_system_instruction: {self.cache_system_instruction}, supports_caching: {self._supports_caching()}")
+                debug_log(f"[X] Skipping cache control - cache_system_instruction: {self.cache_system_instruction}, supports_caching: {self._supports_caching()}")
 
             # Call the original method
-            debug_log(f"🔄 Calling original acompletion method")
+            debug_log(f">>> Calling original acompletion method")
             result = await original_acompletion(**kwargs)
-            debug_log(f"✅ Original acompletion completed")
+            debug_log(f"[OK] Original acompletion completed")
             return result
 
         # Temporarily replace the acompletion method
