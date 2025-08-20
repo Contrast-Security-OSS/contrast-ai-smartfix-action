@@ -183,13 +183,21 @@ class ExtendedLiteLlm(LiteLlm):
 
     def _add_anthropic_style_cache_control(self, messages: List[Any]) -> None:
         """Add cache_control to messages for Anthropic-style providers."""
-        # For Anthropic models, we need to modify the system/developer message
-        for message in messages:
-            if hasattr(message, 'role') and message.role in ['system', 'developer']:
+        debug_log(f"Adding Anthropic-style cache control to {len(messages)} messages")
+
+        # For Anthropic models, we need to modify the system message
+        # According to LiteLLM docs, cache_control should be on the last content item
+        cache_applied = False
+        for i, message in enumerate(messages):
+            if hasattr(message, 'role') and message.role == 'system':
+                debug_log(f"Found system message at index {i}")
                 if hasattr(message, 'content'):
+                    debug_log(f"Message content type: {type(message.content)}")
+
                     # Handle different content formats
                     if isinstance(message.content, str):
-                        # Convert string content to object format with cache control
+                        debug_log(f"Converting string system content to list with cache control")
+                        # Convert string content to list format with cache control on the text item
                         message.content = [
                             {
                                 "type": "text",
@@ -197,14 +205,41 @@ class ExtendedLiteLlm(LiteLlm):
                                 "cache_control": {"type": self.cache_control_type}
                             }
                         ]
-                    elif isinstance(message.content, list):
-                        # Add cache control to the last text item
-                        for i, content_item in enumerate(message.content):
-                            if (isinstance(content_item, dict)
-                                    and content_item.get("type") == "text"
-                                    and i == len(message.content) - 1):  # Last text item
+                        cache_applied = True
+                        debug_log(f"Applied cache_control to string content: {self.cache_control_type}")
+                    elif isinstance(message.content, list) and len(message.content) > 0:
+                        debug_log(f"System message content is list with {len(message.content)} items")
+                        # Find the last text item and add cache control to it
+                        for j in range(len(message.content) - 1, -1, -1):  # Iterate backwards
+                            content_item = message.content[j]
+                            if (isinstance(content_item, dict) and content_item.get("type") == "text"):
+                                debug_log(f"Adding cache_control to last text item at index {j}")
                                 content_item["cache_control"] = {"type": self.cache_control_type}
-                break  # Only modify the first system message
+                                cache_applied = True
+                                debug_log(f"Applied cache_control to list content item {j}: {self.cache_control_type}")
+                                break
+
+                        # If no text items found, convert the whole thing
+                        if not cache_applied and message.content:
+                            debug_log(f"No text items found, converting first item to text with cache control")
+                            first_item = message.content[0]
+                            if isinstance(first_item, str):
+                                message.content[0] = {
+                                    "type": "text",
+                                    "text": first_item,
+                                    "cache_control": {"type": self.cache_control_type}
+                                }
+                                cache_applied = True
+                                debug_log(f"Converted first string item to text with cache control")
+
+                # Only modify the first system message we find
+                if cache_applied:
+                    break
+
+        if cache_applied:
+            debug_log(f"✅ Successfully applied cache control to system message")
+        else:
+            debug_log(f"⚠️ WARNING: Could not find suitable system message to apply cache control")
 
     async def generate_content_async(
         self, llm_request: LlmRequest, stream: bool = False
@@ -220,18 +255,38 @@ class ExtendedLiteLlm(LiteLlm):
 
         async def cached_acompletion(**kwargs):
             """Wrapper that adds caching before calling completion."""
-            debug_log(f"cached_acompletion called for model: {self.model}")
+            debug_log(f"🚨 cached_acompletion wrapper called for model: {self.model}")
             debug_log(f"cache_system_instruction: {self.cache_system_instruction}")
             debug_log(f"_supports_caching(): {self._supports_caching()}")
 
             if self.cache_system_instruction and self._supports_caching():
-                debug_log(f"Applying cache control to completion args for model: {self.model}")
-                self._add_cache_control(kwargs)
-                debug_log(f"Applied prompt caching to model call: {self.model}")
-            else:
-                debug_log(f"Skipping cache control - cache_system_instruction: {self.cache_system_instruction}, supports_caching: {self._supports_caching()}")
+                debug_log(f"✅ Applying cache control to completion args for model: {self.model}")
+                debug_log(f"Completion args keys: {list(kwargs.keys())}")
+                if 'messages' in kwargs:
+                    debug_log(f"Number of messages: {len(kwargs['messages'])}")
+                    for i, msg in enumerate(kwargs['messages']):
+                        if hasattr(msg, 'role'):
+                            debug_log(f"Message {i}: role={msg.role}, content_type={type(getattr(msg, 'content', None))}")
 
-            return await original_acompletion(**kwargs)
+                # Store original messages for comparison
+                original_messages_str = str(kwargs.get('messages', []))[:200] + "..."
+                debug_log(f"Messages before cache control: {original_messages_str}")
+
+                self._add_cache_control(kwargs)
+
+                # Check if messages were modified
+                modified_messages_str = str(kwargs.get('messages', []))[:200] + "..."
+                debug_log(f"Messages after cache control: {modified_messages_str}")
+
+                debug_log(f"✅ Applied prompt caching to model call: {self.model}")
+            else:
+                debug_log(f"❌ Skipping cache control - cache_system_instruction: {self.cache_system_instruction}, supports_caching: {self._supports_caching()}")
+
+            # Call the original method
+            debug_log(f"🔄 Calling original acompletion method")
+            result = await original_acompletion(**kwargs)
+            debug_log(f"✅ Original acompletion completed")
+            return result
 
         # Temporarily replace the acompletion method
         self.llm_client.acompletion = cached_acompletion
