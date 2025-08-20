@@ -206,6 +206,7 @@ async def create_agent(target_folder: Path, remediation_id: str, agent_type: str
     try:
         model_instance = ExtendedLiteLlm(
             model=config.AGENT_MODEL,
+            cache_system_instruction=True,  # Enable prompt caching
             temperature=0.2,  # Set low temperature for more deterministic output
             # seed=42, # The random seed for reproducibility (not supported by bedrock/anthropic atm call throws error)
             stream_options={"include_usage": True}

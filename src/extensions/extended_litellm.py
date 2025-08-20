@@ -77,9 +77,13 @@ class ExtendedLiteLlm(LiteLlm):
             cache_control_type: Type of cache control to use
             **kwargs: Additional arguments passed to LiteLlm
         """
-        super().__init__(model=model, **kwargs)
+        # Extract our custom parameters before calling parent constructor
+        # to avoid field validation errors from the parent class
         self.cache_system_instruction = cache_system_instruction
         self.cache_control_type = cache_control_type
+
+        # Call parent constructor without our custom fields
+        super().__init__(model=model, **kwargs)
 
         # Log if caching is enabled
         if cache_system_instruction:
