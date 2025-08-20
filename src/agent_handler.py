@@ -80,6 +80,15 @@ async def get_mcp_tools(target_folder: Path, remediation_id: str) -> MCPToolset:
     try:
         debug_log("Connecting to MCP Filesystem server...")
 
+        # Windows-specific connection parameters to handle EPIPE issues
+        if platform.system() == 'Windows':
+            connection_timeout = 300
+            get_tools_timeout = 120.0  # Much longer timeout for Windows
+            debug_log("Using Windows-specific MCP connection settings")
+        else:
+            connection_timeout = 180
+            get_tools_timeout = 10.0
+
         fs_tools = MCPToolset(
             connection_params=StdioConnectionParams(
                 server_params=StdioServerParameters(
@@ -90,19 +99,39 @@ async def get_mcp_tools(target_folder: Path, remediation_id: str) -> MCPToolset:
                         target_folder_str,
                     ],
                 ),
-                timeout=300,
+                timeout=connection_timeout,
             )
         )
 
         debug_log("Getting tools list from Filesystem MCP server...")
-        # Use a longer timeout on Windows
-        timeout_seconds = 30.0 if platform.system() == 'Windows' else 10.0
-        debug_log(f"Using {timeout_seconds} second timeout for get_tools")
+        debug_log(f"Using {get_tools_timeout} second timeout for get_tools")
 
-        # Wrap the get_tools call in wait_for to apply a timeout
-        tools_list = await asyncio.wait_for(fs_tools.get_tools(), timeout=timeout_seconds)
+        # Add retry mechanism specifically for Windows EPIPE issues
+        max_retries = 3 if platform.system() == 'Windows' else 1
+        last_error = None
 
-        debug_log(f"Connected to Filesystem MCP server, got {len(tools_list)} tools")
+        for attempt in range(max_retries):
+            try:
+                if attempt > 0:
+                    debug_log(f"Retrying MCP connection (attempt {attempt + 1}/{max_retries})")
+                    # Wait a bit before retry to let any broken connections clean up
+                    await asyncio.sleep(2)
+
+                # Wrap the get_tools call in wait_for to apply a timeout
+                tools_list = await asyncio.wait_for(fs_tools.get_tools(), timeout=get_tools_timeout)
+                debug_log(f"Connected to Filesystem MCP server, got {len(tools_list)} tools")
+                break  # Success, exit retry loop
+
+            except (asyncio.TimeoutError, asyncio.CancelledError, ConnectionError) as retry_error:
+                last_error = retry_error
+                debug_log(f"MCP connection attempt {attempt + 1} failed: {type(retry_error).__name__}: {str(retry_error)}")
+                if attempt == max_retries - 1:
+                    # Last attempt failed, re-raise the error
+                    raise retry_error
+        else:
+            # This should not be reached, but just in case
+            raise last_error if last_error else Exception("Unknown MCP connection failure")
+
         for tool in tools_list:
             if hasattr(tool, 'name'):
                 debug_log(f"  - Filesystem Tool: {tool.name}")
