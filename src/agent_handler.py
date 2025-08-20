@@ -73,6 +73,57 @@ library_logger = logging.getLogger("google_adk.google.adk.tools.base_authenticat
 library_logger.setLevel(logging.ERROR)
 
 
+async def _create_mcp_toolset(target_folder_str: str) -> MCPToolset:
+    """Create MCP toolset with platform-specific configuration."""
+    if platform.system() == 'Windows':
+        connection_timeout = 300
+        debug_log("Using Windows-specific MCP connection settings")
+    else:
+        connection_timeout = 180
+
+    return MCPToolset(
+        connection_params=StdioConnectionParams(
+            server_params=StdioServerParameters(
+                command='npx',
+                args=[
+                    '-y',  # Arguments for the command
+                    '--cache', '/tmp/.npm-cache',  # Use explicit cache directory
+                    '--prefer-offline',  # Try to use cached packages first
+                    '@modelcontextprotocol/server-filesystem@2025.1.14',
+                    target_folder_str,
+                ],
+            ),
+            timeout=connection_timeout,
+        )
+    )
+
+
+async def _get_tools_timeout() -> float:
+    """Get platform-specific timeout for MCP tools connection."""
+    if platform.system() == 'Windows':
+        return 120.0  # Much longer timeout for Windows
+    else:
+        return 30.0  # Increased timeout for Linux due to npm issues
+
+
+async def _clear_npm_cache_if_needed(attempt: int, max_retries: int):
+    """Clear npm cache on second retry if needed."""
+    if attempt == 2:
+        debug_log("Clearing npm cache due to repeated failures...")
+        try:
+            import subprocess
+            subprocess.run(['npm', 'cache', 'clean', '--force'],
+                           capture_output=True, timeout=30)
+            debug_log("NPM cache cleared successfully")
+        except Exception as cache_error:
+            debug_log(f"Failed to clear npm cache: {cache_error}")
+
+
+async def _attempt_mcp_connection(fs_tools: MCPToolset, get_tools_timeout: float) -> List:
+    """Attempt to connect to MCP server and get tools."""
+    return await asyncio.wait_for(fs_tools.get_tools(), timeout=get_tools_timeout)
+
+
 async def get_mcp_tools(target_folder: Path, remediation_id: str) -> MCPToolset:
     """Connects to MCP servers (Filesystem)"""
     debug_log("Attempting to connect to MCP servers...")
@@ -82,30 +133,8 @@ async def get_mcp_tools(target_folder: Path, remediation_id: str) -> MCPToolset:
     try:
         debug_log("Connecting to MCP Filesystem server...")
 
-        # Windows-specific connection parameters to handle EPIPE issues
-        if platform.system() == 'Windows':
-            connection_timeout = 300
-            get_tools_timeout = 120.0  # Much longer timeout for Windows
-            debug_log("Using Windows-specific MCP connection settings")
-        else:
-            connection_timeout = 180
-            get_tools_timeout = 30.0  # Increased timeout for Linux due to npm issues
-
-        fs_tools = MCPToolset(
-            connection_params=StdioConnectionParams(
-                server_params=StdioServerParameters(
-                    command='npx',
-                    args=[
-                        '-y',  # Arguments for the command
-                        '--cache', '/tmp/.npm-cache',  # Use explicit cache directory
-                        '--prefer-offline',  # Try to use cached packages first
-                        '@modelcontextprotocol/server-filesystem@2025.1.14',
-                        target_folder_str,
-                    ],
-                ),
-                timeout=connection_timeout,
-            )
-        )
+        fs_tools = await _create_mcp_toolset(target_folder_str)
+        get_tools_timeout = await _get_tools_timeout()
 
         debug_log("Getting tools list from Filesystem MCP server...")
         debug_log(f"Using {get_tools_timeout} second timeout for get_tools")
@@ -118,22 +147,12 @@ async def get_mcp_tools(target_folder: Path, remediation_id: str) -> MCPToolset:
             try:
                 if attempt > 0:
                     debug_log(f"Retrying MCP connection (attempt {attempt + 1}/{max_retries})")
-                    # On second retry, clear npm cache to handle corrupted packages
-                    if attempt == 2:
-                        debug_log("Clearing npm cache due to repeated failures...")
-                        try:
-                            import subprocess
-                            subprocess.run(['npm', 'cache', 'clean', '--force'],
-                                         capture_output=True, timeout=30)
-                            debug_log("NPM cache cleared successfully")
-                        except Exception as cache_error:
-                            debug_log(f"Failed to clear npm cache: {cache_error}")
-
+                    await _clear_npm_cache_if_needed(attempt, max_retries)
                     # Wait a bit before retry to let any broken connections clean up
                     await asyncio.sleep(2)
 
                 # Wrap the get_tools call in wait_for to apply a timeout
-                tools_list = await asyncio.wait_for(fs_tools.get_tools(), timeout=get_tools_timeout)
+                tools_list = await _attempt_mcp_connection(fs_tools, get_tools_timeout)
                 debug_log(f"Connected to Filesystem MCP server, got {len(tools_list)} tools")
                 break  # Success, exit retry loop
 
