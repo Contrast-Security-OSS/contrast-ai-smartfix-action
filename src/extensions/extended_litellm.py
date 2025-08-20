@@ -196,7 +196,7 @@ class ExtendedLiteLlm(LiteLlm):
 
                     # Handle different content formats
                     if isinstance(message.content, str):
-                        debug_log(f"Converting string system content to list with cache control")
+                        debug_log("Converting string system content to list with cache control")
                         # Convert string content to list format with cache control on the text item
                         message.content = [
                             {
@@ -221,7 +221,7 @@ class ExtendedLiteLlm(LiteLlm):
 
                         # If no text items found, convert the whole thing
                         if not cache_applied and message.content:
-                            debug_log(f"No text items found, converting first item to text with cache control")
+                            debug_log("No text items found, converting first item to text with cache control")
                             first_item = message.content[0]
                             if isinstance(first_item, str):
                                 message.content[0] = {
@@ -230,16 +230,46 @@ class ExtendedLiteLlm(LiteLlm):
                                     "cache_control": {"type": self.cache_control_type}
                                 }
                                 cache_applied = True
-                                debug_log(f"Converted first string item to text with cache control")
+                                debug_log("Converted first string item to text with cache control")
 
                 # Only modify the first system message we find
                 if cache_applied:
                     break
 
         if cache_applied:
-            debug_log(f"[OK] Successfully applied cache control to system message")
+            debug_log("[OK] Successfully applied cache control to system message")
         else:
-            debug_log(f"[!] WARNING: Could not find suitable system message to apply cache control")
+            debug_log("[!] WARNING: Could not find suitable system message to apply cache control")
+
+    def _log_message_details(self, kwargs: Dict[str, Any]) -> None:
+        """Log details about the messages being sent to the completion."""
+        if 'messages' in kwargs:
+            debug_log(f"Number of messages: {len(kwargs['messages'])}")
+            for i, msg in enumerate(kwargs['messages']):
+                if hasattr(msg, 'role'):
+                    role = getattr(msg, 'role', 'unknown')
+                    content = getattr(msg, 'content', None)
+                    content_type = type(content)
+                    debug_log(f"Message {i}: role={role}, content_type={content_type}")
+
+                    # Log first 100 chars of content for system messages
+                    if role == 'system' and content:
+                        content_preview = str(content)[:100] + "..." if len(str(content)) > 100 else str(content)
+                        debug_log(f"  System message preview: {content_preview}")
+
+    def _verify_cache_control_applied(self, kwargs: Dict[str, Any]) -> None:
+        """Verify that cache control was successfully applied to messages."""
+        if 'messages' in kwargs:
+            for i, msg in enumerate(kwargs['messages']):
+                if hasattr(msg, 'role') and getattr(msg, 'role') == 'system':
+                    content = getattr(msg, 'content', None)
+                    debug_log(f"After cache control - System message {i} content type: {type(content)}")
+                    if isinstance(content, list) and len(content) > 0:
+                        for j, item in enumerate(content):
+                            if isinstance(item, dict) and 'cache_control' in item:
+                                debug_log(f"  [OK] Found cache_control in content item {j}: {item.get('cache_control')}")
+                            else:
+                                debug_log(f"  [X] No cache_control in content item {j}: {type(item)}")
 
     async def generate_content_async(
         self, llm_request: LlmRequest, stream: bool = False
@@ -263,44 +293,22 @@ class ExtendedLiteLlm(LiteLlm):
                 debug_log(f"[OK] Applying cache control to completion args for model: {self.model}")
                 debug_log(f"Completion args keys: {list(kwargs.keys())}")
 
-                if 'messages' in kwargs:
-                    debug_log(f"Number of messages: {len(kwargs['messages'])}")
-                    for i, msg in enumerate(kwargs['messages']):
-                        if hasattr(msg, 'role'):
-                            role = getattr(msg, 'role', 'unknown')
-                            content = getattr(msg, 'content', None)
-                            content_type = type(content)
-                            debug_log(f"Message {i}: role={role}, content_type={content_type}")
-
-                            # Log first 100 chars of content for system messages
-                            if role == 'system' and content:
-                                content_preview = str(content)[:100] + "..." if len(str(content)) > 100 else str(content)
-                                debug_log(f"  System message preview: {content_preview}")
+                self._log_message_details(kwargs)
 
                 # Apply cache control
                 self._add_cache_control(kwargs)
 
                 # Verify cache control was applied
-                if 'messages' in kwargs:
-                    for i, msg in enumerate(kwargs['messages']):
-                        if hasattr(msg, 'role') and getattr(msg, 'role') == 'system':
-                            content = getattr(msg, 'content', None)
-                            debug_log(f"After cache control - System message {i} content type: {type(content)}")
-                            if isinstance(content, list) and len(content) > 0:
-                                for j, item in enumerate(content):
-                                    if isinstance(item, dict) and 'cache_control' in item:
-                                        debug_log(f"  [OK] Found cache_control in content item {j}: {item.get('cache_control')}")
-                                    else:
-                                        debug_log(f"  [X] No cache_control in content item {j}: {type(item)}")
+                self._verify_cache_control_applied(kwargs)
 
                 debug_log(f"[OK] Applied prompt caching to model call: {self.model}")
             else:
                 debug_log(f"[X] Skipping cache control - cache_system_instruction: {self.cache_system_instruction}, supports_caching: {self._supports_caching()}")
 
             # Call the original method
-            debug_log(f">>> Calling original acompletion method")
+            debug_log(">>> Calling original acompletion method")
             result = await original_acompletion(**kwargs)
-            debug_log(f"[OK] Original acompletion completed")
+            debug_log("[OK] Original acompletion completed")
             return result
 
         # Temporarily replace the acompletion method
