@@ -89,7 +89,7 @@ async def get_mcp_tools(target_folder: Path, remediation_id: str) -> MCPToolset:
             debug_log("Using Windows-specific MCP connection settings")
         else:
             connection_timeout = 180
-            get_tools_timeout = 10.0
+            get_tools_timeout = 30.0  # Increased timeout for Linux due to npm issues
 
         fs_tools = MCPToolset(
             connection_params=StdioConnectionParams(
@@ -97,7 +97,9 @@ async def get_mcp_tools(target_folder: Path, remediation_id: str) -> MCPToolset:
                     command='npx',
                     args=[
                         '-y',  # Arguments for the command
-                        '@modelcontextprotocol/server-filesystem@2025.7.1',
+                        '--cache', '/tmp/.npm-cache',  # Use explicit cache directory
+                        '--prefer-offline',  # Try to use cached packages first
+                        '@modelcontextprotocol/server-filesystem@2025.1.14',
                         target_folder_str,
                     ],
                 ),
@@ -116,6 +118,17 @@ async def get_mcp_tools(target_folder: Path, remediation_id: str) -> MCPToolset:
             try:
                 if attempt > 0:
                     debug_log(f"Retrying MCP connection (attempt {attempt + 1}/{max_retries})")
+                    # On second retry, clear npm cache to handle corrupted packages
+                    if attempt == 2:
+                        debug_log("Clearing npm cache due to repeated failures...")
+                        try:
+                            import subprocess
+                            subprocess.run(['npm', 'cache', 'clean', '--force'],
+                                         capture_output=True, timeout=30)
+                            debug_log("NPM cache cleared successfully")
+                        except Exception as cache_error:
+                            debug_log(f"Failed to clear npm cache: {cache_error}")
+
                     # Wait a bit before retry to let any broken connections clean up
                     await asyncio.sleep(2)
 
