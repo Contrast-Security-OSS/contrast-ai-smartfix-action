@@ -67,6 +67,8 @@ except ImportError as e:
         sys.exit(1)  # Only exit in production, not in tests
 
 warnings.filterwarnings('ignore', category=UserWarning)
+# Suppress specific Pydantic field shadowing warning from ADK library
+warnings.filterwarnings('ignore', message='Field name "config_type" in "SequentialAgent" shadows an attribute in parent "BaseAgent"')
 library_logger = logging.getLogger("google_adk.google.adk.tools.base_authenticated_tool")
 library_logger.setLevel(logging.ERROR)
 
@@ -106,8 +108,8 @@ async def get_mcp_tools(target_folder: Path, remediation_id: str) -> MCPToolset:
         debug_log("Getting tools list from Filesystem MCP server...")
         debug_log(f"Using {get_tools_timeout} second timeout for get_tools")
 
-        # Add retry mechanism specifically for Windows EPIPE issues
-        max_retries = 3 if platform.system() == 'Windows' else 1
+        # Add retry mechanism for MCP connection reliability across all platforms
+        max_retries = 3
         last_error = None
 
         for attempt in range(max_retries):
