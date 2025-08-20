@@ -87,6 +87,8 @@ class ExtendedLiteLlm(LiteLlm):
         # Log if caching is enabled
         if cache_system_instruction:
             log(f"Prompt caching enabled for {model} with cache_control_type: {cache_control_type}")
+            debug_log(f"ExtendedLiteLlm initialized with caching enabled for model: {model}")
+            debug_log(f"Model supports caching: {self._supports_caching()}")
 
     @property
     def cache_system_instruction(self) -> bool:
@@ -166,7 +168,9 @@ class ExtendedLiteLlm(LiteLlm):
         model_lower = self.model.lower()
 
         # For Anthropic models (including Bedrock Anthropic), add cache_control
-        if model_lower.startswith(("anthropic/", "bedrock/anthropic")):
+        is_anthropic_bedrock = model_lower.startswith("bedrock/") and "anthropic" in model_lower
+        if model_lower.startswith("anthropic/") or is_anthropic_bedrock:
+            debug_log(f"Detected Anthropic model (direct or via Bedrock): {self.model}")
             self._add_anthropic_style_cache_control(messages)
         elif model_lower.startswith(("openai/", "azure/")):
             # OpenAI and Azure OpenAI handle caching automatically for 1024+ tokens
@@ -216,9 +220,16 @@ class ExtendedLiteLlm(LiteLlm):
 
         async def cached_acompletion(**kwargs):
             """Wrapper that adds caching before calling completion."""
+            debug_log(f"cached_acompletion called for model: {self.model}")
+            debug_log(f"cache_system_instruction: {self.cache_system_instruction}")
+            debug_log(f"_supports_caching(): {self._supports_caching()}")
+
             if self.cache_system_instruction and self._supports_caching():
+                debug_log(f"Applying cache control to completion args for model: {self.model}")
                 self._add_cache_control(kwargs)
                 debug_log(f"Applied prompt caching to model call: {self.model}")
+            else:
+                debug_log(f"Skipping cache control - cache_system_instruction: {self.cache_system_instruction}, supports_caching: {self._supports_caching()}")
 
             return await original_acompletion(**kwargs)
 
