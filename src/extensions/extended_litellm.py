@@ -77,17 +77,26 @@ class ExtendedLiteLlm(LiteLlm):
             cache_control_type: Type of cache control to use
             **kwargs: Additional arguments passed to LiteLlm
         """
-        # Extract our custom parameters before calling parent constructor
-        # to avoid field validation errors from the parent class
-        self.cache_system_instruction = cache_system_instruction
-        self.cache_control_type = cache_control_type
-
-        # Call parent constructor without our custom fields
+        # Call parent constructor first
         super().__init__(model=model, **kwargs)
+
+        # Store our custom parameters using object.__setattr__ to bypass field validation
+        object.__setattr__(self, '_cache_system_instruction', cache_system_instruction)
+        object.__setattr__(self, '_cache_control_type', cache_control_type)
 
         # Log if caching is enabled
         if cache_system_instruction:
             log(f"Prompt caching enabled for {model} with cache_control_type: {cache_control_type}")
+
+    @property
+    def cache_system_instruction(self) -> bool:
+        """Get the cache system instruction setting."""
+        return getattr(self, '_cache_system_instruction', False)
+
+    @property
+    def cache_control_type(self) -> str:
+        """Get the cache control type setting."""
+        return getattr(self, '_cache_control_type', 'ephemeral')
 
     def _supports_caching(self) -> bool:
         """Check if the current model supports prompt caching.
