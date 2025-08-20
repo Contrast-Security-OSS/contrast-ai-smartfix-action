@@ -48,6 +48,7 @@ try:
     from google.adk.agents import Agent
     from google.adk.artifacts.in_memory_artifact_service import InMemoryArtifactService
     from google.adk.models.lite_llm import LiteLlm
+    from src.extensions.extended_litellm import ExtendedLiteLlm
     from google.adk.runners import Runner
     from google.adk.sessions import InMemorySessionService
     from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset, StdioServerParameters, StdioConnectionParams
@@ -204,7 +205,7 @@ async def create_agent(target_folder: Path, remediation_id: str, agent_type: str
     agent_name = f"contrast_{agent_type}_agent"
 
     try:
-        model_instance = LiteLlm(
+        model_instance = ExtendedLiteLlm(
             model=config.AGENT_MODEL,
             temperature=0.2,  # Set low temperature for more deterministic output
             # seed=42, # The random seed for reproducibility (not supported by bedrock/anthropic atm call throws error)
