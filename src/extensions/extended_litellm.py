@@ -271,6 +271,42 @@ class ExtendedLiteLlm(LiteLlm):
                     debug_log(f"Message {i}: NO ROLE ATTRIBUTE - type={type(msg)}, attributes={dir(msg)}")
                     debug_log(f"Message {i}: str representation: {str(msg)[:200]}...")
 
+    def _log_request_messages(self, llm_request: LlmRequest) -> None:
+        """Log details about messages in the LlmRequest."""
+        if hasattr(llm_request, 'messages'):
+            messages = llm_request.messages
+            debug_log(f"LlmRequest contains {len(messages)} messages")
+            for i, msg in enumerate(messages):
+                if hasattr(msg, 'role'):
+                    role = getattr(msg, 'role', 'unknown')
+                    content = getattr(msg, 'content', None)
+                    content_type = type(content)
+                    debug_log(f"LlmRequest Message {i}: role={role}, content_type={content_type}")
+
+                    # Log first 100 chars of content for system messages
+                    if role == 'system' and content:
+                        content_preview = str(content)[:100] + "..." if len(str(content)) > 100 else str(content)
+                        debug_log(f"  LlmRequest System message preview: {content_preview}")
+                else:
+                    debug_log(f"LlmRequest Message {i}: NO ROLE ATTRIBUTE - type={type(msg)}")
+
+    def _add_cache_control_to_request(self, llm_request: LlmRequest) -> None:
+        """Try to add cache control directly to the LlmRequest messages."""
+        if not hasattr(llm_request, 'messages'):
+            debug_log("[X] LlmRequest has no messages attribute")
+            return
+
+        messages = llm_request.messages
+        model_lower = self.model.lower()
+
+        # For Anthropic models (including Bedrock Anthropic), add cache_control
+        is_anthropic_bedrock = model_lower.startswith("bedrock/") and "anthropic" in model_lower
+        if model_lower.startswith("anthropic/") or is_anthropic_bedrock:
+            debug_log(f"Applying cache control to LlmRequest for Anthropic model: {self.model}")
+            self._add_anthropic_style_cache_control(messages)
+        else:
+            debug_log(f"No cache control needed for LlmRequest - model: {self.model}")
+
     def _verify_cache_control_applied(self, kwargs: Dict[str, Any]) -> None:
         """Verify that cache control was successfully applied to messages."""
         if 'messages' in kwargs:
@@ -294,12 +330,35 @@ class ExtendedLiteLlm(LiteLlm):
         This method intercepts the completion arguments and adds cache control
         before calling the parent implementation.
         """
+        debug_log(f">>> generate_content_async called for model: {self.model}")
+        debug_log(f"LlmRequest type: {type(llm_request)}")
+        debug_log(f"Stream: {stream}")
+
+        # Introspect the parent class and llm_client to understand the flow
+        debug_log(f"Parent class: {type(super())}")
+        debug_log(f"Parent class methods: {[method for method in dir(super()) if not method.startswith('_')]}")
+        debug_log(f"llm_client type: {type(self.llm_client)}")
+        debug_log(f"llm_client methods: {[method for method in dir(self.llm_client) if not method.startswith('_')]}")
+
+        # Check if acompletion method exists
+        if hasattr(self.llm_client, 'acompletion'):
+            debug_log(f"[OK] llm_client has acompletion method: {type(self.llm_client.acompletion)}")
+        else:
+            debug_log(f"[!] llm_client does NOT have acompletion method")
+
+        # Also check for other common LiteLLM methods
+        for method_name in ['completion', 'acompletion', 'achat', 'chat', 'generate']:
+            if hasattr(self.llm_client, method_name):
+                debug_log(f"[OK] llm_client has {method_name} method")
+            else:
+                debug_log(f"[X] llm_client missing {method_name} method")
+
         # Store the original acompletion method
-        original_acompletion = self.llm_client.acompletion
+        original_acompletion = getattr(self.llm_client, 'acompletion', None)
 
         async def cached_acompletion(**kwargs):
             """Wrapper that adds caching before calling completion."""
-            debug_log(f">>> cached_acompletion wrapper called for model: {self.model}")
+            debug_log(f"!!! WRAPPER CALLED !!! cached_acompletion wrapper called for model: {self.model}")
             debug_log(f"cache_system_instruction: {self.cache_system_instruction}")
             debug_log(f"_supports_caching(): {self._supports_caching()}")
 
@@ -321,24 +380,55 @@ class ExtendedLiteLlm(LiteLlm):
 
             # Call the original method
             debug_log(">>> Calling original acompletion method")
-            result = await original_acompletion(**kwargs)
+            if original_acompletion:
+                result = await original_acompletion(**kwargs)
+            else:
+                debug_log("[!] ERROR: No original acompletion method to call!")
+                raise RuntimeError("acompletion method not available")
             debug_log("[OK] Original acompletion completed")
             return result
 
-        # Temporarily replace the acompletion method
-        self.llm_client.acompletion = cached_acompletion
+        # Only set up interception if acompletion method exists
+        if original_acompletion:
+            debug_log("[OK] Setting up acompletion interception")
+            # Temporarily replace the acompletion method
+            self.llm_client.acompletion = cached_acompletion
+        else:
+            debug_log("[!] WARNING: Cannot intercept acompletion - method does not exist")
+            debug_log("[!] Google ADK may be using a different completion path")
 
         try:
             # Call the parent implementation
+            debug_log(">>> Calling parent generate_content_async")
+
+            # Also try to inspect the LlmRequest to see if we can modify it
+            if hasattr(llm_request, 'messages'):
+                debug_log(f"LlmRequest has messages: {len(llm_request.messages)}")
+                self._log_request_messages(llm_request)
+
+                # Try applying cache control to the request itself
+                if self.cache_system_instruction and self._supports_caching():
+                    debug_log("[OK] Attempting to apply cache control to LlmRequest messages")
+                    self._add_cache_control_to_request(llm_request)
+            else:
+                debug_log(f"LlmRequest attributes: {[attr for attr in dir(llm_request) if not attr.startswith('_')]}")
+
             async for response in super().generate_content_async(llm_request, stream):
                 # Check if we got cached tokens in the response
                 if hasattr(response, 'usage_metadata') and response.usage_metadata:
                     usage = response.usage_metadata
+                    debug_log(f"Response usage_metadata: {type(usage)}")
+                    debug_log(f"Usage attributes: {[attr for attr in dir(usage) if not attr.startswith('_')]}")
                     if hasattr(usage, 'prompt_tokens_details'):
                         # Log cache hit information if available
                         debug_log(f"Prompt caching stats - Model: {self.model}")
+                        debug_log(f"prompt_tokens_details: {usage.prompt_tokens_details}")
 
                 yield response
         finally:
-            # Restore the original method
-            self.llm_client.acompletion = original_acompletion
+            # Restore the original method only if we set up interception
+            if original_acompletion:
+                debug_log(">>> Restoring original acompletion method")
+                self.llm_client.acompletion = original_acompletion
+            else:
+                debug_log(">>> No acompletion method to restore")
