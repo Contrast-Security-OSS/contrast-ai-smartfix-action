@@ -344,7 +344,7 @@ class ExtendedLiteLlm(LiteLlm):
         if hasattr(self.llm_client, 'acompletion'):
             debug_log(f"[OK] llm_client has acompletion method: {type(self.llm_client.acompletion)}")
         else:
-            debug_log(f"[!] llm_client does NOT have acompletion method")
+            debug_log("[!] llm_client does NOT have acompletion method")
 
         # Also check for other common LiteLLM methods
         for method_name in ['completion', 'acompletion', 'achat', 'chat', 'generate']:
