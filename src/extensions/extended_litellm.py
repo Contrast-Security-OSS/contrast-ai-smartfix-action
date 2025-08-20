@@ -122,12 +122,17 @@ class ExtendedLiteLlm(LiteLlm):
             "deepseek/"
         ]
 
-        # Check for unsupported providers - only warn, don't fail
+        # First check if it's a supported model
+        is_supported = any(model_lower.startswith(prefix) for prefix in supported_prefixes)
+
+        if is_supported:
+            return True
+
+        # Only if NOT supported, check for specific unsupported patterns and warn
         unsupported_patterns = [
             "gemini",
             "vertex_ai/gemini",
             "azure/",  # Azure OpenAI not officially supported
-            "claude",  # Direct Claude without anthropic/ prefix
         ]
 
         # Log info for unsupported models if caching is requested
@@ -147,15 +152,16 @@ class ExtendedLiteLlm(LiteLlm):
                             f"Azure OpenAI prompt caching is not officially supported by LiteLLM. "
                             f"Model will work normally without caching."
                         )
-                    else:
-                        log(
-                            f"Prompt caching requested for {self.model}. "
-                            f"This model doesn't support prompt caching in LiteLLM. "
-                            f"Supported providers: OpenAI, Anthropic, Bedrock, Deepseek"
-                        )
                     return False
 
-        return any(model_lower.startswith(prefix) for prefix in supported_prefixes)
+            # Generic warning for other unsupported models
+            log(
+                f"Prompt caching requested for {self.model}. "
+                f"This model doesn't support prompt caching in LiteLLM. "
+                f"Supported providers: OpenAI, Anthropic, Bedrock, Deepseek"
+            )
+
+        return False
 
     def _apply_cache_control_to_request(self, llm_request: LlmRequest) -> None:
         """Apply cache control directly to the LlmRequest before message conversion."""
