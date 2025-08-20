@@ -41,17 +41,17 @@ class ExtendedLiteLlm(LiteLlm):
         temperature=0.2
     )
 
-    # Azure OpenAI (automatic caching)
+    # Deepseek (supports caching)
     model_instance = ExtendedLiteLlm(
-        model="azure/gpt-4o",
+        model="deepseek/deepseek-chat",
         cache_system_instruction=True,
         temperature=0.2
     )
 
-    # Gemini (works without caching)
+    # Gemini (works without caching - not supported by LiteLLM)
     model_instance = ExtendedLiteLlm(
         model="gemini-1.5-pro",
-        cache_system_instruction=True,  # Will be ignored, but no errors
+        cache_system_instruction=True,  # Will be ignored with warning
         temperature=0.2
     )
     ```
@@ -103,83 +103,125 @@ class ExtendedLiteLlm(LiteLlm):
     def _supports_caching(self) -> bool:
         """Check if the current model supports prompt caching.
 
-        Based on LiteLLM documentation, prompt caching is supported for:
+        Based on official LiteLLM documentation, prompt caching is supported for:
         - OpenAI (openai/)
-        - Azure OpenAI (azure/) - treated like OpenAI
-        - Anthropic (anthropic/)
+        - Anthropic API (anthropic/)
         - AWS Bedrock (bedrock/, bedrock/invoke/, bedrock/converse/)
+        - Deepseek API (deepseek/)
 
         NOT supported:
-        - Gemini models (but will work without caching)
-        - Deepseek (not supported due to policy restrictions)
+        - Gemini/Vertex AI models
+        - Azure OpenAI (not in official supported list)
+        - Other providers
         """
         model_lower = self.model.lower()
         supported_prefixes = [
             "anthropic/",
             "openai/",
-            "azure/",  # Treat Azure OpenAI like regular OpenAI
-            "bedrock/"
+            "bedrock/",
+            "deepseek/"
         ]
 
         # Check for unsupported providers - only warn, don't fail
         unsupported_patterns = [
             "gemini",
             "vertex_ai/gemini",
-            "deepseek"  # Not supported due to policy restrictions
+            "azure/",  # Azure OpenAI not officially supported
+            "claude",  # Direct Claude without anthropic/ prefix
         ]
 
         # Log info for unsupported models if caching is requested
         if self.cache_system_instruction:
-            if any(pattern in model_lower for pattern in unsupported_patterns):
-                if "deepseek" in model_lower:
-                    log(
-                        f"Deepseek model {self.model} is not supported due to policy restrictions. "
-                        f"Model will work normally without caching."
-                    )
-                else:
-                    log(
-                        f"Prompt caching requested for {self.model}. "
-                        f"This model doesn't support prompt caching, but will work normally without it. "
-                        f"Caching is available for: OpenAI, Azure OpenAI, Anthropic, AWS Bedrock"
-                    )
-                return False
+            for pattern in unsupported_patterns:
+                if pattern in model_lower:
+                    if "gemini" in pattern:
+                        log(
+                            f"Prompt caching requested for {self.model}. "
+                            f"Gemini models don't support prompt caching in LiteLLM. "
+                            f"Model will work normally without caching. "
+                            f"Supported providers: OpenAI, Anthropic, Bedrock, Deepseek"
+                        )
+                    elif "azure" in pattern:
+                        log(
+                            f"Prompt caching requested for {self.model}. "
+                            f"Azure OpenAI prompt caching is not officially supported by LiteLLM. "
+                            f"Model will work normally without caching."
+                        )
+                    else:
+                        log(
+                            f"Prompt caching requested for {self.model}. "
+                            f"This model doesn't support prompt caching in LiteLLM. "
+                            f"Supported providers: OpenAI, Anthropic, Bedrock, Deepseek"
+                        )
+                    return False
 
         return any(model_lower.startswith(prefix) for prefix in supported_prefixes)
 
-    def _add_cache_control(self, completion_args: Dict[str, Any]) -> None:
-        """
-        Add cache control to model messages based on provider.
-
-        Different providers have different requirements:
-        - Anthropic: Requires cache_control in content objects
-        - OpenAI/Azure OpenAI: Automatic caching for 1024+ tokens, no special formatting needed
-        - AWS Bedrock: Follows provider-specific format (Anthropic models use cache_control)
-        - Deepseek: Works like OpenAI
-
-        This modifies the completion_args in place.
-        """
+    def _apply_cache_control_to_request(self, llm_request: LlmRequest) -> None:
+        """Apply cache control directly to the LlmRequest before message conversion."""
         if not self._supports_caching() or not self.cache_system_instruction:
             return
 
-        messages = completion_args.get("messages", [])
-        if not messages:
+        debug_log(f"Applying cache control to LlmRequest for model: {self.model}")
+
+        # Check if the request has contents (ADK's message format)
+        if not hasattr(llm_request, 'contents') or not llm_request.contents:
+            debug_log("No contents found in LlmRequest")
             return
 
         model_lower = self.model.lower()
-
-        # For Anthropic models (including Bedrock Anthropic), add cache_control
         is_anthropic_bedrock = model_lower.startswith("bedrock/") and "anthropic" in model_lower
-        if model_lower.startswith("anthropic/") or is_anthropic_bedrock:
-            debug_log(f"Detected Anthropic model (direct or via Bedrock): {self.model}")
-            self._add_anthropic_style_cache_control(messages)
-        elif model_lower.startswith(("openai/", "azure/")):
-            # OpenAI and Azure OpenAI handle caching automatically for 1024+ tokens
-            # No special formatting needed, but log that caching is attempted
-            provider = "Azure OpenAI" if model_lower.startswith("azure/") else "OpenAI"
-            debug_log(f"{provider} model detected - automatic caching will apply for content with 1024+ tokens")
-        elif model_lower.startswith("bedrock/"):
-            # For non-Anthropic Bedrock models, check what's supported
-            debug_log("Bedrock model detected - cache support depends on specific model")
+
+        # Only apply for Anthropic models (direct or Bedrock)
+        if not (model_lower.startswith("anthropic/") or is_anthropic_bedrock):
+            debug_log(f"Model {self.model} doesn't need cache control modification")
+            return
+
+        debug_log(f"Found {len(llm_request.contents)} contents in LlmRequest")
+
+        # Apply cache control to the first suitable content (typically system/developer instructions)
+        for i, content in enumerate(llm_request.contents):
+            debug_log(f"Processing content {i}: {type(content)}")
+
+            # Check if this content has a role that should be cached
+            if hasattr(content, 'role'):
+                role = content.role
+                debug_log(f"Content {i} has role: {role}")
+
+                if role in ['system', 'developer', 'user']:
+                    debug_log(f"Applying cache control to {role} content at index {i}")
+
+                    # Modify the content to include cache control
+                    if hasattr(content, 'parts') and content.parts:
+                        debug_log(f"Content has {len(content.parts)} parts")
+
+                        # Apply cache control to the last text part
+                        for j in range(len(content.parts) - 1, -1, -1):
+                            part = content.parts[j]
+                            if hasattr(part, 'text') and part.text:
+                                debug_log(f"Adding cache_control to text part {j}")
+
+                                # Try to add cache control to the part
+                                try:
+                                    # This might need to be adapted based on ADK's actual structure
+                                    if not hasattr(part, 'cache_control'):
+                                        object.__setattr__(part, 'cache_control', {'type': self.cache_control_type})
+                                        debug_log(f"[OK] Added cache_control to {role} content part")
+                                        return  # Only cache the first suitable content
+                                    else:
+                                        part.cache_control = {'type': self.cache_control_type}
+                                        debug_log(f"[OK] Updated cache_control on {role} content part")
+                                        return
+                                except Exception as e:
+                                    debug_log(f"Failed to add cache_control to part: {e}")
+
+                        debug_log(f"No text parts found in {role} content")
+                    else:
+                        debug_log(f"Content {i} has no parts attribute")
+            else:
+                debug_log(f"Content {i} has no role attribute")
+
+        debug_log("No suitable content found for cache control")
 
     def _add_anthropic_style_cache_control(self, messages: List[Any]) -> None:
         """Add cache_control to messages for Anthropic-style providers."""
@@ -203,6 +245,9 @@ class ExtendedLiteLlm(LiteLlm):
                 debug_log(f"Applying cache control to {role} message at index {i}")
 
                 if content is not None:
+                    content_length = len(str(content))
+                    debug_log(f"Message content length: {content_length} characters")
+
                     # Handle different content formats
                     if isinstance(content, str):
                         # Convert string content to list format with cache control
@@ -221,14 +266,17 @@ class ExtendedLiteLlm(LiteLlm):
                             message.content = new_content
 
                         cache_applied = True
+                        debug_log(f"Converted string content ({content_length} chars) to list with cache control")
 
                     elif isinstance(content, list) and len(content) > 0:
+                        debug_log(f"Content is already a list with {len(content)} items")
                         # Find the last text item and add cache control to it
                         for j in range(len(content) - 1, -1, -1):
                             content_item = content[j]
                             if (isinstance(content_item, dict) and content_item.get("type") == "text"):
                                 content_item["cache_control"] = {"type": self.cache_control_type}
                                 cache_applied = True
+                                debug_log(f"Added cache control to existing text item at index {j}")
                                 break
 
                         # If no text items found, convert the first item
@@ -241,6 +289,7 @@ class ExtendedLiteLlm(LiteLlm):
                                     "cache_control": {"type": self.cache_control_type}
                                 }
                                 cache_applied = True
+                                debug_log("Converted first string item to text with cache control")
 
                 # Cache the first cacheable message found
                 if cache_applied:
@@ -261,9 +310,15 @@ class ExtendedLiteLlm(LiteLlm):
             content = msg.get('content') if isinstance(msg, dict) else getattr(msg, 'content', None)
 
             if role in ['system', 'developer', 'user'] and isinstance(content, list):
-                for item in content:
+                for j, item in enumerate(content):
                     if isinstance(item, dict) and 'cache_control' in item:
                         debug_log(f"[OK] Cache control applied to {role} message {i}")
+                        # Log the exact structure for debugging
+                        debug_log(f"Cache control structure: {item.get('cache_control')}")
+                        item_type = item.get('type')
+                        item_text = str(item.get('text', ''))[:50]
+                        item_cache = item.get('cache_control')
+                        debug_log(f"Content item structure: {{'type': '{item_type}', 'text': '{item_text}...', 'cache_control': {item_cache}}}")
                         cache_found = True
                         break
                 if cache_found:
@@ -278,53 +333,26 @@ class ExtendedLiteLlm(LiteLlm):
         """
         Generate content with caching support.
 
-        This method intercepts the completion arguments and adds cache control
-        before calling the parent implementation.
+        This method applies cache control to the LlmRequest before it gets processed
+        into LiteLLM format, which is the correct timing for cache control application.
         """
         debug_log(f"Generating content with caching for model: {self.model}")
 
-        # Store the original acompletion method
-        original_acompletion = getattr(self.llm_client, 'acompletion', None)
-
-        async def cached_acompletion(**kwargs):
-            """Wrapper that adds caching before calling completion."""
-            if self.cache_system_instruction and self._supports_caching():
-                debug_log(f"Applying cache control for {self.model}")
-
-                # Apply cache control
-                self._add_cache_control(kwargs)
-
-                # Verify cache control was applied
-                self._log_cache_application(kwargs)
-            else:
-                debug_log(f"Skipping cache control - enabled: {self.cache_system_instruction}, supported: {self._supports_caching()}")
-
-            # Call the original method
-            if original_acompletion:
-                result = await original_acompletion(**kwargs)
-                return result
-            else:
-                raise RuntimeError("acompletion method not available")
-
-        # Set up interception if acompletion method exists
-        if original_acompletion:
-            self.llm_client.acompletion = cached_acompletion
+        # Apply cache control directly to the LlmRequest BEFORE processing
+        if self.cache_system_instruction and self._supports_caching():
+            debug_log("Applying cache control to LlmRequest before message conversion")
+            self._apply_cache_control_to_request(llm_request)
         else:
-            debug_log("[!] Cannot intercept - acompletion method not found")
+            debug_log(f"Skipping cache control - enabled: {self.cache_system_instruction}, supported: {self._supports_caching()}")
 
-        try:
-            # Call the parent implementation
-            async for response in super().generate_content_async(llm_request, stream):
-                # Log cache hit information if available
-                if hasattr(response, 'usage_metadata') and response.usage_metadata:
-                    usage = response.usage_metadata
-                    if hasattr(usage, 'cached_content_token_count') and usage.cached_content_token_count:
-                        debug_log(f"[OK] Cache hit! Cached tokens: {usage.cached_content_token_count}")
-                    elif hasattr(usage, 'prompt_token_count'):
-                        debug_log(f"Cache miss - Prompt tokens: {usage.prompt_token_count}")
+        # Now call the parent implementation with the modified request
+        async for response in super().generate_content_async(llm_request, stream):
+            # Log cache hit information if available
+            if hasattr(response, 'usage_metadata') and response.usage_metadata:
+                usage = response.usage_metadata
+                if hasattr(usage, 'cached_content_token_count') and usage.cached_content_token_count:
+                    debug_log(f"[OK] Cache hit! Cached tokens: {usage.cached_content_token_count}")
+                elif hasattr(usage, 'prompt_token_count'):
+                    debug_log(f"Cache miss - Prompt tokens: {usage.prompt_token_count}")
 
-                yield response
-        finally:
-            # Restore the original method
-            if original_acompletion:
-                self.llm_client.acompletion = original_acompletion
+            yield response
