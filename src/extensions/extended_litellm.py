@@ -21,16 +21,22 @@
 # #L%
 #
 
-from typing import Dict, List, Optional, Tuple
-from google.adk.models.lite_llm import LiteLlm, _get_completion_inputs
+from typing import Dict, List, Optional, Tuple, AsyncGenerator
+from google.adk.models.lite_llm import (
+    LiteLlm, _get_completion_inputs, _build_request_log, _model_response_to_chunk,
+    _model_response_to_generate_content_response, _message_to_generate_content_response,
+    FunctionChunk, TextChunk, UsageMetadataChunk
+)
 from google.adk.models.llm_request import LlmRequest
+from google.adk.models.llm_response import LlmResponse
 from google.genai import types
-from litellm import Message
-# import litellm
+from litellm import Message, ChatCompletionAssistantMessage, ChatCompletionMessageToolCall, Function
+import litellm
 import logging
+import json
 
 # Enable LiteLLM debug logging
-# litellm._turn_on_debug()
+litellm._turn_on_debug()
 
 logger = logging.getLogger(__name__)
 
@@ -165,11 +171,138 @@ class ExtendedLiteLlm(LiteLlm):
 
         return messages, tools, response_format, generation_params
 
-    async def generate_content_async(self, llm_request, stream=False):
-        """Override to add debug logging and ensure our method is called."""
-        logger.info(f"[EXTENDED] ExtendedLiteLlm.generate_content_async called with model: {self.model}")
-        print(f"[EXTENDED] ExtendedLiteLlm.generate_content_async called with model: {self.model}")
+    async def generate_content_async(  # noqa: C901
+        self, llm_request: LlmRequest, stream: bool = False
+    ) -> AsyncGenerator[LlmResponse, None]:
+        """Generates content asynchronously.
 
-        # Call parent method
-        async for response in super().generate_content_async(llm_request, stream):
-            yield response
+        Args:
+            llm_request: LlmRequest, the request to send to the LiteLlm model.
+            stream: bool = False, whether to do streaming call.
+
+        Yields:
+            LlmResponse: The model response.
+        """
+
+        self._maybe_append_user_content(llm_request)
+        logger.debug(_build_request_log(llm_request))
+
+        # CRITICAL FIX: Use self._get_completion_inputs instead of module function
+        messages, tools, response_format, generation_params = (
+            self._get_completion_inputs(llm_request)
+        )
+
+        if "functions" in self._additional_args:
+            # LiteLLM does not support both tools and functions together.
+            tools = None
+
+        completion_args = {
+            "model": self.model,
+            "messages": messages,
+            "tools": tools,
+            "response_format": response_format,
+        }
+        completion_args.update(self._additional_args)
+
+        if generation_params:
+            completion_args.update(generation_params)
+
+        if stream:
+            text = ""
+            # Track function calls by index
+            function_calls = {}  # index -> {name, args, id}
+            completion_args["stream"] = True
+            aggregated_llm_response = None
+            aggregated_llm_response_with_tool_call = None
+            usage_metadata = None
+            fallback_index = 0
+            async for part in await self.llm_client.acompletion(**completion_args):
+                for chunk, finish_reason in _model_response_to_chunk(part):
+                    if isinstance(chunk, FunctionChunk):
+                        index = chunk.index or fallback_index
+                        if index not in function_calls:
+                            function_calls[index] = {"name": "", "args": "", "id": None}
+
+                        if chunk.name:
+                            function_calls[index]["name"] += chunk.name
+                        if chunk.args:
+                            function_calls[index]["args"] += chunk.args
+
+                            # check if args is completed (workaround for improper chunk
+                            # indexing)
+                            try:
+                                json.loads(function_calls[index]["args"])
+                                fallback_index += 1
+                            except json.JSONDecodeError:
+                                pass
+
+                        function_calls[index]["id"] = (
+                            chunk.id or function_calls[index]["id"] or str(index)
+                        )
+                    elif isinstance(chunk, TextChunk):
+                        text += chunk.text
+                        yield _message_to_generate_content_response(
+                            ChatCompletionAssistantMessage(
+                                role="assistant",
+                                content=chunk.text,
+                            ),
+                            is_partial=True,
+                        )
+                    elif isinstance(chunk, UsageMetadataChunk):
+                        usage_metadata = types.GenerateContentResponseUsageMetadata(
+                            prompt_token_count=chunk.prompt_tokens,
+                            candidates_token_count=chunk.completion_tokens,
+                            total_token_count=chunk.total_tokens,
+                        )
+
+                    if (
+                        finish_reason == "tool_calls" or finish_reason == "stop"
+                    ) and function_calls:
+                        tool_calls = []
+                        for index, func_data in function_calls.items():
+                            if func_data["id"]:
+                                tool_calls.append(
+                                    ChatCompletionMessageToolCall(
+                                        type="function",
+                                        id=func_data["id"],
+                                        function=Function(
+                                            name=func_data["name"],
+                                            arguments=func_data["args"],
+                                            index=index,
+                                        ),
+                                    )
+                                )
+                        aggregated_llm_response_with_tool_call = (
+                            _message_to_generate_content_response(
+                                ChatCompletionAssistantMessage(
+                                    role="assistant",
+                                    content=text,
+                                    tool_calls=tool_calls,
+                                )
+                            )
+                        )
+                        text = ""
+                        function_calls.clear()
+                    elif finish_reason == "stop" and text:
+                        aggregated_llm_response = _message_to_generate_content_response(
+                            ChatCompletionAssistantMessage(role="assistant", content=text)
+                        )
+                        text = ""
+
+            # waiting until streaming ends to yield the llm_response as litellm tends
+            # to send chunk that contains usage_metadata after the chunk with
+            # finish_reason set to tool_calls or stop.
+            if aggregated_llm_response:
+                if usage_metadata:
+                    aggregated_llm_response.usage_metadata = usage_metadata
+                    usage_metadata = None
+                yield aggregated_llm_response
+
+            if aggregated_llm_response_with_tool_call:
+                if usage_metadata:
+                    aggregated_llm_response_with_tool_call.usage_metadata = usage_metadata
+                yield aggregated_llm_response_with_tool_call
+
+        else:
+            response = await self.llm_client.acompletion(**completion_args)
+            yield _model_response_to_generate_content_response(response)
