@@ -31,12 +31,12 @@ from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
 from google.genai import types
 from litellm import Message, ChatCompletionAssistantMessage, ChatCompletionMessageToolCall, Function
-import litellm
+# import litellm
 import logging
 import json
 
 # Enable LiteLLM debug logging
-litellm._turn_on_debug()
+# litellm._turn_on_debug()
 
 logger = logging.getLogger(__name__)
 
@@ -67,8 +67,15 @@ class ExtendedLiteLlm(LiteLlm):
 
     def __init__(self, model: str, **kwargs):
         super().__init__(model=model, **kwargs)
+        # Use multiple logging methods to ensure visibility
         print(f"[EXTENDED] ExtendedLiteLlm initialized with model: {model}")
+        print(f"[EXTENDED] ExtendedLiteLlm kwargs: {kwargs}")
         logger.info(f"[EXTENDED] ExtendedLiteLlm initialized with model: {model}")
+        logger.warning("[EXTENDED] ExtendedLiteLlm INIT - This should always show up!")
+
+        # Force logging to stderr as well
+        import sys
+        print(f"[EXTENDED-STDERR] ExtendedLiteLlm initialized with model: {model}", file=sys.stderr)
 
     def _apply_anthropic_cache_control(self, messages: List[Message]) -> None:
         """Applies cache control to messages for direct Anthropic API models.
@@ -105,31 +112,47 @@ class ExtendedLiteLlm(LiteLlm):
         Args:
             messages: The list of messages to add cache points to.
         """
+        import sys
+        print(f"[EXTENDED] _apply_bedrock_cache_points called with {len(messages)} messages")
+        print("[EXTENDED-STDERR] _apply_bedrock_cache_points called", file=sys.stderr)
+
         if not messages:
+            print("[EXTENDED] No messages to process")
             return
 
-        for message in messages:
+        for i, message in enumerate(messages):
+            print(f"[EXTENDED] Processing message {i}: {type(message)}")
+
             # Add cache point after developer (system) messages
             if hasattr(message, 'role') and message.role == 'developer':
+                print(f"[EXTENDED] Found developer message {i}, adding cache point")
                 if hasattr(message, 'content') and isinstance(message.content, str):
                     # Convert string content to array format and add cache point
+                    original_content = message.content
                     message.content = [
-                        {"text": message.content},
+                        {"text": original_content},
                         {"cachePoint": {"type": "default"}}
                     ]
+                    print("[EXTENDED] Converted developer message content to array with cache point")
 
             # Add cache point after first user message
             elif hasattr(message, 'role') and message.role == 'user':
+                print(f"[EXTENDED] Found user message {i}, adding cache point")
                 if hasattr(message, 'content'):
                     if isinstance(message.content, str):
+                        original_content = message.content
                         message.content = [
-                            {"text": message.content},
+                            {"text": original_content},
                             {"cachePoint": {"type": "default"}}
                         ]
+                        print("[EXTENDED] Converted user message content to array with cache point")
                     elif isinstance(message.content, list):
                         # Add cache point at the end of existing content array
                         message.content.append({"cachePoint": {"type": "default"}})
+                        print("[EXTENDED] Added cache point to existing content array")
                 break  # Only cache first user message
+
+        print("[EXTENDED] _apply_bedrock_cache_points completed")
 
     def _get_completion_inputs(
         self,
@@ -141,7 +164,13 @@ class ExtendedLiteLlm(LiteLlm):
         Optional[Dict],
     ]:
         """Override to add prompt caching for Anthropic and Bedrock models."""
-        logger.info(f"Processing model: {self.model}")
+        import sys
+
+        # Multiple logging methods to ensure visibility
+        print(f"[EXTENDED] _get_completion_inputs called! Model: {self.model}")
+        print(f"[EXTENDED-STDERR] _get_completion_inputs called! Model: {self.model}", file=sys.stderr)
+        logger.info(f"[EXTENDED] Processing model: {self.model}")
+        logger.warning("[EXTENDED] _get_completion_inputs - This should always show up!")
 
         # Get standard inputs from parent class
         messages, tools, response_format, generation_params = _get_completion_inputs(llm_request)
@@ -149,25 +178,38 @@ class ExtendedLiteLlm(LiteLlm):
         # Apply appropriate caching based on model type
         model_lower = self.model.lower()
 
-        logger.info(f"Model detection: bedrock={('bedrock/' in model_lower)}, claude={('claude' in model_lower)}")
+        print(f"[EXTENDED] Model detection: bedrock={('bedrock/' in model_lower)}, claude={('claude' in model_lower)}")
+        logger.info(f"[EXTENDED] Model detection: bedrock={('bedrock/' in model_lower)}, claude={('claude' in model_lower)}")
 
         if "anthropic/" in model_lower and "bedrock/" not in model_lower:
             # Direct Anthropic API - use cache_control
-            logger.info("Applying Anthropic cache_control")
+            print("[EXTENDED] Applying Anthropic cache_control")
+            logger.info("[EXTENDED] Applying Anthropic cache_control")
             self._apply_anthropic_cache_control(messages)
         elif "bedrock/" in model_lower and "claude" in model_lower:
             # Bedrock Claude models - use cachePoint
-            logger.info("Applying Bedrock cachePoint")
+            print("[EXTENDED] Applying Bedrock cachePoint")
+            logger.info("[EXTENDED] Applying Bedrock cachePoint")
             self._apply_bedrock_cache_points(messages)
         else:
-            logger.info("No caching applied - model not supported")
+            print(f"[EXTENDED] No caching applied - model not supported: {self.model}")
+            logger.info(f"[EXTENDED] No caching applied - model not supported: {self.model}")
 
         # Log the final messages structure (truncated)
-        logger.info(f"Final message count: {len(messages)}")
+        print(f"[EXTENDED] Final message count: {len(messages)}")
+        logger.info(f"[EXTENDED] Final message count: {len(messages)}")
         for i, msg in enumerate(messages):
             if hasattr(msg, 'role'):
                 content_type = type(getattr(msg, 'content', None)).__name__
-                logger.info(f"Message {i}: role={msg.role}, content_type={content_type}")
+                print(f"[EXTENDED] Message {i}: role={msg.role}, content_type={content_type}")
+                logger.info(f"[EXTENDED] Message {i}: role={msg.role}, content_type={content_type}")
+
+                # Log cache-related attributes
+                if hasattr(msg, '__dict__'):
+                    for key, value in msg.__dict__.items():
+                        if 'cache' in key.lower():
+                            print(f"[EXTENDED] Message {i} cache attr {key}: {value}")
+                            logger.info(f"[EXTENDED] Message {i} cache attr {key}: {value}")
 
         return messages, tools, response_format, generation_params
 
@@ -183,14 +225,20 @@ class ExtendedLiteLlm(LiteLlm):
         Yields:
             LlmResponse: The model response.
         """
+        import sys
+        print(f"[EXTENDED] generate_content_async called for model: {self.model}")
+        print("[EXTENDED-STDERR] generate_content_async called", file=sys.stderr)
+        logger.warning("[EXTENDED] generate_content_async - This should always show up!")
 
         self._maybe_append_user_content(llm_request)
         logger.debug(_build_request_log(llm_request))
 
         # CRITICAL FIX: Use self._get_completion_inputs instead of module function
+        print("[EXTENDED] About to call self._get_completion_inputs")
         messages, tools, response_format, generation_params = (
             self._get_completion_inputs(llm_request)
         )
+        print("[EXTENDED] Completed self._get_completion_inputs call")
 
         if "functions" in self._additional_args:
             # LiteLLM does not support both tools and functions together.
