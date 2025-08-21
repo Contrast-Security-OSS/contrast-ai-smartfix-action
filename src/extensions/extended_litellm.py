@@ -32,15 +32,17 @@ class ExtendedLiteLlm(LiteLlm):
     """Extended LiteLlm with automatic prompt caching for Anthropic models.
 
     This class extends the base LiteLlm to automatically apply prompt caching
-    to Anthropic models (both direct and via Bedrock). Other models work normally.
+    using the appropriate method for each provider:
+    - Direct Anthropic API: Uses cache_control on messages
+    - Bedrock Claude models: Uses cachePoint objects in content arrays
 
     Example usage:
     ```python
-    # Anthropic - will apply cache_control automatically
+    # Anthropic Direct API - will apply cache_control automatically
     model = ExtendedLiteLlm(model="anthropic/claude-3-5-sonnet-20241022")
 
-    # Bedrock Anthropic - will apply cache_control automatically
-    model = ExtendedLiteLlm(model="bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0")
+    # Bedrock Claude - will apply cachePoint automatically
+    model = ExtendedLiteLlm(model="bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0")
 
     # OpenAI - works with automatic caching (no changes needed)
     model = ExtendedLiteLlm(model="openai/gpt-4o")
@@ -51,7 +53,7 @@ class ExtendedLiteLlm(LiteLlm):
     """
 
     def _apply_anthropic_cache_control(self, messages: List[Message]) -> None:
-        """Applies cache control to messages for Anthropic models.
+        """Applies cache control to messages for direct Anthropic API models.
 
         For Anthropic models, we mark the last user message and system instruction
         with cache_control to enable prompt caching.
@@ -76,6 +78,41 @@ class ExtendedLiteLlm(LiteLlm):
             if hasattr(messages[0], '__dict__'):
                 messages[0].__dict__['cache_control'] = {"type": "ephemeral"}
 
+    def _apply_bedrock_cache_points(self, messages: List[Message]) -> None:
+        """Applies Bedrock-style cachePoint objects to message content arrays.
+
+        For Bedrock models, we add cachePoint objects within the content arrays
+        to create cache checkpoints.
+
+        Args:
+            messages: The list of messages to add cache points to.
+        """
+        if not messages:
+            return
+
+        for message in messages:
+            # Add cache point after developer (system) messages
+            if hasattr(message, 'role') and message.role == 'developer':
+                if hasattr(message, 'content') and isinstance(message.content, str):
+                    # Convert string content to array format and add cache point
+                    message.content = [
+                        {"text": message.content},
+                        {"cachePoint": {"type": "default"}}
+                    ]
+
+            # Add cache point after first user message
+            elif hasattr(message, 'role') and message.role == 'user':
+                if hasattr(message, 'content'):
+                    if isinstance(message.content, str):
+                        message.content = [
+                            {"text": message.content},
+                            {"cachePoint": {"type": "default"}}
+                        ]
+                    elif isinstance(message.content, list):
+                        # Add cache point at the end of existing content array
+                        message.content.append({"cachePoint": {"type": "default"}})
+                break  # Only cache first user message
+
     def _get_completion_inputs(
         self,
         llm_request: LlmRequest
@@ -85,15 +122,18 @@ class ExtendedLiteLlm(LiteLlm):
         Optional[types.SchemaUnion],
         Optional[Dict],
     ]:
-        """Override to add prompt caching for Anthropic models."""
+        """Override to add prompt caching for Anthropic and Bedrock models."""
         # Get standard inputs from parent class
         messages, tools, response_format, generation_params = _get_completion_inputs(llm_request)
 
-        # Apply caching for Anthropic models (direct or via Bedrock)
+        # Apply appropriate caching based on model type
         model_lower = self.model.lower()
-        if ("anthropic/" in model_lower
-                or "claude" in model_lower
-                or ("bedrock/" in model_lower and "claude" in model_lower)):
+
+        if "anthropic/" in model_lower and "bedrock/" not in model_lower:
+            # Direct Anthropic API - use cache_control
             self._apply_anthropic_cache_control(messages)
+        elif "bedrock/" in model_lower and "claude" in model_lower:
+            # Bedrock Claude models - use cachePoint
+            self._apply_bedrock_cache_points(messages)
 
         return messages, tools, response_format, generation_params
