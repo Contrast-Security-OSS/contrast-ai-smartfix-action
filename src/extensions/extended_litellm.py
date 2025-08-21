@@ -1,4 +1,4 @@
-from typing import Any, AsyncGenerator, Dict, List
+from typing import Any, AsyncGenerator, List
 
 # Note: These imports work when this file is in your project that uses ADK
 from google.adk.models.lite_llm import LiteLlm
@@ -163,185 +163,100 @@ class ExtendedLiteLlm(LiteLlm):
 
         return False
 
-    def _apply_cache_control_to_request(self, llm_request: LlmRequest) -> None:
-        """Apply cache control directly to the LlmRequest before message conversion."""
-        if not self._supports_caching() or not self.cache_system_instruction:
+    def _apply_cache_control_to_litellm_messages(self, messages: List[Any]) -> None:
+        """Apply cache control to LiteLLM messages for Anthropic-style providers."""
+        debug_log(f"Adding cache control to {len(messages)} LiteLLM messages")
+
+        if not self._is_anthropic_model():
+            debug_log(f"Model {self.model} doesn't need cache control (OpenAI auto-caches 1024+ tokens)")
             return
-
-        debug_log(f"Applying cache control to LlmRequest for model: {self.model}")
-
-        # Check if the request has contents (ADK's message format)
-        if not hasattr(llm_request, 'contents') or not llm_request.contents:
-            debug_log("No contents found in LlmRequest")
-            return
-
-        model_lower = self.model.lower()
-        is_anthropic_bedrock = model_lower.startswith("bedrock/") and "anthropic" in model_lower
-
-        # Only apply for Anthropic models (direct or Bedrock)
-        if not (model_lower.startswith("anthropic/") or is_anthropic_bedrock):
-            debug_log(f"Model {self.model} doesn't need cache control modification")
-            return
-
-        debug_log(f"Found {len(llm_request.contents)} contents in LlmRequest")
-
-        # Cache both developer (system instructions) and user prompts since they're given once
-        # and remain constant throughout the SmartFix conversation
-        cache_targets = ['developer', 'system', 'user']
-        cached_count = 0
-
-        for i, content in enumerate(llm_request.contents):
-            debug_log(f"Processing content {i}: {type(content)}")
-
-            # Check if this content has a role that should be cached
-            if hasattr(content, 'role'):
-                role = content.role
-                debug_log(f"Content {i} has role: {role}")
-
-                if role in cache_targets:
-                    debug_log(f"Applying cache control to {role} content at index {i}")
-
-                    # Modify the content to include cache control
-                    if hasattr(content, 'parts') and content.parts:
-                        debug_log(f"Content has {len(content.parts)} parts")
-
-                        # Apply cache control to the last text part
-                        for j in range(len(content.parts) - 1, -1, -1):
-                            part = content.parts[j]
-                            if hasattr(part, 'text') and part.text:
-                                debug_log(f"Adding cache_control to text part {j}")
-
-                                # Try to add cache control to the part
-                                try:
-                                    # This might need to be adapted based on ADK's actual structure
-                                    if not hasattr(part, 'cache_control'):
-                                        object.__setattr__(part, 'cache_control', {'type': self.cache_control_type})
-                                        debug_log(f"[OK] Added cache_control to {role} content part")
-                                        cached_count += 1
-                                        break  # Move to next content after caching this part
-                                    else:
-                                        part.cache_control = {'type': self.cache_control_type}
-                                        debug_log(f"[OK] Updated cache_control on {role} content part")
-                                        cached_count += 1
-                                        break  # Move to next content after caching this part
-                                except Exception as e:
-                                    debug_log(f"Failed to add cache_control to part: {e}")
-
-                        if cached_count == 0:
-                            debug_log(f"No text parts found in {role} content")
-                    else:
-                        debug_log(f"Content {i} has no parts attribute")
-            else:
-                debug_log(f"Content {i} has no role attribute")
-
-        if cached_count > 0:
-            debug_log(f"[OK] Applied cache control to {cached_count} content(s)")
-        else:
-            debug_log("[X] No suitable content found for cache control")
-
-    def _add_anthropic_style_cache_control(self, messages: List[Any]) -> None:
-        """Add cache_control to messages for Anthropic-style providers."""
-        debug_log(f"Adding cache control to {len(messages)} messages")
 
         cache_applied = False
         for i, message in enumerate(messages):
-            role = None
-            content = None
+            role, content = self._extract_message_parts(message)
 
-            # Extract role and content from either dict or object format
-            if isinstance(message, dict):
-                role = message.get('role')
-                content = message.get('content')
-            elif hasattr(message, 'role'):
-                role = getattr(message, 'role', None)
-                content = getattr(message, 'content', None)
-
-            # Apply cache control to cacheable messages (developer/system priority)
-            if role in ['system', 'developer', 'user']:
+            # Apply cache control to developer/system messages (these are typically long and reused)
+            if role in ['system', 'developer'] and content is not None:
                 debug_log(f"Applying cache control to {role} message at index {i}")
-
-                if content is not None:
-                    content_length = len(str(content))
-                    debug_log(f"Message content length: {content_length} characters")
-
-                    # Handle different content formats
-                    if isinstance(content, str):
-                        # Convert string content to list format with cache control
-                        new_content = [
-                            {
-                                "type": "text",
-                                "text": content,
-                                "cache_control": {"type": self.cache_control_type}
-                            }
-                        ]
-
-                        # Update the message content
-                        if isinstance(message, dict):
-                            message['content'] = new_content
-                        else:
-                            message.content = new_content
-
-                        cache_applied = True
-                        debug_log(f"Converted string content ({content_length} chars) to list with cache control")
-
-                    elif isinstance(content, list) and len(content) > 0:
-                        debug_log(f"Content is already a list with {len(content)} items")
-                        # Find the last text item and add cache control to it
-                        for j in range(len(content) - 1, -1, -1):
-                            content_item = content[j]
-                            if (isinstance(content_item, dict) and content_item.get("type") == "text"):
-                                content_item["cache_control"] = {"type": self.cache_control_type}
-                                cache_applied = True
-                                debug_log(f"Added cache control to existing text item at index {j}")
-                                break
-
-                        # If no text items found, convert the first item
-                        if not cache_applied and content:
-                            first_item = content[0]
-                            if isinstance(first_item, str):
-                                content[0] = {
-                                    "type": "text",
-                                    "text": first_item,
-                                    "cache_control": {"type": self.cache_control_type}
-                                }
-                                cache_applied = True
-                                debug_log("Converted first string item to text with cache control")
-
-                # Cache the first cacheable message found
-                if cache_applied:
+                if self._apply_cache_to_content(message, content):
+                    cache_applied = True
                     debug_log(f"[OK] Applied cache control to {role} message")
-                    break
+                    break  # Only cache the first suitable message found
 
         if not cache_applied:
             debug_log("[!] No suitable message found for cache control")
 
-    def _log_cache_application(self, kwargs: Dict[str, Any]) -> None:
-        """Log cache control application results."""
-        if 'messages' not in kwargs:
-            return
+    def _is_anthropic_model(self) -> bool:
+        """Check if the model is Anthropic-based."""
+        model_lower = self.model.lower()
+        is_anthropic_bedrock = model_lower.startswith("bedrock/") and "anthropic" in model_lower
+        return model_lower.startswith("anthropic/") or is_anthropic_bedrock
 
-        cache_found = False
-        for i, msg in enumerate(kwargs['messages']):
-            role = msg.get('role') if isinstance(msg, dict) else getattr(msg, 'role', None)
-            content = msg.get('content') if isinstance(msg, dict) else getattr(msg, 'content', None)
+    def _extract_message_parts(self, message: Any) -> tuple:
+        """Extract role and content from message (dict or object format)."""
+        role = None
+        content = None
 
-            if role in ['system', 'developer', 'user'] and isinstance(content, list):
-                for j, item in enumerate(content):
-                    if isinstance(item, dict) and 'cache_control' in item:
-                        debug_log(f"[OK] Cache control applied to {role} message {i}")
-                        # Log the exact structure for debugging
-                        debug_log(f"Cache control structure: {item.get('cache_control')}")
-                        item_type = item.get('type')
-                        item_text = str(item.get('text', ''))[:50]
-                        item_cache = item.get('cache_control')
-                        debug_log(f"Content item structure: {{'type': '{item_type}', 'text': '{item_text}...', 'cache_control': {item_cache}}}")
-                        cache_found = True
-                        break
-                if cache_found:
-                    break
+        if isinstance(message, dict):
+            role = message.get('role')
+            content = message.get('content')
+        elif hasattr(message, 'role'):
+            role = getattr(message, 'role', None)
+            content = getattr(message, 'content', None)
 
-        if not cache_found:
-            debug_log("[X] No cache control found in messages")
+        return role, content
+
+    def _apply_cache_to_content(self, message: Any, content: Any) -> bool:
+        """Apply cache control to message content. Returns True if successful."""
+        content_length = len(str(content))
+        debug_log(f"Message content length: {content_length} characters")
+
+        if isinstance(content, str):
+            return self._apply_cache_to_string_content(message, content)
+        elif isinstance(content, list) and len(content) > 0:
+            return self._apply_cache_to_list_content(content)
+
+        return False
+
+    def _apply_cache_to_string_content(self, message: Any, content: str) -> bool:
+        """Apply cache control to string content."""
+        new_content = [{
+            "type": "text",
+            "text": content,
+            "cache_control": {"type": self.cache_control_type}
+        }]
+
+        if isinstance(message, dict):
+            message['content'] = new_content
+        else:
+            message.content = new_content
+
+        debug_log(f"Converted string content ({len(content)} chars) to list with cache control")
+        return True
+
+    def _apply_cache_to_list_content(self, content: List[Any]) -> bool:
+        """Apply cache control to list content."""
+        debug_log(f"Content is already a list with {len(content)} items")
+
+        # Find the last text item and add cache control to it
+        for j in range(len(content) - 1, -1, -1):
+            content_item = content[j]
+            if isinstance(content_item, dict) and content_item.get("type") == "text":
+                content_item["cache_control"] = {"type": self.cache_control_type}
+                debug_log(f"Added cache control to existing text item at index {j}")
+                return True
+
+        # If no text items found, convert the first item if it's a string
+        if content and isinstance(content[0], str):
+            content[0] = {
+                "type": "text",
+                "text": content[0],
+                "cache_control": {"type": self.cache_control_type}
+            }
+            debug_log("Converted first string item to text with cache control")
+            return True
+
+        return False
 
     async def generate_content_async(
         self, llm_request: LlmRequest, stream: bool = False
@@ -349,26 +264,75 @@ class ExtendedLiteLlm(LiteLlm):
         """
         Generate content with caching support.
 
-        This method applies cache control to the LlmRequest before it gets processed
-        into LiteLLM format, which is the correct timing for cache control application.
+        This method intercepts the LiteLLM messages after ADK conversion and applies
+        cache control in the correct format before calling LiteLLM.
         """
         debug_log(f"Generating content with caching for model: {self.model}")
 
-        # Apply cache control directly to the LlmRequest BEFORE processing
+        # Import necessary functions from the parent class
+        from google.adk.models.lite_llm import _get_completion_inputs, _build_request_log
+
+        # Prepare the request the same way as parent class
+        self._maybe_append_user_content(llm_request)
+        debug_log(_build_request_log(llm_request))
+
+        # Convert ADK request to LiteLLM format
+        messages, tools, response_format, generation_params = _get_completion_inputs(llm_request)
+
+        # Apply cache control to the LiteLLM messages if caching is enabled
         if self.cache_system_instruction and self._supports_caching():
-            debug_log("Applying cache control to LlmRequest before message conversion")
-            self._apply_cache_control_to_request(llm_request)
+            debug_log("Applying cache control to converted LiteLLM messages")
+            self._apply_cache_control_to_litellm_messages(messages)
         else:
             debug_log(f"Skipping cache control - enabled: {self.cache_system_instruction}, supported: {self._supports_caching()}")
 
-        # Now call the parent implementation with the modified request
-        async for response in super().generate_content_async(llm_request, stream):
-            # Log cache hit information if available
-            if hasattr(response, 'usage_metadata') and response.usage_metadata:
-                usage = response.usage_metadata
-                if hasattr(usage, 'cached_content_token_count') and usage.cached_content_token_count:
-                    debug_log(f"[OK] Cache hit! Cached tokens: {usage.cached_content_token_count}")
-                elif hasattr(usage, 'prompt_token_count'):
-                    debug_log(f"Cache miss - Prompt tokens: {usage.prompt_token_count}")
+        # Prepare completion arguments
+        if "functions" in self._additional_args:
+            # LiteLLM does not support both tools and functions together.
+            tools = None
 
-            yield response
+        completion_args = {
+            "model": self.model,
+            "messages": messages,
+            "tools": tools,
+            "response_format": response_format,
+        }
+        completion_args.update(self._additional_args)
+
+        if generation_params:
+            completion_args.update(generation_params)
+
+        # Call LiteLLM directly and convert responses
+        from google.adk.models.lite_llm import _message_to_generate_content_response
+
+        if stream:
+            completion_args["stream"] = True
+            async for part in await self.llm_client.acompletion(**completion_args):
+                # Use the parent class's chunk processing
+                from google.adk.models.lite_llm import _model_response_to_chunk
+                for chunk, finish_reason in _model_response_to_chunk(part):
+                    # Handle chunks and convert to LlmResponse format
+                    # This is simplified - for full streaming support, we'd need to implement
+                    # the complete chunk handling logic
+                    pass
+
+            # For now, fall back to non-streaming for simplicity
+            completion_args["stream"] = False
+            response = await self.llm_client.acompletion(**completion_args)
+            llm_response = _message_to_generate_content_response(response)
+
+        else:
+            # Non-streaming call
+            response = await self.llm_client.acompletion(**completion_args)
+            llm_response = _message_to_generate_content_response(response)
+
+        # Log cache information
+        if hasattr(response, 'usage') and response.usage:
+            usage = response.usage
+            if hasattr(usage, 'prompt_tokens_details') and usage.prompt_tokens_details:
+                cached_tokens = getattr(usage.prompt_tokens_details, 'cached_tokens', 0)
+                if cached_tokens > 0:
+                    debug_log(f"[OK] Cache hit! Cached tokens: {cached_tokens}")
+                else:
+                    debug_log(f"Cache miss - Prompt tokens: {usage.prompt_tokens}")
+        yield llm_response
