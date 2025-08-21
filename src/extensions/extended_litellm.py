@@ -26,11 +26,11 @@ from google.adk.models.lite_llm import LiteLlm, _get_completion_inputs
 from google.adk.models.llm_request import LlmRequest
 from google.genai import types
 from litellm import Message
-import litellm
+# import litellm
 import logging
 
 # Enable LiteLLM debug logging
-litellm._turn_on_debug()
+# litellm._turn_on_debug()
 
 logger = logging.getLogger(__name__)
 
