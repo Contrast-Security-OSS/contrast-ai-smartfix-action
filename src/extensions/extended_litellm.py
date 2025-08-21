@@ -260,63 +260,43 @@ class ExtendedLiteLlm(LiteLlm):
         """
         Generate content with caching support.
 
-        This method intercepts the LiteLLM messages after ADK conversion and applies
-        cache control in the correct format before calling LiteLLM.
+        This method applies cache control by intercepting the message conversion
+        while delegating all other logic to the parent implementation.
         """
         debug_log(f"Generating content with caching for model: {self.model}")
 
-        # Import necessary functions from the parent class
-        from google.adk.models.lite_llm import _get_completion_inputs
-
-        # Prepare the request the same way as parent class
-        self._maybe_append_user_content(llm_request)
-        # Note: Removed verbose _build_request_log() call to reduce log noise
-
-        # Convert ADK request to LiteLLM format
-        messages, tools, response_format, generation_params = _get_completion_inputs(llm_request)
-
-        # Apply cache control to the LiteLLM messages if caching is enabled
+        # Apply cache control by intercepting the _get_completion_inputs call
         if self.cache_system_instruction and self._supports_caching():
-            debug_log("Applying cache control to converted LiteLLM messages")
-            self._apply_cache_control_to_litellm_messages(messages)
+            # Store original method
+            from google.adk.models.lite_llm import _get_completion_inputs
+            original_get_completion_inputs = _get_completion_inputs
+
+            def patched_get_completion_inputs(request):
+                messages, tools, response_format, generation_params = original_get_completion_inputs(request)
+                debug_log("Applying cache control to converted LiteLLM messages")
+                self._apply_cache_control_to_litellm_messages(messages)
+                return messages, tools, response_format, generation_params
+
+            # Monkey patch temporarily
+            import google.adk.models.lite_llm
+            google.adk.models.lite_llm._get_completion_inputs = patched_get_completion_inputs
+
+            try:
+                # Call parent with patched method
+                async for response in super().generate_content_async(llm_request, stream):
+                    # Log cache information
+                    if hasattr(response, 'usage_metadata') and response.usage_metadata:
+                        usage = response.usage_metadata
+                        if hasattr(usage, 'cached_content_token_count') and usage.cached_content_token_count:
+                            debug_log(f"[OK] Cache hit! Cached tokens: {usage.cached_content_token_count}")
+                        elif hasattr(usage, 'prompt_token_count'):
+                            debug_log(f"Cache miss - Prompt tokens: {usage.prompt_token_count}")
+                    yield response
+            finally:
+                # Restore original method
+                google.adk.models.lite_llm._get_completion_inputs = original_get_completion_inputs
         else:
             debug_log(f"Skipping cache control - enabled: {self.cache_system_instruction}, supported: {self._supports_caching()}")
-
-        # Prepare completion arguments
-        if "functions" in self._additional_args:
-            # LiteLLM does not support both tools and functions together.
-            tools = None
-
-        completion_args = {
-            "model": self.model,
-            "messages": messages,
-            "tools": tools,
-            "response_format": response_format,
-        }
-        completion_args.update(self._additional_args)
-
-        if generation_params:
-            completion_args.update(generation_params)
-
-        # Call LiteLLM directly and convert responses
-        from google.adk.models.lite_llm import _message_to_generate_content_response
-
-        if stream:
-            # For now, streaming is not fully implemented, fall back to non-streaming
-            completion_args["stream"] = False
-
-        # Make the completion call
-        response = await self.llm_client.acompletion(**completion_args)
-        llm_response = _message_to_generate_content_response(response)
-
-        # Log cache information
-        if hasattr(response, 'usage') and response.usage:
-            usage = response.usage
-            if hasattr(usage, 'prompt_tokens_details') and usage.prompt_tokens_details:
-                cached_tokens = getattr(usage.prompt_tokens_details, 'cached_tokens', 0)
-                if cached_tokens > 0:
-                    debug_log(f"[OK] Cache hit! Cached tokens: {cached_tokens}")
-                else:
-                    debug_log(f"Cache miss - Prompt tokens: {usage.prompt_tokens}")
-
-        yield llm_response
+            # Just call parent without modification
+            async for response in super().generate_content_async(llm_request, stream):
+                yield response
