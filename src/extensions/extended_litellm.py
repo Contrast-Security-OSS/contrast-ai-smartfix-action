@@ -59,6 +59,11 @@ class ExtendedLiteLlm(LiteLlm):
     ```
     """
 
+    def __init__(self, model: str, **kwargs):
+        super().__init__(model=model, **kwargs)
+        print(f"[EXTENDED] ExtendedLiteLlm initialized with model: {model}")
+        logger.info(f"[EXTENDED] ExtendedLiteLlm initialized with model: {model}")
+
     def _apply_anthropic_cache_control(self, messages: List[Message]) -> None:
         """Applies cache control to messages for direct Anthropic API models.
 
@@ -159,3 +164,12 @@ class ExtendedLiteLlm(LiteLlm):
                 logger.info(f"Message {i}: role={msg.role}, content_type={content_type}")
 
         return messages, tools, response_format, generation_params
+
+    async def generate_content_async(self, llm_request, stream=False):
+        """Override to add debug logging and ensure our method is called."""
+        logger.info(f"[EXTENDED] ExtendedLiteLlm.generate_content_async called with model: {self.model}")
+        print(f"[EXTENDED] ExtendedLiteLlm.generate_content_async called with model: {self.model}")
+
+        # Call parent method
+        async for response in super().generate_content_async(llm_request, stream):
+            yield response
