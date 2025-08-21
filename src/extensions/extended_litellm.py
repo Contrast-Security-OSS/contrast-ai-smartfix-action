@@ -266,7 +266,7 @@ class ExtendedLiteLlm(LiteLlm):
         debug_log(f"Generating content with caching for model: {self.model}")
 
         # Import necessary functions from the parent class
-        from google.adk.models.lite_llm import _get_completion_inputs, _build_request_log
+        from google.adk.models.lite_llm import _get_completion_inputs
 
         # Prepare the request the same way as parent class
         self._maybe_append_user_content(llm_request)
