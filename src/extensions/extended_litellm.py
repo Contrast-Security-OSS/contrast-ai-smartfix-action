@@ -171,20 +171,32 @@ class ExtendedLiteLlm(LiteLlm):
             debug_log(f"Model {self.model} doesn't need cache control (OpenAI auto-caches 1024+ tokens)")
             return
 
-        cache_applied = False
+        # Strategy: Cache the initial user message (after system) which contains the stable vulnerability context
+        # This creates a cache breakpoint before the dynamic tool calls begin
+        system_found = False
+        cache_target_index = -1
+
         for i, message in enumerate(messages):
             role, content = self._extract_message_parts(message)
 
-            # Apply cache control to developer/system messages (these are typically long and reused)
-            if role in ['system', 'developer'] and content is not None:
-                debug_log(f"Applying cache control to {role} message at index {i}")
-                if self._apply_cache_to_content(message, content):
-                    cache_applied = True
-                    debug_log(f"[OK] Applied cache control to {role} message")
-                    break  # Only cache the first suitable message found
+            if role in ['system', 'developer']:
+                system_found = True
+            elif role == 'user' and system_found and content is not None:
+                # This is the first user message after system - cache this as it contains stable context
+                cache_target_index = i
+                break
 
-        if not cache_applied:
-            debug_log("[!] No suitable message found for cache control")
+        if cache_target_index >= 0:
+            message = messages[cache_target_index]
+            role, content = self._extract_message_parts(message)
+            debug_log(f"Applying cache control to {role} message at index {cache_target_index} (initial context)")
+
+            if self._apply_cache_to_content(message, content):
+                debug_log(f"[OK] Applied cache control to {role} message - this establishes stable cache breakpoint")
+            else:
+                debug_log(f"[!] Failed to apply cache control to {role} message")
+        else:
+            debug_log("[!] No suitable cache breakpoint found in message sequence")
 
     def _is_anthropic_model(self) -> bool:
         """Check if the model is Anthropic-based."""
