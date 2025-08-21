@@ -265,7 +265,7 @@ class ExtendedLiteLlm(LiteLlm):
     async def _prepare_completion_args(self, llm_request: LlmRequest) -> tuple:
         """Prepare completion arguments by converting ADK request to LiteLLM format."""
         debug_log("[PREPARE] === PREPARE COMPLETION ARGS START ===")
-        debug_log(f"[PREPARE] Request has {len(llm_request.messages)} messages")
+        debug_log(f"[PREPARE] Request has {len(llm_request.contents)} contents")
 
         from google.adk.models.lite_llm import _get_completion_inputs, _build_request_log
         import logging
