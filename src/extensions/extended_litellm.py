@@ -208,9 +208,6 @@ class ExtendedLiteLlm(LiteLlm):
 
     def _apply_cache_to_content(self, message: Any, content: Any) -> bool:
         """Apply cache control to message content. Returns True if successful."""
-        content_length = len(str(content))
-        debug_log(f"Message content length: {content_length} characters")
-
         if isinstance(content, str):
             return self._apply_cache_to_string_content(message, content)
         elif isinstance(content, list) and len(content) > 0:
@@ -231,7 +228,6 @@ class ExtendedLiteLlm(LiteLlm):
         else:
             message.content = new_content
 
-        debug_log(f"Converted string content ({len(content)} chars) to list with cache control")
         return True
 
     def _apply_cache_to_list_content(self, content: List[Any]) -> bool:
@@ -274,7 +270,7 @@ class ExtendedLiteLlm(LiteLlm):
 
         # Prepare the request the same way as parent class
         self._maybe_append_user_content(llm_request)
-        debug_log(_build_request_log(llm_request))
+        # Note: Removed verbose _build_request_log() call to reduce log noise
 
         # Convert ADK request to LiteLLM format
         messages, tools, response_format, generation_params = _get_completion_inputs(llm_request)
@@ -306,25 +302,12 @@ class ExtendedLiteLlm(LiteLlm):
         from google.adk.models.lite_llm import _message_to_generate_content_response
 
         if stream:
-            completion_args["stream"] = True
-            async for part in await self.llm_client.acompletion(**completion_args):
-                # Use the parent class's chunk processing
-                from google.adk.models.lite_llm import _model_response_to_chunk
-                for chunk, finish_reason in _model_response_to_chunk(part):
-                    # Handle chunks and convert to LlmResponse format
-                    # This is simplified - for full streaming support, we'd need to implement
-                    # the complete chunk handling logic
-                    pass
-
-            # For now, fall back to non-streaming for simplicity
+            # For now, streaming is not fully implemented, fall back to non-streaming
             completion_args["stream"] = False
-            response = await self.llm_client.acompletion(**completion_args)
-            llm_response = _message_to_generate_content_response(response)
 
-        else:
-            # Non-streaming call
-            response = await self.llm_client.acompletion(**completion_args)
-            llm_response = _message_to_generate_content_response(response)
+        # Make the completion call
+        response = await self.llm_client.acompletion(**completion_args)
+        llm_response = _message_to_generate_content_response(response)
 
         # Log cache information
         if hasattr(response, 'usage') and response.usage:
@@ -335,4 +318,5 @@ class ExtendedLiteLlm(LiteLlm):
                     debug_log(f"[OK] Cache hit! Cached tokens: {cached_tokens}")
                 else:
                     debug_log(f"Cache miss - Prompt tokens: {usage.prompt_tokens}")
+
         yield llm_response
