@@ -41,6 +41,11 @@ import datetime  # For timestamps
 
 config = get_config()
 
+# Suppress warnings before importing libraries that might trigger them
+warnings.filterwarnings('ignore', category=UserWarning)
+# Suppress specific Pydantic field shadowing warning from ADK library
+warnings.filterwarnings('ignore', message='Field name "config_type" in "SequentialAgent" shadows an attribute in parent "BaseAgent"')
+
 # --- ADK Setup (Conditional Import) ---
 ADK_AVAILABLE = False
 
@@ -66,9 +71,7 @@ except ImportError as e:
     if not config.testing:
         sys.exit(1)  # Only exit in production, not in tests
 
-warnings.filterwarnings('ignore', category=UserWarning)
-# Suppress specific Pydantic field shadowing warning from ADK library
-warnings.filterwarnings('ignore', message='Field name "config_type" in "SequentialAgent" shadows an attribute in parent "BaseAgent"')
+# Configure library loggers to reduce noise
 library_logger = logging.getLogger("google_adk.google.adk.tools.base_authenticated_tool")
 library_logger.setLevel(logging.ERROR)
 

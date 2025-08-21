@@ -185,7 +185,11 @@ class ExtendedLiteLlm(LiteLlm):
 
         debug_log(f"Found {len(llm_request.contents)} contents in LlmRequest")
 
-        # Apply cache control to the first suitable content (typically system/developer instructions)
+        # Cache both developer (system instructions) and user prompts since they're given once
+        # and remain constant throughout the SmartFix conversation
+        cache_targets = ['developer', 'system', 'user']
+        cached_count = 0
+
         for i, content in enumerate(llm_request.contents):
             debug_log(f"Processing content {i}: {type(content)}")
 
@@ -194,7 +198,7 @@ class ExtendedLiteLlm(LiteLlm):
                 role = content.role
                 debug_log(f"Content {i} has role: {role}")
 
-                if role in ['system', 'developer', 'user']:
+                if role in cache_targets:
                     debug_log(f"Applying cache control to {role} content at index {i}")
 
                     # Modify the content to include cache control
@@ -213,21 +217,27 @@ class ExtendedLiteLlm(LiteLlm):
                                     if not hasattr(part, 'cache_control'):
                                         object.__setattr__(part, 'cache_control', {'type': self.cache_control_type})
                                         debug_log(f"[OK] Added cache_control to {role} content part")
-                                        return  # Only cache the first suitable content
+                                        cached_count += 1
+                                        break  # Move to next content after caching this part
                                     else:
                                         part.cache_control = {'type': self.cache_control_type}
                                         debug_log(f"[OK] Updated cache_control on {role} content part")
-                                        return
+                                        cached_count += 1
+                                        break  # Move to next content after caching this part
                                 except Exception as e:
                                     debug_log(f"Failed to add cache_control to part: {e}")
 
-                        debug_log(f"No text parts found in {role} content")
+                        if cached_count == 0:
+                            debug_log(f"No text parts found in {role} content")
                     else:
                         debug_log(f"Content {i} has no parts attribute")
             else:
                 debug_log(f"Content {i} has no role attribute")
 
-        debug_log("No suitable content found for cache control")
+        if cached_count > 0:
+            debug_log(f"[OK] Applied cache control to {cached_count} content(s)")
+        else:
+            debug_log("[X] No suitable content found for cache control")
 
     def _add_anthropic_style_cache_control(self, messages: List[Any]) -> None:
         """Add cache_control to messages for Anthropic-style providers."""
