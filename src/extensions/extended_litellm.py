@@ -309,159 +309,221 @@ class ExtendedLiteLlm(LiteLlm):
         debug_log("[PREPARE] === PREPARE COMPLETION ARGS END ===")
         return completion_args
 
-    async def _handle_streaming_response(self, completion_args: dict) -> AsyncGenerator[Any, None]:
-        """Handle streaming response processing."""
-        debug_log("[STREAM] === STREAMING HANDLER START ===")
-        debug_log(f"[STREAM] Completion args keys: {list(completion_args.keys())}")
-
-        text = ""
-        function_calls = {}  # index -> {name, args, id}
-        completion_args["stream"] = True
-        aggregated_llm_response = None
-        aggregated_llm_response_with_tool_call = None
-        usage_metadata = None
-        fallback_index = 0
-
-        debug_log("[STREAM] Starting LiteLLM streaming call...")
-
-        # Import all streaming dependencies
-        from google.adk.models.lite_llm import _model_response_to_chunk, _message_to_generate_content_response
-        from google.genai import types
-        from litellm.types.utils import FunctionChunk, TextChunk, UsageMetadataChunk
-        from openai.types.chat import ChatCompletionAssistantMessage
-
-        chunk_count = 0
-        async for part in await self.llm_client.acompletion(**completion_args):
-            chunk_count += 1
-            debug_log(f"[STREAM] Processing chunk #{chunk_count}: {type(part).__name__}")
-
-            for chunk, finish_reason in _model_response_to_chunk(part):
-                debug_log(f"[STREAM] Chunk type: {type(chunk).__name__}, finish_reason: {finish_reason}")
-
-                if isinstance(chunk, FunctionChunk):
-                    debug_log("[STREAM] Processing FunctionChunk")
-                    aggregated_llm_response_with_tool_call = self._handle_function_chunk(
-                        chunk, function_calls, fallback_index, text
-                    )
-                    if aggregated_llm_response_with_tool_call:
-                        debug_log("[STREAM] Function call completed, clearing text and function_calls")
-                        text = ""
-                        function_calls.clear()
-                elif isinstance(chunk, TextChunk):
-                    debug_log(f"[STREAM] Processing TextChunk: '{chunk.text}'")
-                    text += chunk.text
-                    response_chunk = _message_to_generate_content_response(
-                        ChatCompletionAssistantMessage(role="assistant", content=chunk.text),
-                        is_partial=True,
-                    )
-                    debug_log(f"[STREAM] Yielding partial response: {type(response_chunk).__name__}")
-                    yield response_chunk
-                elif isinstance(chunk, UsageMetadataChunk):
-                    debug_log(f"[STREAM] Processing UsageMetadataChunk: prompt={chunk.prompt_tokens}, completion={chunk.completion_tokens}")
-                    usage_metadata = types.GenerateContentResponseUsageMetadata(
-                        prompt_token_count=chunk.prompt_tokens,
-                        candidates_token_count=chunk.completion_tokens,
-                        total_token_count=chunk.total_tokens,
-                    )
-
-                if finish_reason == "stop" and text:
-                    debug_log(f"[STREAM] Finish reason 'stop' with text: '{text[:50]}{'...' if len(text) > 50 else ''}'")
-                    aggregated_llm_response = _message_to_generate_content_response(
-                        ChatCompletionAssistantMessage(role="assistant", content=text)
-                    )
-                    text = ""
-
-        debug_log(f"[STREAM] Streaming loop complete - processed {chunk_count} chunks")
-
-        # Yield final responses
-        if aggregated_llm_response:
-            debug_log("[STREAM] Yielding aggregated LLM response")
-            if usage_metadata:
-                debug_log("[STREAM] Adding usage metadata to aggregated response")
-                aggregated_llm_response.usage_metadata = usage_metadata
-                usage_metadata = None
-            yield aggregated_llm_response
-
-        if aggregated_llm_response_with_tool_call:
-            debug_log("[STREAM] Yielding aggregated LLM response with tool call")
-            if usage_metadata:
-                debug_log("[STREAM] Adding usage metadata to tool call response")
-                aggregated_llm_response_with_tool_call.usage_metadata = usage_metadata
-            yield aggregated_llm_response_with_tool_call
-
-        debug_log("[STREAM] === STREAMING HANDLER END ===")
-
-    def _handle_function_chunk(self, chunk, function_calls: dict, fallback_index: int, text: str):
-        """Handle function chunk processing."""
-        import json
-
-        index = chunk.index or fallback_index
-        if index not in function_calls:
-            function_calls[index] = {"name": "", "args": "", "id": None}
-
-        if chunk.name:
-            function_calls[index]["name"] += chunk.name
-        if chunk.args:
-            function_calls[index]["args"] += chunk.args
-            try:
-                json.loads(function_calls[index]["args"])
-                fallback_index += 1
-            except json.JSONDecodeError:
-                pass
-
-        function_calls[index]["id"] = chunk.id or function_calls[index]["id"] or str(index)
-        return None  # Simplified for now
-
     async def generate_content_async(
         self, llm_request: LlmRequest, stream: bool = False
     ) -> AsyncGenerator[LlmResponse, None]:
         """
         Generate content with caching support.
 
-        This method intercepts the LiteLLM messages after ADK conversion and applies
-        cache control in the correct format before calling LiteLLM directly, while
-        maintaining proper response handling to preserve the agent loop.
+        This method applies cache control to the LiteLLM messages and then delegates
+        to the parent class to preserve proper agent loop functionality.
         """
         debug_log("=== GENERATE CONTENT START ===")
         debug_log(f"Model: {self.model}")
         debug_log(f"Stream mode: {stream}")
         debug_log(f"Cache enabled: {self.cache_system_instruction}")
 
-        completion_args = await self._prepare_completion_args(llm_request)
+        # If caching is enabled and supported, we need to intercept and modify messages
+        if self.cache_system_instruction and self._supports_caching():
+            debug_log("[CACHE-INTERCEPT] Intercepting to apply cache control")
 
-        if stream:
-            debug_log("[STREAM] Taking STREAMING path")
-            # Handle streaming
-            response_count = 0
-            async for response in self._handle_streaming_response(completion_args):
-                response_count += 1
-                debug_log(f"[STREAM] Yielding streaming response #{response_count}: {type(response).__name__}")
+            # Step 1: Prepare the completion args to get converted messages
+            completion_args = await self._prepare_completion_args(llm_request)
+
+            # Step 2: Now call LiteLLM directly with our cached messages
+            # but preserve all the parent class's response handling logic
+            async for response in self._call_litellm_with_caching(completion_args, stream):
                 yield response
-            debug_log(f"[STREAM] STREAMING complete - yielded {response_count} responses")
         else:
-            debug_log("[NON-STREAM] Taking NON-STREAMING path")
-            # Handle non-streaming
-            from google.adk.models.lite_llm import _message_to_generate_content_response
-
-            debug_log("[NON-STREAM] Calling llm_client.acompletion...")
-            response = await self.llm_client.acompletion(**completion_args)
-            debug_log(f"[NON-STREAM] Got LiteLLM response: {type(response).__name__}")
-
-            llm_response = _message_to_generate_content_response(response)
-            debug_log(f"[NON-STREAM] Converted to ADK response: {type(llm_response).__name__}")
-
-            # Log cache information
-            if hasattr(response, 'usage') and response.usage:
-                usage = response.usage
-                if hasattr(usage, 'prompt_tokens_details') and usage.prompt_tokens_details:
-                    cached_tokens = getattr(usage.prompt_tokens_details, 'cached_tokens', 0)
-                    if cached_tokens > 0:
-                        debug_log(f"[OK] Cache hit! Cached tokens: {cached_tokens}")
-                    else:
-                        debug_log(f"Cache miss - Prompt tokens: {usage.prompt_tokens}")
-
-            debug_log("[NON-STREAM] Yielding non-streaming response")
-            yield llm_response
-            debug_log("[NON-STREAM] NON-STREAMING complete")
+            debug_log("[NO-CACHE] Delegating to parent class directly")
+            # No caching - just use parent implementation
+            async for response in super().generate_content_async(llm_request, stream):
+                yield response
 
         debug_log("=== GENERATE CONTENT END ===")
+
+    async def _call_litellm_with_caching(self, completion_args: dict, stream: bool) -> AsyncGenerator[LlmResponse, None]:
+        """Call LiteLLM with cached messages, preserving agent loop functionality."""
+        if stream:
+            async for response in self._handle_cached_streaming(completion_args):
+                yield response
+        else:
+            async for response in self._handle_cached_non_streaming(completion_args):
+                yield response
+
+    async def _handle_cached_streaming(self, completion_args: dict) -> AsyncGenerator[LlmResponse, None]:
+        """Handle cached streaming responses."""
+        debug_log("[CACHED-STREAM] Taking CACHED-STREAMING path")
+
+        # Import necessary components from parent class
+        from google.adk.models.lite_llm import _model_response_to_chunk, _message_to_generate_content_response
+
+        # Initialize streaming state
+        text = ""
+        function_calls = {}  # index -> {name, args, id}
+        completion_args["stream"] = True
+        usage_metadata = None
+        fallback_index = 0
+
+        async for part in await self.llm_client.acompletion(**completion_args):
+            # Use parent's chunk processing logic
+            for chunk, finish_reason in _model_response_to_chunk(part):
+                # Process different chunk types
+                if await self._process_streaming_chunk(chunk, function_calls, fallback_index, text):
+                    # Text chunk was processed - yield partial response
+                    text += chunk.text
+                    yield _message_to_generate_content_response(
+                        self._create_assistant_message(content=chunk.text),
+                        is_partial=True,
+                    )
+                elif type(chunk).__name__ == "UsageMetadataChunk":
+                    usage_metadata = await self._process_usage_chunk(chunk)
+
+                # Handle finish conditions
+                if finish_reason in ["tool_calls", "stop"]:
+                    final_response = await self._create_final_streaming_response(
+                        finish_reason, function_calls, text, usage_metadata
+                    )
+                    if final_response:
+                        yield final_response
+
+        debug_log("[CACHED-STREAM] CACHED-STREAMING complete")
+
+    async def _handle_cached_non_streaming(self, completion_args: dict) -> AsyncGenerator[LlmResponse, None]:
+        """Handle cached non-streaming responses."""
+        debug_log("[CACHED-NON-STREAM] Taking CACHED-NON-STREAMING path")
+
+        from google.adk.models.lite_llm import _message_to_generate_content_response
+
+        # Non-streaming call
+        debug_log("[CACHED-NON-STREAM] Calling llm_client.acompletion...")
+        response = await self.llm_client.acompletion(**completion_args)
+        debug_log(f"[CACHED-NON-STREAM] Got LiteLLM response: {type(response).__name__}")
+
+        llm_response = _message_to_generate_content_response(response)
+        debug_log(f"[CACHED-NON-STREAM] Converted to ADK response: {type(llm_response).__name__}")
+
+        # Log cache information
+        await self._log_cache_info(response)
+
+        debug_log("[CACHED-NON-STREAM] Yielding cached non-streaming response")
+        yield llm_response
+        debug_log("[CACHED-NON-STREAM] CACHED-NON-STREAMING complete")
+
+    def _create_assistant_message(self, content: str, tool_calls=None):
+        """Create assistant message compatible with LiteLLM."""
+        try:
+            from litellm import ChatCompletionAssistantMessage
+            return ChatCompletionAssistantMessage(
+                role="assistant",
+                content=content,
+                tool_calls=tool_calls,
+            )
+        except ImportError:
+            # Fallback for different LiteLLM versions
+            message = {"role": "assistant", "content": content}
+            if tool_calls:
+                message["tool_calls"] = tool_calls
+            return message
+
+    def _create_tool_call(self, call_data: dict):
+        """Create tool call compatible with LiteLLM."""
+        try:
+            from litellm import ChatCompletionMessageToolCall
+            return ChatCompletionMessageToolCall(
+                id=call_data["id"],
+                function={"name": call_data["name"], "arguments": call_data["args"]},
+                type="function",
+            )
+        except ImportError:
+            # Fallback for different LiteLLM versions
+            return {
+                "id": call_data["id"],
+                "function": {"name": call_data["name"], "arguments": call_data["args"]},
+                "type": "function",
+            }
+
+    async def _process_streaming_chunk(self, chunk, function_calls: dict, fallback_index: int, text: str) -> bool:
+        """Process a streaming chunk. Returns True if it's a text chunk."""
+        import json
+
+        chunk_type = type(chunk).__name__
+
+        if chunk_type == "FunctionChunk":
+            index = getattr(chunk, 'index', None) or fallback_index
+            if index not in function_calls:
+                function_calls[index] = {"name": "", "args": "", "id": None}
+
+            if hasattr(chunk, 'name') and chunk.name:
+                function_calls[index]["name"] += chunk.name
+            if hasattr(chunk, 'args') and chunk.args:
+                function_calls[index]["args"] += chunk.args
+
+                # check if args is completed (workaround for improper chunk indexing)
+                try:
+                    json.loads(function_calls[index]["args"])
+                    fallback_index += 1
+                except json.JSONDecodeError:
+                    pass
+
+            function_calls[index]["id"] = (
+                getattr(chunk, 'id', None) or function_calls[index]["id"] or str(index)
+            )
+            return False
+        elif chunk_type == "TextChunk":
+            return True
+
+        return False
+
+    async def _process_usage_chunk(self, chunk):
+        """Process usage metadata chunk."""
+        from google.genai import types
+
+        # Log cache information for debugging
+        cached_tokens = getattr(chunk, 'cached_tokens', 0)
+        if cached_tokens > 0:
+            debug_log(f"[OK] Cache hit! Cached tokens: {cached_tokens}")
+
+        return types.GenerateContentResponseUsageMetadata(
+            prompt_token_count=chunk.prompt_tokens,
+            candidates_token_count=chunk.completion_tokens,
+            total_token_count=chunk.total_tokens,
+        )
+
+    async def _create_final_streaming_response(self, finish_reason: str, function_calls: dict, text: str, usage_metadata):
+        """Create final streaming response based on finish reason."""
+        from google.adk.models.lite_llm import _message_to_generate_content_response
+
+        if function_calls and finish_reason == "tool_calls":
+            # Convert function calls and yield response
+            tool_calls = [
+                self._create_tool_call(call_data)
+                for call_data in function_calls.values()
+                if call_data["name"] and call_data["args"]
+            ]
+
+            return _message_to_generate_content_response(
+                self._create_assistant_message(
+                    content=text,
+                    tool_calls=tool_calls,
+                ),
+                usage_metadata=usage_metadata,
+            )
+        elif finish_reason == "stop":
+            return _message_to_generate_content_response(
+                self._create_assistant_message(content=text),
+                usage_metadata=usage_metadata,
+            )
+
+        return None
+
+    async def _log_cache_info(self, response):
+        """Log cache information from LiteLLM response."""
+        if hasattr(response, 'usage') and response.usage:
+            usage = response.usage
+            if hasattr(usage, 'prompt_tokens_details') and usage.prompt_tokens_details:
+                cached_tokens = getattr(usage.prompt_tokens_details, 'cached_tokens', 0)
+                if cached_tokens > 0:
+                    debug_log(f"[OK] Cache hit! Cached tokens: {cached_tokens}")
+                else:
+                    debug_log(f"Cache miss - Prompt tokens: {usage.prompt_tokens}")
