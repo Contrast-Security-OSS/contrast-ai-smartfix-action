@@ -1,378 +1,99 @@
-from typing import Any, AsyncGenerator, List
+# -
+# #%L
+# Extended LiteLLM with Prompt Caching
+# %%
+# Copyright (C) 2025 Contrast Security, Inc.
+# %%
+# This work is a derivative of Google's ADK LiteLlm class, which is
+# Copyright 2025 Google LLC and licensed under the Apache License, Version 2.0.
+# Original source: https://github.com/google/adk-python
+# %%
+# Contact: support@contrastsecurity.com
+# License: Commercial
+# NOTICE: This Software and the patented inventions embodied within may only be
+# used as part of Contrast Security's commercial offerings. Even though it is
+# made available through public repositories, use of this Software is subject to
+# the applicable End User Licensing Agreement found at
+# https://www.contrastsecurity.com/enduser-terms-0317a or as otherwise agreed
+# between Contrast Security and the End User. The Software may not be reverse
+# engineered, modified, repackaged, sold, redistributed or otherwise used in a
+# way not consistent with the End User License Agreement.
+# #L%
+#
 
-# Note: These imports work when this file is in your project that uses ADK
-from google.adk.models.lite_llm import LiteLlm
+from typing import Dict, List, Optional, Tuple
+from google.adk.models.lite_llm import LiteLlm, _get_completion_inputs
 from google.adk.models.llm_request import LlmRequest
-from google.adk.models.llm_response import LlmResponse
-
-from src.utils import log, debug_log
+from google.genai import types
+from litellm import Message
 
 
 class ExtendedLiteLlm(LiteLlm):
-    """
-    Extended LiteLlm with prompt caching support.
+    """Extended LiteLlm with automatic prompt caching for Anthropic models.
 
-    This class adds prompt caching capabilities to the Google ADK's LiteLlm implementation.
-    It automatically applies caching to system instructions when enabled and supported.
-
-    SUPPORTED PROVIDERS (for prompt caching):
-    ✅ OpenAI (openai/) - Automatic caching for 1024+ tokens
-    ✅ Azure OpenAI (azure/) - Automatic caching for 1024+ tokens
-    ✅ Anthropic (anthropic/) - Manual cache_control required
-    ✅ AWS Bedrock (bedrock/) - Depends on specific model
-
-    WORKS WITHOUT CACHING:
-    ⚪ Gemini models - Will work normally, just without prompt caching
-    ⚪ Other unsupported providers - Will work normally, just without prompt caching
+    This class extends the base LiteLlm to automatically apply prompt caching
+    to Anthropic models (both direct and via Bedrock). Other models work normally.
 
     Example usage:
     ```python
-    # Anthropic (manual cache control)
-    model_instance = ExtendedLiteLlm(
-        model="anthropic/claude-3-5-sonnet-20240620",
-        cache_system_instruction=True,
-        temperature=0.2
-    )
+    # Anthropic - will apply cache_control automatically
+    model = ExtendedLiteLlm(model="anthropic/claude-3-5-sonnet-20241022")
 
-    # OpenAI (automatic caching)
-    model_instance = ExtendedLiteLlm(
-        model="openai/gpt-4o",
-        cache_system_instruction=True,
-        temperature=0.2
-    )
+    # Bedrock Anthropic - will apply cache_control automatically
+    model = ExtendedLiteLlm(model="bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0")
 
-    # Deepseek (supports caching)
-    model_instance = ExtendedLiteLlm(
-        model="deepseek/deepseek-chat",
-        cache_system_instruction=True,
-        temperature=0.2
-    )
+    # OpenAI - works with automatic caching (no changes needed)
+    model = ExtendedLiteLlm(model="openai/gpt-4o")
 
-    # Gemini (works without caching - not supported by LiteLLM)
-    model_instance = ExtendedLiteLlm(
-        model="gemini-1.5-pro",
-        cache_system_instruction=True,  # Will be ignored with warning
-        temperature=0.2
-    )
+    # Other models - work normally without caching
+    model = ExtendedLiteLlm(model="gemini/gemini-1.5-pro")
     ```
-
-    Attributes:
-        cache_system_instruction (bool): Whether to apply caching to system instructions
-        cache_control_type (str): Type of cache control ("ephemeral" for Anthropic)
     """
 
-    def __init__(
-        self,
-        model: str,
-        cache_system_instruction: bool = False,
-        cache_control_type: str = "ephemeral",
-        **kwargs
-    ):
-        """
-        Initialize ExtendedLiteLlm.
+    def _apply_anthropic_cache_control(self, messages: List[Message]) -> None:
+        """Applies cache control to messages for Anthropic models.
+
+        For Anthropic models, we mark the last user message and system instruction
+        with cache_control to enable prompt caching.
 
         Args:
-            model: The model name (e.g., "anthropic/claude-3-5-sonnet-20240620")
-            cache_system_instruction: Whether to enable caching for system instructions
-            cache_control_type: Type of cache control to use
-            **kwargs: Additional arguments passed to LiteLlm
+            messages: The list of messages to apply cache control to.
         """
-        # Call parent constructor first
-        super().__init__(model=model, **kwargs)
-
-        # Store our custom parameters using object.__setattr__ to bypass field validation
-        object.__setattr__(self, '_cache_system_instruction', cache_system_instruction)
-        object.__setattr__(self, '_cache_control_type', cache_control_type)
-
-        # Log if caching is enabled
-        if cache_system_instruction:
-            log(f"Prompt caching enabled for {model} with cache_control_type: {cache_control_type}")
-            debug_log(f"ExtendedLiteLlm initialized with caching enabled for model: {model}")
-            debug_log(f"Model supports caching: {self._supports_caching()}")
-
-    @property
-    def cache_system_instruction(self) -> bool:
-        """Get the cache system instruction setting."""
-        return getattr(self, '_cache_system_instruction', False)
-
-    @property
-    def cache_control_type(self) -> str:
-        """Get the cache control type setting."""
-        return getattr(self, '_cache_control_type', 'ephemeral')
-
-    def _supports_caching(self) -> bool:
-        """Check if the current model supports prompt caching.
-
-        Based on official LiteLLM documentation, prompt caching is supported for:
-        - OpenAI (openai/)
-        - Anthropic API (anthropic/)
-        - AWS Bedrock (bedrock/, bedrock/invoke/, bedrock/converse/)
-        - Deepseek API (deepseek/)
-
-        NOT supported:
-        - Gemini/Vertex AI models
-        - Azure OpenAI (not in official supported list)
-        - Other providers
-        """
-        model_lower = self.model.lower()
-        supported_prefixes = [
-            "anthropic/",
-            "openai/",
-            "bedrock/",
-            "deepseek/"
-        ]
-
-        # First check if it's a supported model
-        is_supported = any(model_lower.startswith(prefix) for prefix in supported_prefixes)
-
-        if is_supported:
-            return True
-
-        # Only if NOT supported, check for specific unsupported patterns and warn
-        unsupported_patterns = [
-            "gemini",
-            "vertex_ai/gemini",
-            "azure/",  # Azure OpenAI not officially supported
-        ]
-
-        # Log info for unsupported models if caching is requested
-        if self.cache_system_instruction:
-            for pattern in unsupported_patterns:
-                if pattern in model_lower:
-                    if "gemini" in pattern:
-                        log(
-                            f"Prompt caching requested for {self.model}. "
-                            f"Gemini models don't support prompt caching in LiteLLM. "
-                            f"Model will work normally without caching. "
-                            f"Supported providers: OpenAI, Anthropic, Bedrock, Deepseek"
-                        )
-                    elif "azure" in pattern:
-                        log(
-                            f"Prompt caching requested for {self.model}. "
-                            f"Azure OpenAI prompt caching is not officially supported by LiteLLM. "
-                            f"Model will work normally without caching."
-                        )
-                    return False
-
-            # Generic warning for other unsupported models
-            log(
-                f"Prompt caching requested for {self.model}. "
-                f"This model doesn't support prompt caching in LiteLLM. "
-                f"Supported providers: OpenAI, Anthropic, Bedrock, Deepseek"
-            )
-
-        return False
-
-    def _apply_cache_control_to_litellm_messages(self, messages: List[Any]) -> None:
-        """Apply cache control to LiteLLM messages for Anthropic-style providers."""
-        debug_log("[CACHE] === CACHE CONTROL APPLICATION START ===")
-        debug_log(f"[CACHE] Adding cache control to {len(messages)} LiteLLM messages")
-
-        if not self._is_anthropic_model():
-            debug_log(f"[CACHE] Model {self.model} doesn't need cache control (OpenAI auto-caches 1024+ tokens)")
+        if not messages:
             return
 
-        # Cache the first developer/system message which contains the stable instructions
-        # This is the approach that previously got cache hits
-        cache_applied = False
-        for i, message in enumerate(messages):
-            role, content = self._extract_message_parts(message)
-            debug_log(f"[CACHE] Message {i}: role='{role}', content_length={len(str(content)) if content else 'None'}")
+        # Find the last user message and apply cache control
+        for i in range(len(messages) - 1, -1, -1):
+            message = messages[i]
+            if hasattr(message, 'role') and message.role == 'user':
+                # Add cache_control to the message
+                if hasattr(message, '__dict__'):
+                    message.__dict__['cache_control'] = {"type": "ephemeral"}
+                break
 
-            # Apply cache control to developer/system messages (these are typically long and reused)
-            if role in ['system', 'developer'] and content is not None:
-                debug_log(f"[CACHE] Applying cache control to {role} message at index {i}")
-                if self._apply_cache_to_content(message, content):
-                    cache_applied = True
-                    debug_log(f"[CACHE] [OK] Applied cache control to {role} message")
-                    break  # Only cache the first suitable message found
-                else:
-                    debug_log(f"[CACHE] [!] Failed to apply cache control to {role} message")
+        # Apply cache control to system instruction (first message if developer role)
+        if messages and hasattr(messages[0], 'role') and messages[0].role == 'developer':
+            if hasattr(messages[0], '__dict__'):
+                messages[0].__dict__['cache_control'] = {"type": "ephemeral"}
 
-        if not cache_applied:
-            debug_log("[CACHE] [!] No suitable message found for cache control")
-
-        debug_log("[CACHE] === CACHE CONTROL APPLICATION END ===")
-
-    def _is_anthropic_model(self) -> bool:
-        """Check if the model is Anthropic-based."""
-        model_lower = self.model.lower()
-        is_anthropic_bedrock = model_lower.startswith("bedrock/") and "anthropic" in model_lower
-        return model_lower.startswith("anthropic/") or is_anthropic_bedrock
-
-    def _extract_message_parts(self, message: Any) -> tuple:
-        """Extract role and content from message (dict or object format)."""
-        role = None
-        content = None
-
-        if isinstance(message, dict):
-            role = message.get('role')
-            content = message.get('content')
-        elif hasattr(message, 'role'):
-            role = getattr(message, 'role', None)
-            content = getattr(message, 'content', None)
-
-        return role, content
-
-    def _apply_cache_to_content(self, message: Any, content: Any) -> bool:
-        """Apply cache control to message content. Returns True if successful."""
-        if isinstance(content, str):
-            return self._apply_cache_to_string_content(message, content)
-        elif isinstance(content, list) and len(content) > 0:
-            return self._apply_cache_to_list_content(content)
-
-        return False
-
-    def _apply_cache_to_string_content(self, message: Any, content: str) -> bool:
-        """Apply cache control to string content."""
-        new_content = [{
-            "type": "text",
-            "text": content,
-            "cache_control": {"type": self.cache_control_type}
-        }]
-
-        if isinstance(message, dict):
-            message['content'] = new_content
-        else:
-            message.content = new_content
-
-        return True
-
-    def _apply_cache_to_list_content(self, content: List[Any]) -> bool:
-        """Apply cache control to list content."""
-        debug_log(f"Content is already a list with {len(content)} items")
-
-        # Find the last text item and add cache control to it
-        for j in range(len(content) - 1, -1, -1):
-            content_item = content[j]
-            if isinstance(content_item, dict) and content_item.get("type") == "text":
-                content_item["cache_control"] = {"type": self.cache_control_type}
-                debug_log(f"Added cache control to existing text item at index {j}")
-                return True
-
-        # If no text items found, convert the first item if it's a string
-        if content and isinstance(content[0], str):
-            content[0] = {
-                "type": "text",
-                "text": content[0],
-                "cache_control": {"type": self.cache_control_type}
-            }
-            debug_log("Converted first string item to text with cache control")
-            return True
-
-        return False
-
-    async def _prepare_completion_args(self, llm_request: LlmRequest) -> tuple:
-        """Prepare completion arguments by converting ADK request to LiteLLM format."""
-        debug_log("[PREPARE] === PREPARE COMPLETION ARGS START ===")
-        debug_log(f"[PREPARE] Request has {len(llm_request.contents)} contents")
-
-        from google.adk.models.lite_llm import _get_completion_inputs, _build_request_log
-        import logging
-        logger = logging.getLogger(__name__)
-
-        # Prepare the request the same way as parent class
-        self._maybe_append_user_content(llm_request)
-        logger.debug(_build_request_log(llm_request))
-
-        # Convert ADK request to LiteLLM format
-        debug_log("[PREPARE] Converting ADK request to LiteLLM format...")
+    def _get_completion_inputs(
+        self,
+        llm_request: LlmRequest
+    ) -> Tuple[
+        List[Message],
+        Optional[List[Dict]],
+        Optional[types.SchemaUnion],
+        Optional[Dict],
+    ]:
+        """Override to add prompt caching for Anthropic models."""
+        # Get standard inputs from parent class
         messages, tools, response_format, generation_params = _get_completion_inputs(llm_request)
-        debug_log(f"[PREPARE] Converted to {len(messages)} LiteLLM messages, {len(tools) if tools else 0} tools")
 
-        # Apply cache control to the LiteLLM messages if caching is enabled
-        if self.cache_system_instruction and self._supports_caching():
-            debug_log("[PREPARE] Applying cache control to converted LiteLLM messages")
-            self._apply_cache_control_to_litellm_messages(messages)
-        else:
-            debug_log(f"[PREPARE] Skipping cache control - enabled: {self.cache_system_instruction}, supported: {self._supports_caching()}")
+        # Apply caching for Anthropic models (direct or via Bedrock)
+        model_lower = self.model.lower()
+        if ("anthropic/" in model_lower
+                or "claude" in model_lower
+                or ("bedrock/" in model_lower and "claude" in model_lower)):
+            self._apply_anthropic_cache_control(messages)
 
-        # Prepare completion arguments same as parent
-        if "functions" in self._additional_args:
-            # LiteLLM does not support both tools and functions together.
-            debug_log("[PREPARE] Removing tools due to functions in additional_args")
-            tools = None
-
-        completion_args = {
-            "model": self.model,
-            "messages": messages,
-            "tools": tools,
-            "response_format": response_format,
-        }
-        completion_args.update(self._additional_args)
-
-        if generation_params:
-            debug_log(f"[PREPARE] Adding generation params: {list(generation_params.keys())}")
-            completion_args.update(generation_params)
-
-        debug_log(f"[PREPARE] Final completion args keys: {list(completion_args.keys())}")
-        debug_log("[PREPARE] === PREPARE COMPLETION ARGS END ===")
-        return completion_args
-
-    async def generate_content_async(
-        self, llm_request: LlmRequest, stream: bool = False
-    ) -> AsyncGenerator[LlmResponse, None]:
-        """
-        Generate content with caching support.
-
-        This method applies cache control and then uses the exact same logic
-        as the parent class to preserve agent loop functionality.
-        """
-        debug_log("=== GENERATE CONTENT START ===")
-        debug_log(f"Model: {self.model}")
-        debug_log(f"Stream mode: {stream}")
-        debug_log(f"Cache enabled: {self.cache_system_instruction}")
-
-        # Apply caching by temporarily patching the conversion function
-        if self.cache_system_instruction and self._supports_caching():
-            debug_log("[CACHE-INTERCEPT] Patching message conversion to apply cache control")
-
-            # Import the function we need to patch
-            from google.adk.models import lite_llm
-            original_get_completion_inputs = lite_llm._get_completion_inputs
-
-            def cached_get_completion_inputs(llm_request_param):
-                debug_log("[CACHE-PATCH] Converting ADK request to LiteLLM format...")
-                messages, tools, response_format, generation_params = original_get_completion_inputs(llm_request_param)
-                debug_log(f"[CACHE-PATCH] Converted to {len(messages)} LiteLLM messages, {len(tools) if tools else 0} tools")
-
-                # Apply cache control to the messages
-                debug_log("[CACHE-PATCH] Applying cache control to converted LiteLLM messages")
-                self._apply_cache_control_to_litellm_messages(messages)
-
-                return messages, tools, response_format, generation_params
-
-            # Temporarily replace the function
-            lite_llm._get_completion_inputs = cached_get_completion_inputs
-
-            try:
-                # Now call the parent method which will use our cached messages
-                debug_log("[CACHE-INTERCEPT] Delegating to parent with patched message conversion")
-                async for response in super().generate_content_async(llm_request, stream):
-                    # Log cache information if available
-                    if hasattr(response, 'usage_metadata') and response.usage_metadata:
-                        usage = response.usage_metadata
-                        # Check for cached tokens in different possible locations
-                        cached_tokens = 0
-                        if hasattr(usage, 'cached_content_token_count') and usage.cached_content_token_count:
-                            cached_tokens = usage.cached_content_token_count
-                        elif hasattr(usage, 'cache_tokens_details') and usage.cache_tokens_details:
-                            cached_tokens = getattr(usage.cache_tokens_details, 'cached_tokens', 0)
-
-                        if cached_tokens > 0:
-                            debug_log(f"[OK] Cache hit! Cached tokens: {cached_tokens}")
-                        elif hasattr(usage, 'prompt_token_count'):
-                            debug_log(f"Cache miss - Prompt tokens: {usage.prompt_token_count}")
-
-                    yield response
-            finally:
-                # Restore the original function
-                lite_llm._get_completion_inputs = original_get_completion_inputs
-                debug_log("[CACHE-INTERCEPT] Restored original message conversion function")
-        else:
-            debug_log("[NO-CACHE] Delegating to parent class directly")
-            # No caching - just use parent implementation
-            async for response in super().generate_content_async(llm_request, stream):
-                yield response
-
-        debug_log("=== GENERATE CONTENT END ===")
+        return messages, tools, response_format, generation_params
