@@ -26,6 +26,13 @@ from google.adk.models.lite_llm import LiteLlm, _get_completion_inputs
 from google.adk.models.llm_request import LlmRequest
 from google.genai import types
 from litellm import Message
+import litellm
+import logging
+
+# Enable LiteLLM debug logging
+litellm._turn_on_debug()
+
+logger = logging.getLogger(__name__)
 
 
 class ExtendedLiteLlm(LiteLlm):
@@ -123,17 +130,32 @@ class ExtendedLiteLlm(LiteLlm):
         Optional[Dict],
     ]:
         """Override to add prompt caching for Anthropic and Bedrock models."""
+        logger.info(f"Processing model: {self.model}")
+
         # Get standard inputs from parent class
         messages, tools, response_format, generation_params = _get_completion_inputs(llm_request)
 
         # Apply appropriate caching based on model type
         model_lower = self.model.lower()
 
+        logger.info(f"Model detection: bedrock={('bedrock/' in model_lower)}, claude={('claude' in model_lower)}")
+
         if "anthropic/" in model_lower and "bedrock/" not in model_lower:
             # Direct Anthropic API - use cache_control
+            logger.info("Applying Anthropic cache_control")
             self._apply_anthropic_cache_control(messages)
         elif "bedrock/" in model_lower and "claude" in model_lower:
             # Bedrock Claude models - use cachePoint
+            logger.info("Applying Bedrock cachePoint")
             self._apply_bedrock_cache_points(messages)
+        else:
+            logger.info("No caching applied - model not supported")
+
+        # Log the final messages structure (truncated)
+        logger.info(f"Final message count: {len(messages)}")
+        for i, msg in enumerate(messages):
+            if hasattr(msg, 'role'):
+                content_type = type(getattr(msg, 'content', None)).__name__
+                logger.info(f"Message {i}: role={msg.role}, content_type={content_type}")
 
         return messages, tools, response_format, generation_params
