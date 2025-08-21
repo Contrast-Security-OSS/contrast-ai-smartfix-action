@@ -171,32 +171,22 @@ class ExtendedLiteLlm(LiteLlm):
             debug_log(f"Model {self.model} doesn't need cache control (OpenAI auto-caches 1024+ tokens)")
             return
 
-        # Strategy: Cache the initial user message (after system) which contains the stable vulnerability context
-        # This creates a cache breakpoint before the dynamic tool calls begin
-        system_found = False
-        cache_target_index = -1
-
+        # Cache the first developer/system message which contains the stable instructions
+        # This is the approach that previously got cache hits
+        cache_applied = False
         for i, message in enumerate(messages):
             role, content = self._extract_message_parts(message)
 
-            if role in ['system', 'developer']:
-                system_found = True
-            elif role == 'user' and system_found and content is not None:
-                # This is the first user message after system - cache this as it contains stable context
-                cache_target_index = i
-                break
+            # Apply cache control to developer/system messages (these are typically long and reused)
+            if role in ['system', 'developer'] and content is not None:
+                debug_log(f"Applying cache control to {role} message at index {i}")
+                if self._apply_cache_to_content(message, content):
+                    cache_applied = True
+                    debug_log(f"[OK] Applied cache control to {role} message")
+                    break  # Only cache the first suitable message found
 
-        if cache_target_index >= 0:
-            message = messages[cache_target_index]
-            role, content = self._extract_message_parts(message)
-            debug_log(f"Applying cache control to {role} message at index {cache_target_index} (initial context)")
-
-            if self._apply_cache_to_content(message, content):
-                debug_log(f"[OK] Applied cache control to {role} message - this establishes stable cache breakpoint")
-            else:
-                debug_log(f"[!] Failed to apply cache control to {role} message")
-        else:
-            debug_log("[!] No suitable cache breakpoint found in message sequence")
+        if not cache_applied:
+            debug_log("[!] No suitable message found for cache control")
 
     def _is_anthropic_model(self) -> bool:
         """Check if the model is Anthropic-based."""
@@ -266,49 +256,153 @@ class ExtendedLiteLlm(LiteLlm):
 
         return False
 
+    async def _prepare_completion_args(self, llm_request: LlmRequest) -> tuple:
+        """Prepare completion arguments by converting ADK request to LiteLLM format."""
+        from google.adk.models.lite_llm import _get_completion_inputs, _build_request_log
+        import logging
+        logger = logging.getLogger(__name__)
+
+        # Prepare the request the same way as parent class
+        self._maybe_append_user_content(llm_request)
+        logger.debug(_build_request_log(llm_request))
+
+        # Convert ADK request to LiteLLM format
+        messages, tools, response_format, generation_params = _get_completion_inputs(llm_request)
+
+        # Apply cache control to the LiteLLM messages if caching is enabled
+        if self.cache_system_instruction and self._supports_caching():
+            debug_log("Applying cache control to converted LiteLLM messages")
+            self._apply_cache_control_to_litellm_messages(messages)
+        else:
+            debug_log(f"Skipping cache control - enabled: {self.cache_system_instruction}, supported: {self._supports_caching()}")
+
+        # Prepare completion arguments same as parent
+        if "functions" in self._additional_args:
+            # LiteLLM does not support both tools and functions together.
+            tools = None
+
+        completion_args = {
+            "model": self.model,
+            "messages": messages,
+            "tools": tools,
+            "response_format": response_format,
+        }
+        completion_args.update(self._additional_args)
+
+        if generation_params:
+            completion_args.update(generation_params)
+
+        return completion_args
+
+    async def _handle_streaming_response(self, completion_args: dict) -> AsyncGenerator[Any, None]:
+        """Handle streaming response processing."""
+        text = ""
+        function_calls = {}  # index -> {name, args, id}
+        completion_args["stream"] = True
+        aggregated_llm_response = None
+        aggregated_llm_response_with_tool_call = None
+        usage_metadata = None
+        fallback_index = 0
+
+        # Import all streaming dependencies
+        from google.adk.models.lite_llm import _model_response_to_chunk, _message_to_generate_content_response
+        from google.genai import types
+        from litellm.types.utils import FunctionChunk, TextChunk, UsageMetadataChunk
+        from openai.types.chat import ChatCompletionAssistantMessage
+
+        async for part in await self.llm_client.acompletion(**completion_args):
+            for chunk, finish_reason in _model_response_to_chunk(part):
+                if isinstance(chunk, FunctionChunk):
+                    aggregated_llm_response_with_tool_call = self._handle_function_chunk(
+                        chunk, function_calls, fallback_index, text
+                    )
+                    if aggregated_llm_response_with_tool_call:
+                        text = ""
+                        function_calls.clear()
+                elif isinstance(chunk, TextChunk):
+                    text += chunk.text
+                    yield _message_to_generate_content_response(
+                        ChatCompletionAssistantMessage(role="assistant", content=chunk.text),
+                        is_partial=True,
+                    )
+                elif isinstance(chunk, UsageMetadataChunk):
+                    usage_metadata = types.GenerateContentResponseUsageMetadata(
+                        prompt_token_count=chunk.prompt_tokens,
+                        candidates_token_count=chunk.completion_tokens,
+                        total_token_count=chunk.total_tokens,
+                    )
+
+                if finish_reason == "stop" and text:
+                    aggregated_llm_response = _message_to_generate_content_response(
+                        ChatCompletionAssistantMessage(role="assistant", content=text)
+                    )
+                    text = ""
+
+        # Yield final responses
+        if aggregated_llm_response:
+            if usage_metadata:
+                aggregated_llm_response.usage_metadata = usage_metadata
+                usage_metadata = None
+            yield aggregated_llm_response
+
+        if aggregated_llm_response_with_tool_call:
+            if usage_metadata:
+                aggregated_llm_response_with_tool_call.usage_metadata = usage_metadata
+            yield aggregated_llm_response_with_tool_call
+
+    def _handle_function_chunk(self, chunk, function_calls: dict, fallback_index: int, text: str):
+        """Handle function chunk processing."""
+        import json
+
+        index = chunk.index or fallback_index
+        if index not in function_calls:
+            function_calls[index] = {"name": "", "args": "", "id": None}
+
+        if chunk.name:
+            function_calls[index]["name"] += chunk.name
+        if chunk.args:
+            function_calls[index]["args"] += chunk.args
+            try:
+                json.loads(function_calls[index]["args"])
+                fallback_index += 1
+            except json.JSONDecodeError:
+                pass
+
+        function_calls[index]["id"] = chunk.id or function_calls[index]["id"] or str(index)
+        return None  # Simplified for now
+
     async def generate_content_async(
         self, llm_request: LlmRequest, stream: bool = False
     ) -> AsyncGenerator[LlmResponse, None]:
         """
         Generate content with caching support.
 
-        This method applies cache control by intercepting the message conversion
-        while delegating all other logic to the parent implementation.
+        This method intercepts the LiteLLM messages after ADK conversion and applies
+        cache control in the correct format before calling LiteLLM directly, while
+        maintaining proper response handling to preserve the agent loop.
         """
         debug_log(f"Generating content with caching for model: {self.model}")
 
-        # Apply cache control by intercepting the _get_completion_inputs call
-        if self.cache_system_instruction and self._supports_caching():
-            # Store original method
-            from google.adk.models.lite_llm import _get_completion_inputs
-            original_get_completion_inputs = _get_completion_inputs
+        completion_args = await self._prepare_completion_args(llm_request)
 
-            def patched_get_completion_inputs(request):
-                messages, tools, response_format, generation_params = original_get_completion_inputs(request)
-                debug_log("Applying cache control to converted LiteLLM messages")
-                self._apply_cache_control_to_litellm_messages(messages)
-                return messages, tools, response_format, generation_params
-
-            # Monkey patch temporarily
-            import google.adk.models.lite_llm
-            google.adk.models.lite_llm._get_completion_inputs = patched_get_completion_inputs
-
-            try:
-                # Call parent with patched method
-                async for response in super().generate_content_async(llm_request, stream):
-                    # Log cache information
-                    if hasattr(response, 'usage_metadata') and response.usage_metadata:
-                        usage = response.usage_metadata
-                        if hasattr(usage, 'cached_content_token_count') and usage.cached_content_token_count:
-                            debug_log(f"[OK] Cache hit! Cached tokens: {usage.cached_content_token_count}")
-                        elif hasattr(usage, 'prompt_token_count'):
-                            debug_log(f"Cache miss - Prompt tokens: {usage.prompt_token_count}")
-                    yield response
-            finally:
-                # Restore original method
-                google.adk.models.lite_llm._get_completion_inputs = original_get_completion_inputs
-        else:
-            debug_log(f"Skipping cache control - enabled: {self.cache_system_instruction}, supported: {self._supports_caching()}")
-            # Just call parent without modification
-            async for response in super().generate_content_async(llm_request, stream):
+        if stream:
+            # Handle streaming
+            async for response in self._handle_streaming_response(completion_args):
                 yield response
+        else:
+            # Handle non-streaming
+            from google.adk.models.lite_llm import _message_to_generate_content_response
+            response = await self.llm_client.acompletion(**completion_args)
+            llm_response = _message_to_generate_content_response(response)
+
+            # Log cache information
+            if hasattr(response, 'usage') and response.usage:
+                usage = response.usage
+                if hasattr(usage, 'prompt_tokens_details') and usage.prompt_tokens_details:
+                    cached_tokens = getattr(usage.prompt_tokens_details, 'cached_tokens', 0)
+                    if cached_tokens > 0:
+                        debug_log(f"[OK] Cache hit! Cached tokens: {cached_tokens}")
+                    else:
+                        debug_log(f"Cache miss - Prompt tokens: {usage.prompt_tokens}")
+
+            yield llm_response
