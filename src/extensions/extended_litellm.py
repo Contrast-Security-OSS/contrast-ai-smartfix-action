@@ -137,39 +137,46 @@ class ExtendedLiteLlm(LiteLlm):
             if role == 'developer' or role == 'system':
                 print(f"[EXTENDED] Found developer/system message {i}, adding cache point")
                 if isinstance(content, str):
-                    # Convert string content to array format and add cache point
-                    original_content = content
-                    new_content = [
-                        {"text": original_content},
-                        {"cachePoint": {"type": "default"}}
-                    ]
+                    # Convert string content to object format with embedded cache point
+                    new_content = {
+                        "text": content,
+                        "cachePoint": {"type": "default"}
+                    }
                     if isinstance(message, dict):
-                        message['content'] = new_content
+                        message['content'] = [new_content]
                     else:
-                        message.content = new_content
-                    print("[EXTENDED] Converted developer/system message content to array with cache point")
+                        message.content = [new_content]
+                    print("[EXTENDED] Converted developer/system message to cache format")
+                elif isinstance(content, list) and len(content) > 0:
+                    # Add cache point to the last text content block
+                    last_block = content[-1]
+                    if isinstance(last_block, dict) and 'text' in last_block:
+                        last_block['cachePoint'] = {"type": "default"}
+                        print("[EXTENDED] Added cache point to existing content block")
 
             # Add cache point after first user message
             elif role == 'user':
                 print(f"[EXTENDED] Found user message {i}, adding cache point")
                 if isinstance(content, str):
-                    original_content = content
-                    new_content = [
-                        {"text": original_content},
-                        {"cachePoint": {"type": "default"}}
-                    ]
+                    # Convert string content to object format with embedded cache point
+                    new_content = {
+                        "text": content,
+                        "cachePoint": {"type": "default"}
+                    }
                     if isinstance(message, dict):
-                        message['content'] = new_content
+                        message['content'] = [new_content]
                     else:
-                        message.content = new_content
-                    print("[EXTENDED] Converted user message content to array with cache point")
-                elif isinstance(content, list):
-                    # Add cache point at the end of existing content array
-                    content.append({"cachePoint": {"type": "default"}})
-                    print("[EXTENDED] Added cache point to existing content array")
-                break  # Only cache first user message
+                        message.content = [new_content]
+                    print("[EXTENDED] Converted user message to cache format")
+                elif isinstance(content, list) and len(content) > 0:
+                    # Add cache point to the last text content block
+                    last_block = content[-1]
+                    if isinstance(last_block, dict) and 'text' in last_block:
+                        last_block['cachePoint'] = {"type": "default"}
+                        print("[EXTENDED] Added cache point to existing content block")
+                break  # Only cache first user message        break  # Only cache first user message
 
-        print("[EXTENDED] _apply_bedrock_cache_points completed")
+        print("[EXTENDED] _apply_bedrock_cache_points completed - no modifications made for now")
 
         # Log final message structure to verify cache points were added
         print("[EXTENDED] Final message structure:")
