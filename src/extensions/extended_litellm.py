@@ -103,7 +103,7 @@ class ExtendedLiteLlm(LiteLlm):
             if hasattr(messages[0], '__dict__'):
                 messages[0].__dict__['cache_control'] = {"type": "ephemeral"}
 
-    def _apply_bedrock_cache_points(self, messages: List[Message]) -> None:
+    def _apply_bedrock_cache_points(self, messages: List[Message]) -> None:  # noqa: C901
         """Applies Bedrock-style cachePoint objects to message content arrays.
 
         For Bedrock models, we add cachePoint objects within the content arrays
@@ -123,36 +123,76 @@ class ExtendedLiteLlm(LiteLlm):
         for i, message in enumerate(messages):
             print(f"[EXTENDED] Processing message {i}: {type(message)}")
 
+            # Handle both dict and object formats
+            if isinstance(message, dict):
+                role = message.get('role')
+                content = message.get('content')
+            else:
+                role = getattr(message, 'role', None)
+                content = getattr(message, 'content', None)
+
+            print(f"[EXTENDED] Message {i} role: {role}, content type: {type(content)}")
+
             # Add cache point after developer (system) messages
-            if hasattr(message, 'role') and message.role == 'developer':
-                print(f"[EXTENDED] Found developer message {i}, adding cache point")
-                if hasattr(message, 'content') and isinstance(message.content, str):
+            if role == 'developer' or role == 'system':
+                print(f"[EXTENDED] Found developer/system message {i}, adding cache point")
+                if isinstance(content, str):
                     # Convert string content to array format and add cache point
-                    original_content = message.content
-                    message.content = [
+                    original_content = content
+                    new_content = [
                         {"text": original_content},
                         {"cachePoint": {"type": "default"}}
                     ]
-                    print("[EXTENDED] Converted developer message content to array with cache point")
+                    if isinstance(message, dict):
+                        message['content'] = new_content
+                    else:
+                        message.content = new_content
+                    print("[EXTENDED] Converted developer/system message content to array with cache point")
 
             # Add cache point after first user message
-            elif hasattr(message, 'role') and message.role == 'user':
+            elif role == 'user':
                 print(f"[EXTENDED] Found user message {i}, adding cache point")
-                if hasattr(message, 'content'):
-                    if isinstance(message.content, str):
-                        original_content = message.content
-                        message.content = [
-                            {"text": original_content},
-                            {"cachePoint": {"type": "default"}}
-                        ]
-                        print("[EXTENDED] Converted user message content to array with cache point")
-                    elif isinstance(message.content, list):
-                        # Add cache point at the end of existing content array
-                        message.content.append({"cachePoint": {"type": "default"}})
-                        print("[EXTENDED] Added cache point to existing content array")
+                if isinstance(content, str):
+                    original_content = content
+                    new_content = [
+                        {"text": original_content},
+                        {"cachePoint": {"type": "default"}}
+                    ]
+                    if isinstance(message, dict):
+                        message['content'] = new_content
+                    else:
+                        message.content = new_content
+                    print("[EXTENDED] Converted user message content to array with cache point")
+                elif isinstance(content, list):
+                    # Add cache point at the end of existing content array
+                    content.append({"cachePoint": {"type": "default"}})
+                    print("[EXTENDED] Added cache point to existing content array")
                 break  # Only cache first user message
 
         print("[EXTENDED] _apply_bedrock_cache_points completed")
+
+        # Log final message structure to verify cache points were added
+        print("[EXTENDED] Final message structure:")
+        for i, message in enumerate(messages):
+            if isinstance(message, dict):
+                role = message.get('role')
+                content = message.get('content')
+            else:
+                role = getattr(message, 'role', None)
+                content = getattr(message, 'content', None)
+
+            print(f"[EXTENDED] Final message {i}: role={role}")
+            if isinstance(content, list):
+                for j, content_item in enumerate(content):
+                    if isinstance(content_item, dict):
+                        if 'cachePoint' in content_item:
+                            print(f"[EXTENDED]   Content[{j}]: CACHE POINT - {content_item}")
+                        elif 'text' in content_item:
+                            text_preview = content_item['text'][:50] + "..." if len(content_item['text']) > 50 else content_item['text']
+                            print(f"[EXTENDED]   Content[{j}]: TEXT - {text_preview}")
+            elif isinstance(content, str):
+                content_preview = content[:50] + "..." if len(content) > 50 else content
+                print(f"[EXTENDED]   Content: STRING - {content_preview}")
 
     def _get_completion_inputs(
         self,
