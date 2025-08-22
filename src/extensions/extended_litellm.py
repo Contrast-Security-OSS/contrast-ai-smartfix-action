@@ -22,16 +22,16 @@
 #
 
 from typing import List, AsyncGenerator
+import litellm
 from google.adk.models.lite_llm import (
     LiteLlm, _get_completion_inputs, _build_request_log, _model_response_to_chunk,
-    _model_response_to_generate_content_response, _message_to_generate_content_response,
+    _message_to_generate_content_response,
     FunctionChunk, TextChunk, UsageMetadataChunk
 )
 from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
 from google.genai import types
 from litellm import Message, ChatCompletionAssistantMessage, ChatCompletionMessageToolCall, Function
-import litellm
 import logging
 import json
 
@@ -322,4 +322,99 @@ class ExtendedLiteLlm(LiteLlm):
 
         else:
             response = await self.llm_client.acompletion(**completion_args)
-            yield _model_response_to_generate_content_response(response)
+            yield self._model_response_to_generate_content_response(response)
+
+    def _model_response_to_generate_content_response(self, response) -> LlmResponse:
+        """Override to extract and log cache-specific token metrics.
+
+        Extracts cache metrics from LiteLLM response and logs them before
+        calling the parent method.
+        """
+        # Extract cache-specific metrics from the raw response
+        usage = response.get("usage", {})
+
+        # Extract the metrics we care about
+        cache_read_input_tokens = usage.get("cacheReadInputTokenCount", 0) or usage.get("cacheReadInputTokens", 0)
+        cache_write_input_tokens = usage.get("cacheWriteInputTokenCount", 0) or usage.get("cacheWriteInputTokens", 0)
+        input_tokens = usage.get("inputTokens", 0) or usage.get("prompt_tokens", 0)
+        output_tokens = usage.get("outputTokens", 0) or usage.get("completion_tokens", 0)
+        total_tokens = usage.get("totalTokens", 0) or usage.get("total_tokens", 0)
+
+        # Calculate total cached tokens (read + write)
+        total_cached_tokens = cache_read_input_tokens + cache_write_input_tokens
+
+        # Log the cache metrics we care about
+        print("[EXTENDED] Cache Token Metrics:")
+        print(f"[EXTENDED]   Cache Read Input Tokens: {cache_read_input_tokens}")
+        print(f"[EXTENDED]   Cache Write Input Tokens: {cache_write_input_tokens}")
+        print(f"[EXTENDED]   Total Cached Tokens: {total_cached_tokens}")
+        print(f"[EXTENDED]   Input Tokens: {input_tokens}")
+        print(f"[EXTENDED]   Output Tokens: {output_tokens}")
+        print(f"[EXTENDED]   Total Tokens: {total_tokens}")
+
+        # Log cache efficiency if there are cached tokens
+        if total_cached_tokens > 0:
+            cache_efficiency = (total_cached_tokens / total_tokens) * 100 if total_tokens > 0 else 0
+            print(f"[EXTENDED]   Cache Efficiency: {cache_efficiency:.1f}% ({total_cached_tokens}/{total_tokens})")
+
+            # Get model cost information from LiteLLM
+            try:
+                # Access litellm's get_model_info function
+                model_info = litellm.get_model_info(self.model)
+
+                regular_input_cost = model_info.get("input_cost_per_token", 3e-06)
+                cache_read_cost = model_info.get("cache_read_input_token_cost", 3e-07)
+                cache_write_cost = model_info.get("cache_creation_input_token_cost", 3.75e-06)
+                output_cost = model_info.get("output_cost_per_token", 1.5e-05)
+
+                print("[EXTENDED]   Model Costs (per token):")
+                print(f"[EXTENDED]     Regular Input: ${regular_input_cost:.2e}")
+                print(f"[EXTENDED]     Cache Read: ${cache_read_cost:.2e}")
+                print(f"[EXTENDED]     Cache Write: ${cache_write_cost:.2e}")
+                print(f"[EXTENDED]     Output: ${output_cost:.2e}")
+
+                # Calculate actual costs
+                total_input_cost = 0
+                total_output_cost = output_tokens * output_cost
+                cache_savings = 0
+
+                if cache_read_input_tokens > 0:
+                    # Cost with caching
+                    cache_read_total_cost = cache_read_input_tokens * cache_read_cost
+                    # What it would have cost without caching
+                    regular_cost_equivalent = cache_read_input_tokens * regular_input_cost
+                    cache_savings = regular_cost_equivalent - cache_read_total_cost
+                    total_input_cost += cache_read_total_cost
+
+                if cache_write_input_tokens > 0:
+                    cache_write_total_cost = cache_write_input_tokens * cache_write_cost
+                    total_input_cost += cache_write_total_cost
+
+                # Non-cached input tokens (if any)
+                non_cached_input_tokens = input_tokens - total_cached_tokens
+                if non_cached_input_tokens > 0:
+                    total_input_cost += non_cached_input_tokens * regular_input_cost
+
+                total_cost = total_input_cost + total_output_cost
+
+                print("[EXTENDED]   Cost Breakdown:")
+                print(f"[EXTENDED]     Input Cost: ${total_input_cost:.6f}")
+                print(f"[EXTENDED]     Output Cost: ${total_output_cost:.6f}")
+                print(f"[EXTENDED]     Total Cost: ${total_cost:.6f}")
+
+                if cache_savings > 0:
+                    print(f"[EXTENDED]     Cache Savings: ${cache_savings:.6f} ({cache_read_input_tokens} tokens)")
+                    savings_percentage = (cache_savings / (cache_savings + total_input_cost)) * 100
+                    print(f"[EXTENDED]     Savings Rate: {savings_percentage:.1f}%")
+
+            except Exception as e:
+                print(f"[EXTENDED]   Could not get model cost info: {e}")
+                # Fallback to hardcoded estimates
+                if cache_read_input_tokens > 0:
+                    regular_cost = cache_read_input_tokens * 3e-06  # Regular input token cost
+                    cache_cost = cache_read_input_tokens * 3e-07   # Cache read cost (90% savings)
+                    savings = regular_cost - cache_cost
+                    print(f"[EXTENDED]   Estimated Cost Savings: ${savings:.6f} ({cache_read_input_tokens} cached tokens)")
+
+        # Call the standard conversion function to get the LlmResponse
+        return _message_to_generate_content_response(response)
