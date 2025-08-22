@@ -77,80 +77,89 @@ class ExtendedLiteLlm(LiteLlm):
         import sys
         print(f"[EXTENDED-STDERR] ExtendedLiteLlm initialized with model: {model}", file=sys.stderr)
 
-    def _apply_caching_to_litellm_messages(self, messages: List[Message]) -> None:  # noqa: C901
-        """Apply caching to LiteLLM messages using the correct format for each provider."""
+    def _apply_role_conversion_and_caching(self, messages: List[Message]) -> None:  # noqa: C901
+        """Convert developer->system for non-OpenAI models and apply caching.
+
+        This prevents LiteLLM's internal role conversion that strips cache_control fields.
+        """
         import sys
 
-        print(f"[EXTENDED] _apply_caching_to_litellm_messages called! Model: {self.model}")
-        print(f"[EXTENDED-STDERR] _apply_caching_to_litellm_messages called! Model: {self.model}", file=sys.stderr)
+        print(f"[EXTENDED] _apply_role_conversion_and_caching called! Model: {self.model}")
+        print(f"[EXTENDED-STDERR] _apply_role_conversion_and_caching called! Model: {self.model}", file=sys.stderr)
         logger.info(f"[EXTENDED] Processing model: {self.model}")
 
         model_lower = self.model.lower()
 
         if "bedrock/" in model_lower and "claude" in model_lower:
-            print("[EXTENDED] Applying Bedrock caching")
-            # For Bedrock, we need to apply cache_control at the message level, not cachePoint
+            print("[EXTENDED] Applying Bedrock role conversion and caching")
+
             for i, message in enumerate(messages):
                 if isinstance(message, dict):
                     role = message.get('role')
                 elif hasattr(message, 'role'):
                     role = getattr(message, 'role', None)
+                    # Convert to dict for easier manipulation
+                    if hasattr(message, '__dict__'):
+                        message_dict = message.__dict__.copy()
+                        messages[i] = message_dict
+                        message = message_dict
+                        role = message.get('role')
                 else:
                     continue
 
-                # Apply cache_control to developer/system messages
-                if role == 'developer' or role == 'system':
-                    print(f"[EXTENDED] Adding cache_control to {role} message {i}")
+                # Convert developer->system and add cache_control in one step
+                if role == 'developer':
+                    print(f"[EXTENDED] Converting developer->system and adding cache_control to message {i}")
 
-                    # For Bedrock Claude, add cache_control to the message itself
                     if isinstance(message, dict):
-                        message['cache_control'] = {"type": "ephemeral"}
-                    elif hasattr(message, '__dict__'):
-                        message.__dict__['cache_control'] = {"type": "ephemeral"}
+                        message['role'] = 'system'  # Prevent LiteLLM conversion
+                        message['cache_control'] = {"type": "ephemeral"}  # Add caching
 
-                    print(f"[EXTENDED] Applied cache_control to {role} message")
-                    break  # Only cache first developer/system message
+                    print("[EXTENDED] Applied role conversion and cache_control")
+                    break  # Only cache first developer message
 
         elif "anthropic/" in model_lower and "bedrock/" not in model_lower:
-            print("[EXTENDED] Applying Anthropic caching")
-            # For direct Anthropic API, also use cache_control
+            print("[EXTENDED] Applying Anthropic caching (no role conversion needed)")
+            # For direct Anthropic API, developer role is fine, just add cache_control
             for i, message in enumerate(messages):
                 if isinstance(message, dict):
                     role = message.get('role')
                 elif hasattr(message, 'role'):
                     role = getattr(message, 'role', None)
+                    # Convert to dict for easier manipulation
+                    if hasattr(message, '__dict__'):
+                        message_dict = message.__dict__.copy()
+                        messages[i] = message_dict
+                        message = message_dict
+                        role = message.get('role')
                 else:
                     continue
 
-                # Apply cache_control to developer/system messages
-                if role == 'developer' or role == 'system':
-                    print(f"[EXTENDED] Adding cache_control to {role} message {i}")
+                # Add cache_control to developer messages for direct Anthropic
+                if role == 'developer':
+                    print(f"[EXTENDED] Adding cache_control to developer message {i}")
 
                     if isinstance(message, dict):
                         message['cache_control'] = {"type": "ephemeral"}
-                    elif hasattr(message, '__dict__'):
-                        message.__dict__['cache_control'] = {"type": "ephemeral"}
 
-                    print(f"[EXTENDED] Applied cache_control to {role} message")
-                    break  # Only cache first developer/system message
+                    print("[EXTENDED] Applied cache_control to developer message")
+                    break  # Only cache first developer message
         else:
-            print(f"[EXTENDED] No caching applied - model not supported: {self.model}")
+            print(f"[EXTENDED] No role conversion or caching needed for: {self.model}")
 
         # Log the final message structure
-        print("[EXTENDED] Final cached message structure:")
+        print("[EXTENDED] Final message structure after role conversion:")
         for i, message in enumerate(messages):
             if isinstance(message, dict):
                 role = message.get('role')
                 has_cache = 'cache_control' in message
-            elif hasattr(message, 'role'):
-                role = getattr(message, 'role', None)
-                has_cache = hasattr(message, '__dict__') and 'cache_control' in message.__dict__
+                cache_status = "CACHED" if has_cache else "NO_CACHE"
+                print(f"[EXTENDED] Message {i}: role={role}, cache_status={cache_status}")
+                if has_cache:
+                    print(f"[EXTENDED] Message {i} cache_control: {message['cache_control']}")
             else:
-                role = 'unknown'
-                has_cache = False
-
-            cache_status = "CACHED" if has_cache else "NO_CACHE"
-            print(f"[EXTENDED] Message {i}: role={role}, cache_status={cache_status}")
+                role = getattr(message, 'role', 'unknown')
+                print(f"[EXTENDED] Message {i}: role={role}, type={type(message)}")
 
     async def generate_content_async(  # noqa: C901
         self, llm_request: LlmRequest, stream: bool = False
@@ -179,10 +188,10 @@ class ExtendedLiteLlm(LiteLlm):
         )
         print("[EXTENDED] Completed _get_completion_inputs call")
 
-        # CRITICAL: Apply caching AFTER converting to LiteLLM format but BEFORE calling LiteLLM
-        print("[EXTENDED] About to apply caching to litellm messages")
-        self._apply_caching_to_litellm_messages(messages)
-        print("[EXTENDED] Completed applying caching to litellm messages")
+        # SIMPLE FIX: Convert developer->system for non-OpenAI models to prevent LiteLLM role conversion
+        print("[EXTENDED] About to apply role conversion and caching")
+        self._apply_role_conversion_and_caching(messages)
+        print("[EXTENDED] Completed role conversion and caching")
 
         if "functions" in self._additional_args:
             # LiteLLM does not support both tools and functions together.
