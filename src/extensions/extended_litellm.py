@@ -21,7 +21,7 @@
 # #L%
 #
 
-from typing import Dict, List, Optional, Tuple, AsyncGenerator
+from typing import List, AsyncGenerator
 from google.adk.models.lite_llm import (
     LiteLlm, _get_completion_inputs, _build_request_log, _model_response_to_chunk,
     _model_response_to_generate_content_response, _message_to_generate_content_response,
@@ -47,14 +47,14 @@ class ExtendedLiteLlm(LiteLlm):
     This class extends the base LiteLlm to automatically apply prompt caching
     using the appropriate method for each provider:
     - Direct Anthropic API: Uses cache_control on messages
-    - Bedrock Claude models: Uses cache_control (same as direct Anthropic)
+    - Bedrock Claude models: Uses cachePoint objects in content arrays
 
     Example usage:
     ```python
     # Anthropic Direct API - will apply cache_control automatically
     model = ExtendedLiteLlm(model="anthropic/claude-3-5-sonnet-20241022")
 
-    # Bedrock Claude - will apply cache_control automatically
+    # Bedrock Claude - will apply cachePoint automatically
     model = ExtendedLiteLlm(model="bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0")
 
     # OpenAI - works with automatic caching (no changes needed)
@@ -77,166 +77,80 @@ class ExtendedLiteLlm(LiteLlm):
         import sys
         print(f"[EXTENDED-STDERR] ExtendedLiteLlm initialized with model: {model}", file=sys.stderr)
 
-    def _apply_anthropic_cache_control(self, messages: List[Message]) -> None:
-        """Applies cache control to messages for direct Anthropic API models.
-
-        For Anthropic models, we mark the last user message and system instruction
-        with cache_control to enable prompt caching.
-
-        Args:
-            messages: The list of messages to apply cache control to.
-        """
-        if not messages:
-            return
-
-        # Find the last user message and apply cache control
-        for i in range(len(messages) - 1, -1, -1):
-            message = messages[i]
-            if hasattr(message, 'role') and message.role == 'user':
-                # Add cache_control to the message
-                if hasattr(message, '__dict__'):
-                    message.__dict__['cache_control'] = {"type": "ephemeral"}
-                break
-
-        # Apply cache control to system instruction (first message if developer role)
-        if messages and hasattr(messages[0], 'role') and messages[0].role == 'developer':
-            if hasattr(messages[0], '__dict__'):
-                messages[0].__dict__['cache_control'] = {"type": "ephemeral"}
-
-    def _apply_bedrock_cache_points(self, messages: List[Message]) -> None:  # noqa: C901
-        """Applies Bedrock-style cachePoint objects to message content arrays.
-
-        For Bedrock models, we add cachePoint objects within the content arrays
-        to create cache checkpoints.
-
-        Args:
-            messages: The list of messages to add cache points to.
-        """
-        import sys
-        print(f"[EXTENDED] _apply_bedrock_cache_points called with {len(messages)} messages")
-        print("[EXTENDED-STDERR] _apply_bedrock_cache_points called", file=sys.stderr)
-
-        if not messages:
-            print("[EXTENDED] No messages to process")
-            return
-
-        for i, message in enumerate(messages):
-            print(f"[EXTENDED] Processing message {i}: {type(message)}")
-
-            # Handle both dict and object formats
-            if isinstance(message, dict):
-                role = message.get('role')
-                content = message.get('content')
-            else:
-                role = getattr(message, 'role', None)
-                content = getattr(message, 'content', None)
-
-            print(f"[EXTENDED] Message {i} role: {role}, content type: {type(content)}")
-
-            # Add cache point only to developer/system messages (user messages don't support cache points in Bedrock)
-            if role == 'developer' or role == 'system':
-                print(f"[EXTENDED] Found developer/system message {i}, adding cache point")
-                if isinstance(content, str):
-                    # Convert string content to object format with embedded cache point
-                    new_content = {
-                        "text": content,
-                        "cachePoint": {"type": "default"}
-                    }
-                    if isinstance(message, dict):
-                        message['content'] = [new_content]
-                    else:
-                        message.content = [new_content]
-                    print("[EXTENDED] Converted developer/system message to cache format")
-                elif isinstance(content, list) and len(content) > 0:
-                    # Add cache point to the last text content block
-                    last_block = content[-1]
-                    if isinstance(last_block, dict) and 'text' in last_block:
-                        last_block['cachePoint'] = {"type": "default"}
-                        print("[EXTENDED] Added cache point to existing content block")
-
-        print("[EXTENDED] _apply_bedrock_cache_points completed - no modifications made for now")
-
-        # Log final message structure to verify cache points were added
-        print("[EXTENDED] Final message structure:")
-        for i, message in enumerate(messages):
-            if isinstance(message, dict):
-                role = message.get('role')
-                content = message.get('content')
-            else:
-                role = getattr(message, 'role', None)
-                content = getattr(message, 'content', None)
-
-            print(f"[EXTENDED] Final message {i}: role={role}")
-            if isinstance(content, list):
-                for j, content_item in enumerate(content):
-                    if isinstance(content_item, dict):
-                        if 'cachePoint' in content_item:
-                            print(f"[EXTENDED]   Content[{j}]: CACHE POINT - {content_item}")
-                        elif 'text' in content_item:
-                            text_preview = content_item['text'][:50] + "..." if len(content_item['text']) > 50 else content_item['text']
-                            print(f"[EXTENDED]   Content[{j}]: TEXT - {text_preview}")
-            elif isinstance(content, str):
-                content_preview = content[:50] + "..." if len(content) > 50 else content
-                print(f"[EXTENDED]   Content: STRING - {content_preview}")
-
-    def _get_completion_inputs(
-        self,
-        llm_request: LlmRequest
-    ) -> Tuple[
-        List[Message],
-        Optional[List[Dict]],
-        Optional[types.SchemaUnion],
-        Optional[Dict],
-    ]:
-        """Override to add prompt caching for Anthropic and Bedrock models."""
+    def _apply_caching_to_litellm_messages(self, messages: List[Message]) -> None:  # noqa: C901
+        """Apply caching to LiteLLM messages using the correct format for each provider."""
         import sys
 
-        # Multiple logging methods to ensure visibility
-        print(f"[EXTENDED] _get_completion_inputs called! Model: {self.model}")
-        print(f"[EXTENDED-STDERR] _get_completion_inputs called! Model: {self.model}", file=sys.stderr)
+        print(f"[EXTENDED] _apply_caching_to_litellm_messages called! Model: {self.model}")
+        print(f"[EXTENDED-STDERR] _apply_caching_to_litellm_messages called! Model: {self.model}", file=sys.stderr)
         logger.info(f"[EXTENDED] Processing model: {self.model}")
-        logger.warning("[EXTENDED] _get_completion_inputs - This should always show up!")
 
-        # Get standard inputs from parent class
-        messages, tools, response_format, generation_params = _get_completion_inputs(llm_request)
-
-        # Apply appropriate caching based on model type
         model_lower = self.model.lower()
 
-        print(f"[EXTENDED] Model detection: bedrock={('bedrock/' in model_lower)}, claude={('claude' in model_lower)}")
-        logger.info(f"[EXTENDED] Model detection: bedrock={('bedrock/' in model_lower)}, claude={('claude' in model_lower)}")
+        if "bedrock/" in model_lower and "claude" in model_lower:
+            print("[EXTENDED] Applying Bedrock caching")
+            # For Bedrock, we need to apply cache_control at the message level, not cachePoint
+            for i, message in enumerate(messages):
+                if isinstance(message, dict):
+                    role = message.get('role')
+                elif hasattr(message, 'role'):
+                    role = getattr(message, 'role', None)
+                else:
+                    continue
 
-        if "anthropic/" in model_lower and "bedrock/" not in model_lower:
-            # Direct Anthropic API - use cache_control
-            print("[EXTENDED] Applying Anthropic cache_control")
-            logger.info("[EXTENDED] Applying Anthropic cache_control")
-            self._apply_anthropic_cache_control(messages)
-        elif "bedrock/" in model_lower and "claude" in model_lower:
-            # Bedrock Claude models - use cache_control (same as direct Anthropic)
-            print("[EXTENDED] Applying cache_control for Bedrock Claude")
-            logger.info("[EXTENDED] Applying cache_control for Bedrock Claude")
-            self._apply_anthropic_cache_control(messages)
+                # Apply cache_control to developer/system messages
+                if role == 'developer' or role == 'system':
+                    print(f"[EXTENDED] Adding cache_control to {role} message {i}")
+
+                    # For Bedrock Claude, add cache_control to the message itself
+                    if isinstance(message, dict):
+                        message['cache_control'] = {"type": "ephemeral"}
+                    elif hasattr(message, '__dict__'):
+                        message.__dict__['cache_control'] = {"type": "ephemeral"}
+
+                    print(f"[EXTENDED] Applied cache_control to {role} message")
+                    break  # Only cache first developer/system message
+
+        elif "anthropic/" in model_lower and "bedrock/" not in model_lower:
+            print("[EXTENDED] Applying Anthropic caching")
+            # For direct Anthropic API, also use cache_control
+            for i, message in enumerate(messages):
+                if isinstance(message, dict):
+                    role = message.get('role')
+                elif hasattr(message, 'role'):
+                    role = getattr(message, 'role', None)
+                else:
+                    continue
+
+                # Apply cache_control to developer/system messages
+                if role == 'developer' or role == 'system':
+                    print(f"[EXTENDED] Adding cache_control to {role} message {i}")
+
+                    if isinstance(message, dict):
+                        message['cache_control'] = {"type": "ephemeral"}
+                    elif hasattr(message, '__dict__'):
+                        message.__dict__['cache_control'] = {"type": "ephemeral"}
+
+                    print(f"[EXTENDED] Applied cache_control to {role} message")
+                    break  # Only cache first developer/system message
         else:
             print(f"[EXTENDED] No caching applied - model not supported: {self.model}")
-            logger.info(f"[EXTENDED] No caching applied - model not supported: {self.model}")
 
-        # Log the final messages structure (truncated)
-        print(f"[EXTENDED] Final message count: {len(messages)}")
-        logger.info(f"[EXTENDED] Final message count: {len(messages)}")
-        for i, msg in enumerate(messages):
-            if hasattr(msg, 'role'):
-                content_type = type(getattr(msg, 'content', None)).__name__
-                print(f"[EXTENDED] Message {i}: role={msg.role}, content_type={content_type}")
-                logger.info(f"[EXTENDED] Message {i}: role={msg.role}, content_type={content_type}")
+        # Log the final message structure
+        print("[EXTENDED] Final cached message structure:")
+        for i, message in enumerate(messages):
+            if isinstance(message, dict):
+                role = message.get('role')
+                has_cache = 'cache_control' in message
+            elif hasattr(message, 'role'):
+                role = getattr(message, 'role', None)
+                has_cache = hasattr(message, '__dict__') and 'cache_control' in message.__dict__
+            else:
+                role = 'unknown'
+                has_cache = False
 
-                # Log cache-related attributes
-                if hasattr(msg, '__dict__'):
-                    for key, value in msg.__dict__.items():
-                        if 'cache' in key.lower():
-                            print(f"[EXTENDED] Message {i} cache attr {key}: {value}")
-                            logger.info(f"[EXTENDED] Message {i} cache attr {key}: {value}")
-
-        return messages, tools, response_format, generation_params
+            cache_status = "CACHED" if has_cache else "NO_CACHE"
+            print(f"[EXTENDED] Message {i}: role={role}, cache_status={cache_status}")
 
     async def generate_content_async(  # noqa: C901
         self, llm_request: LlmRequest, stream: bool = False
@@ -258,12 +172,17 @@ class ExtendedLiteLlm(LiteLlm):
         self._maybe_append_user_content(llm_request)
         logger.debug(_build_request_log(llm_request))
 
-        # CRITICAL FIX: Use self._get_completion_inputs instead of module function
-        print("[EXTENDED] About to call self._get_completion_inputs")
+        # Use parent's _get_completion_inputs (module function, not self method)
+        print("[EXTENDED] About to call _get_completion_inputs")
         messages, tools, response_format, generation_params = (
-            self._get_completion_inputs(llm_request)
+            _get_completion_inputs(llm_request)
         )
-        print("[EXTENDED] Completed self._get_completion_inputs call")
+        print("[EXTENDED] Completed _get_completion_inputs call")
+
+        # CRITICAL: Apply caching AFTER converting to LiteLLM format but BEFORE calling LiteLLM
+        print("[EXTENDED] About to apply caching to litellm messages")
+        self._apply_caching_to_litellm_messages(messages)
+        print("[EXTENDED] Completed applying caching to litellm messages")
 
         if "functions" in self._additional_args:
             # LiteLLM does not support both tools and functions together.
