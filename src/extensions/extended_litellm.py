@@ -31,12 +31,12 @@ from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
 from google.genai import types
 from litellm import Message, ChatCompletionAssistantMessage, ChatCompletionMessageToolCall, Function
-# import litellm
+import litellm
 import logging
 import json
 
 # Enable LiteLLM debug logging
-# litellm._turn_on_debug()
+litellm._turn_on_debug()
 
 logger = logging.getLogger(__name__)
 
