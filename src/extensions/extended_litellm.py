@@ -133,7 +133,7 @@ class ExtendedLiteLlm(LiteLlm):
 
             print(f"[EXTENDED] Message {i} role: {role}, content type: {type(content)}")
 
-            # Add cache point after developer (system) messages
+            # Add cache point only to developer/system messages (user messages don't support cache points in Bedrock)
             if role == 'developer' or role == 'system':
                 print(f"[EXTENDED] Found developer/system message {i}, adding cache point")
                 if isinstance(content, str):
@@ -153,28 +153,6 @@ class ExtendedLiteLlm(LiteLlm):
                     if isinstance(last_block, dict) and 'text' in last_block:
                         last_block['cachePoint'] = {"type": "default"}
                         print("[EXTENDED] Added cache point to existing content block")
-
-            # Add cache point after first user message
-            elif role == 'user':
-                print(f"[EXTENDED] Found user message {i}, adding cache point")
-                if isinstance(content, str):
-                    # Convert string content to object format with embedded cache point
-                    new_content = {
-                        "text": content,
-                        "cachePoint": {"type": "default"}
-                    }
-                    if isinstance(message, dict):
-                        message['content'] = [new_content]
-                    else:
-                        message.content = [new_content]
-                    print("[EXTENDED] Converted user message to cache format")
-                elif isinstance(content, list) and len(content) > 0:
-                    # Add cache point to the last text content block
-                    last_block = content[-1]
-                    if isinstance(last_block, dict) and 'text' in last_block:
-                        last_block['cachePoint'] = {"type": "default"}
-                        print("[EXTENDED] Added cache point to existing content block")
-                break  # Only cache first user message        break  # Only cache first user message
 
         print("[EXTENDED] _apply_bedrock_cache_points completed - no modifications made for now")
 
