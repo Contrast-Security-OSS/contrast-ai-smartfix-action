@@ -116,7 +116,15 @@ class ExtendedLiteLlm(LiteLlm):
                         message['cache_control'] = {"type": "ephemeral"}  # Add caching
 
                     print("[EXTENDED] Applied role conversion and cache_control")
-                    break  # Only cache first developer message
+
+                # Add cache_control to user messages as well
+                elif role == 'user':
+                    print(f"[EXTENDED] Adding cache_control to user message {i}")
+
+                    if isinstance(message, dict):
+                        message['cache_control'] = {"type": "ephemeral"}  # Add caching
+
+                    print("[EXTENDED] Applied cache_control to user message")
 
         elif "anthropic/" in model_lower and "bedrock/" not in model_lower:
             print("[EXTENDED] Applying Anthropic caching (no role conversion needed)")
@@ -143,7 +151,15 @@ class ExtendedLiteLlm(LiteLlm):
                         message['cache_control'] = {"type": "ephemeral"}
 
                     print("[EXTENDED] Applied cache_control to developer message")
-                    break  # Only cache first developer message
+
+                # Add cache_control to user messages as well
+                elif role == 'user':
+                    print(f"[EXTENDED] Adding cache_control to user message {i}")
+
+                    if isinstance(message, dict):
+                        message['cache_control'] = {"type": "ephemeral"}
+
+                    print("[EXTENDED] Applied cache_control to user message")
         else:
             print(f"[EXTENDED] No role conversion or caching needed for: {self.model}")
 
