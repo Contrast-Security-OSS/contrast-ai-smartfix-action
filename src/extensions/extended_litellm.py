@@ -47,14 +47,14 @@ class ExtendedLiteLlm(LiteLlm):
     This class extends the base LiteLlm to automatically apply prompt caching
     using the appropriate method for each provider:
     - Direct Anthropic API: Uses cache_control on messages
-    - Bedrock Claude models: Uses cachePoint objects in content arrays
+    - Bedrock Claude models: Uses cache_control (same as direct Anthropic)
 
     Example usage:
     ```python
     # Anthropic Direct API - will apply cache_control automatically
     model = ExtendedLiteLlm(model="anthropic/claude-3-5-sonnet-20241022")
 
-    # Bedrock Claude - will apply cachePoint automatically
+    # Bedrock Claude - will apply cache_control automatically
     model = ExtendedLiteLlm(model="bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0")
 
     # OpenAI - works with automatic caching (no changes needed)
@@ -212,10 +212,10 @@ class ExtendedLiteLlm(LiteLlm):
             logger.info("[EXTENDED] Applying Anthropic cache_control")
             self._apply_anthropic_cache_control(messages)
         elif "bedrock/" in model_lower and "claude" in model_lower:
-            # Bedrock Claude models - use cachePoint
-            print("[EXTENDED] Applying Bedrock cachePoint")
-            logger.info("[EXTENDED] Applying Bedrock cachePoint")
-            self._apply_bedrock_cache_points(messages)
+            # Bedrock Claude models - use cache_control (same as direct Anthropic)
+            print("[EXTENDED] Applying cache_control for Bedrock Claude")
+            logger.info("[EXTENDED] Applying cache_control for Bedrock Claude")
+            self._apply_anthropic_cache_control(messages)
         else:
             print(f"[EXTENDED] No caching applied - model not supported: {self.model}")
             logger.info(f"[EXTENDED] No caching applied - model not supported: {self.model}")
