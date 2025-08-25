@@ -645,22 +645,16 @@ class TestGitHandler(unittest.TestCase):
         self.assertEqual(result, -1)
         mock_debug_log.assert_called_with("Error getting changed files count for PR 131415: Network error")
 
+    @patch('src.git_handler.config')
     @patch('src.git_handler.run_command')
     @patch('src.git_handler.get_gh_env')
     @patch('src.git_handler.debug_log')
-    def test_check_issues_enabled_success(self, mock_debug_log, mock_get_gh_env, mock_run_command):
+    def test_check_issues_enabled_success(self, mock_debug_log, mock_get_gh_env, mock_run_command, mock_config):
         """Test check_issues_enabled when Issues are enabled"""
-        from src.config import get_config, reset_config
-
         # Setup
+        mock_config.GITHUB_REPOSITORY = 'mock/repo-for-testing'
         mock_get_gh_env.return_value = {'GITHUB_TOKEN': 'mock-token'}
         mock_run_command.return_value = "[]"  # Empty list indicates success
-
-        # Reset config and initialize with testing=True
-        reset_config()
-        config = get_config(testing=True)
-        # Explicitly override the repository setting for this test
-        config.GITHUB_REPOSITORY = 'mock/repo-for-testing'
 
         # Execute
         result = git_handler.check_issues_enabled()
