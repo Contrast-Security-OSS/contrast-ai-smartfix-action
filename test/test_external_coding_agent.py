@@ -247,6 +247,50 @@ class TestExternalCodingAgent(unittest.TestCase):
         # Verify reset_issue was called
         mock_reset_issue.assert_called_once_with(42, "smartfix-id:1REM-FAKE-ABCD")
 
+    @patch('src.git_handler.check_issues_enabled')
+    @patch('src.git_handler.find_issue_with_label')
+    @patch('src.git_handler.create_issue')
+    @patch('src.external_coding_agent.time.sleep')  # Mock sleep to prevent actual sleeping
+    @patch('src.external_coding_agent.error_exit')
+    @patch('src.external_coding_agent.log')
+    @patch('src.external_coding_agent.debug_log')
+    def test_generate_fixes_with_issues_disabled(self, mock_debug_log, mock_log, mock_error_exit, mock_sleep, mock_create_issue, mock_find_issue, mock_check_issues):
+        """Test generate_fixes when GitHub Issues are disabled"""
+        from src.contrast_api import FailureCategory
+
+        # Configure mock data
+        vuln_uuid = 'vuln-uuid-123'
+        remediation_id = '1REM-FAKE-ABCD'
+        vuln_title = "Test SQL Injection Vulnerability"
+        issue_body = "Test issue body for vulnerability"
+
+        # Configure mocks - Issues are disabled
+        mock_check_issues.return_value = False
+        mock_find_issue.return_value = None  # This should trigger the check
+
+        # Make error_exit raise an exception to stop execution (simulating sys.exit behavior)
+        mock_error_exit.side_effect = SystemExit("Mocked exit for Issues disabled")
+
+        # Create agent instance and set CODING_AGENT to external agent
+        agent = ExternalCodingAgent(self.config)
+        agent.config.CODING_AGENT = "GITHUB_COPILOT"  # Set to external agent to avoid early return
+
+        # Execute and expect SystemExit due to Issues being disabled
+        with self.assertRaises(SystemExit):
+            agent.generate_fixes(vuln_uuid, remediation_id, vuln_title, issue_body)
+
+        # Verify Issues disabled check was called and error_exit was triggered
+        mock_find_issue.assert_called_once_with("contrast-vuln-id:VULN-vuln-uuid-123")
+        mock_check_issues.assert_called_once()
+        mock_error_exit.assert_called_once_with("1REM-FAKE-ABCD", FailureCategory.GIT_COMMAND_FAILURE.value)
+        mock_log.assert_any_call("GitHub Issues are disabled for this repository. External coding agent requires Issues to be enabled.", is_error=True)
+
+        # Verify create_issue was not called since Issues are disabled
+        mock_create_issue.assert_not_called()
+
+        # Verify sleep was not called since execution should stop at error_exit
+        mock_sleep.assert_not_called()
+
     @patch('src.git_handler.add_labels_to_pr')
     @patch('src.git_handler.find_open_pr_for_issue')
     @patch('src.external_coding_agent.notify_remediation_pr_opened')

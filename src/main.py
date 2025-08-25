@@ -321,7 +321,7 @@ def main():  # noqa: C901
             log("\n::endgroup::")
 
             if not vulnerability_data:
-                log("No more vulnerabilities found to process or API error occurred. Stopping processing.")
+                log("No more vulnerabilities found to process. Stopping processing.")
                 break
 
             # Extract vulnerability details and prompts from the response
@@ -343,7 +343,7 @@ def main():  # noqa: C901
             log("\n::endgroup::")
 
             if not vulnerability_data:
-                log("No more vulnerabilities found to process or API error occurred. Stopping processing.")
+                log("No more vulnerabilities found to process. Stopping processing.")
                 break
 
             # Extract vulnerability details from the response (no prompts for external agents)

@@ -13,7 +13,7 @@
 # the applicable End User Licensing Agreement found at
 # https://www.contrastsecurity.com/enduser-terms-0317a or as otherwise agreed
 # between Contrast Security and the End User. The Software may not be reverse
-# engineered, modified, repackaged, sold, redistributed or otherwise used in a
+# engineered, modified, repackaged, sold, distributed or otherwise used in a
 # way not consistent with the End User License Agreement.
 # #L%
 #
@@ -67,15 +67,17 @@ class TestGitHandler(unittest.TestCase):
         self.env_patcher.stop()
         reset_config()
 
+    @patch('src.git_handler.check_issues_enabled')
     @patch('src.git_handler.run_command')
     @patch('src.git_handler.log')
     @patch('src.git_handler.debug_log')
-    def test_find_issue_with_label_found(self, mock_debug_log, mock_log, mock_run_command):
+    def test_find_issue_with_label_found(self, mock_debug_log, mock_log, mock_run_command, mock_check_issues):
         """Test finding an issue with a specific label when the issue exists"""
         # Setup
         label = "test-label"
         mock_response = json.dumps([{"number": 42, "createdAt": "2025-07-21T12:00:00Z"}])
         mock_run_command.return_value = mock_response
+        mock_check_issues.return_value = True
 
         # Initialize config with testing=True
         _ = get_config(testing=True)
@@ -84,18 +86,21 @@ class TestGitHandler(unittest.TestCase):
         result = git_handler.find_issue_with_label(label)
 
         # Assert
+        mock_check_issues.assert_called_once()
         mock_run_command.assert_called_once()
         self.assertEqual(42, result)
         mock_debug_log.assert_any_call("Found issue #42 with label: test-label")
 
+    @patch('src.git_handler.check_issues_enabled')
     @patch('src.git_handler.run_command')
     @patch('src.git_handler.log')
     @patch('src.git_handler.debug_log')
-    def test_find_issue_with_label_not_found(self, mock_debug_log, mock_log, mock_run_command):
+    def test_find_issue_with_label_not_found(self, mock_debug_log, mock_log, mock_run_command, mock_check_issues):
         """Test finding an issue with a specific label when no issue exists"""
         # Setup
         label = "test-label"
         mock_run_command.return_value = json.dumps([])
+        mock_check_issues.return_value = True
 
         # Initialize config with testing=True
         _ = get_config(testing=True)
@@ -104,17 +109,20 @@ class TestGitHandler(unittest.TestCase):
         result = git_handler.find_issue_with_label(label)
 
         # Assert
+        mock_check_issues.assert_called_once()
         mock_run_command.assert_called_once()
         self.assertIsNone(result)
         mock_debug_log.assert_any_call("No issues found with label: test-label")
 
+    @patch('src.git_handler.check_issues_enabled')
     @patch('src.git_handler.run_command')
     @patch('src.git_handler.log')
-    def test_find_issue_with_label_error(self, mock_log, mock_run_command):
+    def test_find_issue_with_label_error(self, mock_log, mock_run_command, mock_check_issues):
         """Test finding an issue with a specific label when an error occurs"""
         # Setup
         label = "test-label"
         mock_run_command.side_effect = Exception("Mock error")
+        mock_check_issues.return_value = True
 
         # Initialize config with testing=True
         _ = get_config(testing=True)
@@ -123,14 +131,17 @@ class TestGitHandler(unittest.TestCase):
         result = git_handler.find_issue_with_label(label)
 
         # Assert
+        mock_check_issues.assert_called_once()
         mock_run_command.assert_called_once()
         self.assertIsNone(result)
         mock_log.assert_any_call("Error searching for GitHub issue with label: Mock error", is_error=True)
 
+    @patch('src.git_handler.debug_log')
+    @patch('src.git_handler.check_issues_enabled')
     @patch('src.git_handler.run_command')
     @patch('src.git_handler.ensure_label')
     @patch('src.git_handler.log')
-    def test_create_issue_success(self, mock_log, mock_ensure_label, mock_run_command):
+    def test_create_issue_success(self, mock_log, mock_ensure_label, mock_run_command, mock_check_issues, mock_debug_log):
         """Test creating a GitHub issue when successful"""
         # Setup
         title = "Test Issue Title"
@@ -138,9 +149,13 @@ class TestGitHandler(unittest.TestCase):
         vuln_label = "contrast-vuln-id:VULN-1234"
         remediation_label = "smartfix-id:5678"
 
-        # Mock successful issue creation with URL returned
-        mock_run_command.return_value = "https://github.com/mock/repo/issues/42"
+        # Mock successful issue creation with URL returned, then successful assignment
+        mock_run_command.side_effect = [
+            "https://github.com/mock/repo/issues/42",  # Issue creation response
+            ""  # Assignment response (empty string indicates success)
+        ]
         mock_ensure_label.return_value = True
+        mock_check_issues.return_value = True
 
         # Initialize config with testing=True
         _ = get_config(testing=True)
@@ -149,16 +164,18 @@ class TestGitHandler(unittest.TestCase):
         result = git_handler.create_issue(title, body, vuln_label, remediation_label)
 
         # Assert
-        mock_run_command.assert_called_once()
+        mock_check_issues.assert_called_once()
+        self.assertEqual(mock_run_command.call_count, 2)  # Should call run_command twice (create + assign)
         self.assertEqual(42, result)  # Should extract issue number 42 from URL
         mock_log.assert_any_call("Successfully created issue: https://github.com/mock/repo/issues/42")
         mock_log.assert_any_call("Issue number extracted: 42")
-        mock_log.assert_any_call("Issue assigned to @Copilot")
+        mock_debug_log.assert_any_call("Issue assigned to @Copilot")
 
+    @patch('src.git_handler.check_issues_enabled')
     @patch('src.git_handler.run_command')
     @patch('src.git_handler.ensure_label')
     @patch('src.git_handler.log')
-    def test_create_issue_failure(self, mock_log, mock_ensure_label, mock_run_command):
+    def test_create_issue_failure(self, mock_log, mock_ensure_label, mock_run_command, mock_check_issues):
         """Test creating a GitHub issue when it fails"""
         # Setup
         title = "Test Issue Title"
@@ -169,6 +186,7 @@ class TestGitHandler(unittest.TestCase):
         # Mock failure during issue creation
         mock_run_command.side_effect = Exception("Mock error")
         mock_ensure_label.return_value = True
+        mock_check_issues.return_value = True
 
         # Initialize config with testing=True
         _ = get_config(testing=True)
@@ -177,16 +195,18 @@ class TestGitHandler(unittest.TestCase):
         result = git_handler.create_issue(title, body, vuln_label, remediation_label)
 
         # Assert
+        mock_check_issues.assert_called_once()
         mock_run_command.assert_called_once()
         self.assertIsNone(result)
         mock_log.assert_any_call("Failed to create GitHub issue: Mock error", is_error=True)
 
+    @patch('src.git_handler.check_issues_enabled')
     @patch('src.git_handler.run_command')
     @patch('src.git_handler.find_open_pr_for_issue')
     @patch('src.git_handler.ensure_label')
     @patch('src.git_handler.log')
     @patch('src.git_handler.debug_log')
-    def test_reset_issue_success(self, mock_debug_log, mock_log, mock_ensure_label, mock_find_open_pr, mock_run_command):
+    def test_reset_issue_success(self, mock_debug_log, mock_log, mock_ensure_label, mock_find_open_pr, mock_run_command, mock_check_issues):
         """Test resetting a GitHub issue when successful"""
         # Setup
         issue_number = 42
@@ -194,6 +214,7 @@ class TestGitHandler(unittest.TestCase):
 
         # Mock that no open PR exists
         mock_find_open_pr.return_value = None
+        mock_check_issues.return_value = True
 
         # Mock successful issue view with labels
         mock_run_command.side_effect = [
@@ -217,22 +238,25 @@ class TestGitHandler(unittest.TestCase):
         result = git_handler.reset_issue(issue_number, remediation_label)
 
         # Assert
+        mock_check_issues.assert_called_once()
         self.assertEqual(mock_run_command.call_count, 5)  # Should call run_command 5 times
         self.assertTrue(result)
         mock_debug_log.assert_any_call("Removed existing remediation labels from issue #42")
         mock_log.assert_any_call("Added new remediation label to issue #42")
-        mock_log.assert_any_call("Reassigned issue #42 to @Copilot")
+        mock_debug_log.assert_any_call("Reassigned issue #42 to @Copilot")
 
+    @patch('src.git_handler.check_issues_enabled')
     @patch('src.git_handler.find_open_pr_for_issue')
     @patch('src.git_handler.run_command')
     @patch('src.git_handler.log')
-    def test_reset_issue_failure(self, mock_log, mock_run_command, mock_find_pr):
+    def test_reset_issue_failure(self, mock_log, mock_run_command, mock_find_pr, mock_check_issues):
         """Test resetting a GitHub issue when it fails"""
         # Setup
         issue_number = 42
         remediation_label = "smartfix-id:5678"
         mock_run_command.side_effect = Exception("Mock error")
         mock_find_pr.return_value = None  # No open PR exists
+        mock_check_issues.return_value = True
 
         # Initialize config with testing=True
         _ = get_config(testing=True)
@@ -241,6 +265,7 @@ class TestGitHandler(unittest.TestCase):
         result = git_handler.reset_issue(issue_number, remediation_label)
 
         # Assert
+        mock_check_issues.assert_called_once()
         mock_run_command.assert_called_once()
         self.assertFalse(result)
         mock_log.assert_any_call("Failed to reset issue #42: Mock error", is_error=True)
@@ -509,6 +534,278 @@ class TestGitHandler(unittest.TestCase):
         mock_run_command.assert_called_once()
         mock_log.assert_any_call("Adding labels to PR #789: ['test-label']")
         mock_log.assert_any_call("Failed to add labels to PR #789: Command failed", is_error=True)
+
+    @patch('src.git_handler.run_command')
+    @patch('src.git_handler.get_gh_env')
+    @patch('src.git_handler.debug_log')
+    def test_get_pr_changed_files_count_success(self, mock_debug_log, mock_get_gh_env, mock_run_command):
+        """Test get_pr_changed_files_count when gh command succeeds"""
+        from src.config import get_config
+
+        # Setup
+        mock_get_gh_env.return_value = {'GITHUB_TOKEN': 'mock-token'}
+        mock_run_command.return_value = "3"
+
+        # Initialize config with testing=True
+        _ = get_config(testing=True)
+
+        # Execute
+        result = git_handler.get_pr_changed_files_count(123)
+
+        # Assert
+        self.assertEqual(result, 3)
+        mock_run_command.assert_called_once_with(
+            ['gh', 'pr', 'view', '123', '--json', 'changedFiles', '--jq', '.changedFiles'],
+            env={'GITHUB_TOKEN': 'mock-token'},
+            check=False
+        )
+        mock_debug_log.assert_called_with("PR 123 has 3 changed files")
+
+    @patch('src.git_handler.run_command')
+    @patch('src.git_handler.get_gh_env')
+    @patch('src.git_handler.debug_log')
+    def test_get_pr_changed_files_count_zero_files(self, mock_debug_log, mock_get_gh_env, mock_run_command):
+        """Test get_pr_changed_files_count when PR has zero changed files"""
+        from src.config import get_config
+
+        # Setup
+        mock_get_gh_env.return_value = {'GITHUB_TOKEN': 'mock-token'}
+        mock_run_command.return_value = "0"
+
+        # Initialize config with testing=True
+        _ = get_config(testing=True)
+
+        # Execute
+        result = git_handler.get_pr_changed_files_count(456)
+
+        # Assert
+        self.assertEqual(result, 0)
+        mock_debug_log.assert_called_with("PR 456 has 0 changed files")
+
+    @patch('src.git_handler.run_command')
+    @patch('src.git_handler.get_gh_env')
+    @patch('src.git_handler.debug_log')
+    def test_get_pr_changed_files_count_command_failure(self, mock_debug_log, mock_get_gh_env, mock_run_command):
+        """Test get_pr_changed_files_count when gh command fails"""
+        from src.config import get_config
+
+        # Setup
+        mock_get_gh_env.return_value = {'GITHUB_TOKEN': 'mock-token'}
+        mock_run_command.return_value = None
+
+        # Initialize config with testing=True
+        _ = get_config(testing=True)
+
+        # Execute
+        result = git_handler.get_pr_changed_files_count(789)
+
+        # Assert
+        self.assertEqual(result, -1)
+        mock_debug_log.assert_called_with("Failed to get changed files count for PR 789")
+
+    @patch('src.git_handler.run_command')
+    @patch('src.git_handler.get_gh_env')
+    @patch('src.git_handler.debug_log')
+    def test_get_pr_changed_files_count_invalid_response(self, mock_debug_log, mock_get_gh_env, mock_run_command):
+        """Test get_pr_changed_files_count when gh returns invalid data"""
+        from src.config import get_config
+
+        # Setup
+        mock_get_gh_env.return_value = {'GITHUB_TOKEN': 'mock-token'}
+        mock_run_command.return_value = "invalid_number"
+
+        # Initialize config with testing=True
+        _ = get_config(testing=True)
+
+        # Execute
+        result = git_handler.get_pr_changed_files_count(101112)
+
+        # Assert
+        self.assertEqual(result, -1)
+        mock_debug_log.assert_called_with("Invalid response from gh command for PR 101112: invalid_number")
+
+    @patch('src.git_handler.run_command')
+    @patch('src.git_handler.get_gh_env')
+    @patch('src.git_handler.debug_log')
+    def test_get_pr_changed_files_count_exception(self, mock_debug_log, mock_get_gh_env, mock_run_command):
+        """Test get_pr_changed_files_count when an exception occurs"""
+        from src.config import get_config
+
+        # Setup
+        mock_get_gh_env.return_value = {'GITHUB_TOKEN': 'mock-token'}
+        mock_run_command.side_effect = Exception("Network error")
+
+        # Initialize config with testing=True
+        _ = get_config(testing=True)
+
+        # Execute
+        result = git_handler.get_pr_changed_files_count(131415)
+
+        # Assert
+        self.assertEqual(result, -1)
+        mock_debug_log.assert_called_with("Error getting changed files count for PR 131415: Network error")
+
+    @patch('src.git_handler.config')
+    @patch('src.git_handler.run_command')
+    @patch('src.git_handler.get_gh_env')
+    @patch('src.git_handler.debug_log')
+    def test_check_issues_enabled_success(self, mock_debug_log, mock_get_gh_env, mock_run_command, mock_config):
+        """Test check_issues_enabled when Issues are enabled"""
+        # Setup
+        mock_config.GITHUB_REPOSITORY = 'mock/repo-for-testing'
+        mock_get_gh_env.return_value = {'GITHUB_TOKEN': 'mock-token'}
+        mock_run_command.return_value = "[]"  # Empty list indicates success
+
+        # Execute
+        result = git_handler.check_issues_enabled()
+
+        # Assert
+        self.assertTrue(result)
+        mock_run_command.assert_called_once_with(
+            ['gh', 'issue', 'list', '--repo', 'mock/repo-for-testing', '--limit', '1'],
+            env={'GITHUB_TOKEN': 'mock-token'},
+            check=False
+        )
+        mock_debug_log.assert_called_with("GitHub Issues are enabled for this repository")
+
+    @patch('src.git_handler.run_command')
+    @patch('src.git_handler.get_gh_env')
+    @patch('src.git_handler.debug_log')
+    def test_check_issues_enabled_disabled(self, mock_debug_log, mock_get_gh_env, mock_run_command):
+        """Test check_issues_enabled when Issues are disabled"""
+        from src.config import get_config
+
+        # Setup
+        mock_get_gh_env.return_value = {'GITHUB_TOKEN': 'mock-token'}
+        mock_run_command.return_value = None  # None indicates command failed
+
+        # Initialize config with testing=True
+        _ = get_config(testing=True)
+
+        # Execute
+        result = git_handler.check_issues_enabled()
+
+        # Assert
+        self.assertFalse(result)
+        mock_debug_log.assert_called_with("GitHub Issues appear to be disabled for this repository")
+
+    @patch('src.git_handler.run_command')
+    @patch('src.git_handler.get_gh_env')
+    @patch('src.git_handler.debug_log')
+    def test_check_issues_enabled_exception_issues_disabled(self, mock_debug_log, mock_get_gh_env, mock_run_command):
+        """Test check_issues_enabled when exception contains 'issues are disabled'"""
+        from src.config import get_config
+
+        # Setup
+        mock_get_gh_env.return_value = {'GITHUB_TOKEN': 'mock-token'}
+        mock_run_command.side_effect = Exception("Issues are disabled for this repo")
+
+        # Initialize config with testing=True
+        _ = get_config(testing=True)
+
+        # Execute
+        result = git_handler.check_issues_enabled()
+
+        # Assert
+        self.assertFalse(result)
+        mock_debug_log.assert_called_with("GitHub Issues are disabled for this repository")
+
+    @patch('src.git_handler.run_command')
+    @patch('src.git_handler.get_gh_env')
+    @patch('src.git_handler.debug_log')
+    def test_check_issues_enabled_exception_other_error(self, mock_debug_log, mock_get_gh_env, mock_run_command):
+        """Test check_issues_enabled when exception is not related to disabled Issues"""
+        from src.config import get_config
+
+        # Setup
+        mock_get_gh_env.return_value = {'GITHUB_TOKEN': 'mock-token'}
+        mock_run_command.side_effect = Exception("Network error")
+
+        # Initialize config with testing=True
+        _ = get_config(testing=True)
+
+        # Execute
+        result = git_handler.check_issues_enabled()
+
+        # Assert
+        self.assertTrue(result)
+        mock_debug_log.assert_called_with("Error checking if Issues are enabled, assuming they are: Network error")
+
+    @patch('src.git_handler.check_issues_enabled')
+    @patch('src.git_handler.run_command')
+    @patch('src.git_handler.log')
+    @patch('src.git_handler.debug_log')
+    def test_find_issue_with_label_issues_disabled(self, mock_debug_log, mock_log, mock_run_command, mock_check_issues):
+        """Test finding an issue when Issues are disabled"""
+        from src.config import get_config
+
+        # Setup
+        label = "test-label"
+        mock_check_issues.return_value = False
+
+        # Initialize config with testing=True
+        _ = get_config(testing=True)
+
+        # Execute
+        result = git_handler.find_issue_with_label(label)
+
+        # Assert
+        self.assertIsNone(result)
+        mock_check_issues.assert_called_once()
+        mock_run_command.assert_not_called()
+        mock_log.assert_any_call("GitHub Issues are disabled for this repository. Cannot search for issues.", is_error=True)
+
+    @patch('src.git_handler.check_issues_enabled')
+    @patch('src.git_handler.ensure_label')
+    @patch('src.git_handler.run_command')
+    @patch('src.git_handler.log')
+    def test_create_issue_issues_disabled(self, mock_log, mock_run_command, mock_ensure_label, mock_check_issues):
+        """Test creating an issue when Issues are disabled"""
+        from src.config import get_config
+
+        # Setup
+        title = "Test Issue Title"
+        body = "Test issue body"
+        vuln_label = "contrast-vuln-id:VULN-1234"
+        remediation_label = "smartfix-id:5678"
+        mock_check_issues.return_value = False
+
+        # Initialize config with testing=True
+        _ = get_config(testing=True)
+
+        # Execute
+        result = git_handler.create_issue(title, body, vuln_label, remediation_label)
+
+        # Assert
+        self.assertIsNone(result)
+        mock_check_issues.assert_called_once()
+        mock_ensure_label.assert_not_called()
+        mock_run_command.assert_not_called()
+        mock_log.assert_any_call("GitHub Issues are disabled for this repository. Cannot create issue.", is_error=True)
+
+    @patch('src.git_handler.check_issues_enabled')
+    @patch('src.git_handler.find_open_pr_for_issue')
+    @patch('src.git_handler.log')
+    def test_reset_issue_issues_disabled(self, mock_log, mock_find_open_pr, mock_check_issues):
+        """Test resetting an issue when Issues are disabled"""
+        from src.config import get_config
+
+        # Setup
+        issue_number = 42
+        remediation_label = "smartfix-id:5678"
+        mock_check_issues.return_value = False
+
+        # Initialize config with testing=True
+        _ = get_config(testing=True)
+
+        # Execute
+        result = git_handler.reset_issue(issue_number, remediation_label)
+
+        # Assert
+        self.assertFalse(result)
+        mock_check_issues.assert_called_once()
+        mock_find_open_pr.assert_not_called()
+        mock_log.assert_any_call("GitHub Issues are disabled for this repository. Cannot reset issue.", is_error=True)
 
 
 if __name__ == '__main__':
