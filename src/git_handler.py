@@ -42,6 +42,96 @@ def get_gh_env():
     return gh_env
 
 
+def log_copilot_assignment_error(issue_number: int, error: Exception, remediation_label: str):
+    """
+    Logs a standardized error message for Copilot assignment failures and exits.
+
+    Args:
+        issue_number: The issue number that failed assignment
+        error: The exception that occurred
+        remediation_label: The remediation label to extract ID from
+    """
+    from src.config import get_config
+
+    log(f"Error: Failed to assign issue #{issue_number} to @Copilot: {error}", is_error=True)
+    log("This may be due to:")
+    log("  - GitHub Copilot is not enabled for this repository")
+    log("  - The PAT (Personal Access Token) was not created by a user with a Copilot license seat")
+    log("  - @Copilot user doesn't exist in this repository")
+    log("  - Insufficient permissions to assign users")
+    log("  - Repository settings restricting assignments")
+
+    # Extract remediation_id from the remediation_label (format: "smartfix-id:REMEDIATION_ID")
+    remediation_id = remediation_label.replace("smartfix-id:", "") if remediation_label.startswith("smartfix-id:") else "unknown"
+
+    # Only exit in non-testing mode
+    config = get_config()
+    if not config.testing:
+        error_exit(remediation_id, FailureCategory.GIT_COMMAND_FAILURE.value)
+    else:
+        log("NOTE: In testing mode, not exiting on Copilot assignment failure", is_warning=True)
+
+
+def get_pr_changed_files_count(pr_number: int) -> int:
+    """Get the number of changed files in a PR using GitHub CLI.
+
+    Args:
+        pr_number: The PR number to check
+
+    Returns:
+        int: Number of changed files, or -1 if there was an error
+    """
+    try:
+        result = run_command(['gh', 'pr', 'view', str(pr_number), '--json', 'changedFiles', '--jq', '.changedFiles'],
+                             env=get_gh_env(), check=False)
+        if result is None:
+            debug_log(f"Failed to get changed files count for PR {pr_number}")
+            return -1
+
+        # Parse the result as an integer
+        try:
+            count = int(result.strip())
+            debug_log(f"PR {pr_number} has {count} changed files")
+            return count
+        except ValueError:
+            debug_log(f"Invalid response from gh command for PR {pr_number}: {result}")
+            return -1
+
+    except Exception as e:
+        debug_log(f"Error getting changed files count for PR {pr_number}: {e}")
+        return -1
+
+
+def check_issues_enabled() -> bool:
+    """Check if GitHub Issues are enabled for the repository.
+
+    Returns:
+        bool: True if Issues are enabled, False if disabled
+    """
+    try:
+        # Try to list issues - this will fail if Issues are disabled
+        result = run_command(['gh', 'issue', 'list', '--repo', config.GITHUB_REPOSITORY, '--limit', '1'],
+                             env=get_gh_env(), check=False)
+
+        # If the command succeeded, Issues are enabled
+        if result is not None:
+            debug_log("GitHub Issues are enabled for this repository")
+            return True
+        else:
+            debug_log("GitHub Issues appear to be disabled for this repository")
+            return False
+
+    except Exception as e:
+        error_message = str(e).lower()
+        if "issues are disabled" in error_message:
+            debug_log("GitHub Issues are disabled for this repository")
+            return False
+        else:
+            # If it's a different error, assume Issues are enabled but there's another problem
+            debug_log(f"Error checking if Issues are enabled, assuming they are: {e}")
+            return True
+
+
 def configure_git_user():
     """Configures git user email and name."""
     log("Configuring Git user...")
@@ -415,6 +505,12 @@ def create_issue(title: str, body: str, vuln_label: str, remediation_label: str)
         int: The issue number if created successfully, None otherwise
     """
     log(f"Creating GitHub issue with title: {title}")
+
+    # Check if Issues are enabled for this repository
+    if not check_issues_enabled():
+        log("GitHub Issues are disabled for this repository. Cannot create issue.", is_error=True)
+        return None
+
     gh_env = get_gh_env()
 
     # Ensure both labels exist
@@ -424,26 +520,40 @@ def create_issue(title: str, body: str, vuln_label: str, remediation_label: str)
     # Format labels for the command
     labels = f"{vuln_label},{remediation_label}"
 
+    # Create the issue first without assignment
     issue_command = [
         "gh", "issue", "create",
         "--repo", config.GITHUB_REPOSITORY,
         "--title", title,
         "--body", body,
-        "--label", labels,
-        "--assignee", "@copilot"  # Assign to @Copilot user
+        "--label", labels
     ]
 
     try:
         # Run the command and capture the output (issue URL)
         issue_url = run_command(issue_command, env=gh_env, check=True)
         log(f"Successfully created issue: {issue_url}")
-        log("Issue assigned to @Copilot")
 
         # Extract the issue number from the URL
         # URL format is typically: https://github.com/owner/repo/issues/123
         try:
             issue_number = int(os.path.basename(issue_url.strip()))
             log(f"Issue number extracted: {issue_number}")
+
+            # Now try to assign to @copilot separately
+            assign_command = [
+                "gh", "issue", "edit",
+                "--repo", config.GITHUB_REPOSITORY,
+                str(issue_number),
+                "--add-assignee", "@copilot"
+            ]
+
+            try:
+                run_command(assign_command, env=gh_env, check=True)
+                debug_log("Issue assigned to @Copilot")
+            except Exception as assign_error:
+                log_copilot_assignment_error(issue_number, assign_error, remediation_label)
+
             return issue_number
         except ValueError:
             log(f"Could not extract issue number from URL: {issue_url}", is_error=True)
@@ -465,6 +575,12 @@ def find_issue_with_label(label: str) -> int:
         int: The issue number if found, None otherwise
     """
     log(f"Searching for GitHub issue with label: {label}")
+
+    # Check if Issues are enabled for this repository
+    if not check_issues_enabled():
+        log("GitHub Issues are disabled for this repository. Cannot search for issues.", is_error=True)
+        return None
+
     gh_env = get_gh_env()
 
     issue_list_command = [
@@ -521,6 +637,11 @@ def reset_issue(issue_number: int, remediation_label: str) -> bool:
         bool: True if the issue was successfully reset, False otherwise
     """
     log(f"Resetting GitHub issue #{issue_number}")
+
+    # Check if Issues are enabled for this repository
+    if not check_issues_enabled():
+        log("GitHub Issues are disabled for this repository. Cannot reset issue.", is_error=True)
+        return False
 
     # First check if there's an open PR for this issue
     open_pr = find_open_pr_for_issue(issue_number)
@@ -603,8 +724,11 @@ def reset_issue(issue_number: int, remediation_label: str) -> bool:
             "--add-assignee", "@copilot"
         ]
 
-        run_command(assign_command, env=gh_env, check=True)
-        log(f"Reassigned issue #{issue_number} to @Copilot")
+        try:
+            run_command(assign_command, env=gh_env, check=True)
+            debug_log(f"Reassigned issue #{issue_number} to @Copilot")
+        except Exception as assign_error:
+            log_copilot_assignment_error(issue_number, assign_error, remediation_label)
 
         return True
     except Exception as e:
