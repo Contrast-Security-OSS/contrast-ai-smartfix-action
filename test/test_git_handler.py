@@ -648,6 +648,7 @@ class TestGitHandler(unittest.TestCase):
     @patch('src.git_handler.run_command')
     @patch('src.git_handler.get_gh_env')
     @patch('src.git_handler.debug_log')
+    @patch.dict('os.environ', {'GITHUB_REPOSITORY': 'mock/repo-for-testing'})
     def test_check_issues_enabled_success(self, mock_debug_log, mock_get_gh_env, mock_run_command):
         """Test check_issues_enabled when Issues are enabled"""
         from src.config import get_config, reset_config
