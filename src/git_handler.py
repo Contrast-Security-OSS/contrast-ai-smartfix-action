@@ -51,6 +51,8 @@ def log_copilot_assignment_error(issue_number: int, error: Exception, remediatio
         error: The exception that occurred
         remediation_label: The remediation label to extract ID from
     """
+    from src.config import get_config
+
     log(f"Error: Failed to assign issue #{issue_number} to @Copilot: {error}", is_error=True)
     log("This may be due to:")
     log("  - GitHub Copilot is not enabled for this repository")
@@ -61,7 +63,13 @@ def log_copilot_assignment_error(issue_number: int, error: Exception, remediatio
 
     # Extract remediation_id from the remediation_label (format: "smartfix-id:REMEDIATION_ID")
     remediation_id = remediation_label.replace("smartfix-id:", "") if remediation_label.startswith("smartfix-id:") else "unknown"
-    error_exit(remediation_id, FailureCategory.GIT_COMMAND_FAILURE.value)
+
+    # Only exit in non-testing mode
+    config = get_config()
+    if not config.testing:
+        error_exit(remediation_id, FailureCategory.GIT_COMMAND_FAILURE.value)
+    else:
+        log("NOTE: In testing mode, not exiting on Copilot assignment failure", is_warning=True)
 
 
 def get_pr_changed_files_count(pr_number: int) -> int:
