@@ -314,6 +314,7 @@ class ExtendedLiteLlm(LiteLlm):
             completion_args.update(generation_params)
 
         if stream:
+            print("DEBUG: Entering STREAMING code branch")
             text = ""
             # Track function calls by index
             function_calls = {}  # index -> {name, args, id}
@@ -435,6 +436,7 @@ class ExtendedLiteLlm(LiteLlm):
                 logger.warning("STREAMING: No UsageMetadataChunk received during streaming - cost tracking incomplete!")
 
         else:
+            print("DEBUG: Entering NON-STREAMING code branch")
             response = await self.llm_client.acompletion(**completion_args)
             # Debug: Log the non-streaming response structure
             logger.debug(f"NON-STREAMING: Response type: {type(response)}")
@@ -445,22 +447,25 @@ class ExtendedLiteLlm(LiteLlm):
 
             # Log non-streaming costs immediately after API call
             if response.get("usage"):
-                usage = response["usage"]
-                logger.debug(f"NON-STREAMING: Usage type: {type(usage)}")
-                if hasattr(usage, 'keys'):
-                    logger.debug(f"NON-STREAMING: Usage keys: {list(usage.keys())}")
-                    # It's a dictionary
-                    self._log_usage_and_costs(usage, "NON-STREAMING")
-                elif hasattr(usage, '__dict__'):
-                    logger.debug(f"NON-STREAMING: Usage attributes: {list(usage.__dict__.keys())}")
-                    # Convert Usage object to dictionary
-                    usage_dict = usage.__dict__.copy()
-                    self._log_usage_and_costs(usage_dict, "NON-STREAMING")
+                # Use raw response usage dict (like the old override) instead of Usage object
+                raw_usage = response.get("usage")
+                logger.debug(f"NON-STREAMING: Raw usage type: {type(raw_usage)}")
+
+                if isinstance(raw_usage, dict):
+                    logger.debug(f"NON-STREAMING: Raw usage is dict with keys: {list(raw_usage.keys())}")
+                    self._log_usage_and_costs(raw_usage, "NON-STREAMING")
                 else:
-                    logger.warning(f"NON-STREAMING: Unknown usage object type: {type(usage)}")
+                    # Fallback to Usage object conversion
+                    logger.debug("NON-STREAMING: Raw usage is object, converting...")
+                    if hasattr(raw_usage, '__dict__'):
+                        logger.debug(f"NON-STREAMING: Usage attributes: {list(raw_usage.__dict__.keys())}")
+                        usage_dict = raw_usage.__dict__.copy()
+                        self._log_usage_and_costs(usage_dict, "NON-STREAMING")
+                    else:
+                        logger.warning(f"NON-STREAMING: Unknown usage object type: {type(raw_usage)}")
             else:
                 logger.warning("NON-STREAMING: No usage data in response!")
 
-            # Use parent class method directly - no override needed
+            # Use parent class method directly
             from google.adk.models.lite_llm import _model_response_to_generate_content_response
             yield _model_response_to_generate_content_response(response)
