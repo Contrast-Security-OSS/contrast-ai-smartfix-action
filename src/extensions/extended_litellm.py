@@ -444,7 +444,7 @@ class ExtendedLiteLlm(LiteLlm):
                     self._log_usage_and_costs(raw_usage, "NON-STREAMING")
                 else:
                     # Fallback to Usage object conversion
-                    print(f"NON-STREAMING: Raw usage is object, converting...")
+                    print("NON-STREAMING: Raw usage is object, converting...")
                     if hasattr(raw_usage, '__dict__'):
                         print(f"NON-STREAMING: Usage attributes: {list(raw_usage.__dict__.keys())}")
                         usage_dict = raw_usage.__dict__.copy()
@@ -493,7 +493,7 @@ class ExtendedLiteLlm(LiteLlm):
         )
 
         if cache_read_input_tokens > 0 or cache_write_input_tokens > 0:
-            print(f"[CACHE-EXTRACTION] FOUND CACHE TOKENS!")
+            print("[CACHE-EXTRACTION] FOUND CACHE TOKENS!")
             print(f"[CACHE-EXTRACTION]   Cache Read: {cache_read_input_tokens}")
             print(f"[CACHE-EXTRACTION]   Cache Write: {cache_write_input_tokens}")
 
