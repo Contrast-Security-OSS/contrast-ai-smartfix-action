@@ -127,8 +127,8 @@ class ExtendedLiteLlm(LiteLlm):
                         # Add cache_control to content instead of message
                         self._add_cache_control_to_content(message)
 
-                # Add cache_control to user messages as well
-                elif role == 'user':
+                # Add cache_control to user and assistant messages as well
+                elif role in ['user', 'assistant']:
                     if isinstance(message, dict):
                         # Add cache_control to content instead of message
                         self._add_cache_control_to_content(message)
@@ -149,8 +149,8 @@ class ExtendedLiteLlm(LiteLlm):
                 else:
                     continue
 
-                # Add cache_control to developer and user messages
-                if role in ['developer', 'user']:
+                # Add cache_control to developer, user, and assistant messages
+                if role in ['developer', 'user', 'assistant']:
                     if isinstance(message, dict):
                         # Add cache_control to content instead of message
                         self._add_cache_control_to_content(message)
