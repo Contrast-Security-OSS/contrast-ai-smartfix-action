@@ -38,6 +38,7 @@ from litellm import Message, ChatCompletionAssistantMessage, ChatCompletionMessa
 
 # Enable LiteLLM debug logging
 litellm._turn_on_debug()
+litellm.set_verbose = True
 
 logger = logging.getLogger(__name__)
 
