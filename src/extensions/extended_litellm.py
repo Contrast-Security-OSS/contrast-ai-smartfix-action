@@ -36,6 +36,9 @@ from google.adk.models.llm_response import LlmResponse
 from google.genai import types
 from litellm import Message, ChatCompletionAssistantMessage, ChatCompletionMessageToolCall, Function
 
+# Enable LiteLLM debug logging
+litellm._turn_on_debug()
+
 logger = logging.getLogger(__name__)
 
 
@@ -128,7 +131,7 @@ class ExtendedLiteLlm(LiteLlm):
                         self._add_cache_control_to_content(message)
 
                 # Add cache_control to user and assistant messages as well
-                elif role in ['user', 'assistant']:
+                elif role in ['user', 'assistant', 'tools']:
                     if isinstance(message, dict):
                         # Add cache_control to content instead of message
                         self._add_cache_control_to_content(message)
