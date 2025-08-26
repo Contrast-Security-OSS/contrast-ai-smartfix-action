@@ -76,14 +76,31 @@ class ExtendedLiteLlm(LiteLlm):
         logger.info(f"ExtendedLiteLlm initialized with model: {model}")
 
     def _add_cache_control_to_message(self, message: dict) -> None:
-        """Add cache_control directly to message (not content) for LiteLLM compatibility.
+        """Add cache_control to message content for Anthropic API compatibility.
 
-        Based on successful temp.txt implementation, LiteLLM recognizes message-level
-        cache_control rather than content-level cache_control.
+        Applies cache_control to the content array within each message, which is
+        the documented format for Anthropic's prompt caching feature.
         """
-        if isinstance(message, dict):
-            message['cache_control'] = {"type": "ephemeral"}
-            print(f"[EXTENDED] Added cache_control to message with role: {message.get('role', 'unknown')}")
+        if isinstance(message, dict) and 'content' in message:
+            content = message['content']
+            if isinstance(content, str):
+                # Convert string content to array format with cache_control
+                message['content'] = [
+                    {
+                        "type": "text",
+                        "text": content,
+                        "cache_control": {"type": "ephemeral"}
+                    }
+                ]
+                print(f"[EXTENDED] Added cache_control to content for role: {message.get('role', 'unknown')}")
+            elif isinstance(content, list):
+                # Add cache_control to existing content array
+                for item in content:
+                    if isinstance(item, dict):
+                        item['cache_control'] = {"type": "ephemeral"}
+                print(f"[EXTENDED] Added cache_control to content array for role: {message.get('role', 'unknown')}")
+        elif isinstance(message, dict):
+            print(f"[EXTENDED] Message has no content field for role: {message.get('role', 'unknown')}")
 
     def _log_usage_and_costs(self, usage_data: dict, source: str = "") -> None:
         """Log usage and cost analysis for both streaming and non-streaming responses.
@@ -231,13 +248,13 @@ class ExtendedLiteLlm(LiteLlm):
                 if role == 'developer':
                     if isinstance(message, dict):
                         message['role'] = 'system'  # Prevent LiteLLM conversion
-                        # Add cache_control to message instead of content
+                        # Add cache_control to content instead of message
                         self._add_cache_control_to_message(message)
 
                 # Add cache_control to user and assistant messages as well
                 elif role in ['user', 'assistant']:
                     if isinstance(message, dict):
-                        # Add cache_control to message instead of content
+                        # Add cache_control to content instead of message
                         self._add_cache_control_to_message(message)
 
         elif "anthropic/" in model_lower and "bedrock/" not in model_lower:
@@ -259,7 +276,7 @@ class ExtendedLiteLlm(LiteLlm):
                 # Add cache_control to developer, user, and assistant messages
                 if role in ['developer', 'user', 'assistant']:
                     if isinstance(message, dict):
-                        # Add cache_control to message instead of content
+                        # Add cache_control to content instead of message
                         self._add_cache_control_to_message(message)
 
     async def generate_content_async(  # noqa: C901
@@ -473,24 +490,38 @@ class ExtendedLiteLlm(LiteLlm):
         # Convert to dict for processing, handling both dict and Usage object cases
         if isinstance(usage, dict):
             usage_dict = usage
+            # Extract from dict
+            cache_read_input_tokens = (
+                usage_dict.get("cache_read_input_tokens", 0)
+                or usage_dict.get("cacheReadInputTokens", 0)
+                or usage_dict.get("cacheReadInputTokenCount", 0)
+            )
+            cache_write_input_tokens = (
+                usage_dict.get("cache_creation_input_tokens", 0)
+                or usage_dict.get("cacheWriteInputTokens", 0)
+                or usage_dict.get("cacheWriteInputTokenCount", 0)
+            )
         elif hasattr(usage, '__dict__'):
+            # For Usage objects, access properties directly (they're not in __dict__)
+            cache_read_input_tokens = getattr(usage, 'cache_read_input_tokens', 0)
+            cache_write_input_tokens = getattr(usage, 'cache_creation_input_tokens', 0)
+
+            print("[CACHE-EXTRACTION] Direct property access:")
+            print(f"[CACHE-EXTRACTION]   cache_read_input_tokens: {cache_read_input_tokens}")
+            print(f"[CACHE-EXTRACTION]   cache_creation_input_tokens: {cache_write_input_tokens}")
+
+            # Convert to dict for _log_usage_and_costs, but add the cache fields manually
             usage_dict = usage.__dict__.copy()
-            print(f"[CACHE-EXTRACTION] Converted Usage object to dict: {usage_dict}")
+            usage_dict['cache_read_input_tokens'] = cache_read_input_tokens
+            usage_dict['cache_creation_input_tokens'] = cache_write_input_tokens
+            print(f"[CACHE-EXTRACTION] Enhanced usage dict with cache tokens: {usage_dict.keys()}")
         else:
             print(f"[CACHE-EXTRACTION] Unknown usage type: {type(usage)}")
             usage_dict = {}
+            cache_read_input_tokens = 0
+            cache_write_input_tokens = 0
 
         # Extract cache tokens using the successful field names from temp.txt
-        cache_read_input_tokens = (
-            usage_dict.get("cache_read_input_tokens", 0)
-            or usage_dict.get("cacheReadInputTokens", 0)
-            or usage_dict.get("cacheReadInputTokenCount", 0)
-        )
-        cache_write_input_tokens = (
-            usage_dict.get("cache_creation_input_tokens", 0)
-            or usage_dict.get("cacheWriteInputTokens", 0)
-            or usage_dict.get("cacheWriteInputTokenCount", 0)
-        )
 
         if cache_read_input_tokens > 0 or cache_write_input_tokens > 0:
             print("[CACHE-EXTRACTION] FOUND CACHE TOKENS!")
