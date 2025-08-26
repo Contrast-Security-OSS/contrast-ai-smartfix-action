@@ -106,16 +106,28 @@ class ExtendedLiteLlm(LiteLlm):
             usage_data: Dictionary containing usage information
             source: String indicating if this is from streaming or non-streaming
         """
+        # Log cache token metrics
+        source_prefix = f"[{source}] " if source else ""
+
+        # Debug: Log all usage_data keys to see what we're getting
+        logger.debug(f"{source_prefix}Raw usage_data keys: {list(usage_data.keys())}")
+        logger.debug(f"{source_prefix}Raw usage_data: {usage_data}")
+
         # Extract token counts - try multiple field name variations
         cache_read_input_tokens = (
             usage_data.get("cacheReadInputTokenCount", 0)
             or usage_data.get("cacheReadInputTokens", 0)
             or usage_data.get("cache_read_input_tokens", 0)
+            or usage_data.get("cache_read_tokens", 0)
+            or usage_data.get("cached_tokens", 0)
         )
         cache_write_input_tokens = (
             usage_data.get("cacheWriteInputTokenCount", 0)
             or usage_data.get("cacheWriteInputTokens", 0)
             or usage_data.get("cache_write_input_tokens", 0)
+            or usage_data.get("cache_write_tokens", 0)
+            or usage_data.get("cache_creation_tokens", 0)
+            or usage_data.get("cache_creation_input_tokens", 0)
         )
         input_tokens = (
             usage_data.get("inputTokens", 0)
@@ -311,7 +323,15 @@ class ExtendedLiteLlm(LiteLlm):
             usage_metadata = None
             fallback_index = 0
             async for part in await self.llm_client.acompletion(**completion_args):
+                # Debug: Log what we're getting in streaming chunks
+                logger.debug(f"STREAMING: Received part type: {type(part)}")
+                if hasattr(part, 'usage'):
+                    logger.debug(f"STREAMING: Part has usage: {part.usage}")
+                if hasattr(part, '__dict__'):
+                    logger.debug(f"STREAMING: Part attributes: {list(part.__dict__.keys())}")
+
                 for chunk, finish_reason in _model_response_to_chunk(part):
+                    logger.debug(f"STREAMING: Chunk type: {type(chunk)}, finish_reason: {finish_reason}")
                     if isinstance(chunk, FunctionChunk):
                         index = chunk.index or fallback_index
                         if index not in function_calls:
@@ -343,6 +363,7 @@ class ExtendedLiteLlm(LiteLlm):
                             is_partial=True,
                         )
                     elif isinstance(chunk, UsageMetadataChunk):
+                        logger.debug(f"STREAMING: Found UsageMetadataChunk with attributes: {chunk.__dict__}")
                         usage_metadata = types.GenerateContentResponseUsageMetadata(
                             prompt_token_count=chunk.prompt_tokens,
                             candidates_token_count=chunk.completion_tokens,
@@ -354,6 +375,11 @@ class ExtendedLiteLlm(LiteLlm):
                             "completion_tokens": chunk.completion_tokens,
                             "total_tokens": chunk.total_tokens,
                         }
+                        # Also try to extract cache tokens from the chunk
+                        if hasattr(chunk, '__dict__'):
+                            for key, value in chunk.__dict__.items():
+                                if 'cache' in key.lower():
+                                    streaming_usage[key] = value
                         self._log_usage_and_costs(streaming_usage, "STREAMING")
 
                     if (
@@ -404,11 +430,23 @@ class ExtendedLiteLlm(LiteLlm):
                     aggregated_llm_response_with_tool_call.usage_metadata = usage_metadata
                 yield aggregated_llm_response_with_tool_call
 
+            # Debug: Log if we never got streaming usage data
+            if usage_metadata is None:
+                logger.warning("STREAMING: No UsageMetadataChunk received during streaming - cost tracking incomplete!")
+
         else:
             response = await self.llm_client.acompletion(**completion_args)
+            # Debug: Log the non-streaming response structure
+            logger.debug(f"NON-STREAMING: Response type: {type(response)}")
+            logger.debug(f"NON-STREAMING: Response keys: {list(response.keys()) if hasattr(response, 'keys') else 'No keys'}")
+
             # Log non-streaming costs immediately after API call
             if response.get("usage"):
+                logger.debug(f"NON-STREAMING: Usage data: {response['usage']}")
                 self._log_usage_and_costs(response["usage"], "NON-STREAMING")
+            else:
+                logger.warning("NON-STREAMING: No usage data in response!")
+
             # Use parent class method directly - no override needed
             from google.adk.models.lite_llm import _model_response_to_generate_content_response
             yield _model_response_to_generate_content_response(response)
