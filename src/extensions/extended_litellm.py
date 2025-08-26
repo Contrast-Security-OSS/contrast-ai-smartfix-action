@@ -23,18 +23,14 @@
 
 from typing import List, AsyncGenerator
 import logging
-import json
 
 import litellm
 from google.adk.models.lite_llm import (
-    LiteLlm, _get_completion_inputs, _build_request_log, _model_response_to_chunk,
-    _message_to_generate_content_response,
-    FunctionChunk, TextChunk, UsageMetadataChunk
+    LiteLlm, _get_completion_inputs, _build_request_log
 )
 from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
-from google.genai import types
-from litellm import Message, ChatCompletionAssistantMessage, ChatCompletionMessageToolCall, Function
+from litellm import Message
 
 logger = logging.getLogger(__name__)
 
@@ -318,161 +314,38 @@ class ExtendedLiteLlm(LiteLlm):
         if generation_params:
             completion_args.update(generation_params)
 
-        if stream:
-            print("DEBUG: Entering STREAMING code branch")
-            text = ""
-            # Track function calls by index
-            function_calls = {}  # index -> {name, args, id}
-            completion_args["stream"] = True
-            aggregated_llm_response = None
-            aggregated_llm_response_with_tool_call = None
-            usage_metadata = None
-            fallback_index = 0
-            async for part in await self.llm_client.acompletion(**completion_args):
-                # Debug: Log what we're getting in streaming chunks
-                print(f"STREAMING: Received part type: {type(part)}")
-                if hasattr(part, 'usage'):
-                    print(f"STREAMING: Part has usage: {part.usage}")
-                if hasattr(part, '__dict__'):
-                    print(f"STREAMING: Part attributes: {list(part.__dict__.keys())}")
-
-                for chunk, finish_reason in _model_response_to_chunk(part):
-                    print(f"STREAMING: Chunk type: {type(chunk)}, finish_reason: {finish_reason}")
-                    if isinstance(chunk, FunctionChunk):
-                        index = chunk.index or fallback_index
-                        if index not in function_calls:
-                            function_calls[index] = {"name": "", "args": "", "id": None}
-
-                        if chunk.name:
-                            function_calls[index]["name"] += chunk.name
-                        if chunk.args:
-                            function_calls[index]["args"] += chunk.args
-
-                            # check if args is completed (workaround for improper chunk
-                            # indexing)
-                            try:
-                                json.loads(function_calls[index]["args"])
-                                fallback_index += 1
-                            except json.JSONDecodeError:
-                                pass
-
-                        function_calls[index]["id"] = (
-                            chunk.id or function_calls[index]["id"] or str(index)
-                        )
-                    elif isinstance(chunk, TextChunk):
-                        text += chunk.text
-                        yield _message_to_generate_content_response(
-                            ChatCompletionAssistantMessage(
-                                role="assistant",
-                                content=chunk.text,
-                            ),
-                            is_partial=True,
-                        )
-                    elif isinstance(chunk, UsageMetadataChunk):
-                        print(f"STREAMING: Found UsageMetadataChunk with attributes: {chunk.__dict__}")
-                        usage_metadata = types.GenerateContentResponseUsageMetadata(
-                            prompt_token_count=chunk.prompt_tokens,
-                            candidates_token_count=chunk.completion_tokens,
-                            total_token_count=chunk.total_tokens,
-                        )
-                        # Log streaming costs immediately when usage metadata is available
-                        streaming_usage = {
-                            "prompt_tokens": chunk.prompt_tokens,
-                            "completion_tokens": chunk.completion_tokens,
-                            "total_tokens": chunk.total_tokens,
-                        }
-                        # Also try to extract cache tokens from the chunk
-                        if hasattr(chunk, '__dict__'):
-                            for key, value in chunk.__dict__.items():
-                                if 'cache' in key.lower():
-                                    streaming_usage[key] = value
-                        self._log_usage_and_costs(streaming_usage, "STREAMING")
-
-                    if (
-                        finish_reason == "tool_calls" or finish_reason == "stop"
-                    ) and function_calls:
-                        tool_calls = []
-                        for index, func_data in function_calls.items():
-                            if func_data["id"]:
-                                tool_calls.append(
-                                    ChatCompletionMessageToolCall(
-                                        type="function",
-                                        id=func_data["id"],
-                                        function=Function(
-                                            name=func_data["name"],
-                                            arguments=func_data["args"],
-                                            index=index,
-                                        ),
-                                    )
-                                )
-                        aggregated_llm_response_with_tool_call = (
-                            _message_to_generate_content_response(
-                                ChatCompletionAssistantMessage(
-                                    role="assistant",
-                                    content=text,
-                                    tool_calls=tool_calls,
-                                )
-                            )
-                        )
-                        text = ""
-                        function_calls.clear()
-                    elif finish_reason == "stop" and text:
-                        aggregated_llm_response = _message_to_generate_content_response(
-                            ChatCompletionAssistantMessage(role="assistant", content=text)
-                        )
-                        text = ""
-
-            # waiting until streaming ends to yield the llm_response as litellm tends
-            # to send chunk that contains usage_metadata after the chunk with
-            # finish_reason set to tool_calls or stop.
-            if aggregated_llm_response:
-                if usage_metadata:
-                    aggregated_llm_response.usage_metadata = usage_metadata
-                    usage_metadata = None
-                yield aggregated_llm_response
-
-            if aggregated_llm_response_with_tool_call:
-                if usage_metadata:
-                    aggregated_llm_response_with_tool_call.usage_metadata = usage_metadata
-                yield aggregated_llm_response_with_tool_call
-
-            # Debug: Log if we never got streaming usage data
-            if usage_metadata is None:
-                print("STREAMING: No UsageMetadataChunk received during streaming - cost tracking incomplete!")
-
+        print("DEBUG: Entering NON-STREAMING code branch")
+        response = await self.llm_client.acompletion(**completion_args)
+        # Debug: Log the non-streaming response structure
+        print(f"NON-STREAMING: Response type: {type(response)}")
+        if hasattr(response, 'keys'):
+            print(f"NON-STREAMING: Response keys: {list(response.keys())}")
         else:
-            print("DEBUG: Entering NON-STREAMING code branch")
-            response = await self.llm_client.acompletion(**completion_args)
-            # Debug: Log the non-streaming response structure
-            print(f"NON-STREAMING: Response type: {type(response)}")
-            if hasattr(response, 'keys'):
-                print(f"NON-STREAMING: Response keys: {list(response.keys())}")
+            print("NON-STREAMING: Response has no keys method")
+
+        # Log non-streaming costs immediately after API call
+        if response.get("usage"):
+            # Use raw response usage dict (like the old override) instead of Usage object
+            raw_usage = response.get("usage")
+            print(f"NON-STREAMING: Raw usage type: {type(raw_usage)}")
+
+            if isinstance(raw_usage, dict):
+                print(f"NON-STREAMING: Raw usage is dict with keys: {list(raw_usage.keys())}")
+                self._log_usage_and_costs(raw_usage, "NON-STREAMING")
             else:
-                print("NON-STREAMING: Response has no keys method")
-
-            # Log non-streaming costs immediately after API call
-            if response.get("usage"):
-                # Use raw response usage dict (like the old override) instead of Usage object
-                raw_usage = response.get("usage")
-                print(f"NON-STREAMING: Raw usage type: {type(raw_usage)}")
-
-                if isinstance(raw_usage, dict):
-                    print(f"NON-STREAMING: Raw usage is dict with keys: {list(raw_usage.keys())}")
-                    self._log_usage_and_costs(raw_usage, "NON-STREAMING")
+                # Fallback to Usage object conversion
+                print("NON-STREAMING: Raw usage is object, converting...")
+                if hasattr(raw_usage, '__dict__'):
+                    print(f"NON-STREAMING: Usage attributes: {list(raw_usage.__dict__.keys())}")
+                    usage_dict = raw_usage.__dict__.copy()
+                    self._log_usage_and_costs(usage_dict, "NON-STREAMING")
                 else:
-                    # Fallback to Usage object conversion
-                    print("NON-STREAMING: Raw usage is object, converting...")
-                    if hasattr(raw_usage, '__dict__'):
-                        print(f"NON-STREAMING: Usage attributes: {list(raw_usage.__dict__.keys())}")
-                        usage_dict = raw_usage.__dict__.copy()
-                        self._log_usage_and_costs(usage_dict, "NON-STREAMING")
-                    else:
-                        print(f"NON-STREAMING: Unknown usage object type: {type(raw_usage)}")
-            else:
-                print("NON-STREAMING: No usage data in response!")
+                    print(f"NON-STREAMING: Unknown usage object type: {type(raw_usage)}")
+        else:
+            print("NON-STREAMING: No usage data in response!")
 
-            # Call our override to capture cache tokens from raw response
-            yield self._model_response_to_generate_content_response(response)
+        # Call our override to capture cache tokens from raw response
+        yield self._model_response_to_generate_content_response(response)
 
     def _model_response_to_generate_content_response(self, response) -> LlmResponse:
         """Override to extract cache-specific token metrics from raw LiteLLM response.
