@@ -22,6 +22,9 @@
 #
 
 from typing import List, AsyncGenerator
+import logging
+import json
+
 import litellm
 from google.adk.models.lite_llm import (
     LiteLlm, _get_completion_inputs, _build_request_log, _model_response_to_chunk,
@@ -32,67 +35,184 @@ from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
 from google.genai import types
 from litellm import Message, ChatCompletionAssistantMessage, ChatCompletionMessageToolCall, Function
-import logging
-import json
-
-# Enable LiteLLM debug logging
-litellm._turn_on_debug()
 
 logger = logging.getLogger(__name__)
 
 
 class ExtendedLiteLlm(LiteLlm):
-    """Extended LiteLlm with automatic prompt caching for Anthropic models.
+    """Extended LiteLlm with automatic prompt caching and comprehensive cost analysis.
 
     This class extends the base LiteLlm to automatically apply prompt caching
-    using the appropriate method for each provider:
-    - Direct Anthropic API: Uses cache_control on messages
-    - Bedrock Claude models: Uses cachePoint objects in content arrays
+    and provide detailed cost analysis for all LLM interactions:
+    - Automatic caching: Applies cache_control to system, user, and assistant messages
+    - Complete cost tracking: Captures costs for both streaming and non-streaming calls
+    - Cache-aware pricing: Uses model-specific pricing including cache read/write costs
+    - Comprehensive metrics: Token usage, cache efficiency, and cost savings
+
+    Supported providers:
+    - Direct Anthropic API: Uses cache_control on message content
+    - Bedrock Claude models: Uses cache_control on message content
+    - Other models: Work normally without caching but with cost tracking
 
     Example usage:
     ```python
     # Anthropic Direct API - will apply cache_control automatically
     model = ExtendedLiteLlm(model="anthropic/claude-3-5-sonnet-20241022")
 
-    # Bedrock Claude - will apply cachePoint automatically
+    # Bedrock Claude - will apply cache_control automatically
     model = ExtendedLiteLlm(model="bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0")
 
-    # OpenAI - works with automatic caching (no changes needed)
+    # OpenAI - works with cost tracking (no caching applied)
     model = ExtendedLiteLlm(model="openai/gpt-4o")
 
-    # Other models - work normally without caching
+    # Other models - work normally with cost tracking
     model = ExtendedLiteLlm(model="gemini/gemini-1.5-pro")
     ```
     """
 
     def __init__(self, model: str, **kwargs):
         super().__init__(model=model, **kwargs)
-        # Use multiple logging methods to ensure visibility
         print(f"[EXTENDED] ExtendedLiteLlm initialized with model: {model}")
-        print(f"[EXTENDED] ExtendedLiteLlm kwargs: {kwargs}")
-        logger.info(f"[EXTENDED] ExtendedLiteLlm initialized with model: {model}")
-        logger.warning("[EXTENDED] ExtendedLiteLlm INIT - This should always show up!")
+        logger.info(f"ExtendedLiteLlm initialized with model: {model}")
 
-        # Force logging to stderr as well
-        import sys
-        print(f"[EXTENDED-STDERR] ExtendedLiteLlm initialized with model: {model}", file=sys.stderr)
+    def _add_cache_control_to_message(self, message: dict) -> None:
+        """Add cache_control directly to message (not content) for LiteLLM compatibility.
+
+        Based on successful temp.txt implementation, LiteLLM recognizes message-level
+        cache_control rather than content-level cache_control.
+        """
+        if isinstance(message, dict):
+            message['cache_control'] = {"type": "ephemeral"}
+            print(f"[EXTENDED] Added cache_control to message with role: {message.get('role', 'unknown')}")
+
+    def _log_usage_and_costs(self, usage_data: dict, source: str = "") -> None:
+        """Log usage and cost analysis for both streaming and non-streaming responses.
+
+        Args:
+            usage_data: Dictionary containing usage information
+            source: String indicating if this is from streaming or non-streaming
+        """
+        # Log cache token metrics
+        source_prefix = f"[{source}] " if source else ""
+
+        # Debug: Log all usage_data keys to see what we're getting
+        print(f"{source_prefix}Raw usage_data keys: {list(usage_data.keys())}")
+        print(f"{source_prefix}Raw usage_data: {usage_data}")
+
+        # Extract token counts - try multiple field name variations
+        cache_read_input_tokens = (
+            usage_data.get("cacheReadInputTokenCount", 0)
+            or usage_data.get("cacheReadInputTokens", 0)
+            or usage_data.get("cache_read_input_tokens", 0)
+            or usage_data.get("cache_read_tokens", 0)
+            or usage_data.get("cached_tokens", 0)
+        )
+        cache_write_input_tokens = (
+            usage_data.get("cacheWriteInputTokenCount", 0)
+            or usage_data.get("cacheWriteInputTokens", 0)
+            or usage_data.get("cache_write_input_tokens", 0)
+            or usage_data.get("cache_write_tokens", 0)
+            or usage_data.get("cache_creation_tokens", 0)
+            or usage_data.get("cache_creation_input_tokens", 0)
+        )
+        input_tokens = (
+            usage_data.get("inputTokens", 0)
+            or usage_data.get("prompt_tokens", 0)
+            or usage_data.get("input_tokens", 0)
+        )
+        output_tokens = (
+            usage_data.get("outputTokens", 0)
+            or usage_data.get("completion_tokens", 0)
+            or usage_data.get("output_tokens", 0)
+        )
+        total_tokens = (
+            usage_data.get("totalTokens", 0)
+            or usage_data.get("total_tokens", 0)
+        )
+
+        # Calculate total cached tokens (read + write)
+        total_cached_tokens = cache_read_input_tokens + cache_write_input_tokens
+
+        # Log cache token metrics
+        source_prefix = f"[{source}] " if source else ""
+        print(f"{source_prefix}Cache Token Metrics:")
+        print(f"{source_prefix}  Cache Read Input Tokens: {cache_read_input_tokens}")
+        print(f"{source_prefix}  Cache Write Input Tokens: {cache_write_input_tokens}")
+        print(f"{source_prefix}  Total Cached Tokens: {total_cached_tokens}")
+        print(f"{source_prefix}  Input Tokens: {input_tokens}")
+        print(f"{source_prefix}  Output Tokens: {output_tokens}")
+        print(f"{source_prefix}  Total Tokens: {total_tokens}")
+
+        # Get cost information and log cost analysis
+        try:
+            model_info = litellm.get_model_info(self.model)
+
+            regular_input_cost = model_info.get("input_cost_per_token", 3e-06)
+            cache_read_cost = model_info.get("cache_read_input_token_cost", 3e-07)
+            cache_write_cost = model_info.get("cache_creation_input_token_cost", 3.75e-06)
+            output_cost = model_info.get("output_cost_per_token", 1.5e-05)
+
+            print(f"{source_prefix}Model Costs (per token):")
+            print(f"{source_prefix}  Regular Input: ${regular_input_cost:.2e}")
+            print(f"{source_prefix}  Cache Read: ${cache_read_cost:.2e}")
+            print(f"{source_prefix}  Cache Write: ${cache_write_cost:.2e}")
+            print(f"{source_prefix}  Output: ${output_cost:.2e}")
+
+            # Calculate actual costs
+            total_input_cost = 0
+            total_output_cost = output_tokens * output_cost
+            cache_savings = 0
+
+            if cache_read_input_tokens > 0:
+                # Cost with caching
+                cache_read_total_cost = cache_read_input_tokens * cache_read_cost
+                # What it would have cost without caching
+                regular_cost_equivalent = cache_read_input_tokens * regular_input_cost
+                cache_savings = regular_cost_equivalent - cache_read_total_cost
+                total_input_cost += cache_read_total_cost
+
+            if cache_write_input_tokens > 0:
+                cache_write_total_cost = cache_write_input_tokens * cache_write_cost
+                total_input_cost += cache_write_total_cost
+
+            # Non-cached input tokens (if any)
+            non_cached_input_tokens = input_tokens - total_cached_tokens
+            if non_cached_input_tokens > 0:
+                total_input_cost += non_cached_input_tokens * regular_input_cost
+
+            total_cost = total_input_cost + total_output_cost
+
+            print(f"{source_prefix}Cost Breakdown:")
+            print(f"{source_prefix}  Input Cost: ${total_input_cost:.6f}")
+            print(f"{source_prefix}  Output Cost: ${total_output_cost:.6f}")
+            print(f"{source_prefix}  Total Cost: ${total_cost:.6f}")
+
+            if cache_savings > 0:
+                print(f"{source_prefix}  Cache Savings: ${cache_savings:.6f} ({cache_read_input_tokens} tokens)")
+                savings_percentage = (cache_savings / (cache_savings + total_input_cost)) * 100
+                print(f"{source_prefix}  Savings Rate: {savings_percentage:.1f}%")
+            elif total_cached_tokens > 0:
+                cache_efficiency = (total_cached_tokens / total_tokens) * 100 if total_tokens > 0 else 0
+                print(f"{source_prefix}  Cache Efficiency: {cache_efficiency:.1f}% ({total_cached_tokens}/{total_tokens})")
+
+        except Exception as e:
+            print(f"{source_prefix}Could not retrieve model cost information: {e}")
+            logger.warning(f"Could not retrieve model cost information: {e}")
 
     def _apply_role_conversion_and_caching(self, messages: List[Message]) -> None:  # noqa: C901
         """Convert developer->system for non-OpenAI models and apply caching.
 
         This prevents LiteLLM's internal role conversion that strips cache_control fields.
         """
-        import sys
-
-        print(f"[EXTENDED] _apply_role_conversion_and_caching called! Model: {self.model}")
-        print(f"[EXTENDED-STDERR] _apply_role_conversion_and_caching called! Model: {self.model}", file=sys.stderr)
-        logger.info(f"[EXTENDED] Processing model: {self.model}")
-
         model_lower = self.model.lower()
 
-        if "bedrock/" in model_lower and "claude" in model_lower:
-            print("[EXTENDED] Applying Bedrock role conversion and caching")
+        # Early return if model doesn't support caching
+        if not (("bedrock/" in model_lower and "claude" in model_lower)
+                or ("anthropic/" in model_lower and "bedrock/" not in model_lower)):
+            return
 
+        if "bedrock/" in model_lower and "claude" in model_lower:
+            # Bedrock Claude: Convert developer->system and add cache_control
             for i, message in enumerate(messages):
                 if isinstance(message, dict):
                     role = message.get('role')
@@ -109,26 +229,19 @@ class ExtendedLiteLlm(LiteLlm):
 
                 # Convert developer->system and add cache_control in one step
                 if role == 'developer':
-                    print(f"[EXTENDED] Converting developer->system and adding cache_control to message {i}")
-
                     if isinstance(message, dict):
                         message['role'] = 'system'  # Prevent LiteLLM conversion
-                        message['cache_control'] = {"type": "ephemeral"}  # Add caching
+                        # Add cache_control to message instead of content
+                        self._add_cache_control_to_message(message)
 
-                    print("[EXTENDED] Applied role conversion and cache_control")
-
-                # Add cache_control to user messages as well
-                elif role == 'user':
-                    print(f"[EXTENDED] Adding cache_control to user message {i}")
-
+                # Add cache_control to user and assistant messages as well
+                elif role in ['user', 'assistant']:
                     if isinstance(message, dict):
-                        message['cache_control'] = {"type": "ephemeral"}  # Add caching
-
-                    print("[EXTENDED] Applied cache_control to user message")
+                        # Add cache_control to message instead of content
+                        self._add_cache_control_to_message(message)
 
         elif "anthropic/" in model_lower and "bedrock/" not in model_lower:
-            print("[EXTENDED] Applying Anthropic caching (no role conversion needed)")
-            # For direct Anthropic API, developer role is fine, just add cache_control
+            # Direct Anthropic API: Just add cache_control (developer role is fine)
             for i, message in enumerate(messages):
                 if isinstance(message, dict):
                     role = message.get('role')
@@ -143,44 +256,16 @@ class ExtendedLiteLlm(LiteLlm):
                 else:
                     continue
 
-                # Add cache_control to developer messages for direct Anthropic
-                if role == 'developer':
-                    print(f"[EXTENDED] Adding cache_control to developer message {i}")
-
+                # Add cache_control to developer, user, and assistant messages
+                if role in ['developer', 'user', 'assistant']:
                     if isinstance(message, dict):
-                        message['cache_control'] = {"type": "ephemeral"}
-
-                    print("[EXTENDED] Applied cache_control to developer message")
-
-                # Add cache_control to user messages as well
-                elif role == 'user':
-                    print(f"[EXTENDED] Adding cache_control to user message {i}")
-
-                    if isinstance(message, dict):
-                        message['cache_control'] = {"type": "ephemeral"}
-
-                    print("[EXTENDED] Applied cache_control to user message")
-        else:
-            print(f"[EXTENDED] No role conversion or caching needed for: {self.model}")
-
-        # Log the final message structure
-        print("[EXTENDED] Final message structure after role conversion:")
-        for i, message in enumerate(messages):
-            if isinstance(message, dict):
-                role = message.get('role')
-                has_cache = 'cache_control' in message
-                cache_status = "CACHED" if has_cache else "NO_CACHE"
-                print(f"[EXTENDED] Message {i}: role={role}, cache_status={cache_status}")
-                if has_cache:
-                    print(f"[EXTENDED] Message {i} cache_control: {message['cache_control']}")
-            else:
-                role = getattr(message, 'role', 'unknown')
-                print(f"[EXTENDED] Message {i}: role={role}, type={type(message)}")
+                        # Add cache_control to message instead of content
+                        self._add_cache_control_to_message(message)
 
     async def generate_content_async(  # noqa: C901
         self, llm_request: LlmRequest, stream: bool = False
     ) -> AsyncGenerator[LlmResponse, None]:
-        """Generates content asynchronously.
+        """Generates content asynchronously with automatic prompt caching.
 
         Args:
             llm_request: LlmRequest, the request to send to the LiteLlm model.
@@ -189,25 +274,17 @@ class ExtendedLiteLlm(LiteLlm):
         Yields:
             LlmResponse: The model response.
         """
-        import sys
-        print(f"[EXTENDED] generate_content_async called for model: {self.model}")
-        print("[EXTENDED-STDERR] generate_content_async called", file=sys.stderr)
-        logger.warning("[EXTENDED] generate_content_async - This should always show up!")
-
         self._maybe_append_user_content(llm_request)
+        print(f"[EXTENDED] generate_content_async called for model: {self.model}")
         logger.debug(_build_request_log(llm_request))
 
-        # Use parent's _get_completion_inputs (module function, not self method)
-        print("[EXTENDED] About to call _get_completion_inputs")
+        # Get completion inputs
         messages, tools, response_format, generation_params = (
             _get_completion_inputs(llm_request)
         )
-        print("[EXTENDED] Completed _get_completion_inputs call")
 
-        # SIMPLE FIX: Convert developer->system for non-OpenAI models to prevent LiteLLM role conversion
-        print("[EXTENDED] About to apply role conversion and caching")
+        # Apply role conversion and caching
         self._apply_role_conversion_and_caching(messages)
-        print("[EXTENDED] Completed role conversion and caching")
 
         if "functions" in self._additional_args:
             # LiteLLM does not support both tools and functions together.
@@ -225,6 +302,7 @@ class ExtendedLiteLlm(LiteLlm):
             completion_args.update(generation_params)
 
         if stream:
+            print("DEBUG: Entering STREAMING code branch")
             text = ""
             # Track function calls by index
             function_calls = {}  # index -> {name, args, id}
@@ -234,7 +312,15 @@ class ExtendedLiteLlm(LiteLlm):
             usage_metadata = None
             fallback_index = 0
             async for part in await self.llm_client.acompletion(**completion_args):
+                # Debug: Log what we're getting in streaming chunks
+                print(f"STREAMING: Received part type: {type(part)}")
+                if hasattr(part, 'usage'):
+                    print(f"STREAMING: Part has usage: {part.usage}")
+                if hasattr(part, '__dict__'):
+                    print(f"STREAMING: Part attributes: {list(part.__dict__.keys())}")
+
                 for chunk, finish_reason in _model_response_to_chunk(part):
+                    print(f"STREAMING: Chunk type: {type(chunk)}, finish_reason: {finish_reason}")
                     if isinstance(chunk, FunctionChunk):
                         index = chunk.index or fallback_index
                         if index not in function_calls:
@@ -266,11 +352,24 @@ class ExtendedLiteLlm(LiteLlm):
                             is_partial=True,
                         )
                     elif isinstance(chunk, UsageMetadataChunk):
+                        print(f"STREAMING: Found UsageMetadataChunk with attributes: {chunk.__dict__}")
                         usage_metadata = types.GenerateContentResponseUsageMetadata(
                             prompt_token_count=chunk.prompt_tokens,
                             candidates_token_count=chunk.completion_tokens,
                             total_token_count=chunk.total_tokens,
                         )
+                        # Log streaming costs immediately when usage metadata is available
+                        streaming_usage = {
+                            "prompt_tokens": chunk.prompt_tokens,
+                            "completion_tokens": chunk.completion_tokens,
+                            "total_tokens": chunk.total_tokens,
+                        }
+                        # Also try to extract cache tokens from the chunk
+                        if hasattr(chunk, '__dict__'):
+                            for key, value in chunk.__dict__.items():
+                                if 'cache' in key.lower():
+                                    streaming_usage[key] = value
+                        self._log_usage_and_costs(streaming_usage, "STREAMING")
 
                     if (
                         finish_reason == "tool_calls" or finish_reason == "stop"
@@ -320,124 +419,91 @@ class ExtendedLiteLlm(LiteLlm):
                     aggregated_llm_response_with_tool_call.usage_metadata = usage_metadata
                 yield aggregated_llm_response_with_tool_call
 
+            # Debug: Log if we never got streaming usage data
+            if usage_metadata is None:
+                print("STREAMING: No UsageMetadataChunk received during streaming - cost tracking incomplete!")
+
         else:
+            print("DEBUG: Entering NON-STREAMING code branch")
             response = await self.llm_client.acompletion(**completion_args)
+            # Debug: Log the non-streaming response structure
+            print(f"NON-STREAMING: Response type: {type(response)}")
+            if hasattr(response, 'keys'):
+                print(f"NON-STREAMING: Response keys: {list(response.keys())}")
+            else:
+                print("NON-STREAMING: Response has no keys method")
+
+            # Log non-streaming costs immediately after API call
+            if response.get("usage"):
+                # Use raw response usage dict (like the old override) instead of Usage object
+                raw_usage = response.get("usage")
+                print(f"NON-STREAMING: Raw usage type: {type(raw_usage)}")
+
+                if isinstance(raw_usage, dict):
+                    print(f"NON-STREAMING: Raw usage is dict with keys: {list(raw_usage.keys())}")
+                    self._log_usage_and_costs(raw_usage, "NON-STREAMING")
+                else:
+                    # Fallback to Usage object conversion
+                    print(f"NON-STREAMING: Raw usage is object, converting...")
+                    if hasattr(raw_usage, '__dict__'):
+                        print(f"NON-STREAMING: Usage attributes: {list(raw_usage.__dict__.keys())}")
+                        usage_dict = raw_usage.__dict__.copy()
+                        self._log_usage_and_costs(usage_dict, "NON-STREAMING")
+                    else:
+                        print(f"NON-STREAMING: Unknown usage object type: {type(raw_usage)}")
+            else:
+                print("NON-STREAMING: No usage data in response!")
+
+            # Call our override to capture cache tokens from raw response
             yield self._model_response_to_generate_content_response(response)
 
     def _model_response_to_generate_content_response(self, response) -> LlmResponse:
-        """Override to extract and log cache-specific token metrics.
+        """Override to extract cache-specific token metrics from raw LiteLLM response.
 
-        Extracts cache metrics from LiteLLM response and logs them before
-        calling the parent method.
+        This method captures cache token data from the raw response before any processing.
+        Combines the working approach from temp.txt with current cost analysis.
         """
-        # Debug: Log the entire response structure
-        print("[EXTENDED] Raw response structure:")
-        print(f"[EXTENDED] Response keys: {list(response.keys()) if isinstance(response, dict) else type(response)}")
+        print("[CACHE-EXTRACTION] Intercepting response for cache token extraction")
 
-        # Extract cache-specific metrics from the raw response
+        # Extract cache-specific metrics from the raw response (like temp.txt)
         usage = response.get("usage", {})
-        print(f"[EXTENDED] Usage data: {usage}")
+        print(f"[CACHE-EXTRACTION] Usage data: {usage}")
+        print(f"[CACHE-EXTRACTION] Usage type: {type(usage)}")
 
-        # Extract the metrics we care about - try multiple field name variations
+        # Convert to dict for processing, handling both dict and Usage object cases
+        if isinstance(usage, dict):
+            usage_dict = usage
+        elif hasattr(usage, '__dict__'):
+            usage_dict = usage.__dict__.copy()
+            print(f"[CACHE-EXTRACTION] Converted Usage object to dict: {usage_dict}")
+        else:
+            print(f"[CACHE-EXTRACTION] Unknown usage type: {type(usage)}")
+            usage_dict = {}
+
+        # Extract cache tokens using the successful field names from temp.txt
         cache_read_input_tokens = (
-            usage.get("cacheReadInputTokenCount", 0)
-            or usage.get("cacheReadInputTokens", 0)
-            or usage.get("cache_read_input_tokens", 0)
+            usage_dict.get("cache_read_input_tokens", 0)
+            or usage_dict.get("cacheReadInputTokens", 0)
+            or usage_dict.get("cacheReadInputTokenCount", 0)
         )
         cache_write_input_tokens = (
-            usage.get("cacheWriteInputTokenCount", 0)
-            or usage.get("cacheWriteInputTokens", 0)
-            or usage.get("cache_write_input_tokens", 0)
-        )
-        input_tokens = (
-            usage.get("inputTokens", 0)
-            or usage.get("prompt_tokens", 0)
-            or usage.get("input_tokens", 0)
-        )
-        output_tokens = (
-            usage.get("outputTokens", 0)
-            or usage.get("completion_tokens", 0)
-            or usage.get("output_tokens", 0)
-        )
-        total_tokens = (
-            usage.get("totalTokens", 0)
-            or usage.get("total_tokens", 0)
+            usage_dict.get("cache_creation_input_tokens", 0)
+            or usage_dict.get("cacheWriteInputTokens", 0)
+            or usage_dict.get("cacheWriteInputTokenCount", 0)
         )
 
-        # Calculate total cached tokens (read + write)
-        total_cached_tokens = cache_read_input_tokens + cache_write_input_tokens
+        if cache_read_input_tokens > 0 or cache_write_input_tokens > 0:
+            print(f"[CACHE-EXTRACTION] FOUND CACHE TOKENS!")
+            print(f"[CACHE-EXTRACTION]   Cache Read: {cache_read_input_tokens}")
+            print(f"[CACHE-EXTRACTION]   Cache Write: {cache_write_input_tokens}")
 
-        # Log the cache metrics we care about
-        print("[EXTENDED] Cache Token Metrics:")
-        print(f"[EXTENDED]   Cache Read Input Tokens: {cache_read_input_tokens}")
-        print(f"[EXTENDED]   Cache Write Input Tokens: {cache_write_input_tokens}")
-        print(f"[EXTENDED]   Total Cached Tokens: {total_cached_tokens}")
-        print(f"[EXTENDED]   Input Tokens: {input_tokens}")
-        print(f"[EXTENDED]   Output Tokens: {output_tokens}")
-        print(f"[EXTENDED]   Total Tokens: {total_tokens}")
-
-        # Always try to get cost information, even if no cached tokens
-        try:
-            # Access litellm's get_model_info function
-            model_info = litellm.get_model_info(self.model)
-            print("[EXTENDED] Model info retrieved successfully")
-
-            regular_input_cost = model_info.get("input_cost_per_token", 3e-06)
-            cache_read_cost = model_info.get("cache_read_input_token_cost", 3e-07)
-            cache_write_cost = model_info.get("cache_creation_input_token_cost", 3.75e-06)
-            output_cost = model_info.get("output_cost_per_token", 1.5e-05)
-
-            print("[EXTENDED]   Model Costs (per token):")
-            print(f"[EXTENDED]     Regular Input: ${regular_input_cost:.2e}")
-            print(f"[EXTENDED]     Cache Read: ${cache_read_cost:.2e}")
-            print(f"[EXTENDED]     Cache Write: ${cache_write_cost:.2e}")
-            print(f"[EXTENDED]     Output: ${output_cost:.2e}")
-
-            # Calculate actual costs
-            total_input_cost = 0
-            total_output_cost = output_tokens * output_cost
-            cache_savings = 0
-
-            if cache_read_input_tokens > 0:
-                # Cost with caching
-                cache_read_total_cost = cache_read_input_tokens * cache_read_cost
-                # What it would have cost without caching
-                regular_cost_equivalent = cache_read_input_tokens * regular_input_cost
-                cache_savings = regular_cost_equivalent - cache_read_total_cost
-                total_input_cost += cache_read_total_cost
-
-            if cache_write_input_tokens > 0:
-                cache_write_total_cost = cache_write_input_tokens * cache_write_cost
-                total_input_cost += cache_write_total_cost
-
-            # Non-cached input tokens (if any)
-            non_cached_input_tokens = input_tokens - total_cached_tokens
-            if non_cached_input_tokens > 0:
-                total_input_cost += non_cached_input_tokens * regular_input_cost
-
-            total_cost = total_input_cost + total_output_cost
-
-            print("[EXTENDED]   Cost Breakdown:")
-            print(f"[EXTENDED]     Input Cost: ${total_input_cost:.6f}")
-            print(f"[EXTENDED]     Output Cost: ${total_output_cost:.6f}")
-            print(f"[EXTENDED]     Total Cost: ${total_cost:.6f}")
-
-            if cache_savings > 0:
-                print(f"[EXTENDED]     Cache Savings: ${cache_savings:.6f} ({cache_read_input_tokens} tokens)")
-                savings_percentage = (cache_savings / (cache_savings + total_input_cost)) * 100
-                print(f"[EXTENDED]     Savings Rate: {savings_percentage:.1f}%")
-            elif total_cached_tokens > 0:
-                cache_efficiency = (total_cached_tokens / total_tokens) * 100 if total_tokens > 0 else 0
-                print(f"[EXTENDED]     Cache Efficiency: {cache_efficiency:.1f}% ({total_cached_tokens}/{total_tokens})")
-
-        except Exception as e:
-            print(f"[EXTENDED]   Error getting model cost info: {e}")
-            import traceback
-            print(f"[EXTENDED]   Traceback: {traceback.format_exc()}")
+            # Use our cost analysis method
+            self._log_usage_and_costs(usage_dict, "CACHE-EXTRACTION")
+        else:
+            print("[CACHE-EXTRACTION] No cache tokens found - may indicate caching not working")
 
         # Call the parent method to get the standard LlmResponse
-        print("[EXTENDED] Calling parent _model_response_to_generate_content_response")
         from google.adk.models.lite_llm import _model_response_to_generate_content_response
         result = _model_response_to_generate_content_response(response)
-        print("[EXTENDED] Parent method completed successfully")
+        print("[CACHE-EXTRACTION] Response processing completed")
         return result
