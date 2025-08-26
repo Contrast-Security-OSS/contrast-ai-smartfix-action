@@ -438,12 +438,26 @@ class ExtendedLiteLlm(LiteLlm):
             response = await self.llm_client.acompletion(**completion_args)
             # Debug: Log the non-streaming response structure
             logger.debug(f"NON-STREAMING: Response type: {type(response)}")
-            logger.debug(f"NON-STREAMING: Response keys: {list(response.keys()) if hasattr(response, 'keys') else 'No keys'}")
+            if hasattr(response, 'keys'):
+                logger.debug(f"NON-STREAMING: Response keys: {list(response.keys())}")
+            else:
+                logger.debug("NON-STREAMING: Response has no keys method")
 
             # Log non-streaming costs immediately after API call
             if response.get("usage"):
-                logger.debug(f"NON-STREAMING: Usage data: {response['usage']}")
-                self._log_usage_and_costs(response["usage"], "NON-STREAMING")
+                usage = response["usage"]
+                logger.debug(f"NON-STREAMING: Usage type: {type(usage)}")
+                if hasattr(usage, 'keys'):
+                    logger.debug(f"NON-STREAMING: Usage keys: {list(usage.keys())}")
+                    # It's a dictionary
+                    self._log_usage_and_costs(usage, "NON-STREAMING")
+                elif hasattr(usage, '__dict__'):
+                    logger.debug(f"NON-STREAMING: Usage attributes: {list(usage.__dict__.keys())}")
+                    # Convert Usage object to dictionary
+                    usage_dict = usage.__dict__.copy()
+                    self._log_usage_and_costs(usage_dict, "NON-STREAMING")
+                else:
+                    logger.warning(f"NON-STREAMING: Unknown usage object type: {type(usage)}")
             else:
                 logger.warning("NON-STREAMING: No usage data in response!")
 
