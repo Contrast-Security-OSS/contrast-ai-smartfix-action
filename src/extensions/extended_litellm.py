@@ -325,14 +325,14 @@ class ExtendedLiteLlm(LiteLlm):
             fallback_index = 0
             async for part in await self.llm_client.acompletion(**completion_args):
                 # Debug: Log what we're getting in streaming chunks
-                logger.debug(f"STREAMING: Received part type: {type(part)}")
+                print(f"STREAMING: Received part type: {type(part)}")
                 if hasattr(part, 'usage'):
-                    logger.debug(f"STREAMING: Part has usage: {part.usage}")
+                    print(f"STREAMING: Part has usage: {part.usage}")
                 if hasattr(part, '__dict__'):
-                    logger.debug(f"STREAMING: Part attributes: {list(part.__dict__.keys())}")
+                    print(f"STREAMING: Part attributes: {list(part.__dict__.keys())}")
 
                 for chunk, finish_reason in _model_response_to_chunk(part):
-                    logger.debug(f"STREAMING: Chunk type: {type(chunk)}, finish_reason: {finish_reason}")
+                    print(f"STREAMING: Chunk type: {type(chunk)}, finish_reason: {finish_reason}")
                     if isinstance(chunk, FunctionChunk):
                         index = chunk.index or fallback_index
                         if index not in function_calls:
@@ -364,7 +364,7 @@ class ExtendedLiteLlm(LiteLlm):
                             is_partial=True,
                         )
                     elif isinstance(chunk, UsageMetadataChunk):
-                        logger.debug(f"STREAMING: Found UsageMetadataChunk with attributes: {chunk.__dict__}")
+                        print(f"STREAMING: Found UsageMetadataChunk with attributes: {chunk.__dict__}")
                         usage_metadata = types.GenerateContentResponseUsageMetadata(
                             prompt_token_count=chunk.prompt_tokens,
                             candidates_token_count=chunk.completion_tokens,
@@ -439,32 +439,32 @@ class ExtendedLiteLlm(LiteLlm):
             print("DEBUG: Entering NON-STREAMING code branch")
             response = await self.llm_client.acompletion(**completion_args)
             # Debug: Log the non-streaming response structure
-            logger.debug(f"NON-STREAMING: Response type: {type(response)}")
+            print(f"NON-STREAMING: Response type: {type(response)}")
             if hasattr(response, 'keys'):
-                logger.debug(f"NON-STREAMING: Response keys: {list(response.keys())}")
+                print(f"NON-STREAMING: Response keys: {list(response.keys())}")
             else:
-                logger.debug("NON-STREAMING: Response has no keys method")
+                print("NON-STREAMING: Response has no keys method")
 
             # Log non-streaming costs immediately after API call
             if response.get("usage"):
                 # Use raw response usage dict (like the old override) instead of Usage object
                 raw_usage = response.get("usage")
-                logger.debug(f"NON-STREAMING: Raw usage type: {type(raw_usage)}")
+                print(f"NON-STREAMING: Raw usage type: {type(raw_usage)}")
 
                 if isinstance(raw_usage, dict):
-                    logger.debug(f"NON-STREAMING: Raw usage is dict with keys: {list(raw_usage.keys())}")
+                    print(f"NON-STREAMING: Raw usage is dict with keys: {list(raw_usage.keys())}")
                     self._log_usage_and_costs(raw_usage, "NON-STREAMING")
                 else:
                     # Fallback to Usage object conversion
-                    logger.debug("NON-STREAMING: Raw usage is object, converting...")
+                    print("NON-STREAMING: Raw usage is object, converting...")
                     if hasattr(raw_usage, '__dict__'):
-                        logger.debug(f"NON-STREAMING: Usage attributes: {list(raw_usage.__dict__.keys())}")
+                        print(f"NON-STREAMING: Usage attributes: {list(raw_usage.__dict__.keys())}")
                         usage_dict = raw_usage.__dict__.copy()
                         self._log_usage_and_costs(usage_dict, "NON-STREAMING")
                     else:
-                        logger.warning(f"NON-STREAMING: Unknown usage object type: {type(raw_usage)}")
+                        print(f"NON-STREAMING: Unknown usage object type: {type(raw_usage)}")
             else:
-                logger.warning("NON-STREAMING: No usage data in response!")
+                print("NON-STREAMING: No usage data in response!")
 
             # Use parent class method directly
             from google.adk.models.lite_llm import _model_response_to_generate_content_response
