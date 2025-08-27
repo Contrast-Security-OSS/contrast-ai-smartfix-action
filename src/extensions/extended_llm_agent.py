@@ -56,7 +56,7 @@ class ExtendedLlmAgent(LlmAgent):
     ```
     """
 
-    _original_extended_model: Optional['ExtendedLiteLlm'] = Field(
+    original_extended_model: Optional['ExtendedLiteLlm'] = Field(
         default=None,
         exclude=True,
         description="Reference to the original ExtendedLiteLlm instance for stats access"
@@ -67,11 +67,11 @@ class ExtendedLlmAgent(LlmAgent):
         """Preserve a reference to the ExtendedLiteLlm instance if provided."""
         # Import here to avoid circular imports
         try:
-            from ..models.extended_litellm import ExtendedLiteLlm
+            from .extended_litellm import ExtendedLiteLlm
 
             if isinstance(self.model, ExtendedLiteLlm):
                 # Store reference to the original instance
-                self._original_extended_model = self.model
+                self.original_extended_model = self.model
                 print(f"[EXTENDED_AGENT] Preserved reference to ExtendedLiteLlm instance for agent: {self.name}")
 
         except ImportError:
@@ -85,8 +85,8 @@ class ExtendedLlmAgent(LlmAgent):
     def canonical_model(self):
         """Override to ensure we return the original ExtendedLiteLlm instance."""
         # If we have a preserved ExtendedLiteLlm instance, return it
-        if self._original_extended_model is not None:
-            return self._original_extended_model
+        if self.original_extended_model is not None:
+            return self.original_extended_model
 
         # Otherwise, use the parent's canonical_model
         return super().canonical_model
@@ -94,7 +94,7 @@ class ExtendedLlmAgent(LlmAgent):
     def has_extended_model(self) -> bool:
         """Check if this agent is using an ExtendedLiteLlm model."""
         try:
-            from ..models.extended_litellm import ExtendedLiteLlm
+            from .extended_litellm import ExtendedLiteLlm
             return isinstance(self.canonical_model, ExtendedLiteLlm)
         except ImportError:
             return False
