@@ -274,7 +274,6 @@ class ExtendedLiteLlm(LiteLlm):
         if generation_params:
             completion_args.update(generation_params)
 
-        print("DEBUG: Entering NON-STREAMING code branch")
         response = await self.llm_client.acompletion(**completion_args)
 
         # Call our override to capture cache tokens from raw response

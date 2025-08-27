@@ -53,6 +53,7 @@ try:
     from google.adk.agents import Agent
     from google.adk.artifacts.in_memory_artifact_service import InMemoryArtifactService
     from src.extensions.extended_litellm import ExtendedLiteLlm
+    from src.extensions.extended_llm_agent import ExtendedLlmAgent
     from google.adk.runners import Runner
     from google.adk.sessions import InMemorySessionService
     from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset, StdioServerParameters, StdioConnectionParams
@@ -213,18 +214,12 @@ async def create_agent(target_folder: Path, remediation_id: str, agent_type: str
             # seed=42, # The random seed for reproducibility (not supported by bedrock/anthropic atm call throws error)
             stream_options={"include_usage": True}
         )
-
-        root_agent = Agent(
+        root_agent = ExtendedLlmAgent(
             model=model_instance,
             name=agent_name,
             instruction=agent_instruction,
             tools=[mcp_tools],
         )
-
-        # Store a reference to our original ExtendedLiteLlm instance
-        # in case the Agent class wraps or replaces the model
-        root_agent._original_model_instance = model_instance
-
         debug_log(f"Created {agent_type} agent ({agent_name}) with model {config.AGENT_MODEL}")
         return root_agent
     except Exception as e:
@@ -505,30 +500,6 @@ async def process_agent_run(runner, session, user_query, remediation_id: str, ag
         telemetry_handler.add_agent_event(agent_event_payload)
 
     return final_response
-
-
-def _print_model_accumulated_stats(agent):
-    """
-    Print accumulated statistics from the ExtendedLiteLlm model instance.
-
-    This function attempts to get the original ExtendedLiteLlm instance that was stored
-    during agent creation, as the Google ADK Agent framework may wrap or replace the
-    model instance internally.
-
-    Args:
-        agent: The Google ADK Agent instance
-    """
-    # Get the original ExtendedLiteLlm instance we stored during agent creation
-    model_instance = getattr(agent, '_original_model_instance', None)
-
-    if model_instance and hasattr(model_instance, 'print_accumulated_stats'):
-        debug_log("Calling print_accumulated_stats() on original model instance...")
-        model_instance.print_accumulated_stats()
-    elif hasattr(agent.model, 'print_accumulated_stats'):
-        debug_log("Calling print_accumulated_stats() on agent.model...")
-        agent.model.print_accumulated_stats()
-    else:
-        debug_log(f"Model doesn't have print_accumulated_stats method! Type: {type(agent.model)}")
 
 
 async def _cleanup_event_stream(events_async, timeout=5.0):
@@ -1014,9 +985,7 @@ async def _run_agent_internal_with_prompts(agent_type: str, repo_root: Path, que
 
     # Pass the full model ID (though not used for cost calculation anymore, kept for consistency if needed elsewhere)
     summary = await process_agent_run(runner, session, query, remediation_id, agent_type)
-
-    # Print accumulated statistics from the model
-    _print_model_accumulated_stats(agent)
+    agent.print_accumulated_stats()
 
     return summary
 
