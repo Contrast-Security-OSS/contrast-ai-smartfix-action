@@ -25,9 +25,7 @@ from typing import List, AsyncGenerator
 import logging
 
 import litellm
-from google.adk.models.lite_llm import (
-    LiteLlm, _get_completion_inputs, _build_request_log
-)
+from google.adk.models.lite_llm import LiteLlm, _get_completion_inputs
 from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
 from litellm import Message
@@ -68,7 +66,6 @@ class ExtendedLiteLlm(LiteLlm):
 
     def __init__(self, model: str, **kwargs):
         super().__init__(model=model, **kwargs)
-        print(f"[EXTENDED] ExtendedLiteLlm initialized with model: {model}")
         logger.info(f"ExtendedLiteLlm initialized with model: {model}")
 
     def _add_cache_control_to_message(self, message: dict) -> None:
@@ -88,15 +85,11 @@ class ExtendedLiteLlm(LiteLlm):
                         "cache_control": {"type": "ephemeral"}
                     }
                 ]
-                print(f"[EXTENDED] Added cache_control to content for role: {message.get('role', 'unknown')}")
             elif isinstance(content, list):
                 # Add cache_control to existing content array
                 for item in content:
                     if isinstance(item, dict):
                         item['cache_control'] = {"type": "ephemeral"}
-                print(f"[EXTENDED] Added cache_control to content array for role: {message.get('role', 'unknown')}")
-        elif isinstance(message, dict):
-            print(f"[EXTENDED] Message has no content field for role: {message.get('role', 'unknown')}")
 
     def _apply_role_conversion_and_caching(self, messages: List[Message]) -> None:  # noqa: C901
         """Convert developer->system for non-OpenAI models and apply caching.
@@ -174,8 +167,6 @@ class ExtendedLiteLlm(LiteLlm):
             LlmResponse: The model response.
         """
         self._maybe_append_user_content(llm_request)
-        print(f"[EXTENDED] generate_content_async called for model: {self.model}")
-        logger.debug(_build_request_log(llm_request))
 
         # Get completion inputs
         messages, tools, response_format, generation_params = (
@@ -200,7 +191,6 @@ class ExtendedLiteLlm(LiteLlm):
         if generation_params:
             completion_args.update(generation_params)
 
-        print("DEBUG: Entering NON-STREAMING code branch")
         response = await self.llm_client.acompletion(**completion_args)
 
         # Call our override to capture cache tokens from raw response
@@ -236,11 +226,9 @@ class ExtendedLiteLlm(LiteLlm):
 
         # Log basic usage
         print("Token Usage:")
-        print(f"  Input: {input_tokens}, Output: {output_tokens}, Total: {total_tokens}")
-
-        # Only show cache info if there are cache tokens
-        if cache_read_tokens > 0 or cache_write_tokens > 0:
-            print(f"  Cache Read: {cache_read_tokens}, Cache Write: {cache_write_tokens}")
+        print(f"  New Input: {input_tokens}, Output: {output_tokens}")
+        print(f"  Cache Read: {cache_read_tokens}, Cache Write: {cache_write_tokens}")
+        print(f"  Total: {total_tokens}")
 
         # Calculate and log costs
         try:
@@ -251,25 +239,27 @@ class ExtendedLiteLlm(LiteLlm):
             cache_read_cost_per_token = model_info.get("cache_read_input_token_cost", 3e-07)
             cache_write_cost_per_token = model_info.get("cache_creation_input_token_cost", 3.75e-06)
 
-            # Calculate costs
-            regular_input_tokens = input_tokens - cache_read_tokens - cache_write_tokens
+            # Calculate costs - tokens are additive, not overlapping
+            new_input_cost = input_tokens * input_cost_per_token
+            cache_read_cost = cache_read_tokens * cache_read_cost_per_token
+            cache_write_cost = cache_write_tokens * cache_write_cost_per_token
 
-            input_cost = (regular_input_tokens * input_cost_per_token
-                          + cache_read_tokens * cache_read_cost_per_token
-                          + cache_write_tokens * cache_write_cost_per_token)
+            total_input_cost = new_input_cost + cache_read_cost + cache_write_cost
             output_cost = output_tokens * output_cost_per_token
-            total_cost = input_cost + output_cost
+            total_cost = total_input_cost + output_cost
 
             print("Cost Analysis:")
-            print(f"  Input: ${input_cost:.6f}, Output: ${output_cost:.6f}, Total: ${total_cost:.6f}")
+            print(f"  Input: ${total_input_cost:.6f} (New: ${new_input_cost:.6f}, Cache Read: ${cache_read_cost:.6f}, Cache Write: ${cache_write_cost:.6f})")
+            print(f"  Output: ${output_cost:.6f}, Total: ${total_cost:.6f}")
 
             # Show savings only if we have cache read tokens
             if cache_read_tokens > 0:
-                potential_cost = cache_read_tokens * input_cost_per_token
-                actual_cache_cost = cache_read_tokens * cache_read_cost_per_token
-                savings = potential_cost - actual_cache_cost
-                savings_pct = (savings / potential_cost) * 100
-                print(f"  Cache Savings: ${savings:.6f} ({savings_pct:.1f}%) from {cache_read_tokens} tokens")
+                # What the cached tokens would have cost at regular price
+                cache_savings = cache_read_tokens * (input_cost_per_token - cache_read_cost_per_token)
 
+                # Calculate what total input cost would have been without caching
+                total_input_without_cache = total_input_cost + cache_savings
+                savings_pct = (cache_savings / total_input_without_cache) * 100
+                print(f"  Cache Savings: ${cache_savings:.6f} ({savings_pct:.1f}%) from {cache_read_tokens} cached tokens")
         except Exception as e:
             logger.warning(f"Could not calculate costs: {e}")
