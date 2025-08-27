@@ -25,12 +25,95 @@ from typing import List, AsyncGenerator
 import logging
 
 import litellm
-from google.adk.models.lite_llm import LiteLlm, _get_completion_inputs
+from google.adk.models.lite_llm import (
+    LiteLlm, _get_completion_inputs, _build_request_log
+)
 from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
 from litellm import Message
 
 logger = logging.getLogger(__name__)
+
+
+class TokenCostAccumulator:
+    """Accumulator for tracking token usage and costs across multiple LLM calls."""
+
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        """Reset all accumulated values to zero."""
+        # Token counts
+        self.total_new_input_tokens = 0
+        self.total_output_tokens = 0
+        self.total_cache_read_tokens = 0
+        self.total_cache_write_tokens = 0
+
+        # Costs
+        self.total_new_input_cost = 0.0
+        self.total_cache_read_cost = 0.0
+        self.total_cache_write_cost = 0.0
+        self.total_output_cost = 0.0
+
+        # Call count
+        self.call_count = 0
+
+    def add_usage(self, input_tokens: int, output_tokens: int, cache_read_tokens: int,
+                  cache_write_tokens: int, new_input_cost: float, cache_read_cost: float,
+                  cache_write_cost: float, output_cost: float):
+        """Add usage statistics from a single LLM call."""
+        # Accumulate tokens
+        self.total_new_input_tokens += input_tokens
+        self.total_output_tokens += output_tokens
+        self.total_cache_read_tokens += cache_read_tokens
+        self.total_cache_write_tokens += cache_write_tokens
+
+        # Accumulate costs
+        self.total_new_input_cost += new_input_cost
+        self.total_cache_read_cost += cache_read_cost
+        self.total_cache_write_cost += cache_write_cost
+        self.total_output_cost += output_cost
+
+        # Increment call count
+        self.call_count += 1
+
+    @property
+    def total_tokens(self):
+        """Calculate total tokens across all types."""
+        return (self.total_new_input_tokens + self.total_output_tokens
+                + self.total_cache_read_tokens + self.total_cache_write_tokens)
+
+    @property
+    def total_input_cost(self):
+        """Calculate total input cost (new + cache read + cache write)."""
+        return self.total_new_input_cost + self.total_cache_read_cost + self.total_cache_write_cost
+
+    @property
+    def total_cost(self):
+        """Calculate total cost across all operations."""
+        return self.total_input_cost + self.total_output_cost
+
+    @property
+    def cache_savings(self):
+        """Calculate total cache savings (what cache reads would have cost at regular price)."""
+        if self.total_cache_read_tokens == 0:
+            return 0.0
+        # Estimate regular input cost per token from new input cost
+        if self.total_new_input_tokens > 0:
+            regular_cost_per_token = self.total_new_input_cost / self.total_new_input_tokens
+            return self.total_cache_read_tokens * (regular_cost_per_token - (self.total_cache_read_cost / self.total_cache_read_tokens))
+        return 0.0
+
+    @property
+    def cache_savings_percentage(self):
+        """Calculate cache savings as a percentage of what input cost would have been without caching."""
+        if self.total_cache_read_tokens == 0:
+            return 0.0
+        savings = self.cache_savings
+        total_input_without_cache = self.total_input_cost + savings
+        if total_input_without_cache > 0:
+            return (savings / total_input_without_cache) * 100
+        return 0.0
 
 
 class ExtendedLiteLlm(LiteLlm):
@@ -66,6 +149,8 @@ class ExtendedLiteLlm(LiteLlm):
 
     def __init__(self, model: str, **kwargs):
         super().__init__(model=model, **kwargs)
+        self.cost_accumulator = TokenCostAccumulator()
+        print(f"[EXTENDED] ExtendedLiteLlm initialized with model: {model}")
         logger.info(f"ExtendedLiteLlm initialized with model: {model}")
 
     def _add_cache_control_to_message(self, message: dict) -> None:
@@ -85,11 +170,15 @@ class ExtendedLiteLlm(LiteLlm):
                         "cache_control": {"type": "ephemeral"}
                     }
                 ]
+                print(f"[EXTENDED] Added cache_control to content for role: {message.get('role', 'unknown')}")
             elif isinstance(content, list):
                 # Add cache_control to existing content array
                 for item in content:
                     if isinstance(item, dict):
                         item['cache_control'] = {"type": "ephemeral"}
+                print(f"[EXTENDED] Added cache_control to content array for role: {message.get('role', 'unknown')}")
+        elif isinstance(message, dict):
+            print(f"[EXTENDED] Message has no content field for role: {message.get('role', 'unknown')}")
 
     def _apply_role_conversion_and_caching(self, messages: List[Message]) -> None:  # noqa: C901
         """Convert developer->system for non-OpenAI models and apply caching.
@@ -167,6 +256,8 @@ class ExtendedLiteLlm(LiteLlm):
             LlmResponse: The model response.
         """
         self._maybe_append_user_content(llm_request)
+        print(f"[EXTENDED] generate_content_async called for model: {self.model}")
+        logger.debug(_build_request_log(llm_request))
 
         # Get completion inputs
         messages, tools, response_format, generation_params = (
@@ -191,6 +282,7 @@ class ExtendedLiteLlm(LiteLlm):
         if generation_params:
             completion_args.update(generation_params)
 
+        print("DEBUG: Entering NON-STREAMING code branch")
         response = await self.llm_client.acompletion(**completion_args)
 
         # Call our override to capture cache tokens from raw response
@@ -252,6 +344,12 @@ class ExtendedLiteLlm(LiteLlm):
             print(f"  Input: ${total_input_cost:.6f} (New: ${new_input_cost:.6f}, Cache Read: ${cache_read_cost:.6f}, Cache Write: ${cache_write_cost:.6f})")
             print(f"  Output: ${output_cost:.6f}, Total: ${total_cost:.6f}")
 
+            # Add to accumulator
+            self.cost_accumulator.add_usage(
+                input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
+                new_input_cost, cache_read_cost, cache_write_cost, output_cost
+            )
+
             # Show savings only if we have cache read tokens
             if cache_read_tokens > 0:
                 # What the cached tokens would have cost at regular price
@@ -263,3 +361,44 @@ class ExtendedLiteLlm(LiteLlm):
                 print(f"  Cache Savings: ${cache_savings:.6f} ({savings_pct:.1f}%) from {cache_read_tokens} cached tokens")
         except Exception as e:
             logger.warning(f"Could not calculate costs: {e}")
+
+    def print_accumulated_stats(self):
+        """Print accumulated token usage and cost statistics across all calls."""
+        acc = self.cost_accumulator
+
+        if acc.call_count == 0:
+            print("No accumulated statistics available (no calls made yet).")
+            return
+
+        print(f"\n=== ACCUMULATED STATISTICS ({acc.call_count} calls) ===")
+
+        # Token usage summary
+        print("Total Token Usage:")
+        print(f"  New Input: {acc.total_new_input_tokens}, Output: {acc.total_output_tokens}")
+        print(f"  Cache Read: {acc.total_cache_read_tokens}, Cache Write: {acc.total_cache_write_tokens}")
+        print(f"  Total: {acc.total_tokens}")
+
+        # Cost summary
+        print("Total Cost Analysis:")
+        print(f"  Input: ${acc.total_input_cost:.6f} "
+              f"(New: ${acc.total_new_input_cost:.6f}, "
+              f"Cache Read: ${acc.total_cache_read_cost:.6f}, "
+              f"Cache Write: ${acc.total_cache_write_cost:.6f})")
+        print(f"  Output: ${acc.total_output_cost:.6f}, Total: ${acc.total_cost:.6f}")
+
+        # Cache savings summary
+        if acc.total_cache_read_tokens > 0:
+            savings = acc.cache_savings
+            savings_pct = acc.cache_savings_percentage
+            print(f"  Total Cache Savings: ${savings:.6f} ({savings_pct:.1f}%) from {acc.total_cache_read_tokens} cached tokens")
+
+        # Average per call
+        avg_cost = acc.total_cost / acc.call_count
+        avg_tokens = acc.total_tokens / acc.call_count
+        print(f"Average per call: ${avg_cost:.6f}, {avg_tokens:.1f} tokens")
+        print("=" * 50)
+
+    def reset_accumulated_stats(self):
+        """Reset accumulated statistics to start fresh."""
+        self.cost_accumulator.reset()
+        print("Accumulated statistics have been reset.")
