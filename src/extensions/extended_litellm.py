@@ -24,6 +24,7 @@
 from typing import List, AsyncGenerator
 import logging
 
+import litellm
 from google.adk.models.lite_llm import (
     LiteLlm, _get_completion_inputs, _build_request_log
 )
@@ -160,67 +161,6 @@ class ExtendedLiteLlm(LiteLlm):
                         # Add cache_control to content instead of message
                         self._add_cache_control_to_message(message)
 
-    def _log_usage_and_costs(self, response) -> LlmResponse:
-        """Override to extract cache-specific token metrics from raw LiteLLM response.
-
-        This method captures cache token data from the raw response before any processing.
-        Combines the working approach from temp.txt with current cost analysis.
-        """
-        print("[CACHE-EXTRACTION] Intercepting response for cache token extraction")
-
-        # Extract cache-specific metrics from the raw response (like temp.txt)
-        usage = response.get("usage", {})
-        print(f"[CACHE-EXTRACTION] Usage data: {usage}")
-        print(f"[CACHE-EXTRACTION] Usage type: {type(usage)}")
-
-        # Convert to dict for processing, handling both dict and Usage object cases
-        if isinstance(usage, dict):
-            usage_dict = usage
-            # Extract from dict
-            cache_read_input_tokens = (
-                usage_dict.get("cache_read_input_tokens", 0)
-                or usage_dict.get("cacheReadInputTokens", 0)
-                or usage_dict.get("cacheReadInputTokenCount", 0)
-            )
-            cache_write_input_tokens = (
-                usage_dict.get("cache_creation_input_tokens", 0)
-                or usage_dict.get("cacheWriteInputTokens", 0)
-                or usage_dict.get("cacheWriteInputTokenCount", 0)
-            )
-        elif hasattr(usage, '__dict__'):
-            # For Usage objects, access properties directly (they're not in __dict__)
-            cache_read_input_tokens = getattr(usage, 'cache_read_input_tokens', 0)
-            cache_write_input_tokens = getattr(usage, 'cache_creation_input_tokens', 0)
-
-            print("[CACHE-EXTRACTION] Direct property access:")
-            print(f"[CACHE-EXTRACTION]   cache_read_input_tokens: {cache_read_input_tokens}")
-            print(f"[CACHE-EXTRACTION]   cache_creation_input_tokens: {cache_write_input_tokens}")
-
-            # Convert to dict for _log_usage_and_costs, but add the cache fields manually
-            usage_dict = usage.__dict__.copy()
-            usage_dict['cache_read_input_tokens'] = cache_read_input_tokens
-            usage_dict['cache_creation_input_tokens'] = cache_write_input_tokens
-            print(f"[CACHE-EXTRACTION] Enhanced usage dict with cache tokens: {usage_dict.keys()}")
-        else:
-            print(f"[CACHE-EXTRACTION] Unknown usage type: {type(usage)}")
-            usage_dict = {}
-            cache_read_input_tokens = 0
-            cache_write_input_tokens = 0
-
-        # Extract cache tokens using the successful field names from temp.txt
-
-        if cache_read_input_tokens > 0 or cache_write_input_tokens > 0:
-            print("[CACHE-EXTRACTION] FOUND CACHE TOKENS!")
-            print(f"[CACHE-EXTRACTION]   Cache Read: {cache_read_input_tokens}")
-            print(f"[CACHE-EXTRACTION]   Cache Write: {cache_write_input_tokens}")
-
-            # Use our cost analysis method
-            self._log_usage_and_costs(usage_dict, "CACHE-EXTRACTION")
-        else:
-            print("[CACHE-EXTRACTION] No cache tokens found - may indicate caching not working")
-
-        print("[CACHE-EXTRACTION] Response processing completed")
-
     async def generate_content_async(  # noqa: C901
         self, llm_request: LlmRequest, stream: bool = False
     ) -> AsyncGenerator[LlmResponse, None]:
@@ -263,9 +203,73 @@ class ExtendedLiteLlm(LiteLlm):
         print("DEBUG: Entering NON-STREAMING code branch")
         response = await self.llm_client.acompletion(**completion_args)
 
-        # Capture cache tokens from raw response
-        self._log_usage_and_costs(response)
+        # Call our override to capture cache tokens from raw response
+        self._log_cost_analysis(response)
 
         # Call the parent method to get the standard LlmResponse
         from google.adk.models.lite_llm import _model_response_to_generate_content_response
         yield _model_response_to_generate_content_response(response)
+
+    def _log_cost_analysis(self, response) -> None:
+        """Log detailed cost analysis with cache token information."""
+
+        usage = response.get("usage", {})
+        if not usage:
+            return
+
+        # Extract tokens - handle both dict and Usage object cases
+        if isinstance(usage, dict):
+            input_tokens = usage.get("prompt_tokens", usage.get("input_tokens", 0))
+            output_tokens = usage.get("completion_tokens", usage.get("output_tokens", 0))
+            total_tokens = usage.get("total_tokens", input_tokens + output_tokens)
+            cache_read_tokens = usage.get("cache_read_input_tokens", 0)
+            cache_write_tokens = usage.get("cache_creation_input_tokens", 0)
+        elif hasattr(usage, '__dict__'):
+            # For Usage objects, access properties directly
+            input_tokens = getattr(usage, 'prompt_tokens', 0)
+            output_tokens = getattr(usage, 'completion_tokens', 0)
+            total_tokens = getattr(usage, 'total_tokens', input_tokens + output_tokens)
+            cache_read_tokens = getattr(usage, 'cache_read_input_tokens', 0)
+            cache_write_tokens = getattr(usage, 'cache_creation_input_tokens', 0)
+        else:
+            return
+
+        # Log basic usage
+        print("Token Usage:")
+        print(f"  Input: {input_tokens}, Output: {output_tokens}, Total: {total_tokens}")
+
+        # Only show cache info if there are cache tokens
+        if cache_read_tokens > 0 or cache_write_tokens > 0:
+            print(f"  Cache Read: {cache_read_tokens}, Cache Write: {cache_write_tokens}")
+
+        # Calculate and log costs
+        try:
+            model_info = litellm.get_model_info(self.model)
+
+            input_cost_per_token = model_info.get("input_cost_per_token", 3e-06)
+            output_cost_per_token = model_info.get("output_cost_per_token", 1.5e-05)
+            cache_read_cost_per_token = model_info.get("cache_read_input_token_cost", 3e-07)
+            cache_write_cost_per_token = model_info.get("cache_creation_input_token_cost", 3.75e-06)
+
+            # Calculate costs
+            regular_input_tokens = input_tokens - cache_read_tokens - cache_write_tokens
+
+            input_cost = (regular_input_tokens * input_cost_per_token
+                          + cache_read_tokens * cache_read_cost_per_token
+                          + cache_write_tokens * cache_write_cost_per_token)
+            output_cost = output_tokens * output_cost_per_token
+            total_cost = input_cost + output_cost
+
+            print("Cost Analysis:")
+            print(f"  Input: ${input_cost:.6f}, Output: ${output_cost:.6f}, Total: ${total_cost:.6f}")
+
+            # Show savings only if we have cache read tokens
+            if cache_read_tokens > 0:
+                potential_cost = cache_read_tokens * input_cost_per_token
+                actual_cache_cost = cache_read_tokens * cache_read_cost_per_token
+                savings = potential_cost - actual_cache_cost
+                savings_pct = (savings / potential_cost) * 100
+                print(f"  Cache Savings: ${savings:.6f} ({savings_pct:.1f}%) from {cache_read_tokens} tokens")
+
+        except Exception as e:
+            logger.warning(f"Could not calculate costs: {e}")
