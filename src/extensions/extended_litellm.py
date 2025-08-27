@@ -25,9 +25,7 @@ from typing import List, AsyncGenerator
 import logging
 
 import litellm
-from google.adk.models.lite_llm import (
-    LiteLlm, _get_completion_inputs, _build_request_log
-)
+from google.adk.models.lite_llm import LiteLlm, _get_completion_inputs
 from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
 from litellm import Message
@@ -152,8 +150,6 @@ class ExtendedLiteLlm(LiteLlm):
 
     def __init__(self, model: str, **kwargs):
         super().__init__(model=model, **kwargs)
-        print(f"[EXTENDED] ExtendedLiteLlm initialized with model: {model}")
-        logger.info(f"ExtendedLiteLlm initialized with model: {model}")
 
     def _add_cache_control_to_message(self, message: dict) -> None:
         """Add cache_control to message content for Anthropic API compatibility.
@@ -172,15 +168,11 @@ class ExtendedLiteLlm(LiteLlm):
                         "cache_control": {"type": "ephemeral"}
                     }
                 ]
-                print(f"[EXTENDED] Added cache_control to content for role: {message.get('role', 'unknown')}")
             elif isinstance(content, list):
                 # Add cache_control to existing content array
                 for item in content:
                     if isinstance(item, dict):
                         item['cache_control'] = {"type": "ephemeral"}
-                print(f"[EXTENDED] Added cache_control to content array for role: {message.get('role', 'unknown')}")
-        elif isinstance(message, dict):
-            print(f"[EXTENDED] Message has no content field for role: {message.get('role', 'unknown')}")
 
     def _apply_role_conversion_and_caching(self, messages: List[Message]) -> None:  # noqa: C901
         """Convert developer->system for non-OpenAI models and apply caching.
@@ -258,8 +250,6 @@ class ExtendedLiteLlm(LiteLlm):
             LlmResponse: The model response.
         """
         self._maybe_append_user_content(llm_request)
-        print(f"[EXTENDED] generate_content_async called for model: {self.model}")
-        logger.debug(_build_request_log(llm_request))
 
         # Get completion inputs
         messages, tools, response_format, generation_params = (
