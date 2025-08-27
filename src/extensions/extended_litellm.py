@@ -31,6 +31,7 @@ from google.adk.models.lite_llm import (
 from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
 from litellm import Message
+from pydantic import Field
 
 logger = logging.getLogger(__name__)
 
@@ -129,15 +130,14 @@ class ExtendedLiteLlm(LiteLlm):
     Supported providers:
     - Direct Anthropic API: Uses cache_control on message content
     - Bedrock Claude models: Uses cache_control on message content
-    - Other models: Work normally without caching but with cost tracking
 
     Example usage:
     ```python
-    # Anthropic Direct API - will apply cache_control automatically
-    model = ExtendedLiteLlm(model="anthropic/claude-3-5-sonnet-20241022")
-
-    # Bedrock Claude - will apply cache_control automatically
+    # Bedrock Claude - Works with all features and cost tracking
     model = ExtendedLiteLlm(model="bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0")
+
+    # Direct Anthropic - Works with all features and cost tracking
+    model = ExtendedLiteLlm(model="anthropic/claude-3-7-sonnet-20250219")
 
     # OpenAI - works with cost tracking (no caching applied)
     model = ExtendedLiteLlm(model="openai/gpt-4o")
@@ -147,9 +147,11 @@ class ExtendedLiteLlm(LiteLlm):
     ```
     """
 
+    cost_accumulator: TokenCostAccumulator = Field(default_factory=TokenCostAccumulator)
+    """Accumulator for tracking token usage and costs across multiple LLM calls."""
+
     def __init__(self, model: str, **kwargs):
         super().__init__(model=model, **kwargs)
-        self.cost_accumulator = TokenCostAccumulator()
         print(f"[EXTENDED] ExtendedLiteLlm initialized with model: {model}")
         logger.info(f"ExtendedLiteLlm initialized with model: {model}")
 
