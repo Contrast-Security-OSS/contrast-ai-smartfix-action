@@ -18,10 +18,10 @@ from typing import Optional, TYPE_CHECKING
 from typing_extensions import override
 from pydantic import Field, model_validator
 
-from .llm_agent import LlmAgent
+from google.adk.agents import LlmAgent
 
 if TYPE_CHECKING:
-    from ..models.extended_litellm import ExtendedLiteLlm
+    from .extended_litellm import ExtendedLiteLlm
 
 
 class ExtendedLlmAgent(LlmAgent):
@@ -34,8 +34,8 @@ class ExtendedLlmAgent(LlmAgent):
 
     Example usage:
     ```python
-    from google.adk.models.extended_litellm import ExtendedLiteLlm
-    from google.adk.agents.extended_llm_agent import ExtendedLlmAgent
+    from src.extensions.extended_litellm import ExtendedLiteLlm
+    from src.extensions.extended_llm_agent import ExtendedLlmAgent
 
     # Create the extended model
     model = ExtendedLiteLlm(model="bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0")
