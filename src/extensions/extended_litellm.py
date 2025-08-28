@@ -375,15 +375,15 @@ class ExtendedLiteLlm(LiteLlm):
                 "cache_write_tokens": acc.total_cache_write_tokens
             },
             "cost_analysis": {
-                "total_cost": round(acc.total_cost, 6),
-                "input_cost": round(acc.total_input_cost, 6),
-                "output_cost": round(acc.total_output_cost, 6),
-                "new_input_cost": round(acc.total_new_input_cost, 6),
-                "cache_read_cost": round(acc.total_cache_read_cost, 6),
-                "cache_write_cost": round(acc.total_cache_write_cost, 6)
+                "total_cost": f"${acc.total_cost:.6f}",
+                "input_cost": f"${acc.total_input_cost:.6f}",
+                "output_cost": f"${acc.total_output_cost:.6f}",
+                "new_input_cost": f"${acc.total_new_input_cost:.6f}",
+                "cache_read_cost": f"${acc.total_cache_read_cost:.6f}",
+                "cache_write_cost": f"${acc.total_cache_write_cost:.6f}"
             },
             "averages": {
-                "cost_per_call": round(acc.total_cost / acc.call_count, 6),
+                "cost_per_call": f"${acc.total_cost / acc.call_count:.6f}",
                 "tokens_per_call": round(acc.total_tokens / acc.call_count, 1)
             }
         }
@@ -393,7 +393,7 @@ class ExtendedLiteLlm(LiteLlm):
             savings = acc.cache_savings
             savings_pct = acc.cache_savings_percentage
             stats["cache_savings"] = {
-                "total_savings": round(savings, 6),
+                "total_savings": f"${savings:.6f}",
                 "savings_percentage": round(savings_pct, 1),
                 "cached_tokens_used": acc.total_cache_read_tokens
             }
