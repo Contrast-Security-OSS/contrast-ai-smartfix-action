@@ -207,3 +207,12 @@ class ExtendedLlmAgent(LlmAgent):
             'has_stats': self.has_extended_model(),
             'model_id': id(model),  # Python object ID for debugging
         }
+
+
+# Rebuild the model schema after ExtendedLiteLlm is available
+# This resolves forward references and ensures Pydantic can fully validate the model
+try:
+    ExtendedLlmAgent.model_rebuild()
+except ImportError:
+    # ExtendedLiteLlm not available, skip rebuild
+    pass
