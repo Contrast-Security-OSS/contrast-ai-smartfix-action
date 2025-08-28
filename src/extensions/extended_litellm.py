@@ -22,7 +22,7 @@
 #
 
 from typing import List, AsyncGenerator
-import logging
+import json
 
 import litellm
 from google.adk.models.lite_llm import LiteLlm, _get_completion_inputs
@@ -30,8 +30,7 @@ from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
 from litellm import Message
 from pydantic import Field
-
-logger = logging.getLogger(__name__)
+from src.utils import debug_log
 
 
 class TokenCostAccumulator:
@@ -308,10 +307,10 @@ class ExtendedLiteLlm(LiteLlm):
             return
 
         # Log basic usage
-        print("Token Usage:")
-        print(f"  New Input: {input_tokens}, Output: {output_tokens}")
-        print(f"  Cache Read: {cache_read_tokens}, Cache Write: {cache_write_tokens}")
-        print(f"  Total: {total_tokens}")
+        debug_log("Token Usage:")
+        debug_log(f"  New Input: {input_tokens}, Output: {output_tokens}")
+        debug_log(f"  Cache Read: {cache_read_tokens}, Cache Write: {cache_write_tokens}")
+        debug_log(f"  Total: {total_tokens}")
 
         # Calculate and log costs
         try:
@@ -331,9 +330,9 @@ class ExtendedLiteLlm(LiteLlm):
             output_cost = output_tokens * output_cost_per_token
             total_cost = total_input_cost + output_cost
 
-            print("Cost Analysis:")
-            print(f"  Input: ${total_input_cost:.6f} (New: ${new_input_cost:.6f}, Cache Read: ${cache_read_cost:.6f}, Cache Write: ${cache_write_cost:.6f})")
-            print(f"  Output: ${output_cost:.6f}, Total: ${total_cost:.6f}")
+            debug_log("Cost Analysis:")
+            debug_log(f"  Input: ${total_input_cost:.6f} (New: ${new_input_cost:.6f}, Cache Read: ${cache_read_cost:.6f}, Cache Write: ${cache_write_cost:.6f})")
+            debug_log(f"  Output: ${output_cost:.6f}, Total: ${total_cost:.6f}")
 
             # Add to accumulator
             self.cost_accumulator.add_usage(
@@ -349,47 +348,69 @@ class ExtendedLiteLlm(LiteLlm):
                 # Calculate what total input cost would have been without caching
                 total_input_without_cache = total_input_cost + cache_savings
                 savings_pct = (cache_savings / total_input_without_cache) * 100
-                print(f"  Cache Savings: ${cache_savings:.6f} ({savings_pct:.1f}%) from {cache_read_tokens} cached tokens")
+                debug_log(f"  Cache Savings: ${cache_savings:.6f} ({savings_pct:.1f}%) from {cache_read_tokens} cached tokens")
         except Exception as e:
-            logger.warning(f"Could not calculate costs: {e}")
+            debug_log(f"Could not calculate costs: {e}")
 
-    def print_accumulated_stats(self):
-        """Print accumulated token usage and cost statistics across all calls."""
+    def gather_accumulated_stats_dict(self) -> dict:
+        """Gather accumulated token usage and cost statistics as dictionary.
+
+        Returns:
+            dict: Dictionary containing accumulated statistics
+        """
         acc = self.cost_accumulator
 
         if acc.call_count == 0:
-            print("No accumulated statistics available (no calls made yet).")
-            return
+            return {"message": "No accumulated statistics available (no calls made yet)."}
 
-        print(f"\n=== ACCUMULATED STATISTICS ({acc.call_count} calls) ===")
+        # Build the statistics as a structured dictionary
+        stats = {
+            "summary": f"ACCUMULATED STATISTICS ({acc.call_count} calls)",
+            "call_count": acc.call_count,
+            "token_usage": {
+                "total_tokens": acc.total_tokens,
+                "new_input_tokens": acc.total_new_input_tokens,
+                "output_tokens": acc.total_output_tokens,
+                "cache_read_tokens": acc.total_cache_read_tokens,
+                "cache_write_tokens": acc.total_cache_write_tokens
+            },
+            "cost_analysis": {
+                "total_cost": round(acc.total_cost, 6),
+                "input_cost": round(acc.total_input_cost, 6),
+                "output_cost": round(acc.total_output_cost, 6),
+                "new_input_cost": round(acc.total_new_input_cost, 6),
+                "cache_read_cost": round(acc.total_cache_read_cost, 6),
+                "cache_write_cost": round(acc.total_cache_write_cost, 6)
+            },
+            "averages": {
+                "cost_per_call": round(acc.total_cost / acc.call_count, 6),
+                "tokens_per_call": round(acc.total_tokens / acc.call_count, 1)
+            }
+        }
 
-        # Token usage summary
-        print("Total Token Usage:")
-        print(f"  New Input: {acc.total_new_input_tokens}, Output: {acc.total_output_tokens}")
-        print(f"  Cache Read: {acc.total_cache_read_tokens}, Cache Write: {acc.total_cache_write_tokens}")
-        print(f"  Total: {acc.total_tokens}")
-
-        # Cost summary
-        print("Total Cost Analysis:")
-        print(f"  Input: ${acc.total_input_cost:.6f} "
-              f"(New: ${acc.total_new_input_cost:.6f}, "
-              f"Cache Read: ${acc.total_cache_read_cost:.6f}, "
-              f"Cache Write: ${acc.total_cache_write_cost:.6f})")
-        print(f"  Output: ${acc.total_output_cost:.6f}, Total: ${acc.total_cost:.6f}")
-
-        # Cache savings summary
+        # Add cache savings if available
         if acc.total_cache_read_tokens > 0:
             savings = acc.cache_savings
             savings_pct = acc.cache_savings_percentage
-            print(f"  Total Cache Savings: ${savings:.6f} ({savings_pct:.1f}%) from {acc.total_cache_read_tokens} cached tokens")
+            stats["cache_savings"] = {
+                "total_savings": round(savings, 6),
+                "savings_percentage": round(savings_pct, 1),
+                "cached_tokens_used": acc.total_cache_read_tokens
+            }
 
-        # Average per call
-        avg_cost = acc.total_cost / acc.call_count
-        avg_tokens = acc.total_tokens / acc.call_count
-        print(f"Average per call: ${avg_cost:.6f}, {avg_tokens:.1f} tokens")
-        print("=" * 50)
+        return stats
+
+    def gather_accumulated_stats(self) -> str:
+        """Gather accumulated token usage and cost statistics as JSON string.
+
+        Returns:
+            str: JSON formatted string containing accumulated statistics
+        """
+        stats = self.gather_accumulated_stats_dict()
+        # Convert to JSON string with proper formatting
+        return json.dumps(stats, indent=2)
 
     def reset_accumulated_stats(self):
         """Reset accumulated statistics to start fresh."""
         self.cost_accumulator.reset()
-        print("Accumulated statistics have been reset.")
+        debug_log("Accumulated statistics have been reset.")

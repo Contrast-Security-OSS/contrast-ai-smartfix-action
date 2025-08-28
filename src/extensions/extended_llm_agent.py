@@ -24,11 +24,12 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Optional, Any
 from typing_extensions import override
 from pydantic import Field, model_validator
 
 from google.adk.agents import LlmAgent
+from src.utils import debug_log
 
 # Import ExtendedLiteLlm at module level so it's available for model_rebuild()
 ExtendedLiteLlm = None
@@ -64,13 +65,16 @@ class ExtendedLlmAgent(LlmAgent):
     # Run agent tasks...
     result = await agent.run(...)
 
-    # Access accumulated statistics
-    agent.print_accumulated_stats()
+
+    # Get statistics as JSON string for programmatic use
+    stats_json = agent.gather_accumulated_stats()
+
+    # Reset statistics
     agent.reset_accumulated_stats()
     ```
     """
 
-    original_extended_model: Optional['ExtendedLiteLlm'] = Field(
+    original_extended_model: Optional[Any] = Field(
         default=None,
         exclude=True,
         description="Reference to the original ExtendedLiteLlm instance for stats access"
@@ -86,7 +90,7 @@ class ExtendedLlmAgent(LlmAgent):
             if isinstance(self.model, ExtendedLiteLlm):
                 # Store reference to the original instance
                 self.original_extended_model = self.model
-                print(f"[EXTENDED_AGENT] Preserved reference to ExtendedLiteLlm instance for agent: {self.name}")
+                debug_log(f"[EXTENDED_AGENT] Preserved reference to ExtendedLiteLlm instance for agent: {self.name}")
 
         except ImportError:
             # ExtendedLiteLlm not available, ignore
@@ -113,17 +117,20 @@ class ExtendedLlmAgent(LlmAgent):
         except ImportError:
             return False
 
-    def get_extended_model(self) -> Optional['ExtendedLiteLlm']:
+    def get_extended_model(self) -> Optional[Any]:
         """Get the ExtendedLiteLlm instance if available."""
         if self.has_extended_model():
             return self.canonical_model
         return None
 
-    def print_accumulated_stats(self) -> None:
-        """Print accumulated token usage and cost statistics.
+    def gather_accumulated_stats_dict(self) -> dict:
+        """Get accumulated token usage and cost statistics as dictionary.
 
-        This method provides access to the accumulated statistics from the
-        ExtendedLiteLlm instance being used by this agent.
+        This method provides programmatic access to the accumulated statistics
+        from the ExtendedLiteLlm instance being used by this agent.
+
+        Returns:
+            dict: Dictionary containing accumulated statistics
 
         Raises:
             ValueError: If the agent is not using an ExtendedLiteLlm model.
@@ -136,8 +143,29 @@ class ExtendedLlmAgent(LlmAgent):
                 f"Current model type: {type(self.canonical_model).__name__}"
             )
 
-        print(f"\n=== STATISTICS FOR AGENT: {self.name} ===")
-        extended_model.print_accumulated_stats()
+        return extended_model.gather_accumulated_stats_dict()
+
+    def gather_accumulated_stats(self) -> str:
+        """Get accumulated token usage and cost statistics as JSON string.
+
+        This method provides programmatic access to the accumulated statistics
+        from the ExtendedLiteLlm instance being used by this agent.
+
+        Returns:
+            str: JSON formatted string containing accumulated statistics
+
+        Raises:
+            ValueError: If the agent is not using an ExtendedLiteLlm model.
+        """
+        extended_model = self.get_extended_model()
+        if extended_model is None:
+            raise ValueError(
+                f"Agent '{self.name}' is not using an ExtendedLiteLlm model. "
+                "Cannot access accumulated statistics. "
+                f"Current model type: {type(self.canonical_model).__name__}"
+            )
+
+        return extended_model.gather_accumulated_stats()
 
     def reset_accumulated_stats(self) -> None:
         """Reset accumulated statistics to start fresh.
@@ -153,7 +181,7 @@ class ExtendedLlmAgent(LlmAgent):
                 f"Current model type: {type(self.canonical_model).__name__}"
             )
 
-        print(f"Resetting accumulated statistics for agent: {self.name}")
+        debug_log(f"Resetting accumulated statistics for agent: {self.name}")
         extended_model.reset_accumulated_stats()
 
     def get_accumulated_stats_summary(self) -> dict:

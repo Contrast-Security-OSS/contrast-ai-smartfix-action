@@ -274,25 +274,7 @@ async def _check_event_limit(event_count: int, agent_type: str, max_events_limit
     return None, False
 
 
-def _extract_token_usage(event) -> tuple:
-    """Extract token usage information from event metadata."""
-    total_tokens = 0
-    prompt_tokens = 0
-    output_tokens = 0
-
-    if event.usage_metadata is not None:
-        debug_log(f"Event usage metadata for this message: {event.usage_metadata}")
-        if hasattr(event.usage_metadata, "total_token_count"):
-            total_tokens = event.usage_metadata.total_token_count
-        if hasattr(event.usage_metadata, "prompt_token_count"):
-            prompt_tokens = event.usage_metadata.prompt_token_count
-        if total_tokens > 0 and prompt_tokens > 0:
-            output_tokens = total_tokens - prompt_tokens
-
-    return total_tokens, prompt_tokens, output_tokens
-
-
-def _process_agent_content(event, agent_type: str, prompt_tokens: int, output_tokens: int, total_tokens: int) -> str:
+def _process_agent_content(event, agent_type: str) -> str:
     """Process agent content/message from event."""
     if not event.content:
         return None
@@ -305,7 +287,6 @@ def _process_agent_content(event, agent_type: str, prompt_tokens: int, output_to
 
     if message_text:
         log(f"\n*** {agent_type.upper()} Agent Message: \033[1;36m {message_text} \033[0m")
-        log(f"Tokens statistics. prompt tokens: {prompt_tokens}, output tokens {output_tokens}, total tokens: {total_tokens}")
         return message_text
 
     return None
@@ -362,11 +343,8 @@ async def _process_agent_event(event, event_count: int, agent_type: str, max_eve
     if should_break:
         return 0, 0, 0, final_response, should_break
 
-    # Extract token usage information
-    total_tokens, prompt_tokens, output_tokens = _extract_token_usage(event)
-
     # Process agent content/message
-    content_response = _process_agent_content(event, agent_type, prompt_tokens, output_tokens, total_tokens)
+    content_response = _process_agent_content(event, agent_type)
     if content_response:
         final_response = content_response
 
@@ -374,7 +352,7 @@ async def _process_agent_event(event, event_count: int, agent_type: str, max_eve
     _process_function_calls(event, agent_type, agent_tool_calls_telemetry)
     _process_function_responses(event, agent_type, agent_tool_calls_telemetry)
 
-    return total_tokens, prompt_tokens, output_tokens, final_response, False
+    return final_response, False
 
 
 async def _handle_agent_exception(e: Exception, events_async, remediation_id: str) -> bool:
@@ -402,7 +380,7 @@ async def _handle_agent_exception(e: Exception, events_async, remediation_id: st
     return is_asyncio_error
 
 
-async def process_agent_run(runner, session, user_query, remediation_id: str, agent_type: str = None) -> str:
+async def process_agent_run(runner, agent, session, user_query, remediation_id: str, agent_type: str = None) -> str:
     """Runs the agent, allowing it to use tools, and returns the final text response."""
     agent_event_actions = []
     start_time = datetime.datetime.now()
@@ -414,7 +392,6 @@ async def process_agent_run(runner, session, user_query, remediation_id: str, ag
 
     # Initialize tracking variables
     event_count = 0
-    total_tokens = 0
     final_response = "AI agent did not provide a final summary."
     max_events_limit = config.MAX_EVENTS_PER_AGENT
 
@@ -436,12 +413,9 @@ async def process_agent_run(runner, session, user_query, remediation_id: str, ag
             event_count += 1
 
             # Process the event and get updated state
-            event_tokens, event_prompt_tokens, event_output_tokens, event_response, should_break = \
+            event_response, should_break = \
                 await _process_agent_event(event, event_count, agent_type, max_events_limit, agent_tool_calls_telemetry)
 
-            # Update tracking variables
-            if event_tokens > 0:
-                total_tokens = event_tokens
             if event_response:
                 final_response = event_response
 
@@ -484,6 +458,20 @@ async def process_agent_run(runner, session, user_query, remediation_id: str, ag
         debug_log(f"Closing MCP server connections for {agent_type.upper()} agent...")
         log(f"{agent_type.upper()} agent run finished.")
 
+        # Get accumulated statistics for telemetry
+        try:
+            stats_data = agent.gather_accumulated_stats_dict()
+            debug_log(agent.gather_accumulated_stats())  # Log the JSON formatted version
+
+            # Extract telemetry values directly from the dictionary
+            total_tokens = stats_data.get("token_usage", {}).get("total_tokens", 0)
+            total_cost = stats_data.get("cost_analysis", {}).get("total_cost", 0.0)
+        except (ValueError, KeyError, AttributeError) as e:
+            # Fallback values if stats retrieval fails
+            debug_log(f"Could not retrieve statistics: {e}")
+            total_tokens = 0
+            total_cost = 0.0
+
         # Directly assign toolCalls rather than appending, to avoid nested arrays
         agent_event_telemetry["toolCalls"] = agent_tool_calls_telemetry
         agent_event_actions.append(agent_event_telemetry)
@@ -494,8 +482,8 @@ async def process_agent_run(runner, session, user_query, remediation_id: str, ag
             "agentType": agent_type.upper(),
             "result": agent_run_result,
             "actions": agent_event_actions,
-            "totalTokens": total_tokens,  # Use the tracked token count from latest event
-            "totalCost": 0.0  # Placeholder still as cost calculation would need more info
+            "totalTokens": total_tokens,
+            "totalCost": total_cost
         }
         telemetry_handler.add_agent_event(agent_event_payload)
 
@@ -984,9 +972,7 @@ async def _run_agent_internal_with_prompts(agent_type: str, repo_root: Path, que
     )
 
     # Pass the full model ID (though not used for cost calculation anymore, kept for consistency if needed elsewhere)
-    summary = await process_agent_run(runner, session, query, remediation_id, agent_type)
-    agent.print_accumulated_stats()
-
+    summary = await process_agent_run(runner, agent, session, query, remediation_id, agent_type)
     return summary
 
 # This patch is now handled in src/asyncio_win_patch.py and called from main.py
