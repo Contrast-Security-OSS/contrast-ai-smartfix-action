@@ -1,27 +1,41 @@
-# Copyright 2025 Google LLC
+# -
+# #%L
+# Extended LLM Agent
+# %%
+# Copyright (C) 2025 Contrast Security, Inc.
+# %%
+# This work is a derivative of Google's ADK LlmAgent class, which is
+# Copyright 2025 Google LLC and licensed under the Apache License, Version 2.0.
+# Original source: https://github.com/google/adk-python
+# %%
+# Contact: support@contrastsecurity.com
+# License: Commercial
+# NOTICE: This Software and the patented inventions embodied within may only be
+# used as part of Contrast Security's commercial offerings. Even though it is
+# made available through public repositories, use of this Software is subject to
+# the applicable End User Licensing Agreement found at
+# https://www.contrastsecurity.com/enduser-terms-0317a or as otherwise agreed
+# between Contrast Security and the End User. The Software may not be reverse
+# engineered, modified, repackaged, sold, redistributed or otherwise used in a
+# way not consistent with the End User License Agreement.
+# #L%
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+
 
 from __future__ import annotations
 
-from typing import Optional, TYPE_CHECKING
+from typing import Optional
 from typing_extensions import override
 from pydantic import Field, model_validator
 
 from google.adk.agents import LlmAgent
 
-if TYPE_CHECKING:
+# Import ExtendedLiteLlm at module level so it's available for model_rebuild()
+ExtendedLiteLlm = None
+try:
     from .extended_litellm import ExtendedLiteLlm
+except ImportError:
+    pass
 
 
 class ExtendedLlmAgent(LlmAgent):
@@ -211,8 +225,10 @@ class ExtendedLlmAgent(LlmAgent):
 
 # Rebuild the model schema after ExtendedLiteLlm is available
 # This resolves forward references and ensures Pydantic can fully validate the model
-try:
-    ExtendedLlmAgent.model_rebuild()
-except ImportError:
-    # ExtendedLiteLlm not available, skip rebuild
-    pass
+if ExtendedLiteLlm is not None:
+    try:
+        ExtendedLlmAgent.model_rebuild()
+    except Exception:
+        # If rebuild fails for any reason, just continue
+        # The class will still work, just without perfect type validation
+        pass
