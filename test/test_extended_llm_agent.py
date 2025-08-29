@@ -35,14 +35,14 @@ from unittest.mock import Mock, patch, MagicMock
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # Now import project modules (after path modification)
-from src.config import reset_config, get_config  # noqa: E402
+from src.config import get_config  # noqa: E402
 
 # Initialize config with testing flag
 _ = get_config(testing=True)
 
 # Import the classes under test AFTER config initialization
 from src.extensions.extended_llm_agent import ExtendedLlmAgent  # noqa: E402
-from src.extensions.extended_litellm import ExtendedLiteLlm, TokenCostAccumulator  # noqa: E402
+from src.extensions.extended_litellm import ExtendedLiteLlm  # noqa: E402
 
 
 class TestExtendedLlmAgentFunctionality(unittest.TestCase):

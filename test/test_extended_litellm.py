@@ -32,13 +32,13 @@ import sys
 import unittest
 import json
 import os
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import patch
 
 # Add project root to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # Now import project modules (after path modification)
-from src.config import reset_config, get_config  # noqa: E402
+from src.config import get_config  # noqa: E402
 
 # Initialize config with testing flag
 _ = get_config(testing=True)
