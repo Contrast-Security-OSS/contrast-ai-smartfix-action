@@ -465,7 +465,15 @@ async def process_agent_run(runner, agent, session, user_query, remediation_id: 
 
             # Extract telemetry values directly from the dictionary
             total_tokens = stats_data.get("token_usage", {}).get("total_tokens", 0)
-            total_cost = stats_data.get("cost_analysis", {}).get("total_cost", 0.0)
+            raw_total_cost = stats_data.get("cost_analysis", {}).get("total_cost", 0.0)
+
+            # Remove "$" prefix if present and convert to float
+            if isinstance(raw_total_cost, str) and raw_total_cost.startswith("$"):
+                total_cost = float(raw_total_cost[1:])
+            elif isinstance(raw_total_cost, str):
+                total_cost = float(raw_total_cost)
+            else:
+                total_cost = raw_total_cost
         except (ValueError, KeyError, AttributeError) as e:
             # Fallback values if stats retrieval fails
             debug_log(f"Could not retrieve statistics: {e}")
