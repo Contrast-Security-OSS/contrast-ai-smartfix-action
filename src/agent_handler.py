@@ -340,6 +340,7 @@ async def _process_agent_event(event, event_count: int, agent_type: str, max_eve
 
     # Check if we've exceeded the event limit
     final_response, should_break = await _check_event_limit(event_count, agent_type, max_events_limit)
+    if should_break:
         return final_response, should_break
 
     # Process agent content/message
