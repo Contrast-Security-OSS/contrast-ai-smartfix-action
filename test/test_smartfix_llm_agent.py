@@ -19,9 +19,9 @@
 #
 
 """
-Unit tests for ExtendedLlmAgent class.
+Unit tests for SmartFixLlmAgent class.
 
-This module tests the ExtendedLlmAgent functionality with focused tests on
+This module tests the SmartFixLlmAgent functionality with focused tests on
 the extension logic without complex ADK dependencies.
 """
 
@@ -41,62 +41,62 @@ from src.config import get_config  # noqa: E402
 _ = get_config(testing=True)
 
 # Import the classes under test AFTER config initialization
-from src.extensions.extended_llm_agent import ExtendedLlmAgent  # noqa: E402
-from src.extensions.extended_litellm import ExtendedLiteLlm  # noqa: E402
+from src.extensions.smartfix_llm_agent import SmartFixLlmAgent  # noqa: E402
+from src.extensions.smartfix_litellm import SmartFixLiteLlm  # noqa: E402
 
 
-class TestExtendedLlmAgentFunctionality(unittest.TestCase):
-    """Test cases focusing on ExtendedLlmAgent specific functionality."""
+class TestSmartFixLlmAgentFunctionality(unittest.TestCase):
+    """Test cases focusing on SmartFixLlmAgent specific functionality."""
 
     def test_has_extended_model_true(self):
-        """Test has_extended_model returns True when ExtendedLiteLlm reference exists."""
+        """Test has_extended_model returns True when SmartFixLiteLlm reference exists."""
         # Test the method logic directly without full object instantiation
         agent = MagicMock()
-        agent.canonical_model = Mock(spec=ExtendedLiteLlm)
+        agent.canonical_model = Mock(spec=SmartFixLiteLlm)
 
         # Apply the real method to our mock
-        result = ExtendedLlmAgent.has_extended_model(agent)
+        result = SmartFixLlmAgent.has_extended_model(agent)
         self.assertTrue(result)
 
     def test_has_extended_model_false(self):
-        """Test has_extended_model returns False when no ExtendedLiteLlm reference exists."""
+        """Test has_extended_model returns False when no SmartFixLiteLlm reference exists."""
         agent = MagicMock()
-        agent.canonical_model = Mock()  # Not an ExtendedLiteLlm
+        agent.canonical_model = Mock()  # Not a SmartFixLiteLlm
 
-        result = ExtendedLlmAgent.has_extended_model(agent)
+        result = SmartFixLlmAgent.has_extended_model(agent)
         self.assertFalse(result)
 
     def test_get_extended_model_with_reference(self):
-        """Test get_extended_model returns the canonical model when it's ExtendedLiteLlm."""
+        """Test get_extended_model returns the canonical model when it's SmartFixLiteLlm."""
         agent = MagicMock()
-        mock_extended_model = Mock(spec=ExtendedLiteLlm)
+        mock_extended_model = Mock(spec=SmartFixLiteLlm)
         agent.canonical_model = mock_extended_model
 
         # Mock has_extended_model to return True
-        with patch.object(ExtendedLlmAgent, 'has_extended_model', return_value=True):
-            result = ExtendedLlmAgent.get_extended_model(agent)
+        with patch.object(SmartFixLlmAgent, 'has_extended_model', return_value=True):
+            result = SmartFixLlmAgent.get_extended_model(agent)
             self.assertIs(result, mock_extended_model)
 
     def test_reset_accumulated_stats_with_extended_model(self):
-        """Test that reset delegates to ExtendedLiteLlm model."""
+        """Test that reset delegates to SmartFixLiteLlm model."""
         agent = MagicMock()
-        mock_extended_model = Mock(spec=ExtendedLiteLlm)
+        mock_extended_model = Mock(spec=SmartFixLiteLlm)
 
         # The real method calls get_extended_model first
         with patch.object(agent, 'get_extended_model', return_value=mock_extended_model):
-            ExtendedLlmAgent.reset_accumulated_stats(agent)
+            SmartFixLlmAgent.reset_accumulated_stats(agent)
             # Should delegate to the extended model's reset method
             mock_extended_model.reset_accumulated_stats.assert_called_once()
 
 
-class TestExtendedLlmAgentIntegration(unittest.TestCase):
-    """Integration tests for ExtendedLlmAgent with real ExtendedLiteLlm instances."""
+class TestSmartFixLlmAgentIntegration(unittest.TestCase):
+    """Integration tests for SmartFixLlmAgent with real SmartFixLiteLlm instances."""
 
     @patch('litellm.completion')
     def test_extended_model_delegation_logic(self, mock_completion):
-        """Test that ExtendedLlmAgent logic works with ExtendedLiteLlm."""
-        # Create a real ExtendedLiteLlm instance
-        extended_model = ExtendedLiteLlm(model="test-model")
+        """Test that SmartFixLlmAgent logic works with SmartFixLiteLlm."""
+        # Create a real SmartFixLiteLlm instance
+        extended_model = SmartFixLiteLlm(model="test-model")
 
         # Add some usage to the accumulator to simulate usage
         extended_model.cost_accumulator.add_usage(
@@ -133,8 +133,8 @@ class TestExtendedLlmAgentIntegration(unittest.TestCase):
     @patch('litellm.completion')
     def test_model_info_functionality(self, mock_completion):
         """Test get_model_info provides correct information."""
-        # Create a real ExtendedLiteLlm instance
-        extended_model = ExtendedLiteLlm(model="test-model-id")
+        # Create a real SmartFixLiteLlm instance
+        extended_model = SmartFixLiteLlm(model="test-model-id")
 
         # Create a mock agent
         agent = MagicMock()
@@ -142,11 +142,11 @@ class TestExtendedLlmAgentIntegration(unittest.TestCase):
         agent.canonical_model = extended_model
         agent.original_extended_model = extended_model
 
-        result = ExtendedLlmAgent.get_model_info(agent)
+        result = SmartFixLlmAgent.get_model_info(agent)
 
         self.assertEqual(result['agent_name'], "test-agent")
         self.assertEqual(result['model_name'], "test-model-id")
-        self.assertEqual(result['model_type'], "ExtendedLiteLlm")
+        self.assertEqual(result['model_type'], "SmartFixLiteLlm")
         self.assertTrue(result['is_extended'])
         self.assertTrue(result['has_stats'])
         self.assertIn('model_id', result)

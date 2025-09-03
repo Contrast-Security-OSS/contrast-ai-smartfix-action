@@ -1,6 +1,6 @@
 # -
 # #%L
-# Extended LLM Agent
+# SmartFix LLM Agent
 # %%
 # Copyright (C) 2025 Contrast Security, Inc.
 # %%
@@ -31,32 +31,32 @@ from pydantic import Field, model_validator
 from google.adk.agents import LlmAgent
 from src.utils import debug_log
 
-# Import ExtendedLiteLlm at module level so it's available for model_rebuild()
-ExtendedLiteLlm = None
+# Import SmartFixLiteLlm at module level so it's available for model_rebuild()
+SmartFixLiteLlm = None
 try:
-    from .extended_litellm import ExtendedLiteLlm
+    from .smartfix_litellm import SmartFixLiteLlm
 except ImportError:
     pass
 
 
-class ExtendedLlmAgent(LlmAgent):
-    """Extended LLM Agent that preserves ExtendedLiteLlm statistics across calls.
+class SmartFixLlmAgent(LlmAgent):
+    """SmartFix LLM Agent that preserves SmartFixLiteLlm statistics across calls.
 
-    This class solves the issue where ExtendedLiteLlm accumulated statistics
+    This class solves the issue where SmartFixLiteLlm accumulated statistics
     aren't preserved when using the model within a Google ADK Agent. It ensures
-    that the same ExtendedLiteLlm instance is used for all LLM calls and provides
+    that the same SmartFixLiteLlm instance is used for all LLM calls and provides
     convenient methods to access accumulated statistics.
 
     Example usage:
     ```python
-    from src.extensions.extended_litellm import ExtendedLiteLlm
-    from src.extensions.extended_llm_agent import ExtendedLlmAgent
+    from src.extensions.smartfix_litellm import SmartFixLiteLlm
+    from src.extensions.smartfix_llm_agent import SmartFixLlmAgent
 
     # Create the extended model
-    model = ExtendedLiteLlm(model="bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0")
+    model = SmartFixLiteLlm(model="bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0")
 
     # Create the extended agent
-    agent = ExtendedLlmAgent(
+    agent = SmartFixLlmAgent(
         name="my-agent",
         model=model,
         instruction="You are a helpful assistant."
@@ -77,23 +77,23 @@ class ExtendedLlmAgent(LlmAgent):
     original_extended_model: Optional[Any] = Field(
         default=None,
         exclude=True,
-        description="Reference to the original ExtendedLiteLlm instance for stats access"
+        description="Reference to the original SmartFixLiteLlm instance for stats access"
     )
 
     @model_validator(mode='after')
     def _preserve_extended_model_reference(self):
-        """Preserve a reference to the ExtendedLiteLlm instance if provided."""
+        """Preserve a reference to the SmartFixLiteLlm instance if provided."""
         # Import here to avoid circular imports
         try:
-            from .extended_litellm import ExtendedLiteLlm
+            from .smartfix_litellm import SmartFixLiteLlm
 
-            if isinstance(self.model, ExtendedLiteLlm):
+            if isinstance(self.model, SmartFixLiteLlm):
                 # Store reference to the original instance
                 self.original_extended_model = self.model
-                debug_log(f"[EXTENDED_AGENT] Preserved reference to ExtendedLiteLlm instance for agent: {self.name}")
+                debug_log(f"[SMARTFIX_AGENT] Preserved reference to SmartFixLiteLlm instance for agent: {self.name}")
 
         except ImportError:
-            # ExtendedLiteLlm not available, ignore
+            # SmartFixLiteLlm not available, ignore
             pass
 
         return self
@@ -101,8 +101,8 @@ class ExtendedLlmAgent(LlmAgent):
     @override
     @property
     def canonical_model(self):
-        """Override to ensure we return the original ExtendedLiteLlm instance."""
-        # If we have a preserved ExtendedLiteLlm instance, return it
+        """Override to ensure we return the original SmartFixLiteLlm instance."""
+        # If we have a preserved SmartFixLiteLlm instance, return it
         if self.original_extended_model is not None:
             return self.original_extended_model
 
@@ -110,15 +110,15 @@ class ExtendedLlmAgent(LlmAgent):
         return super().canonical_model
 
     def has_extended_model(self) -> bool:
-        """Check if this agent is using an ExtendedLiteLlm model."""
+        """Check if this agent is using an SmartFixLiteLlm model."""
         try:
-            from .extended_litellm import ExtendedLiteLlm
-            return isinstance(self.canonical_model, ExtendedLiteLlm)
+            from .smartfix_litellm import SmartFixLiteLlm
+            return isinstance(self.canonical_model, SmartFixLiteLlm)
         except ImportError:
             return False
 
     def get_extended_model(self) -> Optional[Any]:
-        """Get the ExtendedLiteLlm instance if available."""
+        """Get the SmartFixLiteLlm instance if available."""
         if self.has_extended_model():
             return self.canonical_model
         return None
@@ -127,18 +127,18 @@ class ExtendedLlmAgent(LlmAgent):
         """Get accumulated token usage and cost statistics as dictionary.
 
         This method provides programmatic access to the accumulated statistics
-        from the ExtendedLiteLlm instance being used by this agent.
+        from the SmartFixLiteLlm instance being used by this agent.
 
         Returns:
             dict: Dictionary containing accumulated statistics
 
         Raises:
-            ValueError: If the agent is not using an ExtendedLiteLlm model.
+            ValueError: If the agent is not using an SmartFixLiteLlm model.
         """
         extended_model = self.get_extended_model()
         if extended_model is None:
             raise ValueError(
-                f"Agent '{self.name}' is not using an ExtendedLiteLlm model. "
+                f"Agent '{self.name}' is not using an SmartFixLiteLlm model. "
                 "Cannot access accumulated statistics. "
                 f"Current model type: {type(self.canonical_model).__name__}"
             )
@@ -149,18 +149,18 @@ class ExtendedLlmAgent(LlmAgent):
         """Get accumulated token usage and cost statistics as JSON string.
 
         This method provides programmatic access to the accumulated statistics
-        from the ExtendedLiteLlm instance being used by this agent.
+        from the SmartFixLiteLlm instance being used by this agent.
 
         Returns:
             str: JSON formatted string containing accumulated statistics
 
         Raises:
-            ValueError: If the agent is not using an ExtendedLiteLlm model.
+            ValueError: If the agent is not using an SmartFixLiteLlm model.
         """
         extended_model = self.get_extended_model()
         if extended_model is None:
             raise ValueError(
-                f"Agent '{self.name}' is not using an ExtendedLiteLlm model. "
+                f"Agent '{self.name}' is not using an SmartFixLiteLlm model. "
                 "Cannot access accumulated statistics. "
                 f"Current model type: {type(self.canonical_model).__name__}"
             )
@@ -171,12 +171,12 @@ class ExtendedLlmAgent(LlmAgent):
         """Reset accumulated statistics to start fresh.
 
         Raises:
-            ValueError: If the agent is not using an ExtendedLiteLlm model.
+            ValueError: If the agent is not using an SmartFixLiteLlm model.
         """
         extended_model = self.get_extended_model()
         if extended_model is None:
             raise ValueError(
-                f"Agent '{self.name}' is not using an ExtendedLiteLlm model. "
+                f"Agent '{self.name}' is not using an SmartFixLiteLlm model. "
                 "Cannot reset accumulated statistics. "
                 f"Current model type: {type(self.canonical_model).__name__}"
             )
@@ -197,12 +197,12 @@ class ExtendedLlmAgent(LlmAgent):
                 - And more detailed breakdowns
 
         Raises:
-            ValueError: If the agent is not using an ExtendedLiteLlm model.
+            ValueError: If the agent is not using an SmartFixLiteLlm model.
         """
         extended_model = self.get_extended_model()
         if extended_model is None:
             raise ValueError(
-                f"Agent '{self.name}' is not using an ExtendedLiteLlm model. "
+                f"Agent '{self.name}' is not using an SmartFixLiteLlm model. "
                 "Cannot access accumulated statistics. "
                 f"Current model type: {type(self.canonical_model).__name__}"
             )
@@ -236,7 +236,7 @@ class ExtendedLlmAgent(LlmAgent):
             dict: Dictionary containing model information including:
                 - model_name: The model name/identifier
                 - model_type: The class name of the model
-                - is_extended: Whether it's an ExtendedLiteLlm instance
+                - is_extended: Whether it's an SmartFixLiteLlm instance
                 - has_stats: Whether accumulated statistics are available
         """
         model = self.canonical_model
@@ -251,11 +251,11 @@ class ExtendedLlmAgent(LlmAgent):
         }
 
 
-# Rebuild the model schema after ExtendedLiteLlm is available
+# Rebuild the model schema after SmartFixLiteLlm is available
 # This resolves forward references and ensures Pydantic can fully validate the model
-if ExtendedLiteLlm is not None:
+if SmartFixLiteLlm is not None:
     try:
-        ExtendedLlmAgent.model_rebuild()
+        SmartFixLlmAgent.model_rebuild()
     except Exception:
         # If rebuild fails for any reason, just continue
         # The class will still work, just without perfect type validation

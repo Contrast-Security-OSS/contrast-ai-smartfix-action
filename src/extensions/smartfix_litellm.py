@@ -1,6 +1,6 @@
 # -
 # #%L
-# Extended LiteLLM with Prompt Caching
+# SmartFix LiteLLM with Prompt Caching
 # %%
 # Copyright (C) 2025 Contrast Security, Inc.
 # %%
@@ -58,7 +58,7 @@ class TokenCostAccumulator:
 
     def add_usage(self, input_tokens: int, output_tokens: int, cache_read_tokens: int,
                   cache_write_tokens: int, new_input_cost: float, cache_read_cost: float,
-                  cache_write_cost: float, output_cost: float):
+                  cache_write_cost: float, output_cost: float) -> None:
         """Add usage statistics from a single LLM call."""
         # Accumulate tokens
         self.total_new_input_tokens += input_tokens
@@ -114,8 +114,8 @@ class TokenCostAccumulator:
         return 0.0
 
 
-class ExtendedLiteLlm(LiteLlm):
-    """Extended LiteLlm with automatic prompt caching and comprehensive cost analysis.
+class SmartFixLiteLlm(LiteLlm):
+    """SmartFix LiteLlm with automatic prompt caching and comprehensive cost analysis.
 
     This class extends the base LiteLlm to automatically apply prompt caching
     and provide detailed cost analysis for all LLM interactions:
@@ -131,16 +131,16 @@ class ExtendedLiteLlm(LiteLlm):
     Example usage:
     ```python
     # Bedrock Claude - Works with all features and cost tracking
-    model = ExtendedLiteLlm(model="bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0")
+    model = SmartFixLiteLlm(model="bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0")
 
     # Direct Anthropic - Works with all features and cost tracking
-    model = ExtendedLiteLlm(model="anthropic/claude-3-7-sonnet-20250219")
+    model = SmartFixLiteLlm(model="anthropic/claude-3-7-sonnet-20250219")
 
     # OpenAI - works with cost tracking (no caching applied)
-    model = ExtendedLiteLlm(model="openai/gpt-4o")
+    model = SmartFixLiteLlm(model="openai/gpt-4o")
 
     # Other models - work normally with cost tracking
-    model = ExtendedLiteLlm(model="gemini/gemini-1.5-pro")
+    model = SmartFixLiteLlm(model="gemini/gemini-1.5-pro")
     ```
     """
 

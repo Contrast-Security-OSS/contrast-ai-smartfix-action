@@ -19,7 +19,7 @@
 #
 
 """
-Unit tests for ExtendedLiteLlm and TokenCostAccumulator classes.
+Unit tests for SmartFixLiteLlm and TokenCostAccumulator classes.
 
 This module tests the extended LiteLLM functionality including:
 - Token cost accumulation and statistics gathering
@@ -44,7 +44,7 @@ from src.config import get_config  # noqa: E402
 _ = get_config(testing=True)
 
 # Import the classes under test AFTER config initialization
-from src.extensions.extended_litellm import ExtendedLiteLlm, TokenCostAccumulator  # noqa: E402
+from src.extensions.smartfix_litellm import SmartFixLiteLlm, TokenCostAccumulator  # noqa: E402
 
 
 class TestTokenCostAccumulator(unittest.TestCase):
@@ -262,21 +262,21 @@ class TestTokenCostAccumulator(unittest.TestCase):
         self.assertEqual(self.accumulator.call_count, 0)
 
 
-class TestExtendedLiteLlm(unittest.TestCase):
-    """Test cases for ExtendedLiteLlm class."""
+class TestSmartFixLiteLlm(unittest.TestCase):
+    """Test cases for SmartFixLiteLlm class."""
 
     def setUp(self):
         """Set up test fixtures before each test method."""
         # Mock LiteLlm initialization to avoid dependencies
         with patch('litellm.completion'):
-            self.extended_model = ExtendedLiteLlm(model="test-model")
+            self.extended_model = SmartFixLiteLlm(model="test-model")
 
     def test_initialization(self):
-        """Test that ExtendedLiteLlm initializes correctly."""
+        """Test that SmartFixLiteLlm initializes correctly."""
         self.assertEqual(self.extended_model.model, "test-model")
         self.assertIsInstance(self.extended_model.cost_accumulator, TokenCostAccumulator)
 
-    @patch('src.extensions.extended_litellm.debug_log')
+    @patch('src.extensions.smartfix_litellm.debug_log')
     def test_gather_accumulated_stats_dict(self, mock_debug_log):
         """Test statistics dictionary generation."""
         # Add some usage to the accumulator
@@ -299,7 +299,7 @@ class TestExtendedLiteLlm(unittest.TestCase):
         self.assertIn('cost_analysis', stats)
         self.assertIn('averages', stats)
 
-    @patch('src.extensions.extended_litellm.debug_log')
+    @patch('src.extensions.smartfix_litellm.debug_log')
     def test_gather_accumulated_stats_json(self, mock_debug_log):
         """Test JSON statistics generation."""
         # Add some usage to the accumulator
@@ -321,7 +321,7 @@ class TestExtendedLiteLlm(unittest.TestCase):
         self.assertEqual(stats_dict['call_count'], 1)
         self.assertIn('token_usage', stats_dict)
 
-    @patch('src.extensions.extended_litellm.debug_log')
+    @patch('src.extensions.smartfix_litellm.debug_log')
     def test_reset_accumulated_stats(self, mock_debug_log):
         """Test that reset clears accumulated statistics."""
         # Add some usage first
@@ -349,15 +349,15 @@ class TestExtendedLiteLlm(unittest.TestCase):
         mock_debug_log.assert_called_with("Accumulated statistics have been reset.")
 
 
-class TestExtendedLiteLlmIntegration(unittest.TestCase):
-    """Integration tests for ExtendedLiteLlm functionality."""
+class TestSmartFixLiteLlmIntegration(unittest.TestCase):
+    """Integration tests for SmartFixLiteLlm functionality."""
 
     @patch('litellm.completion')
-    @patch('src.extensions.extended_litellm.debug_log')
+    @patch('src.extensions.smartfix_litellm.debug_log')
     def test_cost_accumulator_integration(self, mock_debug_log, mock_completion):
-        """Test that cost accumulator integrates properly with ExtendedLiteLlm."""
-        # Create a real ExtendedLiteLlm instance
-        model = ExtendedLiteLlm(model="test-integration-model")
+        """Test that cost accumulator integrates properly with SmartFixLiteLlm."""
+        # Create a real SmartFixLiteLlm instance
+        model = SmartFixLiteLlm(model="test-integration-model")
 
         # Verify it has a cost accumulator
         self.assertIsInstance(model.cost_accumulator, TokenCostAccumulator)

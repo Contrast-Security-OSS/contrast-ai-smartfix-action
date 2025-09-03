@@ -52,8 +52,8 @@ ADK_AVAILABLE = False
 try:
     from google.adk.agents import Agent
     from google.adk.artifacts.in_memory_artifact_service import InMemoryArtifactService
-    from src.extensions.extended_litellm import ExtendedLiteLlm
-    from src.extensions.extended_llm_agent import ExtendedLlmAgent
+    from src.extensions.smartfix_litellm import SmartFixLiteLlm
+    from src.extensions.smartfix_llm_agent import SmartFixLlmAgent
     from google.adk.runners import Runner
     from google.adk.sessions import InMemorySessionService
     from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset, StdioServerParameters, StdioConnectionParams
@@ -80,10 +80,10 @@ library_logger.setLevel(logging.ERROR)
 async def _create_mcp_toolset(target_folder_str: str) -> MCPToolset:
     """Create MCP toolset with platform-specific configuration."""
     if platform.system() == 'Windows':
-        connection_timeout = 300
+        connection_timeout = 180
         debug_log("Using Windows-specific MCP connection settings")
     else:
-        connection_timeout = 180
+        connection_timeout = 120
 
     return MCPToolset(
         connection_params=StdioConnectionParams(
@@ -208,13 +208,13 @@ async def create_agent(target_folder: Path, remediation_id: str, agent_type: str
     agent_name = f"contrast_{agent_type}_agent"
 
     try:
-        model_instance = ExtendedLiteLlm(
+        model_instance = SmartFixLiteLlm(
             model=config.AGENT_MODEL,
             temperature=0.2,  # Set low temperature for more deterministic output
             # seed=42, # The random seed for reproducibility (not supported by bedrock/anthropic atm call throws error)
             stream_options={"include_usage": True}
         )
-        root_agent = ExtendedLlmAgent(
+        root_agent = SmartFixLlmAgent(
             model=model_instance,
             name=agent_name,
             instruction=agent_instruction,
