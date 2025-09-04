@@ -41,13 +41,19 @@ import datetime  # For timestamps
 
 config = get_config()
 
+# Suppress warnings before importing libraries that might trigger them
+warnings.filterwarnings('ignore', category=UserWarning)
+# Suppress specific Pydantic field shadowing warning from ADK library
+warnings.filterwarnings('ignore', message='Field name "config_type" in "SequentialAgent" shadows an attribute in parent "BaseAgent"')
+
 # --- ADK Setup (Conditional Import) ---
 ADK_AVAILABLE = False
 
 try:
     from google.adk.agents import Agent
     from google.adk.artifacts.in_memory_artifact_service import InMemoryArtifactService
-    from google.adk.models.lite_llm import LiteLlm
+    from src.extensions.smartfix_litellm import SmartFixLiteLlm
+    from src.extensions.smartfix_llm_agent import SmartFixLlmAgent
     from google.adk.runners import Runner
     from google.adk.sessions import InMemorySessionService
     from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset, StdioServerParameters, StdioConnectionParams
@@ -66,9 +72,60 @@ except ImportError as e:
     if not config.testing:
         sys.exit(1)  # Only exit in production, not in tests
 
-warnings.filterwarnings('ignore', category=UserWarning)
+# Configure library loggers to reduce noise
 library_logger = logging.getLogger("google_adk.google.adk.tools.base_authenticated_tool")
 library_logger.setLevel(logging.ERROR)
+
+
+async def _create_mcp_toolset(target_folder_str: str) -> MCPToolset:
+    """Create MCP toolset with platform-specific configuration."""
+    if platform.system() == 'Windows':
+        connection_timeout = 180
+        debug_log("Using Windows-specific MCP connection settings")
+    else:
+        connection_timeout = 120
+
+    return MCPToolset(
+        connection_params=StdioConnectionParams(
+            server_params=StdioServerParameters(
+                command='npx',
+                args=[
+                    '-y',  # Arguments for the command
+                    '--cache', '/tmp/.npm-cache',  # Use explicit cache directory
+                    '--prefer-offline',  # Try to use cached packages first
+                    '@modelcontextprotocol/server-filesystem@2025.1.14',
+                    target_folder_str,
+                ],
+            ),
+            timeout=connection_timeout,
+        )
+    )
+
+
+async def _get_tools_timeout() -> float:
+    """Get platform-specific timeout for MCP tools connection."""
+    if platform.system() == 'Windows':
+        return 120.0  # Much longer timeout for Windows
+    else:
+        return 30.0  # Increased timeout for Linux due to npm issues
+
+
+async def _clear_npm_cache_if_needed(attempt: int, max_retries: int):
+    """Clear npm cache on second retry if needed."""
+    if attempt == 2:
+        debug_log("Clearing npm cache due to repeated failures...")
+        try:
+            import subprocess
+            subprocess.run(['npm', 'cache', 'clean', '--force'],
+                           capture_output=True, timeout=30)
+            debug_log("NPM cache cleared successfully")
+        except Exception as cache_error:
+            debug_log(f"Failed to clear npm cache: {cache_error}")
+
+
+async def _attempt_mcp_connection(fs_tools: MCPToolset, get_tools_timeout: float) -> List:
+    """Attempt to connect to MCP server and get tools."""
+    return await asyncio.wait_for(fs_tools.get_tools(), timeout=get_tools_timeout)
 
 
 async def get_mcp_tools(target_folder: Path, remediation_id: str) -> MCPToolset:
@@ -80,29 +137,39 @@ async def get_mcp_tools(target_folder: Path, remediation_id: str) -> MCPToolset:
     try:
         debug_log("Connecting to MCP Filesystem server...")
 
-        fs_tools = MCPToolset(
-            connection_params=StdioConnectionParams(
-                server_params=StdioServerParameters(
-                    command='npx',
-                    args=[
-                        '-y',  # Arguments for the command
-                        '@modelcontextprotocol/server-filesystem@2025.7.1',
-                        target_folder_str,
-                    ],
-                ),
-                timeout=50,
-            )
-        )
+        fs_tools = await _create_mcp_toolset(target_folder_str)
+        get_tools_timeout = await _get_tools_timeout()
 
         debug_log("Getting tools list from Filesystem MCP server...")
-        # Use a longer timeout on Windows
-        timeout_seconds = 30.0 if platform.system() == 'Windows' else 10.0
-        debug_log(f"Using {timeout_seconds} second timeout for get_tools")
+        debug_log(f"Using {get_tools_timeout} second timeout for get_tools")
 
-        # Wrap the get_tools call in wait_for to apply a timeout
-        tools_list = await asyncio.wait_for(fs_tools.get_tools(), timeout=timeout_seconds)
+        # Add retry mechanism for MCP connection reliability across all platforms
+        max_retries = 3
+        last_error = None
 
-        debug_log(f"Connected to Filesystem MCP server, got {len(tools_list)} tools")
+        for attempt in range(max_retries):
+            try:
+                if attempt > 0:
+                    debug_log(f"Retrying MCP connection (attempt {attempt + 1}/{max_retries})")
+                    await _clear_npm_cache_if_needed(attempt, max_retries)
+                    # Wait a bit before retry to let any broken connections clean up
+                    await asyncio.sleep(2)
+
+                # Wrap the get_tools call in wait_for to apply a timeout
+                tools_list = await _attempt_mcp_connection(fs_tools, get_tools_timeout)
+                debug_log(f"Connected to Filesystem MCP server, got {len(tools_list)} tools")
+                break  # Success, exit retry loop
+
+            except (asyncio.TimeoutError, asyncio.CancelledError, ConnectionError) as retry_error:
+                last_error = retry_error
+                debug_log(f"MCP connection attempt {attempt + 1} failed: {type(retry_error).__name__}: {str(retry_error)}")
+                if attempt == max_retries - 1:
+                    # Last attempt failed, re-raise the error
+                    raise retry_error
+        else:
+            # This should not be reached, but just in case
+            raise last_error if last_error else Exception("Unknown MCP connection failure")
+
         for tool in tools_list:
             if hasattr(tool, 'name'):
                 debug_log(f"  - Filesystem Tool: {tool.name}")
@@ -141,13 +208,13 @@ async def create_agent(target_folder: Path, remediation_id: str, agent_type: str
     agent_name = f"contrast_{agent_type}_agent"
 
     try:
-        model_instance = LiteLlm(
+        model_instance = SmartFixLiteLlm(
             model=config.AGENT_MODEL,
             temperature=0.2,  # Set low temperature for more deterministic output
             # seed=42, # The random seed for reproducibility (not supported by bedrock/anthropic atm call throws error)
             stream_options={"include_usage": True}
         )
-        root_agent = Agent(
+        root_agent = SmartFixLlmAgent(
             model=model_instance,
             name=agent_name,
             instruction=agent_instruction,
@@ -207,25 +274,7 @@ async def _check_event_limit(event_count: int, agent_type: str, max_events_limit
     return None, False
 
 
-def _extract_token_usage(event) -> tuple:
-    """Extract token usage information from event metadata."""
-    total_tokens = 0
-    prompt_tokens = 0
-    output_tokens = 0
-
-    if event.usage_metadata is not None:
-        debug_log(f"Event usage metadata for this message: {event.usage_metadata}")
-        if hasattr(event.usage_metadata, "total_token_count"):
-            total_tokens = event.usage_metadata.total_token_count
-        if hasattr(event.usage_metadata, "prompt_token_count"):
-            prompt_tokens = event.usage_metadata.prompt_token_count
-        if total_tokens > 0 and prompt_tokens > 0:
-            output_tokens = total_tokens - prompt_tokens
-
-    return total_tokens, prompt_tokens, output_tokens
-
-
-def _process_agent_content(event, agent_type: str, prompt_tokens: int, output_tokens: int, total_tokens: int) -> str:
+def _process_agent_content(event, agent_type: str) -> str:
     """Process agent content/message from event."""
     if not event.content:
         return None
@@ -238,7 +287,6 @@ def _process_agent_content(event, agent_type: str, prompt_tokens: int, output_to
 
     if message_text:
         log(f"\n*** {agent_type.upper()} Agent Message: \033[1;36m {message_text} \033[0m")
-        log(f"Tokens statistics. prompt tokens: {prompt_tokens}, output tokens {output_tokens}, total tokens: {total_tokens}")
         return message_text
 
     return None
@@ -293,13 +341,10 @@ async def _process_agent_event(event, event_count: int, agent_type: str, max_eve
     # Check if we've exceeded the event limit
     final_response, should_break = await _check_event_limit(event_count, agent_type, max_events_limit)
     if should_break:
-        return 0, 0, 0, final_response, should_break
-
-    # Extract token usage information
-    total_tokens, prompt_tokens, output_tokens = _extract_token_usage(event)
+        return final_response, should_break
 
     # Process agent content/message
-    content_response = _process_agent_content(event, agent_type, prompt_tokens, output_tokens, total_tokens)
+    content_response = _process_agent_content(event, agent_type)
     if content_response:
         final_response = content_response
 
@@ -307,7 +352,7 @@ async def _process_agent_event(event, event_count: int, agent_type: str, max_eve
     _process_function_calls(event, agent_type, agent_tool_calls_telemetry)
     _process_function_responses(event, agent_type, agent_tool_calls_telemetry)
 
-    return total_tokens, prompt_tokens, output_tokens, final_response, False
+    return final_response, False
 
 
 async def _handle_agent_exception(e: Exception, events_async, remediation_id: str) -> bool:
@@ -335,7 +380,7 @@ async def _handle_agent_exception(e: Exception, events_async, remediation_id: st
     return is_asyncio_error
 
 
-async def process_agent_run(runner, session, user_query, remediation_id: str, agent_type: str = None) -> str:
+async def process_agent_run(runner, agent, session, user_query, remediation_id: str, agent_type: str = None) -> str:
     """Runs the agent, allowing it to use tools, and returns the final text response."""
     agent_event_actions = []
     start_time = datetime.datetime.now()
@@ -347,7 +392,6 @@ async def process_agent_run(runner, session, user_query, remediation_id: str, ag
 
     # Initialize tracking variables
     event_count = 0
-    total_tokens = 0
     final_response = "AI agent did not provide a final summary."
     max_events_limit = config.MAX_EVENTS_PER_AGENT
 
@@ -369,12 +413,9 @@ async def process_agent_run(runner, session, user_query, remediation_id: str, ag
             event_count += 1
 
             # Process the event and get updated state
-            event_tokens, event_prompt_tokens, event_output_tokens, event_response, should_break = \
+            event_response, should_break = \
                 await _process_agent_event(event, event_count, agent_type, max_events_limit, agent_tool_calls_telemetry)
 
-            # Update tracking variables
-            if event_tokens > 0:
-                total_tokens = event_tokens
             if event_response:
                 final_response = event_response
 
@@ -417,6 +458,28 @@ async def process_agent_run(runner, session, user_query, remediation_id: str, ag
         debug_log(f"Closing MCP server connections for {agent_type.upper()} agent...")
         log(f"{agent_type.upper()} agent run finished.")
 
+        # Get accumulated statistics for telemetry
+        try:
+            stats_data = agent.gather_accumulated_stats_dict()
+            debug_log(agent.gather_accumulated_stats())  # Log the JSON formatted version
+
+            # Extract telemetry values directly from the dictionary
+            total_tokens = stats_data.get("token_usage", {}).get("total_tokens", 0)
+            raw_total_cost = stats_data.get("cost_analysis", {}).get("total_cost", 0.0)
+
+            # Remove "$" prefix if present and convert to float
+            if isinstance(raw_total_cost, str) and raw_total_cost.startswith("$"):
+                total_cost = float(raw_total_cost[1:])
+            elif isinstance(raw_total_cost, str):
+                total_cost = float(raw_total_cost)
+            else:
+                total_cost = raw_total_cost
+        except (ValueError, KeyError, AttributeError) as e:
+            # Fallback values if stats retrieval fails
+            debug_log(f"Could not retrieve statistics: {e}")
+            total_tokens = 0
+            total_cost = 0.0
+
         # Directly assign toolCalls rather than appending, to avoid nested arrays
         agent_event_telemetry["toolCalls"] = agent_tool_calls_telemetry
         agent_event_actions.append(agent_event_telemetry)
@@ -427,8 +490,8 @@ async def process_agent_run(runner, session, user_query, remediation_id: str, ag
             "agentType": agent_type.upper(),
             "result": agent_run_result,
             "actions": agent_event_actions,
-            "totalTokens": total_tokens,  # Use the tracked token count from latest event
-            "totalCost": 0.0  # Placeholder still as cost calculation would need more info
+            "totalTokens": total_tokens,
+            "totalCost": total_cost
         }
         telemetry_handler.add_agent_event(agent_event_payload)
 
@@ -917,8 +980,7 @@ async def _run_agent_internal_with_prompts(agent_type: str, repo_root: Path, que
     )
 
     # Pass the full model ID (though not used for cost calculation anymore, kept for consistency if needed elsewhere)
-    summary = await process_agent_run(runner, session, query, remediation_id, agent_type)
-
+    summary = await process_agent_run(runner, agent, session, query, remediation_id, agent_type)
     return summary
 
 # This patch is now handled in src/asyncio_win_patch.py and called from main.py
@@ -933,3 +995,5 @@ if platform.system() == "Windows":
                 return  # ignore this error
             raise
         asyncio.BaseEventLoop._check_closed = _patched_loop_check_closed
+
+# %%
