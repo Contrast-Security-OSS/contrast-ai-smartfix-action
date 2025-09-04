@@ -25,7 +25,7 @@ import sys
 from src import contrast_api
 from src.config import get_config  # Using get_config function instead of direct import
 from src.utils import debug_log, extract_remediation_id_from_branch, extract_remediation_id_from_labels, log
-from src.git_handler import extract_issue_number_from_branch
+from src.git_handler import extract_issue_number_from_branch, get_pr_changed_files_count
 import src.telemetry_handler as telemetry_handler
 
 
@@ -119,10 +119,37 @@ def _extract_vulnerability_info(labels: list) -> str:
     return vuln_uuid
 
 
-def _notify_remediation_service(remediation_id: str):
+def _notify_remediation_service(remediation_id: str, pr_number: int = None):
     """Notify the Remediation backend service about the closed PR."""
     log(f"Notifying Remediation service about closed PR for remediation {remediation_id}...")
     config = get_config()
+
+    # Check if PR has no changed files (for external agents like Copilot)
+    if pr_number is not None:
+        changed_files_count = get_pr_changed_files_count(pr_number)
+        if changed_files_count == 0:
+            # PR has no changes - report as failed remediation
+            log(f"PR {pr_number} has no changed files. Reporting as failed remediation.")
+            remediation_notified = contrast_api.notify_remediation_failed(
+                remediation_id=remediation_id,
+                failure_category="GENERATE_PR_FAILURE",
+                contrast_host=config.CONTRAST_HOST,
+                contrast_org_id=config.CONTRAST_ORG_ID,
+                contrast_app_id=config.CONTRAST_APP_ID,
+                contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
+                contrast_api_key=config.CONTRAST_API_KEY
+            )
+
+            if remediation_notified:
+                log(f"Successfully notified Remediation service about failed remediation {remediation_id} (no changes).")
+            else:
+                log(f"Failed to notify Remediation service about failed remediation {remediation_id} (no changes).", is_error=True)
+            return
+        elif changed_files_count == -1:
+            # Error getting count, fall back to standard closed notification
+            log(f"Could not determine changed files count for PR {pr_number}. Proceeding with standard closed notification.")
+
+    # Standard PR closed notification
     remediation_notified = contrast_api.notify_remediation_pr_closed(
         remediation_id=remediation_id,
         contrast_host=config.CONTRAST_HOST,
@@ -159,7 +186,8 @@ def handle_closed_pr():
     telemetry_handler.update_telemetry("vulnInfo.vulnRule", "unknown")
 
     # Notify the Remediation backend service
-    _notify_remediation_service(remediation_id)
+    pr_number = pull_request.get("number")
+    _notify_remediation_service(remediation_id, pr_number)
 
     # Complete telemetry and finish
     telemetry_handler.update_telemetry("additionalAttributes.prStatus", "CLOSED")
