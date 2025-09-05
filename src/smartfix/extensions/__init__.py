@@ -11,8 +11,8 @@ Key Components:
 
 # Import classes for easy access
 try:
-    from src.smartfix.extensions.smartfix_litellm import SmartFixLiteLlm
-    from src.smartfix.extensions.smartfix_llm_agent import SmartFixLlmAgent
+    from src.smartfix.extensions.smartfix_litellm import SmartFixLiteLlm  # noqa: F401
+    from src.smartfix.extensions.smartfix_llm_agent import SmartFixLlmAgent  # noqa: F401
 
     __all__ = [
         "SmartFixLiteLlm",

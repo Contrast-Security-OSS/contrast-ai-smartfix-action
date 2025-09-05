@@ -11,7 +11,7 @@ Key Components:
 
 # Import classes for easy access
 try:
-    from .external_coding_agent import ExternalCodingAgent
+    from .external_coding_agent import ExternalCodingAgent  # noqa: F401
 
     __all__ = [
         "ExternalCodingAgent",
