@@ -41,8 +41,8 @@ from src.config import get_config  # noqa: E402
 _ = get_config(testing=True)
 
 # Import the classes under test AFTER config initialization
-from src.extensions.smartfix_llm_agent import SmartFixLlmAgent  # noqa: E402
-from src.extensions.smartfix_litellm import SmartFixLiteLlm  # noqa: E402
+from src.smartfix.extensions.smartfix_llm_agent import SmartFixLlmAgent  # noqa: E402
+from src.smartfix.extensions.smartfix_litellm import SmartFixLiteLlm  # noqa: E402
 
 
 class TestSmartFixLlmAgentFunctionality(unittest.TestCase):
