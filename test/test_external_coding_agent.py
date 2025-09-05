@@ -46,7 +46,7 @@ os.environ.update(TEST_ENV_VARS)
 
 # Import with testing=True
 from src.config import get_config, reset_config  # noqa: E402
-from src.external_coding_agent import ExternalCodingAgent  # noqa: E402
+from src.github.external_coding_agent import ExternalCodingAgent  # noqa: E402
 
 
 class TestExternalCodingAgent(unittest.TestCase):
@@ -65,7 +65,7 @@ class TestExternalCodingAgent(unittest.TestCase):
         self.env_patcher.stop()
         reset_config()
 
-    @patch('src.external_coding_agent.log')
+    @patch('src.github.external_coding_agent.log')
     def test_constructor(self, mock_log):
         """Test that we can construct an ExternalCodingAgent object"""
         # Create an ExternalCodingAgent object
@@ -74,7 +74,7 @@ class TestExternalCodingAgent(unittest.TestCase):
         # Assert that the config was set correctly
         self.assertEqual(agent.config, self.config)
 
-    @patch('src.external_coding_agent.debug_log')
+    @patch('src.github.external_coding_agent.debug_log')
     def test_generate_fixes_with_smartfix(self, mock_debug_log):
         """Test generate_fixes returns False when CODING_AGENT is SMARTFIX"""
         # Set CODING_AGENT to SMARTFIX
@@ -92,16 +92,16 @@ class TestExternalCodingAgent(unittest.TestCase):
         # Assert that debug_log was called with the expected message
         mock_debug_log.assert_called_with("SMARTFIX agent detected, ExternalCodingAgent.generate_fixes returning False")
 
-    @patch('src.external_coding_agent.error_exit')
+    @patch('src.github.external_coding_agent.error_exit')
     @patch('src.git_handler.find_issue_with_label')
     @patch('src.git_handler.create_issue')
     @patch('src.git_handler.add_labels_to_pr')
     @patch('src.git_handler.find_open_pr_for_issue')
-    @patch('src.external_coding_agent.notify_remediation_pr_opened')
-    @patch('src.external_coding_agent.time.sleep')  # Mock sleep to speed up tests
+    @patch('src.github.external_coding_agent.notify_remediation_pr_opened')
+    @patch('src.github.external_coding_agent.time.sleep')  # Mock sleep to speed up tests
     @patch('src.telemetry_handler.update_telemetry')
-    @patch('src.external_coding_agent.debug_log')
-    @patch('src.external_coding_agent.log')
+    @patch('src.github.external_coding_agent.debug_log')
+    @patch('src.github.external_coding_agent.log')
     def test_generate_fixes_with_external_agent_pr_created(self, mock_log, mock_debug_log, mock_update_telemetry,
                                                            mock_sleep, mock_notify, mock_find_pr, mock_add_labels, mock_create_issue,
                                                            mock_find_issue, mock_error_exit):
@@ -142,14 +142,14 @@ class TestExternalCodingAgent(unittest.TestCase):
         mock_update_telemetry.assert_any_call("additionalAttributes.prNumber", 123)
         mock_update_telemetry.assert_any_call("additionalAttributes.prUrl", "https://github.com/owner/repo/pull/123")
 
-    @patch('src.external_coding_agent.error_exit')
+    @patch('src.github.external_coding_agent.error_exit')
     @patch('src.git_handler.find_issue_with_label')
     @patch('src.git_handler.create_issue')
     @patch('src.git_handler.find_open_pr_for_issue')
-    @patch('src.external_coding_agent.time.sleep')
+    @patch('src.github.external_coding_agent.time.sleep')
     @patch('src.telemetry_handler.update_telemetry')
-    @patch('src.external_coding_agent.debug_log')
-    @patch('src.external_coding_agent.log')
+    @patch('src.github.external_coding_agent.debug_log')
+    @patch('src.github.external_coding_agent.log')
     def test_generate_fixes_with_external_agent_pr_timeout(self, mock_log, mock_debug_log, mock_update_telemetry,
                                                            mock_sleep, mock_find_pr, mock_create_issue, mock_find_issue, mock_error_exit):
         """Test generate_fixes when PR creation times out"""
@@ -196,11 +196,11 @@ class TestExternalCodingAgent(unittest.TestCase):
     @patch('src.git_handler.find_issue_with_label')
     @patch('src.git_handler.reset_issue')
     @patch('src.git_handler.find_open_pr_for_issue')
-    @patch('src.external_coding_agent.notify_remediation_pr_opened')
-    @patch('src.external_coding_agent.time.sleep')
+    @patch('src.github.external_coding_agent.notify_remediation_pr_opened')
+    @patch('src.github.external_coding_agent.time.sleep')
     @patch('src.telemetry_handler.update_telemetry')
-    @patch('src.external_coding_agent.debug_log')
-    @patch('src.external_coding_agent.log')
+    @patch('src.github.external_coding_agent.debug_log')
+    @patch('src.github.external_coding_agent.log')
     def test_generate_fixes_with_existing_issue(self, mock_log, mock_debug_log, mock_update_telemetry,
                                                 mock_sleep, mock_notify, mock_find_pr, mock_reset_issue,
                                                 mock_find_issue):
@@ -250,10 +250,10 @@ class TestExternalCodingAgent(unittest.TestCase):
     @patch('src.git_handler.check_issues_enabled')
     @patch('src.git_handler.find_issue_with_label')
     @patch('src.git_handler.create_issue')
-    @patch('src.external_coding_agent.time.sleep')  # Mock sleep to prevent actual sleeping
-    @patch('src.external_coding_agent.error_exit')
-    @patch('src.external_coding_agent.log')
-    @patch('src.external_coding_agent.debug_log')
+    @patch('src.github.external_coding_agent.time.sleep')  # Mock sleep to prevent actual sleeping
+    @patch('src.github.external_coding_agent.error_exit')
+    @patch('src.github.external_coding_agent.log')
+    @patch('src.github.external_coding_agent.debug_log')
     def test_generate_fixes_with_issues_disabled(self, mock_debug_log, mock_log, mock_error_exit, mock_sleep, mock_create_issue, mock_find_issue, mock_check_issues):
         """Test generate_fixes when GitHub Issues are disabled"""
         from src.contrast_api import FailureCategory
@@ -293,10 +293,10 @@ class TestExternalCodingAgent(unittest.TestCase):
 
     @patch('src.git_handler.add_labels_to_pr')
     @patch('src.git_handler.find_open_pr_for_issue')
-    @patch('src.external_coding_agent.notify_remediation_pr_opened')
-    @patch('src.external_coding_agent.time.sleep')  # Mock sleep to speed up tests
-    @patch('src.external_coding_agent.log')
-    @patch('src.external_coding_agent.debug_log')
+    @patch('src.github.external_coding_agent.notify_remediation_pr_opened')
+    @patch('src.github.external_coding_agent.time.sleep')  # Mock sleep to speed up tests
+    @patch('src.github.external_coding_agent.log')
+    @patch('src.github.external_coding_agent.debug_log')
     def test_poll_for_pr_found_immediately(self, mock_debug_log, mock_log, mock_sleep, mock_notify, mock_find_pr, mock_add_labels):
         """Test _poll_for_pr when PR is found on first attempt"""
         # Configure mocks
@@ -338,10 +338,10 @@ class TestExternalCodingAgent(unittest.TestCase):
 
     @patch('src.git_handler.add_labels_to_pr')
     @patch('src.git_handler.find_open_pr_for_issue')
-    @patch('src.external_coding_agent.notify_remediation_pr_opened')
-    @patch('src.external_coding_agent.time.sleep')
-    @patch('src.external_coding_agent.log')
-    @patch('src.external_coding_agent.debug_log')
+    @patch('src.github.external_coding_agent.notify_remediation_pr_opened')
+    @patch('src.github.external_coding_agent.time.sleep')
+    @patch('src.github.external_coding_agent.log')
+    @patch('src.github.external_coding_agent.debug_log')
     def test_poll_for_pr_found_after_retries(self, mock_debug_log, mock_log, mock_sleep, mock_notify, mock_find_pr, mock_add_labels):
         """Test _poll_for_pr when PR is found after several attempts"""
         # Configure mocks
@@ -377,10 +377,10 @@ class TestExternalCodingAgent(unittest.TestCase):
             self.assertEqual(call[0][0], 0.01)  # Verify sleep called with 0.01 seconds
 
     @patch('src.git_handler.find_open_pr_for_issue')
-    @patch('src.external_coding_agent.notify_remediation_pr_opened')
-    @patch('src.external_coding_agent.time.sleep')
-    @patch('src.external_coding_agent.log')
-    @patch('src.external_coding_agent.debug_log')
+    @patch('src.github.external_coding_agent.notify_remediation_pr_opened')
+    @patch('src.github.external_coding_agent.time.sleep')
+    @patch('src.github.external_coding_agent.log')
+    @patch('src.github.external_coding_agent.debug_log')
     def test_poll_for_pr_not_found(self, mock_debug_log, mock_log, mock_sleep, mock_notify, mock_find_pr):
         """Test _poll_for_pr when PR is never found"""
         # Configure mocks
@@ -408,10 +408,10 @@ class TestExternalCodingAgent(unittest.TestCase):
 
     @patch('src.git_handler.add_labels_to_pr')
     @patch('src.git_handler.find_open_pr_for_issue')
-    @patch('src.external_coding_agent.notify_remediation_pr_opened')
-    @patch('src.external_coding_agent.time.sleep')
-    @patch('src.external_coding_agent.log')
-    @patch('src.external_coding_agent.debug_log')
+    @patch('src.github.external_coding_agent.notify_remediation_pr_opened')
+    @patch('src.github.external_coding_agent.time.sleep')
+    @patch('src.github.external_coding_agent.log')
+    @patch('src.github.external_coding_agent.debug_log')
     def test_poll_for_pr_notification_failure(self, mock_debug_log, mock_log, mock_sleep, mock_notify, mock_find_pr, mock_add_labels):
         """Test _poll_for_pr when PR is found but notification fails"""
         # Configure mocks
@@ -573,7 +573,7 @@ class TestExternalCodingAgent(unittest.TestCase):
         self.assertNotIn('### Event Summary', result)
         self.assertNotIn('### HTTP Request Details', result)
 
-    @patch('src.external_coding_agent.tail_string')
+    @patch('src.github.external_coding_agent.tail_string')
     def test_assemble_issue_body_with_very_long_data(self, mock_tail_string):
         """Test assemble_issue_body with very long vulnerability data that needs truncation"""
         agent = ExternalCodingAgent(self.config)
@@ -637,7 +637,7 @@ class TestExternalCodingAgent(unittest.TestCase):
 
     def test_assemble_issue_body_character_count_logging(self):
         """Test that assemble_issue_body logs the character count"""
-        with patch('src.external_coding_agent.debug_log') as mock_debug_log:
+        with patch('src.github.external_coding_agent.debug_log') as mock_debug_log:
             agent = ExternalCodingAgent(self.config)
 
             vulnerability_details = {

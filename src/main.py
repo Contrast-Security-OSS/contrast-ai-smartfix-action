@@ -39,7 +39,7 @@ from src import contrast_api
 from src import agent_handler
 from src import git_handler
 from src import qa_handler
-from src.external_coding_agent import ExternalCodingAgent
+from src.github.external_coding_agent import ExternalCodingAgent
 
 config = get_config()
 telemetry_handler.initialize_telemetry()
