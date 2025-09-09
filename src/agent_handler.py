@@ -52,8 +52,8 @@ ADK_AVAILABLE = False
 try:
     from google.adk.agents import Agent
     from google.adk.artifacts.in_memory_artifact_service import InMemoryArtifactService
-    from src.extensions.smartfix_litellm import SmartFixLiteLlm
-    from src.extensions.smartfix_llm_agent import SmartFixLlmAgent
+    from src.smartfix.extensions.smartfix_litellm import SmartFixLiteLlm
+    from src.smartfix.extensions.smartfix_llm_agent import SmartFixLlmAgent
     from google.adk.runners import Runner
     from google.adk.sessions import InMemorySessionService
     from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset, StdioServerParameters, StdioConnectionParams

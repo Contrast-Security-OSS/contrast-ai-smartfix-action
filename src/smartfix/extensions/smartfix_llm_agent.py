@@ -49,8 +49,8 @@ class SmartFixLlmAgent(LlmAgent):
 
     Example usage:
     ```python
-    from src.extensions.smartfix_litellm import SmartFixLiteLlm
-    from src.extensions.smartfix_llm_agent import SmartFixLlmAgent
+    from src.smartfix.extensions.smartfix_litellm import SmartFixLiteLlm
+    from src.smartfix.extensions.smartfix_llm_agent import SmartFixLlmAgent
 
     # Create the extended model
     model = SmartFixLiteLlm(model="bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0")
