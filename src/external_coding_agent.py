@@ -190,7 +190,7 @@ Please review this security vulnerability and implement appropriate fixes to add
         log(f"Waiting for external agent to create a PR for issue #{issue_number}")
 
         # Poll for a PR to be created by the external agent (100 attempts, 5 seconds apart = ~8.3 minutes max)
-        pr_info = self._poll_for_pr(issue_number, remediation_id, vulnerability_label, remediation_label, max_attempts=100, sleep_seconds=5)
+        pr_info = self._poll_for_pr(issue_number, remediation_id, vulnerability_label, remediation_label, max_attempts=1, sleep_seconds=5)
 
         log("\n::endgroup::")
         if pr_info:
