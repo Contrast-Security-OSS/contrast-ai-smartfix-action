@@ -222,6 +222,49 @@ This is an example variation of the workflow file for use with the GitHub Copilo
   # The Closed and Merge Handler jobs remain the same as the previous example as well.
 ```
 
+### Installation and Configuration for Claude Code Coding Agent
+
+This is an example variation of the workflow file for use with the Claude Code Coding Agent:
+```
+  # The beginning of the workflow file is the same as the previous example.
+
+  # Use a variation of this 'generate_fixes' job in order to run with the Claude Code Coding Agent
+  generate_fixes:
+    name: Generate Fixes
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    permissions:
+      issues: write
+    steps:
+      # When using Claude Code, it is unnecessary to authenticate with an LLM API from this step.
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Contrast AI SmartFix - Generate Fixes Action
+        uses: Contrast-Security-OSS/contrast-ai-smartfix-action@v1 # Replace with the latest version
+        with:
+          # Contrast Configuration
+          contrast_host: ${{ vars.CONTRAST_HOST }} # The host name of your Contrast SaaS instance, e.g. 'app.contrastsecurity.com'
+          contrast_org_id: ${{ vars.CONTRAST_ORG_ID }} # The UUID of your Contrast organization
+          contrast_app_id: ${{ vars.CONTRAST_APP_ID }} # The UUID that is specific to the application in this repository.
+          contrast_authorization_key: ${{ secrets.CONTRAST_AUTHORIZATION_KEY }}
+          contrast_api_key: ${{ secrets.CONTRAST_API_KEY }}
+
+          # GitHub Configuration
+          github_token: ${{ secrets.GITHUB_TOKEN }} # Necessary for creating Issues and mentioning Claude Code (@claude).
+          base_branch: '${{ github.event.repository.default_branch }}' # This will default to your repo default branch (other common base branches are 'main', 'master' or 'develop')
+          coding_agent: 'CLAUDE_CODE' # Specify the use of Claude Code instead of the default SmartFix internal coding agent
+
+          # Other Optional Inputs (see action.yml for defaults and more options)
+          # formatting_command: 'mvn spotless:apply' # Or the command appropriate for your project to correct the formatting of SmartFix's changes.  This ensures that SmartFix follows your coding standards.
+          # max_open_prs: 5 # This is the maximum limit for the number of PRs that SmartFix will have open at single time
+
+  # The Closed and Merge Handler jobs remain the same as the previous example as well.
+```
+
 ### Supported LLMs (Bring Your Own LLM \- BYOLLM) for the SmartFix Coding Agent
 
 SmartFix uses a "Bring Your Own LLM" (BYOLLM) model. You provide the credentials for your preferred LLM provider.
