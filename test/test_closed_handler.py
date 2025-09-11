@@ -27,12 +27,16 @@ import json
 # Add project root to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+# Import test setup helper
+sys.path.insert(0, os.path.dirname(__file__))
+from setup_test_env import TestEnvironmentMixin
+
 # Now import project modules (after path modification)
 from src.config import reset_config, get_config  # noqa: E402
 from src import closed_handler  # noqa: E402
 
 
-class TestClosedHandler(unittest.TestCase):
+class TestClosedHandler(unittest.TestCase, TestEnvironmentMixin):
     """Tests for the closed_handler module"""
 
     def setUp(self):
@@ -43,23 +47,14 @@ class TestClosedHandler(unittest.TestCase):
 
         reset_config()
 
-        # Mock environment variables
-        self.env_patcher = patch.dict(os.environ, {
-            'CONTRAST_HOST': 'test.contrastsecurity.com',
-            'CONTRAST_ORG_ID': 'test-org-id',
-            'CONTRAST_APP_ID': 'test-app-id',
-            'CONTRAST_AUTHORIZATION_KEY': 'test-auth-key',
-            'CONTRAST_API_KEY': 'test-api-key',
-            'GITHUB_EVENT_PATH': '/tmp/github_event.json',
-            'REPO_ROOT': '/tmp/test_repo',
-        })
-        self.env_patcher.start()
+        # Use mixin to set up standard test environment
+        self.setup_standard_test_env()
 
         self.config = get_config()
 
     def tearDown(self):
         """Clean up after each test"""
-        self.env_patcher.stop()
+        self.cleanup_standard_test_env()
         self.exit_patcher.stop()
         reset_config()
 

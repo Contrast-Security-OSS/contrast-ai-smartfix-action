@@ -26,33 +26,28 @@ import os
 # Add project root to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+# Import test setup helper
+sys.path.insert(0, os.path.dirname(__file__))
+from setup_test_env import TestEnvironmentMixin
+
 # Now import project modules (after path modification)
 import requests  # noqa: E402
 from src.config import reset_config, get_config  # noqa: E402
 from src import contrast_api  # noqa: E402
 
 
-class TestContrastApiFailureCategories(unittest.TestCase):
+class TestContrastApiFailureCategories(unittest.TestCase, TestEnvironmentMixin):
     """Tests for the contrast_api failure categories and notification functions"""
 
     def setUp(self):
         """Set up test environment before each test"""
         reset_config()
+        self.setup_standard_test_env()  # Use mixin helper
         self.config = get_config()
-
-        # Mock environment variables
-        self.env_patcher = patch.dict(os.environ, {
-            'CONTRAST_HOST': 'test.contrastsecurity.com',
-            'CONTRAST_ORG_ID': 'test-org-id',
-            'CONTRAST_APP_ID': 'test-app-id',
-            'CONTRAST_AUTHORIZATION_KEY': 'test-auth-key',
-            'CONTRAST_API_KEY': 'test-api-key',
-        })
-        self.env_patcher.start()
 
     def tearDown(self):
         """Clean up after each test"""
-        self.env_patcher.stop()
+        self.cleanup_standard_test_env()  # Use mixin helper
         reset_config()
 
     def test_failure_category_enum_all_values(self):

@@ -27,36 +27,26 @@ import os
 # Add project root to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+# Import test setup helper
+sys.path.insert(0, os.path.dirname(__file__))
+from setup_test_env import TestEnvironmentMixin
+
 from src import utils  # noqa: E402
 from src.config import get_config, reset_config  # noqa: E402
 from src.contrast_api import FailureCategory  # noqa: E402
 
 
-class TestErrorExit(unittest.TestCase):
+class TestErrorExit(unittest.TestCase, TestEnvironmentMixin):
     """Tests for the error_exit function in utils.py"""
 
     def setUp(self):
         """Set up test environment before each test"""
-        self.env_vars = {
-            'CONTRAST_HOST': 'test-host',
-            'CONTRAST_ORG_ID': 'test-org',
-            'CONTRAST_APP_ID': 'test-app',
-            'CONTRAST_AUTHORIZATION_KEY': 'test-auth',
-            'CONTRAST_API_KEY': 'test-api',
-            'GITHUB_WORKSPACE': '/tmp',
-            'BASE_BRANCH': 'main',
-            'GITHUB_TOKEN': 'mock-token',
-            'GITHUB_REPOSITORY': 'mock/repo',
-            'BUILD_COMMAND': 'echo "Mock build command"',
-            'RUN_TASK': 'generate_fix',
-        }
-        self.env_patcher = patch.dict('os.environ', self.env_vars)
-        self.env_patcher.start()
+        self.setup_standard_test_env()
         reset_config()  # Reset the config singleton
 
     def tearDown(self):
         """Clean up after each test"""
-        self.env_patcher.stop()
+        self.cleanup_standard_test_env()
         reset_config()
 
     @contextmanager

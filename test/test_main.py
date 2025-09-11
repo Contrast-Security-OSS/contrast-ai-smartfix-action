@@ -9,6 +9,10 @@ from unittest.mock import patch, MagicMock
 # Add src directory to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+# Import test setup helper
+sys.path.insert(0, os.path.dirname(__file__))
+from setup_test_env import TestEnvironmentMixin, create_temp_repo_dir, cleanup_temp_dir
+
 # Initialize config with testing flag first
 from src.config import reset_config, get_config  # noqa: E402
 _ = get_config(testing=True)
@@ -16,15 +20,19 @@ _ = get_config(testing=True)
 from src.main import main  # noqa: E402
 
 
-class TestMain(unittest.TestCase):
+class TestMain(unittest.TestCase, TestEnvironmentMixin):
     """Test the main functionality of the application."""
 
     def setUp(self):
         """Set up test environment before each test."""
-        # Create a temporary directory
-        self.temp_dir = tempfile.mkdtemp()
+        # Use helper for temp directory creation
+        self.temp_dir = str(create_temp_repo_dir())
 
-        # Setup standard env vars needed for testing
+        # Setup standard env vars using mixin, then override paths for this test
+        self.setup_standard_test_env()
+
+        # Override paths specific to this test
+        import os
         self.env_vars = {
             'HOME': self.temp_dir,
             'GITHUB_WORKSPACE': self.temp_dir,
@@ -42,9 +50,11 @@ class TestMain(unittest.TestCase):
             'RUN_TASK': 'generate_fix'
         }
 
-        # Apply environment variables
-        self.env_patcher = patch.dict('os.environ', self.env_vars, clear=True)
-        self.env_patcher.start()
+        # Apply additional environment variables to what the mixin already set up
+        os.environ.update(self.env_vars)
+
+        # Reset config for clean test state
+        reset_config()
 
         # Mock subprocess calls
         self.subproc_patcher = patch('subprocess.run')
@@ -79,7 +89,7 @@ class TestMain(unittest.TestCase):
     def tearDown(self):
         """Clean up after each test."""
         # Stop all patches
-        self.env_patcher.stop()
+        self.cleanup_standard_test_env()
         self.subproc_patcher.stop()
         self.git_patcher.stop()
         self.api_patcher.stop()

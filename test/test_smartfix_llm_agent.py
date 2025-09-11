@@ -34,6 +34,10 @@ from unittest.mock import Mock, patch, MagicMock
 # Add project root to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+# Import test setup helper
+sys.path.insert(0, os.path.dirname(__file__))
+from setup_test_env import TestEnvironmentMixin
+
 # Now import project modules (after path modification)
 from src.config import get_config  # noqa: E402
 
@@ -45,8 +49,16 @@ from src.smartfix.extensions.smartfix_llm_agent import SmartFixLlmAgent  # noqa:
 from src.smartfix.extensions.smartfix_litellm import SmartFixLiteLlm  # noqa: E402
 
 
-class TestSmartFixLlmAgentFunctionality(unittest.TestCase):
+class TestSmartFixLlmAgentFunctionality(unittest.TestCase, TestEnvironmentMixin):
     """Test cases focusing on SmartFixLlmAgent specific functionality."""
+
+    def setUp(self):
+        """Set up test environment."""
+        self.setup_standard_test_env()
+
+    def tearDown(self):
+        """Clean up test environment."""
+        self.cleanup_standard_test_env()
 
     def test_has_extended_model_true(self):
         """Test has_extended_model returns True when SmartFixLiteLlm reference exists."""
@@ -89,8 +101,16 @@ class TestSmartFixLlmAgentFunctionality(unittest.TestCase):
             mock_extended_model.reset_accumulated_stats.assert_called_once()
 
 
-class TestSmartFixLlmAgentIntegration(unittest.TestCase):
+class TestSmartFixLlmAgentIntegration(unittest.TestCase, TestEnvironmentMixin):
     """Integration tests for SmartFixLlmAgent with real SmartFixLiteLlm instances."""
+
+    def setUp(self):
+        """Set up test environment."""
+        self.setup_standard_test_env()
+
+    def tearDown(self):
+        """Clean up test environment."""
+        self.cleanup_standard_test_env()
 
     @patch('litellm.completion')
     def test_extended_model_delegation_logic(self, mock_completion):

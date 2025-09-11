@@ -4,10 +4,14 @@ import sys
 from unittest.mock import patch, MagicMock
 from packaging.version import Version
 
-# Add src directory to path for imports
+# Add project root to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-# Import with testing=True to avoid requiring environment variables
+# Import test setup helper
+sys.path.insert(0, os.path.dirname(__file__))
+from setup_test_env import TestEnvironmentMixin
+
+# Import modules
 from src.config import reset_config, get_config  # noqa: E402
 from src.version_check import get_latest_repo_version, check_for_newer_version, do_version_check, normalize_version, safe_parse_version  # noqa: E402
 
@@ -15,24 +19,12 @@ from src.version_check import get_latest_repo_version, check_for_newer_version, 
 _ = get_config(testing=True)
 
 
-class TestVersionCheck(unittest.TestCase):
+class TestVersionCheck(unittest.TestCase, TestEnvironmentMixin):
     """Test the version checking functionality."""
 
     def setUp(self):
-        # Common setup for all tests
-        self.env_vars = {
-            'BASE_BRANCH': 'main',
-            'GITHUB_WORKSPACE': '/tmp',
-            'GITHUB_TOKEN': 'mock-token',
-            'GITHUB_REPOSITORY': 'mock/repo',
-            'CONTRAST_HOST': 'test-host',
-            'CONTRAST_ORG_ID': 'test-org',
-            'CONTRAST_APP_ID': 'test-app',
-            'CONTRAST_AUTHORIZATION_KEY': 'test-auth',
-            'CONTRAST_API_KEY': 'test-api',
-        }
-        self.env_patcher = patch.dict('os.environ', self.env_vars)
-        self.env_patcher.start()
+        # Common setup for all tests using mixin
+        self.setup_standard_test_env()
         reset_config()  # Reset config before each test
 
         self.requests_patcher = patch('src.version_check.requests')
@@ -61,7 +53,7 @@ class TestVersionCheck(unittest.TestCase):
 
     def tearDown(self):
         # Clean up all patches
-        self.env_patcher.stop()
+        self.cleanup_standard_test_env()
         self.requests_patcher.stop()
         self.log_patcher.stop()
         self.debug_log_patcher.stop()

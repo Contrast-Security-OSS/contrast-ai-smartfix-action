@@ -26,43 +26,28 @@ import os
 # Add project root to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-# Define test environment variables used throughout the test file
-TEST_ENV_VARS = {
-    'GITHUB_REPOSITORY': 'mock/repo',
-    'GITHUB_TOKEN': 'mock-token',
-    'BASE_BRANCH': 'main',
-    'CONTRAST_HOST': 'test-host',
-    'CONTRAST_ORG_ID': 'test-org',
-    'CONTRAST_APP_ID': 'test-app',
-    'CONTRAST_AUTHORIZATION_KEY': 'test-auth',
-    'CONTRAST_API_KEY': 'test-api',
-    'GITHUB_WORKSPACE': '/tmp',
-    'RUN_TASK': 'generate_fix',  # This triggers the requirement for BUILD_COMMAND
-    'BUILD_COMMAND': 'echo "Test build command"'  # Required when RUN_TASK=generate_fix with SMARTFIX coding agent
-}
-
-# Set environment variables before importing modules to prevent initialization errors
-os.environ.update(TEST_ENV_VARS)
+# Import test setup helper
+sys.path.insert(0, os.path.dirname(__file__))
+from setup_test_env import TestEnvironmentMixin
 
 # Import with testing=True
 from src.config import get_config, reset_config  # noqa: E402
 from src.github.external_coding_agent import ExternalCodingAgent  # noqa: E402
 
 
-class TestExternalCodingAgent(unittest.TestCase):
+class TestExternalCodingAgent(unittest.TestCase, TestEnvironmentMixin):
     """Tests for the ExternalCodingAgent class"""
 
     def setUp(self):
         """Set up test environment before each test"""
-        # Use the shared TEST_ENV_VARS for consistent environment setup
-        self.env_patcher = patch.dict('os.environ', TEST_ENV_VARS)
-        self.env_patcher.start()
+        # Use the mixin to set up standard test environment
+        self.setup_standard_test_env()
         reset_config()  # Reset the config singleton
         self.config = get_config(testing=True)
 
     def tearDown(self):
         """Clean up after each test"""
-        self.env_patcher.stop()
+        self.cleanup_standard_test_env()
         reset_config()
 
     @patch('src.github.external_coding_agent.log')
