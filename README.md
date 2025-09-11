@@ -223,7 +223,8 @@ This is an example variation of the workflow file for use with the GitHub Copilo
 ```
 
 ### Installation and Configuration for Claude Code Coding Agent
-
+- NOTE: The Claude GitHub app is required to be installed in your GitHub organization or repository.
+- Please see: https://docs.anthropic.com/en/docs/claude-code/github-actions
 This is an example variation of the workflow file for use with the Claude Code Coding Agent:
 ```
   # The beginning of the workflow file is the same as the previous example.
@@ -233,8 +234,6 @@ This is an example variation of the workflow file for use with the Claude Code C
     name: Generate Fixes
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
-    permissions:
-      issues: write
     steps:
       # When using Claude Code, it is unnecessary to authenticate with an LLM API from this step.
 
