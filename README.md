@@ -254,7 +254,7 @@ This is an example variation of the workflow file for use with the Claude Code C
           contrast_api_key: ${{ secrets.CONTRAST_API_KEY }}
 
           # GitHub Configuration
-          github_token: ${{ secrets.GITHUB_TOKEN }} # Necessary for creating Issues and mentioning Claude Code (@claude).
+          github_token: ${{ secrets.PAT_TOKEN }} # Necessary for creating Issues and mentioning Claude Code (@claude). This token should have read permission for metadata and read-write permission for issues and pulls. A best practice is to have an GitHub Organization service account create the PAT (an Organization admin may need to approve it)
           base_branch: '${{ github.event.repository.default_branch }}' # This will default to your repo default branch (other common base branches are 'main', 'master' or 'develop')
           coding_agent: 'CLAUDE_CODE' # Specify the use of Claude Code instead of the default SmartFix internal coding agent
 
