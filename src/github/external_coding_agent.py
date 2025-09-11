@@ -24,6 +24,7 @@ from src.contrast_api import FailureCategory, notify_remediation_pr_opened
 from src.config import Config
 from src import git_handler
 from src import telemetry_handler
+from src.coding_agents import CodingAgents
 
 
 class ExternalCodingAgent:
@@ -143,7 +144,7 @@ Please review this security vulnerability and implement appropriate fixes to add
         Returns:
             bool: False if the CODING_AGENT is SMARTFIX, True otherwise
         """
-        if hasattr(self.config, 'CODING_AGENT') and self.config.CODING_AGENT == "SMARTFIX":
+        if hasattr(self.config, 'CODING_AGENT') and self.config.CODING_AGENT == CodingAgents.SMARTFIX.name:
             debug_log("SMARTFIX agent detected, ExternalCodingAgent.generate_fixes returning False")
             return False
 
@@ -154,6 +155,10 @@ Please review this security vulnerability and implement appropriate fixes to add
         vulnerability_label = f"contrast-vuln-id:VULN-{vuln_uuid}"
         remediation_label = f"smartfix-id:{remediation_id}"
         issue_title = vuln_title
+
+        if self.config.CODING_AGENT == CodingAgents.CLAUDE_CODE.name:
+            debug_log("CLAUDE_CODE agent detected, tagging @claude in issue title for processing")
+            issue_title = f"@claude fix: {issue_title}"
 
         # Use the provided issue_body or fall back to default
         if issue_body is None:
@@ -181,6 +186,13 @@ Please review this security vulnerability and implement appropriate fixes to add
                 error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
 
         telemetry_handler.update_telemetry("additionalAttributes.externalIssueNumber", issue_number)
+
+        if self.config.CODING_AGENT == CodingAgents.CLAUDE_CODE.name:
+            log("Claude agent processing support is not implemented as of yet so stop processing and log agent failure", is_error=True)
+            telemetry_handler.update_telemetry("resultInfo.prCreated", False)
+            telemetry_handler.update_telemetry("resultInfo.failureReason", "Claude processing not implemented")
+            telemetry_handler.update_telemetry("resultInfo.failureCategory", FailureCategory.AGENT_FAILURE.name)
+            error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
 
         # Poll for PR creation by the external agent
         log(f"Waiting for external agent to create a PR for issue #{issue_number}")

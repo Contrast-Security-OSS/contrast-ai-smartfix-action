@@ -25,6 +25,7 @@ from typing import List, Optional
 from src.utils import run_command, debug_log, log, error_exit
 from src.contrast_api import FailureCategory
 from src.config import get_config
+from src.coding_agents import CodingAgents
 config = get_config()
 
 
@@ -540,7 +541,7 @@ def create_issue(title: str, body: str, vuln_label: str, remediation_label: str)
             issue_number = int(os.path.basename(issue_url.strip()))
             log(f"Issue number extracted: {issue_number}")
 
-            if config.CODING_AGENT == "CLAUDE_CODE":
+            if config.CODING_AGENT == CodingAgents.CLAUDE_CODE.name:
                 debug_log("CLAUDE_CODE agent detected no need to edit issue for assignment")
                 return issue_number
 
@@ -629,7 +630,8 @@ def reset_issue(issue_number: int, remediation_label: str) -> bool:
     Resets a GitHub issue by:
     1. Removing all existing labels that start with "smartfix-id:"
     2. Adding the specified remediation label
-    3. Unassigning the @Copilot user and reassigning the issue to @Copilot
+    3. If coding agent is CoPilot then unassigning the @Copilot user and reassigning the issue to @Copilot
+    4. If coding agent is Claude Code then adding a comment to notify @claude to reprocess the issue
 
     The reset will not occur if there's an open PR for the issue.
 
@@ -708,6 +710,25 @@ def reset_issue(issue_number: int, remediation_label: str) -> bool:
 
         run_command(add_label_command, env=gh_env, check=True)
         log(f"Added new remediation label to issue #{issue_number}")
+
+        # If using CLAUDE_CODE, skip reassignment and tag @claude in comment
+        if config.CODING_AGENT == CodingAgents.CLAUDE_CODE.name:
+            debug_log("CLAUDE_CODE agent detected need to add a comment and tag @claude for reprocessing")
+            # Add a comment to the existing issue to notify @claude to reprocess
+            comment:str = f"@claude reprocess this issue with the new remediation label: {remediation_label} and attempt a fix."
+            comment_command = [
+                "gh", "issue", "comment",
+                "--repo", config.GITHUB_REPOSITORY,
+                str(issue_number),
+                "--create-if-none",
+                "--edit-last",
+                "--body", comment
+            ]
+
+            # add a new comment and use the @claude handle to reprocess the issue
+            run_command(comment_command, env=gh_env, check=True)
+            log(f"Added new comment tagging @claude to issue #{issue_number}")
+            return True
 
         # Unassign from @Copilot (if assigned)
         unassign_command = [
