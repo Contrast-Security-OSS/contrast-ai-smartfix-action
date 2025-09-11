@@ -18,22 +18,15 @@
 # #L%
 #
 
-import sys
 import unittest
 from unittest.mock import patch, mock_open
 import os
 import json
 
-# Add project root to path for imports
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-# Import test setup helper
-sys.path.insert(0, os.path.dirname(__file__))
+# Test setup imports (path is set up by conftest.py)
 from setup_test_env import TestEnvironmentMixin
-
-# Now import project modules (after path modification)
-from src.config import reset_config, get_config  # noqa: E402
-from src import closed_handler  # noqa: E402
+from src.config import reset_config, get_config
+from src import closed_handler
 
 
 class TestClosedHandler(unittest.TestCase, TestEnvironmentMixin):

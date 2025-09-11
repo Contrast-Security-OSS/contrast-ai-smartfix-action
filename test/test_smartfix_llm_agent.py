@@ -25,28 +25,14 @@ This module tests the SmartFixLlmAgent functionality with focused tests on
 the extension logic without complex ADK dependencies.
 """
 
-import sys
 import unittest
 import json
-import os
 from unittest.mock import Mock, patch, MagicMock
 
-# Add project root to path for imports
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-# Import test setup helper
-sys.path.insert(0, os.path.dirname(__file__))
+# Test setup imports (path is set up by conftest.py)
 from setup_test_env import TestEnvironmentMixin
-
-# Now import project modules (after path modification)
-from src.config import get_config  # noqa: E402
-
-# Initialize config with testing flag
-_ = get_config(testing=True)
-
-# Import the classes under test AFTER config initialization
-from src.smartfix.extensions.smartfix_llm_agent import SmartFixLlmAgent  # noqa: E402
-from src.smartfix.extensions.smartfix_litellm import SmartFixLiteLlm  # noqa: E402
+from src.smartfix.extensions.smartfix_llm_agent import SmartFixLlmAgent
+from src.smartfix.extensions.smartfix_litellm import SmartFixLiteLlm
 
 
 class TestSmartFixLlmAgentFunctionality(unittest.TestCase, TestEnvironmentMixin):

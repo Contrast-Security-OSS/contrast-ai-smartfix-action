@@ -18,22 +18,15 @@
 # #L%
 #
 
-import sys
 import unittest
 from unittest.mock import patch
 from contextlib import contextmanager
-import os
 
-# Add project root to path for imports
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-# Import test setup helper
-sys.path.insert(0, os.path.dirname(__file__))
+# Test setup imports (path is set up by conftest.py)
 from setup_test_env import TestEnvironmentMixin
-
-from src import utils  # noqa: E402
-from src.config import get_config, reset_config  # noqa: E402
-from src.contrast_api import FailureCategory  # noqa: E402
+from src import utils
+from src.config import get_config, reset_config
+from src.contrast_api import FailureCategory
 
 
 class TestErrorExit(unittest.TestCase, TestEnvironmentMixin):

@@ -1,22 +1,12 @@
 import unittest
 import os
-import sys
 from unittest.mock import patch, MagicMock
 from packaging.version import Version
 
-# Add project root to path for imports
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-# Import test setup helper
-sys.path.insert(0, os.path.dirname(__file__))
+# Test setup imports (path is set up by conftest.py)
 from setup_test_env import TestEnvironmentMixin
-
-# Import modules
-from src.config import reset_config, get_config  # noqa: E402
-from src.version_check import get_latest_repo_version, check_for_newer_version, do_version_check, normalize_version, safe_parse_version  # noqa: E402
-
-# Initialize config with testing=True for tests
-_ = get_config(testing=True)
+from src.config import reset_config
+from src.version_check import get_latest_repo_version, check_for_newer_version, do_version_check, normalize_version, safe_parse_version
 
 
 class TestVersionCheck(unittest.TestCase, TestEnvironmentMixin):

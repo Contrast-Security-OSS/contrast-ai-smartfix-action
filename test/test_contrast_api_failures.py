@@ -18,22 +18,14 @@
 # #L%
 #
 
-import sys
 import unittest
 from unittest.mock import patch, MagicMock
-import os
+import requests
 
-# Add project root to path for imports
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-# Import test setup helper
-sys.path.insert(0, os.path.dirname(__file__))
+# Test setup imports (path is set up by conftest.py)
 from setup_test_env import TestEnvironmentMixin
-
-# Now import project modules (after path modification)
-import requests  # noqa: E402
-from src.config import reset_config, get_config  # noqa: E402
-from src import contrast_api  # noqa: E402
+from src.config import reset_config, get_config
+from src import contrast_api
 
 
 class TestContrastApiFailureCategories(unittest.TestCase, TestEnvironmentMixin):

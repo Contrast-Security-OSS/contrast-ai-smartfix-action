@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Tuple, List, Optional
 
 # Import configurations and utilities
-from src.config import get_config
+# This used to import get_config() but we use the existing global config instead
 from src.utils import debug_log, run_command, log, error_exit, tail_string
 from src import agent_handler
 from src import git_handler
@@ -146,7 +146,7 @@ def run_qa_loop(
         - List[str]: A log of QA summaries.
     """
     log("\n--- Starting QA Review Process ---")
-    config = get_config()
+    # Using existing global config
     qa_attempts = 0
     build_success = False
     build_output = "Build not run."

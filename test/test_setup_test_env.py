@@ -3,15 +3,8 @@
 
 import unittest
 import os
-import sys
-from pathlib import Path
 
-# Add project root to path for imports
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
-
-# Import our setup helper directly from the test directory
-sys.path.insert(0, str(Path(__file__).parent))
+# Test setup imports (path is set up by conftest.py)
 from setup_test_env import (
     get_standard_test_env_vars,
     setup_test_environment,

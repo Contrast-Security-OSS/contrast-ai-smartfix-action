@@ -1,23 +1,13 @@
 import unittest
-import sys
 import os
 import io
-import tempfile
 import contextlib
 from unittest.mock import patch, MagicMock
 
-# Add src directory to path for imports
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-# Import test setup helper
-sys.path.insert(0, os.path.dirname(__file__))
-from setup_test_env import TestEnvironmentMixin, create_temp_repo_dir, cleanup_temp_dir
-
-# Initialize config with testing flag first
-from src.config import reset_config, get_config  # noqa: E402
-_ = get_config(testing=True)
-# Import modules to be tested AFTER config initialization
-from src.main import main  # noqa: E402
+# Test setup imports (path is set up by conftest.py)
+from setup_test_env import TestEnvironmentMixin, create_temp_repo_dir
+from src.config import reset_config
+from src.main import main
 
 
 class TestMain(unittest.TestCase, TestEnvironmentMixin):

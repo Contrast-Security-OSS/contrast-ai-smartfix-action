@@ -28,23 +28,12 @@ This module tests the extended LiteLLM functionality including:
 - Proper integration with LiteLLM base functionality
 """
 
-import sys
 import unittest
 import json
-import os
 from unittest.mock import patch
 
-# Add project root to path for imports
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-# Now import project modules (after path modification)
-from src.config import get_config  # noqa: E402
-
-# Initialize config with testing flag
-_ = get_config(testing=True)
-
-# Import the classes under test AFTER config initialization
-from src.smartfix.extensions.smartfix_litellm import SmartFixLiteLlm, TokenCostAccumulator  # noqa: E402
+# Test setup imports (path is set up by conftest.py)
+from src.smartfix.extensions.smartfix_litellm import SmartFixLiteLlm, TokenCostAccumulator
 
 
 class TestTokenCostAccumulator(unittest.TestCase):

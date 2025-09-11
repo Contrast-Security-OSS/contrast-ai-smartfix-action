@@ -40,8 +40,7 @@ from src import agent_handler
 from src import git_handler
 
 # Import domain models
-from src.smartfix.domains.vulnerability.context import PromptConfiguration, BuildConfiguration, RepositoryConfiguration, RemediationContext
-from src.smartfix.domains.vulnerability.models import Vulnerability, VulnerabilitySeverity
+from src.smartfix.domains.vulnerability.context import PromptConfiguration, BuildConfiguration, RepositoryConfiguration
 from src.smartfix.domains.vulnerability.processor import VulnerabilityProcessor
 from src import qa_handler
 from src.github.external_coding_agent import ExternalCodingAgent
