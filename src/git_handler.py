@@ -540,6 +540,10 @@ def create_issue(title: str, body: str, vuln_label: str, remediation_label: str)
             issue_number = int(os.path.basename(issue_url.strip()))
             log(f"Issue number extracted: {issue_number}")
 
+            if config.CODING_AGENT == "CLAUDE_CODE":
+                debug_log("CLAUDE_CODE agent detected no need to edit issue for assignment")
+                return issue_number
+
             # Now try to assign to @copilot separately
             assign_command = [
                 "gh", "issue", "edit",

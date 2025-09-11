@@ -333,7 +333,7 @@ def main():  # noqa: C901
             qa_system_prompt = vulnerability_data['qaSystemPrompt']
             qa_user_prompt = vulnerability_data['qaUserPrompt']
         else:
-            # For external coding agents (like GITHUB_COPILOT), get vulnerability details
+            # For external coding agents (GITHUB_COPILOT/CLAUDE_CODE), get vulnerability details
             log("\n::group::--- Fetching next vulnerability details from Contrast API ---")
             vulnerability_data = contrast_api.get_vulnerability_details(
                 config.CONTRAST_HOST, config.CONTRAST_ORG_ID, config.CONTRAST_APP_ID,

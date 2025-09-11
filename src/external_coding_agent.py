@@ -155,6 +155,10 @@ Please review this security vulnerability and implement appropriate fixes to add
         remediation_label = f"smartfix-id:{remediation_id}"
         issue_title = vuln_title
 
+        if self.config.CODING_AGENT == "CLAUDE_CODE":
+            debug_log("CLAUDE_CODE agent detected, tagging @claude in issue title for processing")
+            issue_title = f"@claude fix: {issue_title}"
+
         # Use the provided issue_body or fall back to default
         if issue_body is None:
             log(f"Failed to generate issue body for vulnerability id {vuln_uuid}", is_error=True)
