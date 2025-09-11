@@ -188,6 +188,7 @@ Please review this security vulnerability and implement appropriate fixes to add
         telemetry_handler.update_telemetry("additionalAttributes.externalIssueNumber", issue_number)
 
         if self.config.CODING_AGENT == CodingAgents.CLAUDE_CODE.name:
+            # temporary short-circuit for Claude until we implement the PR processing logic
             log("Claude agent processing support is not implemented as of yet so stop processing and log agent failure", is_error=True)
             telemetry_handler.update_telemetry("resultInfo.prCreated", False)
             telemetry_handler.update_telemetry("resultInfo.failureReason", "Claude processing not implemented")
