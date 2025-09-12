@@ -28,6 +28,7 @@ from asyncio.proactor_events import _ProactorBasePipeTransport
 
 # Import configurations and utilities
 from src.config import get_config
+from src.coding_agents import CodingAgents
 from src.utils import debug_log, log, error_exit
 from src import telemetry_handler
 from src.qa_handler import run_build_command
@@ -310,7 +311,7 @@ def main():  # noqa: C901
             break
 
         # --- Fetch Next Vulnerability Data from API ---
-        if config.CODING_AGENT == "SMARTFIX":
+        if config.CODING_AGENT == CodingAgents.SMARTFIX.name:
             # For SMARTFIX, get vulnerability with prompts
             log("\n::group::--- Fetching next vulnerability and prompts from Contrast API ---")
             vulnerability_data = contrast_api.get_vulnerability_with_prompts(
@@ -382,7 +383,7 @@ def main():  # noqa: C901
         log(f"\n\033[0;33m Selected vuln to fix: {vuln_title} \033[0m")
 
         # --- Check if we need to use the external coding agent ---
-        if config.CODING_AGENT != "SMARTFIX":
+        if config.CODING_AGENT != CodingAgents.SMARTFIX.name:
             external_agent = ExternalCodingAgent(config)
             # Assemble the issue body from vulnerability details
             issue_body = external_agent.assemble_issue_body(vulnerability_data)
