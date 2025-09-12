@@ -2,7 +2,6 @@
 """Tests for test environment setup helper."""
 
 import unittest
-import os
 
 # Test setup imports (path is set up by conftest.py)
 from setup_test_env import (
