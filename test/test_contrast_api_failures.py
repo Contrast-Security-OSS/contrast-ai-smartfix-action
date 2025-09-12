@@ -22,24 +22,20 @@ import unittest
 from unittest.mock import patch, MagicMock
 import requests
 
-# Test setup imports (path is set up by conftest.py)
-from setup_test_env import TestEnvironmentMixin
 from src.config import reset_config, get_config
 from src import contrast_api
 
 
-class TestContrastApiFailureCategories(unittest.TestCase, TestEnvironmentMixin):
+class TestContrastApiFailureCategories(unittest.TestCase):
     """Tests for the contrast_api failure categories and notification functions"""
 
     def setUp(self):
         """Set up test environment before each test"""
         reset_config()
-        self.setup_standard_test_env()  # Use mixin helper
         self.config = get_config()
 
     def tearDown(self):
         """Clean up after each test"""
-        self.cleanup_standard_test_env()  # Use mixin helper
         reset_config()
 
     def test_failure_category_enum_all_values(self):

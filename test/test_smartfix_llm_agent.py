@@ -30,21 +30,12 @@ import json
 from unittest.mock import Mock, patch, MagicMock
 
 # Test setup imports (path is set up by conftest.py)
-from setup_test_env import TestEnvironmentMixin
 from src.smartfix.extensions.smartfix_llm_agent import SmartFixLlmAgent
 from src.smartfix.extensions.smartfix_litellm import SmartFixLiteLlm
 
 
-class TestSmartFixLlmAgentFunctionality(unittest.TestCase, TestEnvironmentMixin):
+class TestSmartFixLlmAgentFunctionality(unittest.TestCase):
     """Test cases focusing on SmartFixLlmAgent specific functionality."""
-
-    def setUp(self):
-        """Set up test environment."""
-        self.setup_standard_test_env()
-
-    def tearDown(self):
-        """Clean up test environment."""
-        self.cleanup_standard_test_env()
 
     def test_has_extended_model_true(self):
         """Test has_extended_model returns True when SmartFixLiteLlm reference exists."""
@@ -87,16 +78,8 @@ class TestSmartFixLlmAgentFunctionality(unittest.TestCase, TestEnvironmentMixin)
             mock_extended_model.reset_accumulated_stats.assert_called_once()
 
 
-class TestSmartFixLlmAgentIntegration(unittest.TestCase, TestEnvironmentMixin):
+class TestSmartFixLlmAgentIntegration(unittest.TestCase):
     """Integration tests for SmartFixLlmAgent with real SmartFixLiteLlm instances."""
-
-    def setUp(self):
-        """Set up test environment."""
-        self.setup_standard_test_env()
-
-    def tearDown(self):
-        """Clean up test environment."""
-        self.cleanup_standard_test_env()
 
     @patch('litellm.completion')
     def test_extended_model_delegation_logic(self, mock_completion):

@@ -23,23 +23,20 @@ from unittest.mock import patch
 from contextlib import contextmanager
 
 # Test setup imports (path is set up by conftest.py)
-from setup_test_env import TestEnvironmentMixin
 from src import utils
 from src.config import get_config, reset_config
 from src.contrast_api import FailureCategory
 
 
-class TestErrorExit(unittest.TestCase, TestEnvironmentMixin):
+class TestErrorExit(unittest.TestCase):
     """Tests for the error_exit function in utils.py"""
 
     def setUp(self):
         """Set up test environment before each test"""
-        self.setup_standard_test_env()
         reset_config()  # Reset the config singleton
 
     def tearDown(self):
         """Clean up after each test"""
-        self.cleanup_standard_test_env()
         reset_config()
 
     @contextmanager

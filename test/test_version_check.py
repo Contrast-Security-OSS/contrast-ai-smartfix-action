@@ -4,17 +4,15 @@ from unittest.mock import patch, MagicMock
 from packaging.version import Version
 
 # Test setup imports (path is set up by conftest.py)
-from setup_test_env import TestEnvironmentMixin
 from src.config import reset_config
 from src.version_check import get_latest_repo_version, check_for_newer_version, do_version_check, normalize_version, safe_parse_version
 
 
-class TestVersionCheck(unittest.TestCase, TestEnvironmentMixin):
+class TestVersionCheck(unittest.TestCase):
     """Test the version checking functionality."""
 
     def setUp(self):
-        # Common setup for all tests using mixin
-        self.setup_standard_test_env()
+        # Common setup for all tests
         reset_config()  # Reset config before each test
 
         self.requests_patcher = patch('src.version_check.requests')
@@ -43,7 +41,6 @@ class TestVersionCheck(unittest.TestCase, TestEnvironmentMixin):
 
     def tearDown(self):
         # Clean up all patches
-        self.cleanup_standard_test_env()
         self.requests_patcher.stop()
         self.log_patcher.stop()
         self.debug_log_patcher.stop()
@@ -138,11 +135,11 @@ class TestVersionCheck(unittest.TestCase, TestEnvironmentMixin):
         # Check that the appropriate debug_log message was called
         self.mock_debug_log.assert_any_call("Running from SHA: abcdef1234567890abcdef1234567890abcdef12. No ref found for version check, using SHA.")
 
+    @patch.dict('os.environ', {'GITHUB_REF': 'refs/tags/v1.0.0'}, clear=True)
     @patch('src.version_check.get_latest_repo_version')
     def test_do_version_check_with_github_ref(self, mock_get_latest):
         """Test when GITHUB_REF is set but not GITHUB_ACTION_REF."""
         # Setup environment and mocks
-        os.environ["GITHUB_REF"] = "refs/tags/v1.0.0"
         mock_get_latest.return_value = "v2.0.0"
 
         # Reset mocks before test
@@ -181,11 +178,10 @@ class TestVersionCheck(unittest.TestCase, TestEnvironmentMixin):
         self.mock_debug_log.assert_any_call("Running action from SHA: abcdef1234567890abcdef1234567890abcdef12. Skipping version comparison against tags.")
         mock_get_latest.assert_not_called()
 
+    @patch.dict('os.environ', {'GITHUB_REF': 'refs/heads/main'}, clear=True)
     @patch('src.version_check.get_latest_repo_version')
     def test_do_version_check_unparseable_version(self, mock_get_latest):
         """Test with a reference that can't be parsed as a version."""
-        os.environ["GITHUB_REF"] = "refs/heads/main"
-
         do_version_check()
 
         # Check debug_log calls

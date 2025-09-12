@@ -54,30 +54,6 @@ def setup_test_environment():
     return patch.dict(os.environ, get_standard_test_env_vars(), clear=True)
 
 
-class TestEnvironmentMixin:
-    """
-    Mixin class to provide standard test environment setup.
-
-    Usage:
-        class TestMyClass(unittest.TestCase, TestEnvironmentMixin):
-            def setUp(self):
-                self.setup_standard_test_env()
-
-            def tearDown(self):
-                self.cleanup_standard_test_env()
-    """
-
-    def setup_standard_test_env(self):
-        """Set up standard test environment."""
-        self._env_patcher = setup_test_environment()
-        self._env_patcher.start()
-
-    def cleanup_standard_test_env(self):
-        """Clean up standard test environment."""
-        if hasattr(self, '_env_patcher'):
-            self._env_patcher.stop()
-
-
 def create_temp_repo_dir():
     """
     Create a temporary directory for repository testing.

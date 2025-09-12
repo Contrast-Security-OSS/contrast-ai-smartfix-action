@@ -24,23 +24,19 @@ from unittest.mock import patch
 import json
 
 # Test setup imports (path is set up by conftest.py)
-from setup_test_env import TestEnvironmentMixin
 from src.config import get_config, reset_config
 from src import git_handler
 
 
-class TestGitHandler(unittest.TestCase, TestEnvironmentMixin):
+class TestGitHandler(unittest.TestCase):
     """Tests for functions in git_handler.py"""
 
     def setUp(self):
         """Set up test environment before each test"""
-        # Use the mixin to set up standard test environment
-        self.setup_standard_test_env()
         reset_config()  # Reset the config singleton
 
     def tearDown(self):
         """Clean up after each test"""
-        self.cleanup_standard_test_env()
         reset_config()
 
     @patch('src.git_handler.check_issues_enabled')

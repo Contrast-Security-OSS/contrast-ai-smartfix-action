@@ -22,24 +22,20 @@ import unittest
 from unittest.mock import patch, MagicMock
 
 # Test setup imports (path is set up by conftest.py)
-from setup_test_env import TestEnvironmentMixin
 from src.config import get_config, reset_config
 from src.github.external_coding_agent import ExternalCodingAgent
 
 
-class TestExternalCodingAgent(unittest.TestCase, TestEnvironmentMixin):
+class TestExternalCodingAgent(unittest.TestCase):
     """Tests for the ExternalCodingAgent class"""
 
     def setUp(self):
         """Set up test environment before each test"""
-        # Use the mixin to set up standard test environment
-        self.setup_standard_test_env()
         reset_config()  # Reset the config singleton
         self.config = get_config(testing=True)
 
     def tearDown(self):
         """Clean up after each test"""
-        self.cleanup_standard_test_env()
         reset_config()
 
     @patch('src.github.external_coding_agent.log')

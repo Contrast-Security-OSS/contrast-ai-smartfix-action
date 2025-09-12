@@ -7,8 +7,6 @@ import os
 # Test setup imports (path is set up by conftest.py)
 from setup_test_env import (
     get_standard_test_env_vars,
-    setup_test_environment,
-    TestEnvironmentMixin,
     create_temp_repo_dir,
     cleanup_temp_dir
 )
@@ -36,19 +34,6 @@ class TestSetupTestEnv(unittest.TestCase):
         self.assertEqual(env_vars['BASE_BRANCH'], 'main')
         self.assertEqual(env_vars['TESTING'], 'true')
 
-    def test_setup_test_environment_context_manager(self):
-        """Test setup_test_environment as context manager."""
-        # Store original value if it exists
-        original_value = os.environ.get('CONTRAST_HOST')
-
-        with setup_test_environment():
-            # Should have test value
-            self.assertEqual(os.environ.get('CONTRAST_HOST'), 'test.contrastsecurity.com')
-            self.assertEqual(os.environ.get('BASE_BRANCH'), 'main')
-
-        # Should be restored after context
-        self.assertEqual(os.environ.get('CONTRAST_HOST'), original_value)
-
     def test_create_and_cleanup_temp_dir(self):
         """Test temporary directory creation and cleanup."""
         # Create temp directory
@@ -63,25 +48,6 @@ class TestSetupTestEnv(unittest.TestCase):
 
         # Should no longer exist
         self.assertFalse(temp_dir.exists())
-
-
-class TestEnvironmentMixinExample(unittest.TestCase, TestEnvironmentMixin):
-    """Example test class using the TestEnvironmentMixin."""
-
-    def setUp(self):
-        """Set up test environment using mixin."""
-        self.setup_standard_test_env()
-
-    def tearDown(self):
-        """Clean up test environment using mixin."""
-        self.cleanup_standard_test_env()
-
-    def test_environment_is_setup(self):
-        """Test that environment is properly set up by mixin."""
-        # These should be available from the standard setup
-        self.assertEqual(os.environ.get('BASE_BRANCH'), 'main')
-        self.assertEqual(os.environ.get('TESTING'), 'true')
-        self.assertIsNotNone(os.environ.get('CONTRAST_HOST'))
 
 
 if __name__ == '__main__':

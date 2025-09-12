@@ -5,12 +5,12 @@ import contextlib
 from unittest.mock import patch, MagicMock
 
 # Test setup imports (path is set up by conftest.py)
-from setup_test_env import TestEnvironmentMixin, create_temp_repo_dir
+from setup_test_env import create_temp_repo_dir
 from src.config import reset_config
 from src.main import main
 
 
-class TestMain(unittest.TestCase, TestEnvironmentMixin):
+class TestMain(unittest.TestCase):
     """Test the main functionality of the application."""
 
     def setUp(self):
@@ -18,9 +18,7 @@ class TestMain(unittest.TestCase, TestEnvironmentMixin):
         # Use helper for temp directory creation
         self.temp_dir = str(create_temp_repo_dir())
 
-        # Setup standard env vars using mixin, then override paths for this test
-        self.setup_standard_test_env()
-
+        # Setup standard env vars, then override paths for this test
         # Override paths specific to this test
         import os
         self.env_vars = {
@@ -79,7 +77,6 @@ class TestMain(unittest.TestCase, TestEnvironmentMixin):
     def tearDown(self):
         """Clean up after each test."""
         # Stop all patches
-        self.cleanup_standard_test_env()
         self.subproc_patcher.stop()
         self.git_patcher.stop()
         self.api_patcher.stop()

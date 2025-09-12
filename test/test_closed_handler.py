@@ -23,13 +23,12 @@ from unittest.mock import patch, mock_open
 import os
 import json
 
-# Test setup imports (path is set up by conftest.py)
-from setup_test_env import TestEnvironmentMixin
+
 from src.config import reset_config, get_config
 from src import closed_handler
 
 
-class TestClosedHandler(unittest.TestCase, TestEnvironmentMixin):
+class TestClosedHandler(unittest.TestCase):
     """Tests for the closed_handler module"""
 
     def setUp(self):
@@ -39,15 +38,10 @@ class TestClosedHandler(unittest.TestCase, TestEnvironmentMixin):
         self.mock_exit = self.exit_patcher.start()
 
         reset_config()
-
-        # Use mixin to set up standard test environment
-        self.setup_standard_test_env()
-
         self.config = get_config()
 
     def tearDown(self):
         """Clean up after each test"""
-        self.cleanup_standard_test_env()
         self.exit_patcher.stop()
         reset_config()
 
