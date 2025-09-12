@@ -171,7 +171,7 @@ class Config:
             CodingAgents[coding_agent.upper()]
             return coding_agent.upper()
         except (KeyError, ValueError):
-            _log_config_message(f"Warning: Invalid CODING_AGENT '{coding_agent}'. Must be one of {[agent.name for agent in CodingAgents]}. Defaulting to 'SMARTFIX'.", is_warning=True)
+            _log_config_message(f"Warning: Invalid CODING_AGENT '{coding_agent}'. Must be one of {[agent.name for agent in CodingAgents]}. Defaulting to '{CodingAgents.SMARTFIX.name}'.", is_warning=True)
             return CodingAgents.SMARTFIX.name
 
     def _parse_and_validate_severities(self, json_str: Optional[str]) -> List[str]:
