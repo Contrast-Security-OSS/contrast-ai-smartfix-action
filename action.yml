@@ -90,7 +90,7 @@ inputs:
     required: false
     default: 'true'
   coding_agent:
-    description: 'Specifies the coding agent to use for generating fixes. Allowed values: SMARTFIX, GITHUB_COPILOT.'
+    description: 'Specifies the coding agent to use for generating fixes. Allowed values: SMARTFIX, GITHUB_COPILOT, CLAUDE_CODE.'
     required: false
     default: 'SMARTFIX'
 
