@@ -86,6 +86,7 @@ def _extract_remediation_info(pull_request: dict) -> tuple:
         
         # Set the external coding agent in telemetry based on branch prefix
         coding_agent = "EXTERNAL-CLAUDE-CODE" if branch_name.startswith("claude/") else "EXTERNAL-COPILOT"
+        debug_log(f"Determined external coding agent to be: {coding_agent}")
         telemetry_handler.update_telemetry("additionalAttributes.codingAgent", coding_agent)
     else:
         # Use original method for branches created by SmartFix
