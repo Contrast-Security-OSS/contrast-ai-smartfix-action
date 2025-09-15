@@ -868,19 +868,6 @@ def extract_issue_number_from_branch(branch_name: str) -> Optional[int]:
             debug_log(f"Failed to convert extracted issue number '{match.group(1)}' from copilot branch to int")
             pass
     
-    # Check for claude branch format: claude/issue-<number>-YYYYMMDD-HHMM
-    # claude_pattern = r'^claude/issue-(\d+)-\d{8}-\d{4}$'
-    # match = re.match(claude_pattern, branch_name)
-    # if match:
-    #     try:
-    #         issue_number = int(match.group(1))
-    #         # Validate that it's a positive number (GitHub issue numbers start from 1)
-    #         if issue_number > 0:
-    #             return issue_number
-    #     except ValueError:
-    #         debug_log(f"Failed to convert extracted issue number '{match.group(1)}' from claude branch to int")
-    #         pass
-
     return None
 
 
