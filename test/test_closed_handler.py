@@ -38,7 +38,7 @@ TEST_ENV_VARS = {
     'CONTRAST_AUTHORIZATION_KEY': 'test-auth-key',
     'CONTRAST_API_KEY': 'test-api-key',
     'GITHUB_WORKSPACE': '/tmp',
-    'RUN_TASK': 'generate_fix',
+    'RUN_TASK': 'closed',
     'BUILD_COMMAND': 'echo "Test build command"',
     'GITHUB_EVENT_PATH': '/tmp/github_event.json',
     'REPO_ROOT': '/tmp/test_repo',

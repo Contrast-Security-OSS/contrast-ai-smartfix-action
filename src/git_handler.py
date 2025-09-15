@@ -867,7 +867,7 @@ def extract_issue_number_from_branch(branch_name: str) -> Optional[int]:
         except ValueError:
             debug_log(f"Failed to convert extracted issue number '{match.group(1)}' from copilot or claude branch to int")
             pass
-    
+
     return None
 
 
