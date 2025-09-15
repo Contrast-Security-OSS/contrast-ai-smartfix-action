@@ -23,7 +23,6 @@ from pathlib import Path
 from typing import Tuple, List, Optional
 
 # Import configurations and utilities
-# This used to import get_config() but we use the existing global config instead
 from src.utils import debug_log, run_command, log, error_exit, tail_string
 from src import agent_handler
 from src import git_handler
