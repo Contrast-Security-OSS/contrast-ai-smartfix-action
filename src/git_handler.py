@@ -764,7 +764,8 @@ def reset_issue(issue_number: int, remediation_label: str) -> bool:
 def find_open_pr_for_issue(issue_number: int) -> dict:
     """
     Finds an open pull request associated with the given issue number.
-    Specifically looks for PRs with branch names matching the pattern 'copilot/fix-{issue_number}'.
+    Specifically looks for PRs with branch names matching the pattern 'copilot/fix-{issue_number}'
+    or 'claude/issue-<issue_number>-'.
 
     Args:
         issue_number: The issue number to find a PR for
@@ -802,34 +803,12 @@ def find_open_pr_for_issue(issue_number: int) -> dict:
                 "--limit", "1",
                 "--json", "number,url,title,headRefName,baseRefName,state"
             ]
+
+            pr_list_output = run_command(claude_pr_list_command, env=gh_env, check=False)
             
-            claude_pr_list_output = run_command(claude_pr_list_command, env=gh_env, check=False)
-            
-            if not claude_pr_list_output or claude_pr_list_output.strip() == "[]":
+            if not pr_list_output or pr_list_output.strip() == "[]":
                 debug_log(f"No open PRs found for issue #{issue_number} with either Copilot or Claude branch pattern")
                 return None
-                
-            try:
-                claude_prs_data = json.loads(claude_pr_list_output)
-                if claude_prs_data:
-                    # Found a Claude PR
-                    pr_info = claude_prs_data[0]
-                    pr_number = pr_info.get("number")
-                    pr_url = pr_info.get("url")
-                    pr_title = pr_info.get("title")
-                    
-                    if pr_number and pr_url:
-                        log(f"Found open PR #{pr_number} with Claude branch for issue #{issue_number}: {pr_title}")
-                        return pr_info
-                    
-                # If we get here, no PR was found with Claude branch pattern either
-                debug_log(f"No open PRs found for issue #{issue_number} with either branch pattern")
-                return None
-            except json.JSONDecodeError:
-                log(f"Could not parse JSON output from Claude PR search: {claude_pr_list_output}", is_error=True)
-                return None
-            
-            return None
 
         prs_data = json.loads(pr_list_output)
 
@@ -858,7 +837,8 @@ def find_open_pr_for_issue(issue_number: int) -> dict:
 
 def extract_issue_number_from_branch(branch_name: str) -> Optional[int]:
     """
-    Extracts the GitHub issue number from a branch name with format 'copilot/fix-<issue_number>' or 'claude/issue-<issue_number>-YYYYMMDD-HHMM'.
+    Extracts the GitHub issue number from a branch name with format 'copilot/fix-<issue_number>'
+    or 'claude/issue-<issue_number>-YYYYMMDD-HHMM'.
 
     Args:
         branch_name: The branch name to extract the issue number from
@@ -872,6 +852,12 @@ def extract_issue_number_from_branch(branch_name: str) -> Optional[int]:
     # Check for copilot branch format: copilot/fix-<number>
     copilot_pattern = r'^copilot/fix-(\d+)$'
     match = re.match(copilot_pattern, branch_name)
+
+    if not match:
+        # Check for claude branch format: claude/issue-<number>-YYYYMMDD-HHMM
+        claude_pattern = r'^claude/issue-(\d+)-\d{8}-\d{4}$'
+        match = re.match(claude_pattern, branch_name)
+
     if match:
         try:
             issue_number = int(match.group(1))
@@ -883,17 +869,17 @@ def extract_issue_number_from_branch(branch_name: str) -> Optional[int]:
             pass
     
     # Check for claude branch format: claude/issue-<number>-YYYYMMDD-HHMM
-    claude_pattern = r'^claude/issue-(\d+)-\d{8}-\d{4}$'
-    match = re.match(claude_pattern, branch_name)
-    if match:
-        try:
-            issue_number = int(match.group(1))
-            # Validate that it's a positive number (GitHub issue numbers start from 1)
-            if issue_number > 0:
-                return issue_number
-        except ValueError:
-            debug_log(f"Failed to convert extracted issue number '{match.group(1)}' from claude branch to int")
-            pass
+    # claude_pattern = r'^claude/issue-(\d+)-\d{8}-\d{4}$'
+    # match = re.match(claude_pattern, branch_name)
+    # if match:
+    #     try:
+    #         issue_number = int(match.group(1))
+    #         # Validate that it's a positive number (GitHub issue numbers start from 1)
+    #         if issue_number > 0:
+    #             return issue_number
+    #     except ValueError:
+    #         debug_log(f"Failed to convert extracted issue number '{match.group(1)}' from claude branch to int")
+    #         pass
 
     return None
 
