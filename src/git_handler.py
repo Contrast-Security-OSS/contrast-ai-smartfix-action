@@ -765,7 +765,7 @@ def find_open_pr_for_issue(issue_number: int) -> dict:
     """
     Finds an open pull request associated with the given issue number.
     Specifically looks for PRs with branch names matching the pattern 'copilot/fix-{issue_number}'
-    or 'claude/issue-<issue_number>-'.
+    or 'claude/issue-{issue_number}-'.
 
     Args:
         issue_number: The issue number to find a PR for
