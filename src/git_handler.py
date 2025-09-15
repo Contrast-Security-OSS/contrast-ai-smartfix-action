@@ -715,7 +715,7 @@ def reset_issue(issue_number: int, remediation_label: str) -> bool:
         if config.CODING_AGENT == CodingAgents.CLAUDE_CODE.name:
             debug_log("CLAUDE_CODE agent detected need to add a comment and tag @claude for reprocessing")
             # Add a comment to the existing issue to notify @claude to reprocess
-            comment:str = f"@claude reprocess this issue with the new remediation label: {remediation_label} and attempt a fix."
+            comment: str = f"@claude reprocess this issue with the new remediation label: {remediation_label} and attempt a fix."
             comment_command = [
                 "gh", "issue", "comment",
                 "--repo", config.GITHUB_REPOSITORY,

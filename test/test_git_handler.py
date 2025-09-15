@@ -189,7 +189,7 @@ class TestGitHandler(unittest.TestCase):
         # Mock that no open PR exists
         mock_find_open_pr.return_value = None
         mock_check_issues.return_value = True
-        
+
         # Explicitly configure for SMARTFIX agent
         mock_config.CODING_AGENT = CodingAgents.SMARTFIX.name
         mock_config.GITHUB_REPOSITORY = 'mock/repo'
@@ -276,7 +276,7 @@ class TestGitHandler(unittest.TestCase):
             "Cannot reset issue #42 because it has an open PR #123: https://github.com/mock/repo/pull/123",
             is_error=True
         )
-        
+
     @patch('src.git_handler.check_issues_enabled')
     @patch('src.git_handler.run_command')
     @patch('src.git_handler.find_open_pr_for_issue')
@@ -293,7 +293,7 @@ class TestGitHandler(unittest.TestCase):
         # Mock that no open PR exists
         mock_find_open_pr.return_value = None
         mock_check_issues.return_value = True
-        
+
         # Configure the mock to use CLAUDE_CODE
         mock_config.CODING_AGENT = CodingAgents.CLAUDE_CODE.name
         mock_config.GITHUB_REPOSITORY = 'mock/repo'
@@ -318,26 +318,26 @@ class TestGitHandler(unittest.TestCase):
         mock_check_issues.assert_called_once()
         self.assertEqual(mock_run_command.call_count, 4)  # Should call run_command 4 times (view, remove label, add label, add comment)
         self.assertTrue(result)
-        
+
         # Check that Claude-specific logic was executed
         mock_debug_log.assert_any_call("CLAUDE_CODE agent detected need to add a comment and tag @claude for reprocessing")
         mock_log.assert_any_call(f"Added new comment tagging @claude to issue #{issue_number}")
-        
+
         # Verify the comment command
         comment_command_call = mock_run_command.call_args_list[3]
         comment_command = comment_command_call[0][0]
-        
+
         # Verify command structure
         self.assertEqual(comment_command[0], "gh")
         self.assertEqual(comment_command[1], "issue")
         self.assertEqual(comment_command[2], "comment")
         self.assertEqual(comment_command[5], str(issue_number))
-        
+
         # Verify comment body contains '@claude' and the remediation label
         comment_body = comment_command[-1]
         self.assertIn("@claude", comment_body)
         self.assertIn(remediation_label, comment_body)
-        
+
     @patch('src.git_handler.check_issues_enabled')
     @patch('src.git_handler.run_command')
     @patch('src.git_handler.find_open_pr_for_issue')
@@ -353,7 +353,7 @@ class TestGitHandler(unittest.TestCase):
         # Mock that no open PR exists
         mock_find_open_pr.return_value = None
         mock_check_issues.return_value = True
-        
+
         # Configure the mock to use CLAUDE_CODE
         mock_config.CODING_AGENT = CodingAgents.CLAUDE_CODE.name
         mock_config.GITHUB_REPOSITORY = 'mock/repo'
@@ -378,7 +378,7 @@ class TestGitHandler(unittest.TestCase):
         mock_check_issues.assert_called_once()
         self.assertEqual(mock_run_command.call_count, 4)  # Should still call run_command 4 times
         self.assertFalse(result)  # Should return False due to the error
-        
+
         # Verify error was logged
         mock_log.assert_any_call(f"Failed to reset issue #{issue_number}: Failed to comment", is_error=True)
 
