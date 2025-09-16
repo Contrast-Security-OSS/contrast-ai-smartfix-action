@@ -458,9 +458,11 @@ class TestGitHandler(unittest.TestCase):
 
         # Assert
         self.assertIsNone(result)
-        mock_run_command.assert_called_once()
+        # The modified find_open_pr_for_issue function now makes up to 2 calls to run_command
+        # First for Copilot branch pattern, and second for Claude branch pattern if the first one fails
+        self.assertLessEqual(mock_run_command.call_count, 2)
         mock_debug_log.assert_any_call("Searching for open PR related to issue #42")
-        mock_debug_log.assert_any_call("No open PRs found for issue #42")
+        mock_debug_log.assert_any_call("No open PRs found for issue #42 with either Copilot or Claude branch pattern")
 
     @patch('src.git_handler.debug_log')
     @patch('src.git_handler.run_command')
@@ -525,9 +527,9 @@ class TestGitHandler(unittest.TestCase):
         mock_log.assert_any_call("Adding labels to PR #123: ['contrast-vuln-id:VULN-12345', 'smartfix-id:remediation-67890']")
         mock_log.assert_any_call("Successfully added labels to PR #123: ['contrast-vuln-id:VULN-12345', 'smartfix-id:remediation-67890']")
 
-    def test_extract_issue_number_from_branch_success(self):
+    def test_extract_issue_number_from_branch_copilot_success(self):
         """Test extracting issue number from valid copilot branch name"""
-        # Test cases with valid branch names
+        # Test cases with valid Copilot branch names
         test_cases = [
             ("copilot/fix-123", 123),
             ("copilot/fix-1", 1),
@@ -539,19 +541,40 @@ class TestGitHandler(unittest.TestCase):
             with self.subTest(branch_name=branch_name):
                 result = git_handler.extract_issue_number_from_branch(branch_name)
                 self.assertEqual(result, expected_issue_number)
+                
+    def test_extract_issue_number_from_branch_claude_success(self):
+        """Test extracting issue number from valid Claude Code branch name"""
+        # Test cases with valid Claude Code branch names - format: claude/issue-<issue_number>-YYYYMMDD-HHMM
+        test_cases = [
+            ("claude/issue-123-20250908-1723", 123),
+            ("claude/issue-1-20250909-0930", 1),
+            ("claude/issue-999999-20251010-0800", 999999),
+            ("claude/issue-75-20250725-1212", 75),
+        ]
+
+        for branch_name, expected_issue_number in test_cases:
+            with self.subTest(branch_name=branch_name):
+                result = git_handler.extract_issue_number_from_branch(branch_name)
+                self.assertEqual(result, expected_issue_number)
 
     def test_extract_issue_number_from_branch_invalid(self):
         """Test extracting issue number from invalid branch names"""
         # Test cases with invalid branch names
         invalid_branches = [
-            "main",                           # Wrong branch name
-            "feature/new-feature",           # Wrong branch name
-            "copilot/fix-",                  # Missing issue number
-            "copilot/fix-abc",               # Non-numeric issue number
-            "copilot/fix-123abc",            # Invalid format
-            "copilot/fix-123-extra",         # Extra parts
-            "smartfix/remediation-123",      # Different prefix
-            "",                              # Empty string
+            "main",                              # Wrong branch name
+            "feature/new-feature",               # Wrong branch name
+            "copilot/fix-",                      # Missing issue number
+            "copilot/fix-abc",                   # Non-numeric issue number
+            "copilot/fix-123abc",                # Invalid format
+            "copilot/fix-123-extra",             # Extra parts
+            "claude/issue-",                     # Missing issue number
+            "claude/issue-abc-20250908-1723",    # Non-numeric issue number
+            "claude/issue-123-20250908",         # Missing time part
+            "claude/issue-123-YYYYMMDD-HHMM",    # Literal date placeholder
+            "claude/issue-123-20250908-172",     # Incomplete time format
+            "claude/issue-123-202509081723",     # No hyphen separator
+            "smartfix/remediation-123",          # Different prefix
+            "",                                  # Empty string
         ]
 
         for branch_name in invalid_branches:
@@ -563,7 +586,8 @@ class TestGitHandler(unittest.TestCase):
         """Test edge cases for extracting issue number from branch name"""
         # Test edge cases
         edge_cases = [
-            ("copilot/fix-2147483647", 2147483647),  # Large number (max 32-bit int)
+            ("copilot/fix-2147483647", 2147483647),   # Large number (max 32-bit int) - Copilot
+            ("claude/issue-2147483647-20250908-1723", 2147483647),  # Large number (max 32-bit int) - Claude
         ]
 
         for branch_name, expected_issue_number in edge_cases:

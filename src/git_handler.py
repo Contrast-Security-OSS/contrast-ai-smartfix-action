@@ -764,7 +764,8 @@ def reset_issue(issue_number: int, remediation_label: str) -> bool:
 def find_open_pr_for_issue(issue_number: int) -> dict:
     """
     Finds an open pull request associated with the given issue number.
-    Specifically looks for PRs with branch names matching the pattern 'copilot/fix-{issue_number}'.
+    Specifically looks for PRs with branch names matching the pattern 'copilot/fix-{issue_number}'
+    or 'claude/issue-{issue_number}-'.
 
     Args:
         issue_number: The issue number to find a PR for
@@ -775,8 +776,8 @@ def find_open_pr_for_issue(issue_number: int) -> dict:
     debug_log(f"Searching for open PR related to issue #{issue_number}")
     gh_env = get_gh_env()
 
-    # Use a search pattern that matches PRs with branch names following the 'copilot/fix-{issue_number}' pattern
-    # IDEA: Whenever we start supporting other coding agents the proper branch prefix will need to be passed in
+    # Use search patterns that match PRs with branch names for both Copilot and Claude Code
+    # First try to find PRs with Copilot branch pattern
     search_pattern = f"head:copilot/fix-{issue_number}"
 
     pr_list_command = [
@@ -792,8 +793,22 @@ def find_open_pr_for_issue(issue_number: int) -> dict:
         pr_list_output = run_command(pr_list_command, env=gh_env, check=False)
 
         if not pr_list_output or pr_list_output.strip() == "[]":
-            debug_log(f"No open PRs found for issue #{issue_number}")
-            return None
+            # Try again with claude branch pattern
+            claude_search_pattern = f"head:claude/issue-{issue_number}-"
+            claude_pr_list_command = [
+                "gh", "pr", "list",
+                "--repo", config.GITHUB_REPOSITORY,
+                "--state", "open",
+                "--search", claude_search_pattern,
+                "--limit", "1",
+                "--json", "number,url,title,headRefName,baseRefName,state"
+            ]
+
+            pr_list_output = run_command(claude_pr_list_command, env=gh_env, check=False)
+            
+            if not pr_list_output or pr_list_output.strip() == "[]":
+                debug_log(f"No open PRs found for issue #{issue_number} with either Copilot or Claude branch pattern")
+                return None
 
         prs_data = json.loads(pr_list_output)
 
@@ -822,7 +837,8 @@ def find_open_pr_for_issue(issue_number: int) -> dict:
 
 def extract_issue_number_from_branch(branch_name: str) -> Optional[int]:
     """
-    Extracts the GitHub issue number from a branch name with format 'copilot/fix-<issue_number>'.
+    Extracts the GitHub issue number from a branch name with format 'copilot/fix-<issue_number>'
+    or 'claude/issue-<issue_number>-YYYYMMDD-HHMM'.
 
     Args:
         branch_name: The branch name to extract the issue number from
@@ -833,10 +849,14 @@ def extract_issue_number_from_branch(branch_name: str) -> Optional[int]:
     if not branch_name:
         return None
 
-    # Use regex to match the exact pattern: copilot/fix-<number>
-    # This ensures we only match the expected format and extract just the number
-    pattern = r'^copilot/fix-(\d+)$'
-    match = re.match(pattern, branch_name)
+    # Check for copilot branch format: copilot/fix-<number>
+    copilot_pattern = r'^copilot/fix-(\d+)$'
+    match = re.match(copilot_pattern, branch_name)
+
+    if not match:
+        # Check for claude branch format: claude/issue-<number>-YYYYMMDD-HHMM
+        claude_pattern = r'^claude/issue-(\d+)-\d{8}-\d{4}$'
+        match = re.match(claude_pattern, branch_name)
 
     if match:
         try:
@@ -845,8 +865,7 @@ def extract_issue_number_from_branch(branch_name: str) -> Optional[int]:
             if issue_number > 0:
                 return issue_number
         except ValueError:
-            # This shouldn't happen since \d+ only matches digits, but being safe
-            debug_log(f"Failed to convert extracted issue number '{match.group(1)}' to int")
+            debug_log(f"Failed to convert extracted issue number '{match.group(1)}' from copilot or claude branch to int")
             pass
 
     return None

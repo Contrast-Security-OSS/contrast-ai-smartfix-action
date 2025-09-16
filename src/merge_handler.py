@@ -72,8 +72,8 @@ def _extract_remediation_info(pull_request: dict) -> tuple:
     # Extract remediation ID from branch name or PR labels
     remediation_id = None
 
-    # Check if this is a branch created by external agent (e.g., GitHub Copilot)
-    if branch_name.startswith("copilot/fix"):
+    # Check if this is a branch created by external agent (e.g., GitHub Copilot or Claude Code)
+    if branch_name.startswith("copilot/fix") or branch_name.startswith("claude/issue-"):
         debug_log("Branch appears to be created by external agent. Extracting remediation ID from PR labels.")
         remediation_id = extract_remediation_id_from_labels(labels)
         # Extract GitHub issue number from branch name
@@ -83,14 +83,18 @@ def _extract_remediation_info(pull_request: dict) -> tuple:
             debug_log(f"Extracted external issue number from branch name: {issue_number}")
         else:
             debug_log(f"Could not extract issue number from branch name: {branch_name}")
-        telemetry_handler.update_telemetry("additionalAttributes.codingAgent", "EXTERNAL-COPILOT")
+        
+        # Set the external coding agent in telemetry based on branch prefix
+        coding_agent = "EXTERNAL-CLAUDE-CODE" if branch_name.startswith("claude/") else "EXTERNAL-COPILOT"
+        debug_log(f"Determined external coding agent to be: {coding_agent}")
+        telemetry_handler.update_telemetry("additionalAttributes.codingAgent", coding_agent)
     else:
         # Use original method for branches created by SmartFix
         remediation_id = extract_remediation_id_from_branch(branch_name)
         telemetry_handler.update_telemetry("additionalAttributes.codingAgent", "INTERNAL-SMARTFIX")
 
     if not remediation_id:
-        if branch_name.startswith("copilot/fix"):
+        if branch_name.startswith("copilot/fix") or branch_name.startswith("claude/issue-"):
             log(f"Error: Could not extract remediation ID from PR labels for external agent branch: {branch_name}", is_error=True)
         else:
             log(f"Error: Could not extract remediation ID from branch name: {branch_name}", is_error=True)
