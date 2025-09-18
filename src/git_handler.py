@@ -924,7 +924,7 @@ def watch_github_action_run(run_id: int) -> bool:
     Returns:
         bool: True if the run completed successfully, False if it failed
     """
-    log(f"Watching GitHub Actions run #{run_id} until completion...")
+    log(f"OK Now watching GitHub Actions run #{run_id} until completion... This may take several minutes.")
     gh_env = get_gh_env()
 
     watch_command = [
@@ -949,30 +949,33 @@ def watch_github_action_run(run_id: int) -> bool:
         return False
 
 
-def get_latest_branch_by_pattern(pattern: str, author: str = None) -> Optional[str]:
+def get_latest_branch_by_pattern(pattern: str) -> Optional[str]:
     """
-    Gets the latest branch matching a specific pattern and optionally from a specific author.
+    Gets the latest branch matching a specific pattern, ignoring author information.
+
+    This function is particularly useful for finding Claude-generated branches
+    which follow a specific naming pattern regardless of the commit author.
 
     Args:
         pattern: The regex pattern to match branch names against
-        author: Optional author username to filter branches by
 
     Returns:
         Optional[str]: The latest matching branch name or None if no matches found
     """
-    import re
-    import json
-    from src.utils import run_command, debug_log, log
-    from src.git_handler import get_gh_env
+    #import re
+    #import json
+    #from src.utils import run_command, debug_log, log
+    # Avoid circular import
 
-    debug_log(f"Finding latest branch matching pattern '{pattern}'{f' from author {author}' if author else ''}")
+    debug_log(f"Finding latest branch matching pattern '{pattern}'")
 
+    # Ignore author parameter - we'll find branches by pattern only
     # Construct GraphQL query to get branches
-    # Limit to 100 most recent branches - adjust if needed
+    # Limit to 100 most recent branches, ordered by commit date descending
     graphql_query = """
     query($repo_owner: String!, $repo_name: String!) {
       repository(owner: $repo_owner, name: $repo_name) {
-        refs(refPrefix: "refs/heads/", first: 100, orderBy: {field: ALPHABETICAL, direction: DESC}) {
+        refs(refPrefix: "refs/heads/", first: 100) {
           nodes {
             name
             target {
@@ -1020,18 +1023,14 @@ def get_latest_branch_by_pattern(pattern: str, author: str = None) -> Optional[s
         # Compile regex pattern
         pattern_regex = re.compile(pattern)
 
-        # Filter branches by pattern and author if specified
+        # Filter branches by pattern only (ignoring author)
         matching_branches = []
         for branch in branches:
             branch_name = branch.get('name')
             if not branch_name or not pattern_regex.match(branch_name):
                 continue
 
-            if author:
-                commit_author = branch.get('target', {}).get('author', {}).get('user', {}).get('login')
-                if commit_author != author:
-                    continue
-
+            # Always collect the committed date for sorting
             committed_date = branch.get('target', {}).get('committedDate')
             if committed_date:
                 matching_branches.append((branch_name, committed_date))
@@ -1044,7 +1043,7 @@ def get_latest_branch_by_pattern(pattern: str, author: str = None) -> Optional[s
             debug_log(f"Found latest matching branch: {latest_branch}")
             return latest_branch
         else:
-            debug_log(f"No branches found matching pattern '{pattern}'{f' from author {author}' if author else ''}")
+            debug_log(f"No branches found matching pattern '{pattern}'")
             return None
 
     except Exception as e:
@@ -1068,7 +1067,7 @@ def get_claude_workflow_run_id() -> int:
         "--repo", config.GITHUB_REPOSITORY,
         "--status", "in_progress",
         "--workflow", "claude.yml",
-        "--event", "issues",
+        #"--event", "issues",
         "--limit", "1",
         "--json", "databaseId"
     ]
