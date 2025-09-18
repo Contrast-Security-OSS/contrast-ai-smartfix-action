@@ -187,19 +187,13 @@ Please review this security vulnerability and implement appropriate fixes to add
 
         telemetry_handler.update_telemetry("additionalAttributes.externalIssueNumber", issue_number)
 
-        if self.config.CODING_AGENT == CodingAgents.CLAUDE_CODE.name:
-            # temporary short-circuit for Claude until we implement the PR processing logic
-            log("Claude agent processing support is not implemented as of yet so stop processing and log agent failure", is_error=True)
-            telemetry_handler.update_telemetry("resultInfo.prCreated", False)
-            telemetry_handler.update_telemetry("resultInfo.failureReason", "Claude processing not implemented")
-            telemetry_handler.update_telemetry("resultInfo.failureCategory", FailureCategory.AGENT_FAILURE.name)
-            error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
+        # Proceed with PR polling for all agent types
 
         # Poll for PR creation by the external agent
         log(f"Waiting for external agent to create a PR for issue #{issue_number}")
 
         # Poll for a PR to be created by the external agent (100 attempts, 5 seconds apart = ~8.3 minutes max)
-        pr_info = self._poll_for_pr(issue_number, remediation_id, vulnerability_label, remediation_label, max_attempts=100, sleep_seconds=5)
+        pr_info = self._process_external_coding_agent_run(issue_number, remediation_id, vulnerability_label, remediation_label, max_attempts=100, sleep_seconds=5)
 
         log("\n::endgroup::")
         if pr_info:
@@ -218,8 +212,8 @@ Please review this security vulnerability and implement appropriate fixes to add
             telemetry_handler.update_telemetry("resultInfo.failureCategory", FailureCategory.AGENT_FAILURE.name)
             return False
 
-    def _poll_for_pr(self, issue_number: int, remediation_id: str, vulnerability_label: str,
-                     remediation_label: str, max_attempts: int = 100, sleep_seconds: int = 5) -> Optional[dict]:
+    def _process_external_coding_agent_run(self, issue_number: int, remediation_id: str, vulnerability_label: str,
+                                           remediation_label: str, max_attempts: int = 100, sleep_seconds: int = 5) -> Optional[dict]:
         """
         Poll for a PR to be created by the external agent.
 
@@ -236,8 +230,11 @@ Please review this security vulnerability and implement appropriate fixes to add
 
         for attempt in range(1, max_attempts + 1):
             debug_log(f"Polling attempt {attempt}/{max_attempts} for PR related to issue #{issue_number}")
-
-            pr_info = git_handler.find_open_pr_for_issue(issue_number)
+            if self.config.CODING_AGENT == CodingAgents.CLAUDE_CODE.name:
+                pr_info = self._process_claude_workflow_run(issue_number, vulnerability_label, remediation_label)
+            else:
+                # GitHub Copilot agent
+                pr_info = git_handler.find_open_pr_for_issue(issue_number)
 
             if pr_info:
                 pr_number = pr_info.get("number")
@@ -278,5 +275,155 @@ Please review this security vulnerability and implement appropriate fixes to add
 
         log(f"No PR found for issue #{issue_number} after {max_attempts} polling attempts", is_error=True)
         return None
+
+    def _process_claude_workflow_run(self, issue_number: int, vulnerability_label: str, remediation_label: str) -> Optional[dict]:
+        """
+        Process the Claude Code workflow run and extract PR information from Claude's comment.
+
+        Supports internationalization by using language-agnostic patterns to extract information
+        from Claude's comments. This allows the code to work correctly even when GitHub's UI
+        is displayed in non-English languages.
+
+        Args:
+            issue_number: The issue number Claude is working on
+            vulnerability_label: The vulnerability label to add to the PR
+            remediation_label: The remediation label to add to the PR
+
+        Returns:
+            Optional[dict]: PR information if successfully created, None otherwise
+        """
+        # Check for Claude workflow run ID
+        workflow_run_id = git_handler.get_claude_workflow_run_id()
+        debug_log(f"Found claude workflow_run_id value: {workflow_run_id}")
+
+        if not workflow_run_id:
+            # If no workflow run ID found yet, continue polling
+            debug_log(f"claude workflow_run_id not found")
+            return None
+
+        # Watch the github action run
+        workflow_success = git_handler.watch_github_action_run(workflow_run_id)
+
+        if not workflow_success:
+            debug_log(f"GitHub Action run #{workflow_run_id} failed for issue #{issue_number}")
+            return None
+
+        # Get the issue comments to find Claude's response
+        claude_comments = git_handler.get_issue_comments(issue_number)
+
+        if not claude_comments or len(claude_comments) == 0:
+            debug_log(f"No Claude comments found for issue #{issue_number}")
+            return None
+
+        # Parse the most recent comment body to extract PR info
+        comment_body = claude_comments[0].get('body', '')
+        debug_log(f"Found claude comment_body value: {comment_body}")
+
+        # Parse data from the comment body
+        try:
+            # Extract PR title and body from the URL parameters
+            import re
+            import urllib.parse
+
+            # Find the Create PR URL that contains the title and body
+            # More generic approach that searches for any markdown link containing a GitHub compare URL
+            # This works regardless of the UI language (e.g., "Create PR", "プルリクエストを作成", etc.)
+            create_pr_match = re.search(r'\[.*?]\((https?://.*?/compare/.*?\.\.\.([^?)]*)(?:\?|\)|$))', comment_body)
+            debug_log(f"Found claude create_pr_match value: {create_pr_match}")
+            if not create_pr_match:
+                # Try the traditional English pattern as a fallback
+                create_pr_match = re.search(r'\[Create PR ➔\]\((.*?)\)', comment_body)
+                if not create_pr_match:
+                    log(f"Could not find Create PR URL in Claude comment", is_error=True)
+                    return None
+                create_pr_url = create_pr_match.group(1)
+                debug_log(f"Found fallback claude create_pr_url value: {create_pr_match}")
+            else:
+                create_pr_url = create_pr_match.group(1)
+                debug_log(f"Found claude create_pr_url value: {create_pr_match}")
+
+            # Extract query parameters from URL
+            params = {}
+            if '?' in create_pr_url:
+                query = create_pr_url.split('?', 1)[1]
+                param_pairs = query.split('&')
+                for pair in param_pairs:
+                    if '=' in pair:
+                        key, value = pair.split('=', 1)
+                        params[key] = urllib.parse.unquote(value)
+
+            # Extract title and body
+            pr_title = params.get('title', '')
+            debug_log(f"Found claude pr_title value: {pr_title}")
+            pr_body = params.get('body', '')
+            debug_log(f"Found claude pr_body value: {pr_body}")
+
+            # If head_branch was not extracted from URL, try to extract it from the comment
+            # if not head_branch:
+            #     # Try different patterns that might contain the branch name
+            #     branch_patterns = [
+            #         r'`(claude/issue-\d+-\d{8}-\d{4})`',  # Standard backtick format
+            #         r'[`"](claude/issue-\d+-\d{8}-\d{4})[`"]',  # With different quote styles
+            #         r'\[`(claude/issue-\d+-\d{8}-\d{4})`]',  # As a markdown link text (no need to escape closing square bracket)
+            #         r'\b(claude/issue-\d+-\d{8}-\d{4})\b'   # Without any formatting
+            #     ]
+            #
+            #     for pattern in branch_patterns:
+            #         branch_match = re.search(pattern, comment_body)
+            #         if branch_match:
+            #             head_branch = branch_match.group(1)
+            #             break
+            #
+            #     if not head_branch:
+            #         log(f"Could not extract head branch from Claude comment", is_error=True)
+            #         return None
+            pattern = fr'^claude/issue-{issue_number}-\d{{8}}-\d{{4}}$'
+            debug_log(f"Found claude pattern value: {pattern}")
+            head_branch =  git_handler.get_latest_branch_by_pattern(pattern, 'claude')
+            debug_log(f"Found claude head_branch value: {head_branch}")
+            if not head_branch:
+                log(f"Could not extract head branch from Claude comment", is_error=True)
+                return None
+
+            # Create PR using extracted information
+            base_branch = self.config.BASE_BRANCH
+            pr_url = git_handler.create_claude_pr(
+                title=pr_title,
+                body=pr_body,
+                base_branch=base_branch,
+                head_branch=head_branch,
+                vulnerability_label=vulnerability_label,
+                remediation_label=remediation_label
+            )
+            debug_log(f"claude create PR returned: {pr_url}")
+
+            if not pr_url:
+                log(f"Failed to create PR for Claude Code fix", is_error=True)
+                return None
+
+            # Extract PR number from URL
+            pr_number_match = re.search(r'/pull/(\d+)$', pr_url)
+            if not pr_number_match:
+                log(f"Could not extract PR number from URL: {pr_url}", is_error=True)
+                return None
+
+            pr_number = int(pr_number_match.group(1))
+
+            # Create PR info object similar to what find_open_pr_for_issue returns
+            pr_info = {
+                "number": pr_number,
+                "url": pr_url,
+                "title": pr_title,
+                "headRefName": head_branch,
+                "baseRefName": base_branch,
+                "state": "OPEN"
+            }
+
+            log(f"Successfully created PR #{pr_number} for Claude Code fix")
+            return pr_info
+
+        except Exception as e:
+            log(f"Error parsing Claude comment: {str(e)}", is_error=True)
+            return None
 
     # Additional methods will be implemented later

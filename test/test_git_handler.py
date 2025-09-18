@@ -21,7 +21,7 @@
 import sys
 import unittest
 import unittest.mock
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock, call
 import os
 import json
 
@@ -941,6 +941,491 @@ class TestGitHandler(unittest.TestCase):
         mock_check_issues.assert_called_once()
         mock_find_open_pr.assert_not_called()
         mock_log.assert_any_call("GitHub Issues are disabled for this repository. Cannot reset issue.", is_error=True)
+
+    @patch('src.git_handler.run_command')
+    @patch('src.git_handler.get_gh_env')
+    @patch('src.git_handler.debug_log')
+    @patch('src.git_handler.log')
+    def test_get_issue_comments_success(self, mock_log, mock_debug_log, mock_get_gh_env, mock_run_command):
+        """Test getting comments from an issue when successful"""
+        # Setup
+        issue_number = 94
+        mock_get_gh_env.return_value = {'GITHUB_TOKEN': 'mock-token'}
+
+        # Sample JSON response based on example provided
+        comment_data = [
+            {
+                "author": {
+                    "login": "claude"
+                },
+                "authorAssociation": "NONE",
+                "body": "Claude Code is working… <img src=\"https://github.com/user-attachments/assets/5ac382c7-e004-429b-8e35-7feb3e8f9c6f\" width=\"14px\" height=\"14px\" style=\"vertical-align: middle; margin-left: 4px;\" />\n\nI'll analyze this and get back to you.\n\n[View job run](https://github.com/dougj-contrast/django_vuln/actions/runs/17774252155)",
+                "createdAt": "2025-09-16T17:40:22Z",
+                "id": "IC_kwDOPOy2L87ErgSF",
+                "includesCreatedEdit": False,
+                "isMinimized": False,
+                "minimizedReason": "",
+                "reactionGroups": [],
+                "url": "https://github.com/dougj-contrast/django_vuln/issues/94#issuecomment-3299738757",
+                "viewerDidAuthor": False
+            }
+        ]
+
+        # Mock the response from gh command
+        mock_run_command.return_value = json.dumps(comment_data)
+
+        # Initialize config with testing=True
+        _ = get_config(testing=True)
+
+        # Execute
+        result = git_handler.get_issue_comments(issue_number)
+
+        # Assert
+        self.assertEqual(result, comment_data)
+        mock_run_command.assert_called_once()
+
+        # Verify the command was constructed correctly
+        command = mock_run_command.call_args[0][0]
+        self.assertEqual(command[0:3], ["gh", "issue", "view"])
+        self.assertEqual(command[3], "94")
+        self.assertTrue('--json' in command)
+        self.assertTrue('--jq' in command)
+
+        # Verify the jq filter contains author.login == "claude"
+        jq_index = command.index('--jq') + 1
+        self.assertIn('author.login == "claude"', command[jq_index])
+        self.assertIn('sort_by(.createdAt) | reverse', command[jq_index])
+
+        mock_log.assert_any_call("Getting comments for issue #94 and author: claude")
+        mock_debug_log.assert_any_call("Found 1 comments on issue #94")
+
+    @patch('src.git_handler.run_command')
+    @patch('src.git_handler.get_gh_env')
+    @patch('src.git_handler.debug_log')
+    @patch('src.git_handler.log')
+    def test_get_issue_comments_no_comments(self, mock_log, mock_debug_log, mock_get_gh_env, mock_run_command):
+        """Test getting comments from an issue when no comments are found"""
+        # Setup
+        issue_number = 42
+        mock_get_gh_env.return_value = {'GITHUB_TOKEN': 'mock-token'}
+
+        # Mock responses for the case where no comments are found
+        test_cases = ["[]", "null", ""]
+
+        for response in test_cases:
+            with self.subTest(response=response):
+                mock_run_command.return_value = response
+
+                # Initialize config with testing=True
+                _ = get_config(testing=True)
+
+                # Execute
+                result = git_handler.get_issue_comments(issue_number)
+
+                # Assert
+                self.assertEqual(result, [])
+                mock_debug_log.assert_any_call(f"No comments found for issue #{issue_number}")
+                mock_log.assert_any_call(f"Getting comments for issue #{issue_number} and author: claude")
+
+    @patch('src.git_handler.run_command')
+    @patch('src.git_handler.get_gh_env')
+    @patch('src.git_handler.log')
+    def test_get_issue_comments_json_error(self, mock_log, mock_get_gh_env, mock_run_command):
+        """Test getting comments from an issue when JSON parsing error occurs"""
+        # Setup
+        issue_number = 42
+        mock_get_gh_env.return_value = {'GITHUB_TOKEN': 'mock-token'}
+
+        # Mock invalid JSON response
+        mock_run_command.return_value = "{invalid json}"
+
+        # Initialize config with testing=True
+        _ = get_config(testing=True)
+
+        # Execute
+        result = git_handler.get_issue_comments(issue_number)
+
+        # Assert
+        self.assertEqual(result, [])
+        mock_run_command.assert_called_once()
+        mock_log.assert_any_call(f"Getting comments for issue #{issue_number} and author: claude")
+        # Use assertIn rather than assert_any_call to check for partial match
+        # since the actual error message includes JSON exception details
+        log_calls = [call[0][0] for call in mock_log.call_args_list if call[1].get('is_error', False)]
+        self.assertTrue(any("Could not parse JSON output from gh issue view:" in msg for msg in log_calls))
+        self.assertTrue(any("{invalid json}" in msg for msg in log_calls))
+
+    @patch('src.git_handler.run_command')
+    @patch('src.git_handler.get_gh_env')
+    @patch('src.git_handler.log')
+    def test_get_issue_comments_exception(self, mock_log, mock_get_gh_env, mock_run_command):
+        """Test getting comments from an issue when an exception occurs"""
+        # Setup
+        issue_number = 42
+        mock_get_gh_env.return_value = {'GITHUB_TOKEN': 'mock-token'}
+
+        # Mock exception when running command
+        mock_run_command.side_effect = Exception("Command failed")
+
+        # Initialize config with testing=True
+        _ = get_config(testing=True)
+
+        # Execute
+        result = git_handler.get_issue_comments(issue_number)
+
+        # Assert
+        self.assertEqual(result, [])
+        mock_run_command.assert_called_once()
+        mock_log.assert_any_call(f"Getting comments for issue #{issue_number} and author: claude")
+        mock_log.assert_any_call(f"Error getting comments for issue #{issue_number}: Command failed", is_error=True)
+
+    @patch('src.git_handler.run_command')
+    @patch('src.git_handler.get_gh_env')
+    @patch('src.git_handler.log')
+    @patch('src.git_handler.config')
+    def test_watch_github_action_run_success(self, mock_config, mock_log, mock_get_gh_env, mock_run_command):
+        """Test watching a GitHub action run that completes successfully"""
+        # Setup
+        run_id = 12345
+        mock_get_gh_env.return_value = {'GITHUB_TOKEN': 'mock-token'}
+        mock_config.GITHUB_REPOSITORY = 'mock/repo'
+        mock_run_command.return_value = "Run completed successfully"  # Success case returns output
+
+        # Initialize config with testing=True
+        _ = get_config(testing=True)
+
+        # Execute
+        result = git_handler.watch_github_action_run(run_id)
+
+        # Assert
+        self.assertTrue(result)
+        mock_run_command.assert_called_once()
+
+        # Verify the command was constructed correctly
+        command = mock_run_command.call_args[0][0]
+        self.assertEqual(command[0:3], ["gh", "run", "watch"])
+        self.assertEqual(command[3], "12345")
+        self.assertEqual(command[4:6], ["--repo", "mock/repo"])
+        self.assertTrue("--compact" in command)
+        self.assertTrue("--exit-status" in command)
+        self.assertTrue("--interval" in command)
+
+        mock_log.assert_any_call("Watching GitHub Actions run #12345 until completion...")
+        mock_log.assert_any_call("GitHub Actions run #12345 completed successfully")
+
+    @patch('src.git_handler.run_command')
+    @patch('src.git_handler.get_gh_env')
+    @patch('src.git_handler.log')
+    @patch('src.git_handler.config')
+    def test_watch_github_action_run_failure(self, mock_config, mock_log, mock_get_gh_env, mock_run_command):
+        """Test watching a GitHub action run that fails"""
+        # Setup
+        run_id = 12345
+        mock_get_gh_env.return_value = {'GITHUB_TOKEN': 'mock-token'}
+        mock_config.GITHUB_REPOSITORY = 'mock/repo'
+
+        # Simulate failure with an exception
+        mock_run_command.side_effect = Exception("Run failed with status 1")
+
+        # Initialize config with testing=True
+        _ = get_config(testing=True)
+
+        # Execute
+        result = git_handler.watch_github_action_run(run_id)
+
+        # Assert
+        self.assertFalse(result)
+        mock_run_command.assert_called_once()
+        mock_log.assert_any_call("Watching GitHub Actions run #12345 until completion...")
+        mock_log.assert_any_call("GitHub Actions run #12345 failed: Run failed with status 1", is_error=True)
+
+    @patch('src.git_handler.run_command')
+    @patch('src.git_handler.get_gh_env')
+    @patch('src.git_handler.log')
+    @patch('src.git_handler.debug_log')
+    @patch('src.git_handler.config')
+    def test_get_claude_workflow_run_id_success(self, mock_config, mock_debug_log, mock_log, mock_get_gh_env, mock_run_command):
+        """Test getting Claude workflow run ID when successful"""
+        # Setup
+        mock_config.GITHUB_REPOSITORY = 'mock/repo'
+        mock_get_gh_env.return_value = {'GITHUB_TOKEN': 'mock-token'}
+
+        # Sample response with a workflow run ID
+        run_data = [{"databaseId": 12345678}]
+        mock_run_command.return_value = json.dumps(run_data)
+
+        # Execute
+        result = git_handler.get_claude_workflow_run_id()
+
+        # Assert
+        self.assertEqual(result, 12345678)
+        mock_run_command.assert_called_once()
+
+        # Verify command structure
+        command = mock_run_command.call_args[0][0]
+        self.assertEqual(command[0:3], ["gh", "run", "list"])
+        self.assertTrue("--repo" in command)
+        self.assertTrue("--status" in command)
+        self.assertTrue("--workflow" in command)
+        self.assertTrue("--event" in command)
+        self.assertTrue("--limit" in command)
+        self.assertTrue("--json" in command)
+
+        self.assertEqual(command[command.index("--status") + 1], "in_progress")
+        self.assertEqual(command[command.index("--workflow") + 1], "claude.yml")
+        self.assertEqual(command[command.index("--event") + 1], "issues")
+        self.assertEqual(command[command.index("--json") + 1], "databaseId")
+
+        mock_log.assert_any_call("Getting in-progress Claude workflow run ID")
+        mock_log.assert_any_call(f"Found in-progress Claude workflow run ID: 12345678")
+
+    @patch('src.git_handler.run_command')
+    @patch('src.git_handler.get_gh_env')
+    @patch('src.git_handler.debug_log')
+    @patch('src.git_handler.config')
+    def test_get_claude_workflow_run_id_no_runs(self, mock_config, mock_debug_log, mock_get_gh_env, mock_run_command):
+        """Test getting Claude workflow run ID when no runs exist"""
+        # Setup
+        mock_config.GITHUB_REPOSITORY = 'mock/repo'
+        mock_get_gh_env.return_value = {'GITHUB_TOKEN': 'mock-token'}
+
+        # Empty array response
+        mock_run_command.return_value = "[]"
+
+        # Execute
+        result = git_handler.get_claude_workflow_run_id()
+
+        # Assert
+        self.assertIsNone(result)
+        mock_run_command.assert_called_once()
+        mock_debug_log.assert_any_call("No in-progress Claude workflow runs found")
+
+    @patch('src.git_handler.run_command')
+    @patch('src.git_handler.get_gh_env')
+    @patch('src.git_handler.log')
+    @patch('src.git_handler.config')
+    def test_get_claude_workflow_run_id_json_error(self, mock_config, mock_log, mock_get_gh_env, mock_run_command):
+        """Test getting Claude workflow run ID when JSON parsing error occurs"""
+        # Setup
+        mock_config.GITHUB_REPOSITORY = 'mock/repo'
+        mock_get_gh_env.return_value = {'GITHUB_TOKEN': 'mock-token'}
+
+        # Invalid JSON response
+        mock_run_command.return_value = "{invalid json}"
+
+        # Execute
+        result = git_handler.get_claude_workflow_run_id()
+
+        # Assert
+        self.assertIsNone(result)
+        mock_run_command.assert_called_once()
+
+        # Check that error was logged with correct prefix
+        log_calls = [call[0][0] for call in mock_log.call_args_list if call[1].get('is_error', False)]
+        self.assertTrue(any("Could not parse JSON output from gh run list:" in msg for msg in log_calls))
+
+    @patch('src.git_handler.run_command')
+    @patch('src.git_handler.get_gh_env')
+    @patch('src.git_handler.log')
+    @patch('src.git_handler.config')
+    def test_get_claude_workflow_run_id_exception(self, mock_config, mock_log, mock_get_gh_env, mock_run_command):
+        """Test getting Claude workflow run ID when an exception occurs"""
+        # Setup
+        mock_config.GITHUB_REPOSITORY = 'mock/repo'
+        mock_get_gh_env.return_value = {'GITHUB_TOKEN': 'mock-token'}
+
+        # Simulate command failure
+        mock_run_command.side_effect = Exception("Command failed")
+
+        # Execute
+        result = git_handler.get_claude_workflow_run_id()
+
+        # Assert
+        self.assertIsNone(result)
+        mock_run_command.assert_called_once()
+        mock_log.assert_any_call("Error getting in-progress Claude workflow run ID: Command failed", is_error=True)
+
+    @patch('src.git_handler.ensure_label')
+    @patch('src.git_handler.run_command')
+    @patch('src.git_handler.get_gh_env')
+    @patch('src.git_handler.log')
+    @patch('src.git_handler.debug_log')
+    @patch('tempfile.NamedTemporaryFile')
+    @patch('os.path.exists')
+    @patch('os.path.getsize')
+    @patch('os.remove')
+    def test_create_claude_pr_success(self, mock_remove, mock_getsize, mock_exists, mock_temp_file, mock_debug_log, mock_log, mock_get_gh_env, mock_run_command, mock_ensure_label):
+        """Test create_claude_pr when successful"""
+        # Setup mock file
+        mock_file = MagicMock()
+        mock_file.name = '/tmp/mock_pr_body.md'
+        mock_temp_file.return_value.__enter__.return_value = mock_file
+
+        # Mock file operations
+        mock_exists.return_value = True
+        mock_getsize.return_value = 1024  # 1KB file size
+
+        # Mock PR creation
+        mock_get_gh_env.return_value = {'GITHUB_TOKEN': 'mock-token'}
+        mock_run_command.return_value = "https://github.com/mock/repo/pull/123\n"  # PR URL with newline
+        mock_ensure_label.return_value = True
+
+        # Test data
+        title = "Test Claude PR Title"
+        body = "Test Claude PR body content"
+        base_branch = "main"
+        head_branch = "feature/claude-fix"
+        vuln_label = "contrast-vuln-id:VULN-12345"
+        rem_label = "smartfix-id:REM-67890"
+
+        # Execute
+        result = git_handler.create_claude_pr(title, body, base_branch, head_branch, vuln_label, rem_label)
+
+        # Assert
+        self.assertEqual(result, "https://github.com/mock/repo/pull/123")
+
+        # Verify ensure_label was called for both labels
+        mock_ensure_label.assert_any_call(vuln_label, "Vulnerability identified by Contrast", "ff0000")
+        mock_ensure_label.assert_any_call(rem_label, "Remediation ID for Contrast vulnerability", "0075ca")
+
+        # Verify run_command was called with correct parameters
+        mock_run_command.assert_called_once()
+        command_args = mock_run_command.call_args[0][0]
+        self.assertEqual(command_args[0:3], ["gh", "pr", "create"])
+        self.assertEqual(command_args[3:5], ["--title", "Test Claude PR Title"])
+        self.assertEqual(command_args[5:7], ["--body-file", "/tmp/mock_pr_body.md"])
+        self.assertEqual(command_args[7:9], ["--base", "main"])
+        self.assertEqual(command_args[9:11], ["--head", "feature/claude-fix"])
+        self.assertEqual(command_args[11:13], ["--label", vuln_label])
+        self.assertEqual(command_args[13:15], ["--label", rem_label])
+
+        # Verify temp file was created and cleaned up
+        mock_temp_file.assert_called_once()
+        mock_file.write.assert_called_with(body)
+        mock_remove.assert_called_with("/tmp/mock_pr_body.md")
+
+        # Verify appropriate logs were created
+        mock_log.assert_any_call(f"Creating Claude PR with title: '{title}'")
+        mock_log.assert_any_call("Successfully created Claude PR: https://github.com/mock/repo/pull/123\n")
+
+    @patch('src.git_handler.ensure_label')
+    @patch('src.git_handler.run_command')
+    @patch('src.git_handler.get_gh_env')
+    @patch('src.git_handler.log')
+    @patch('tempfile.NamedTemporaryFile')
+    @patch('os.path.exists')
+    @patch('os.remove')
+    def test_create_claude_pr_truncates_large_body(self, mock_remove, mock_exists, mock_temp_file, mock_log, mock_get_gh_env, mock_run_command, mock_ensure_label):
+        """Test create_claude_pr when body is too large"""
+        # Setup mock file
+        mock_file = MagicMock()
+        mock_file.name = '/tmp/mock_pr_body.md'
+        mock_temp_file.return_value.__enter__.return_value = mock_file
+
+        # Mock file operations
+        mock_exists.return_value = True
+
+        # Mock PR creation
+        mock_get_gh_env.return_value = {'GITHUB_TOKEN': 'mock-token'}
+        mock_run_command.return_value = "https://github.com/mock/repo/pull/456"
+        mock_ensure_label.return_value = True
+
+        # Test data with large body
+        title = "Test Claude PR Title"
+        body = "X" * 40000  # 40KB body (over the 32KB limit)
+        base_branch = "main"
+        head_branch = "feature/claude-fix"
+        vuln_label = "contrast-vuln-id:VULN-12345"
+        rem_label = "smartfix-id:REM-67890"
+
+        # Execute
+        result = git_handler.create_claude_pr(title, body, base_branch, head_branch, vuln_label, rem_label)
+
+        # Assert
+        self.assertEqual(result, "https://github.com/mock/repo/pull/456")
+
+        # Verify body was truncated (should be truncated to 32000 chars plus the truncation message)
+        expected_truncated_body = body[:32000] + "\n\n...[Content truncated due to size limits]..."
+        mock_file.write.assert_called_with(expected_truncated_body)
+
+        # Verify warning log was created
+        mock_log.assert_any_call(f"PR body is too large (40000 chars). Truncating to 32000 chars.", is_warning=True)
+
+    @patch('src.git_handler.run_command')
+    @patch('src.git_handler.get_gh_env')
+    @patch('src.git_handler.log')
+    @patch('tempfile.NamedTemporaryFile')
+    @patch('os.path.exists')
+    @patch('os.remove')
+    def test_create_claude_pr_command_fails(self, mock_remove, mock_exists, mock_temp_file, mock_log, mock_get_gh_env, mock_run_command):
+        """Test create_claude_pr when gh command fails"""
+        # Setup mock file
+        mock_file = MagicMock()
+        mock_file.name = '/tmp/mock_pr_body.md'
+        mock_temp_file.return_value.__enter__.return_value = mock_file
+
+        # Mock file operations
+        mock_exists.return_value = True
+
+        # Mock PR creation failure
+        mock_get_gh_env.return_value = {'GITHUB_TOKEN': 'mock-token'}
+        mock_run_command.side_effect = Exception("Failed to create PR")
+
+        # Test data
+        title = "Test Claude PR Title"
+        body = "Test body"
+        base_branch = "main"
+        head_branch = "feature/claude-fix"
+        vuln_label = "contrast-vuln-id:VULN-12345"
+        rem_label = "smartfix-id:REM-67890"
+
+        # Execute
+        result = git_handler.create_claude_pr(title, body, base_branch, head_branch, vuln_label, rem_label)
+
+        # Assert
+        self.assertEqual(result, "")  # Should return empty string on failure
+
+        # Verify error was logged
+        mock_log.assert_any_call("Error creating Claude PR: Failed to create PR", is_error=True)
+
+        # Verify cleanup was still attempted
+        mock_remove.assert_called_with("/tmp/mock_pr_body.md")
+
+    @patch('src.git_handler.run_command')
+    @patch('src.git_handler.get_gh_env')
+    @patch('src.git_handler.log')
+    @patch('tempfile.NamedTemporaryFile')
+    @patch('os.path.exists')
+    @patch('os.remove')
+    def test_create_claude_pr_temp_file_missing(self, mock_remove, mock_exists, mock_temp_file, mock_log, mock_get_gh_env, mock_run_command):
+        """Test create_claude_pr when temp file is missing"""
+        # Setup mock file
+        mock_file = MagicMock()
+        mock_file.name = '/tmp/mock_pr_body.md'
+        mock_temp_file.return_value.__enter__.return_value = mock_file
+
+        # Mock file operations - file doesn't exist
+        mock_exists.return_value = False
+
+        # Test data
+        title = "Test Claude PR Title"
+        body = "Test body"
+        base_branch = "main"
+        head_branch = "feature/claude-fix"
+        vuln_label = "contrast-vuln-id:VULN-12345"
+        rem_label = "smartfix-id:REM-67890"
+
+        # Execute
+        result = git_handler.create_claude_pr(title, body, base_branch, head_branch, vuln_label, rem_label)
+
+        # Assert
+        self.assertEqual(result, "")  # Should return empty string if file missing
+
+        # Verify error was logged
+        mock_log.assert_any_call("Error: Temporary file /tmp/mock_pr_body.md does not exist", is_error=True)
+
+        # Verify run_command was not called
+        mock_run_command.assert_not_called()
 
 
 if __name__ == '__main__':

@@ -871,6 +871,319 @@ def extract_issue_number_from_branch(branch_name: str) -> Optional[int]:
     return None
 
 
+def get_issue_comments(issue_number: int, author: str = "claude") -> List[dict]:
+    """
+    Gets comments on a GitHub issue by issue number.
+    Returns latest comments by author claude first (sorted in reverse chronological order).
+
+    Args:
+        issue_number: The issue number to fetch comments from
+        author: The author username to filter comments by
+
+    Returns:
+        List[dict]: A list of comment data dictionaries or empty list if no comments or error
+    """
+    log(f"Getting comments for issue #{issue_number} and author: {author}")
+    gh_env = get_gh_env()
+    jq_filter = f'.comments | map(select(.author.login == "{author}")) | sort_by(.createdAt) | reverse'
+
+    issue_comment_command = [
+        "gh", "issue", "view",
+        str(issue_number),
+        "--repo", config.GITHUB_REPOSITORY,
+        "--json", "comments",
+        "--jq", jq_filter
+    ]
+
+    try:
+        comment_output = run_command(issue_comment_command, env=gh_env, check=False)
+
+        if not comment_output or comment_output.strip() == "[]" or comment_output.strip() == "null":
+            debug_log(f"No comments found for issue #{issue_number}")
+            return []
+
+        comments_data = json.loads(comment_output)
+        debug_log(f"Found {len(comments_data)} comments on issue #{issue_number}")
+        return comments_data
+    except json.JSONDecodeError as e:
+        log(f"Could not parse JSON output from gh issue view: {e}. Output: {comment_output}", is_error=True)
+        return []
+    except Exception as e:
+        log(f"Error getting comments for issue #{issue_number}: {e}", is_error=True)
+        return []
+
+
+def watch_github_action_run(run_id: int) -> bool:
+    """
+    Watches a GitHub Actions workflow run until it completes.
+    Uses 'gh run watch' to poll the run status with 10-second intervals.
+
+    Args:
+        run_id: The GitHub Actions run ID to watch
+
+    Returns:
+        bool: True if the run completed successfully, False if it failed
+    """
+    log(f"Watching GitHub Actions run #{run_id} until completion...")
+    gh_env = get_gh_env()
+
+    watch_command = [
+        "gh", "run", "watch",
+        str(run_id),
+        "--repo", config.GITHUB_REPOSITORY,
+        "--compact",
+        "--exit-status",
+        "--interval", "10"
+    ]
+
+    try:
+        # run_command will return the command's output if successful
+        # Since --exit-status is used, the command will exit with status 0 for success, non-zero for failure
+        run_command(watch_command, env=gh_env, check=False)
+        log(f"GitHub Actions run #{run_id} completed successfully")
+        return True
+    except Exception as e:
+        # If run_command throws an exception, it means the gh command returned a non-zero exit code,
+        # which with --exit-status means the workflow failed
+        log(f"GitHub Actions run #{run_id} failed: {e}", is_error=True)
+        return False
+
+
+def get_latest_branch_by_pattern(pattern: str, author: str = None) -> Optional[str]:
+    """
+    Gets the latest branch matching a specific pattern and optionally from a specific author.
+
+    Args:
+        pattern: The regex pattern to match branch names against
+        author: Optional author username to filter branches by
+
+    Returns:
+        Optional[str]: The latest matching branch name or None if no matches found
+    """
+    import re
+    import json
+    from src.utils import run_command, debug_log, log
+    from src.git_handler import get_gh_env
+
+    debug_log(f"Finding latest branch matching pattern '{pattern}'{f' from author {author}' if author else ''}")
+
+    # Construct GraphQL query to get branches
+    # Limit to 100 most recent branches - adjust if needed
+    graphql_query = """
+    query($repo_owner: String!, $repo_name: String!) {
+      repository(owner: $repo_owner, name: $repo_name) {
+        refs(refPrefix: "refs/heads/", first: 100, orderBy: {field: ALPHABETICAL, direction: DESC}) {
+          nodes {
+            name
+            target {
+              ... on Commit {
+                author {
+                  user { login }
+                }
+                committedDate
+              }
+            }
+          }
+        }
+      }
+    }
+    """
+
+    try:
+        # Parse repository owner and name from config
+        #from src.config import get_config
+        #config = get_config()
+        repo_parts = config.GITHUB_REPOSITORY.split('/')
+        if len(repo_parts) != 2:
+            log(f"Invalid repository format: {config.GITHUB_REPOSITORY}", is_error=True)
+            return None
+
+        repo_owner, repo_name = repo_parts
+
+        # Execute GraphQL query using GitHub CLI
+        gh_env = get_gh_env()
+        result = run_command([
+            'gh', 'api', 'graphql',
+            '-f', f'query={graphql_query}',
+            '-f', f'repo_owner={repo_owner}',
+            '-f', f'repo_name={repo_name}'
+        ], env=gh_env, check=False)
+
+        if not result:
+            debug_log("Failed to get branches from GitHub API")
+            return None
+
+        # Parse JSON response
+        data = json.loads(result)
+        branches = data.get('data', {}).get('repository', {}).get('refs', {}).get('nodes', [])
+
+        # Compile regex pattern
+        pattern_regex = re.compile(pattern)
+
+        # Filter branches by pattern and author if specified
+        matching_branches = []
+        for branch in branches:
+            branch_name = branch.get('name')
+            if not branch_name or not pattern_regex.match(branch_name):
+                continue
+
+            if author:
+                commit_author = branch.get('target', {}).get('author', {}).get('user', {}).get('login')
+                if commit_author != author:
+                    continue
+
+            committed_date = branch.get('target', {}).get('committedDate')
+            if committed_date:
+                matching_branches.append((branch_name, committed_date))
+
+        # Sort by commit date in descending order (newest first)
+        matching_branches.sort(key=lambda x: x[1], reverse=True)
+
+        if matching_branches:
+            latest_branch = matching_branches[0][0]
+            debug_log(f"Found latest matching branch: {latest_branch}")
+            return latest_branch
+        else:
+            debug_log(f"No branches found matching pattern '{pattern}'{f' from author {author}' if author else ''}")
+            return None
+
+    except Exception as e:
+        log(f"Error finding latest branch: {str(e)}", is_error=True)
+        return None
+
+
+def get_claude_workflow_run_id() -> int:
+    """
+    Lists in-progress Claude GitHub workflow runs and returns the workflow run ID.
+    Uses the GitHub CLI to find the most recent in-progress workflow run for claude.yml.
+
+    Returns:
+        int: The workflow run ID if found, or None if no in-progress runs are found
+    """
+    log("Getting in-progress Claude workflow run ID")
+    gh_env = get_gh_env()
+
+    workflow_command = [
+        "gh", "run", "list",
+        "--repo", config.GITHUB_REPOSITORY,
+        "--status", "in_progress",
+        "--workflow", "claude.yml",
+        "--event", "issues",
+        "--limit", "1",
+        "--json", "databaseId"
+    ]
+
+    try:
+        run_output = run_command(workflow_command, env=gh_env, check=False)
+
+        if not run_output or run_output.strip() == "[]":
+            debug_log("No in-progress Claude workflow runs found")
+            return None
+
+        runs_data = json.loads(run_output)
+
+        if not runs_data or len(runs_data) == 0:
+            debug_log("No in-progress Claude workflow runs found in JSON response")
+            return None
+
+        # Extract the databaseId from the first (and only) run in the response
+        workflow_run_id = runs_data[0].get("databaseId")
+
+        if workflow_run_id is not None:
+            workflow_run_id = int(workflow_run_id)
+            log(f"Found in-progress Claude workflow run ID: {workflow_run_id}")
+            return workflow_run_id
+        else:
+            debug_log("No databaseId found in workflow run data")
+            return None
+
+    except json.JSONDecodeError as e:
+        log(f"Could not parse JSON output from gh run list: {e}", is_error=True)
+        return None
+    except Exception as e:
+        log(f"Error getting in-progress Claude workflow run ID: {e}", is_error=True)
+        return None
+
+
+def create_claude_pr(title: str, body: str, base_branch: str, head_branch: str, vulnerability_label: str, remediation_label: str) -> str:
+    """
+    Creates a GitHub Pull Request specifically for Claude fixes using the GitHub CLI.
+    Applies vulnerability and remediation labels to the PR automatically.
+
+    Args:
+        title: The title of the PR
+        body: The body content of the PR
+        base_branch: The branch to merge into (target branch)
+        head_branch: The branch containing the changes (source branch)
+        vulnerability_label: The vulnerability label to apply (contrast-vuln-id:*)
+        remediation_label: The remediation label to apply (smartfix-id:*)
+
+    Returns:
+        str: The URL of the created pull request, or empty string if creation failed
+    """
+    log(f"Creating Claude PR with title: '{title}'")
+    import tempfile
+    import os.path
+
+    # Set a maximum PR body size (GitHub recommends keeping it under 65536 chars)
+    max_pr_body_size = 32000
+
+    # Truncate PR body if too large
+    if len(body) > max_pr_body_size:
+        log(f"PR body is too large ({len(body)} chars). Truncating to {max_pr_body_size} chars.", is_warning=True)
+        body = body[:max_pr_body_size] + "\n\n...[Content truncated due to size limits]..."
+
+    # Create a temporary file to store the PR body
+    with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.md') as temp_file:
+        temp_file_path = temp_file.name
+        temp_file.write(body)
+        debug_log(f"PR body written to temporary file: {temp_file_path}")
+
+    try:
+        # Check file exists and print size for debugging
+        if os.path.exists(temp_file_path):
+            file_size = os.path.getsize(temp_file_path)
+            debug_log(f"Temporary file exists: {temp_file_path}, size: {file_size} bytes")
+        else:
+            log(f"Error: Temporary file {temp_file_path} does not exist", is_error=True)
+            return ""
+
+        gh_env = get_gh_env()
+
+        # Ensure both labels exist
+        ensure_label(vulnerability_label, "Vulnerability identified by Contrast", "ff0000")
+        ensure_label(remediation_label, "Remediation ID for Contrast vulnerability", "0075ca")
+
+        # Build the PR command with labels
+        pr_command = [
+            "gh", "pr", "create",
+            "--title", title,
+            "--body-file", temp_file_path,
+            "--base", base_branch,
+            "--head", head_branch,
+            "--label", vulnerability_label,
+            "--label", remediation_label
+        ]
+
+        # Run the command and capture the output (PR URL)
+        pr_url = run_command(pr_command, env=gh_env, check=True)
+        if pr_url:
+            log(f"Successfully created Claude PR: {pr_url}")
+        return pr_url.strip() if pr_url else ""
+
+    except Exception as e:
+        log(f"Error creating Claude PR: {e}", is_error=True)
+        return ""
+    finally:
+        # Clean up the temporary file
+        if os.path.exists(temp_file_path):
+            try:
+                os.remove(temp_file_path)
+                debug_log(f"Temporary PR body file {temp_file_path} removed.")
+            except OSError as e:
+                log(f"Could not remove temporary file {temp_file_path}: {e}", is_error=True)
+
+
 def add_labels_to_pr(pr_number: int, labels: List[str]) -> bool:
     """
     Add labels to an existing pull request.
