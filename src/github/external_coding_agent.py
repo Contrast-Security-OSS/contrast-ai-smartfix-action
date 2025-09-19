@@ -193,7 +193,7 @@ Please review this security vulnerability and implement appropriate fixes to add
         log(f"Waiting for external agent to create a PR for issue #{issue_number}")
 
         # Poll for a PR to be created by the external agent (100 attempts, 5 seconds apart = ~8.3 minutes max)
-        pr_info = self._process_external_coding_agent_run(issue_number, remediation_id, vulnerability_label, remediation_label, max_attempts=100, sleep_seconds=5)
+        pr_info = self._process_external_coding_agent_run(issue_number, remediation_id, vulnerability_label, remediation_label, max_attempts=60, sleep_seconds=5)
 
         log("\n::endgroup::")
         if pr_info:
@@ -213,7 +213,7 @@ Please review this security vulnerability and implement appropriate fixes to add
             return False
 
     def _process_external_coding_agent_run(self, issue_number: int, remediation_id: str, vulnerability_label: str,
-                                           remediation_label: str, max_attempts: int = 60, sleep_seconds: int = 5) -> Optional[dict]:
+                                           remediation_label: str, max_attempts: int = 100, sleep_seconds: int = 5) -> Optional[dict]:
         """
         Poll for a PR to be created by the external agent.
 
