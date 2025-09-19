@@ -297,7 +297,7 @@ Please review this security vulnerability and implement appropriate fixes to add
 
         if not workflow_run_id:
             # If no workflow run ID found yet, continue polling
-            debug_log(f"claude workflow_run_id not found")
+            debug_log(f"claude workflow_run_id not found, checking again...")
             return None
 
         # Watch the github action run
@@ -502,7 +502,7 @@ Please review this security vulnerability and implement appropriate fixes to add
             error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
 
         # Extract branch name from URL if possible (the part after the ...)
-        branch_from_url_match = re.search(r'/compare/.*?\.\.\.(.*)(?:\?|$)', create_pr_url)
+        branch_from_url_match = re.search(r'/compare/.*?\.\.\.(.*?)(?:\?|$)', create_pr_url)
         if branch_from_url_match:
             head_branch_from_url = branch_from_url_match.group(1)
             debug_log(f"Found branch name from URL: {head_branch_from_url}")
