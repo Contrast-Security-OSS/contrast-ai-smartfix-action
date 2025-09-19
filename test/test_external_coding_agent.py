@@ -178,7 +178,7 @@ class TestExternalCodingAgent(unittest.TestCase):
             self.assertFalse(result)
 
             # Verify _poll_for_pr was called with the right parameters
-            mock_poll_for_pr.assert_called_once_with(42, "1REM-FAKE-ABCD", 'contrast-vuln-id:VULN-1234-FAKE-ABCD', 'smartfix-id:1REM-FAKE-ABCD', max_attempts=100, sleep_seconds=5)
+            mock_poll_for_pr.assert_called_once_with(42, "1REM-FAKE-ABCD", 'contrast-vuln-id:VULN-1234-FAKE-ABCD', 'smartfix-id:1REM-FAKE-ABCD', max_attempts=60, sleep_seconds=5)
         finally:
             # Restore original method
             agent._process_external_coding_agent_run = original_poll_for_pr
@@ -236,7 +236,7 @@ class TestExternalCodingAgent(unittest.TestCase):
             self.assertTrue(result)
 
             # Verify poll was called correctly
-            mock_poll_for_pr.assert_called_once_with(42, "1REM-FAKE-ABCD", 'contrast-vuln-id:VULN-1234-FAKE-ABCD', 'smartfix-id:1REM-FAKE-ABCD', max_attempts=100, sleep_seconds=5)
+            mock_poll_for_pr.assert_called_once_with(42, "1REM-FAKE-ABCD", 'contrast-vuln-id:VULN-1234-FAKE-ABCD', 'smartfix-id:1REM-FAKE-ABCD', max_attempts=60, sleep_seconds=5)
         finally:
             # Restore original method
             agent._process_external_coding_agent_run = original_poll_for_pr
