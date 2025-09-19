@@ -22,6 +22,7 @@ import sys
 import unittest
 from unittest.mock import patch, MagicMock
 import os
+import re
 
 # Add project root to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -786,7 +787,7 @@ class TestExternalCodingAgent(unittest.TestCase):
         # Assert
         self.assertIsNone(result)
         mock_watch_action.assert_any_call(17776654036)
-        mock_log.assert_any_call(f"GitHub Action run #17776654036 failed for issue #{issue_number}", is_error=True)
+        mock_log.assert_any_call(f"Claude action run #17776654036 failed for issue #{issue_number}", is_error=True)
         # Not asserting on mock_sleep since it might be called in a loop
 
     @patch('src.github.external_coding_agent.error_exit')
@@ -959,6 +960,42 @@ class TestExternalCodingAgent(unittest.TestCase):
         mock_create_claude_pr.assert_called()
         mock_log.assert_any_call("Failed to create PR for Claude Code fix", is_error=True)
         # Not asserting on mock_sleep since it might be called in a loop
+
+
+    @patch('src.github.external_coding_agent.debug_log')
+    def test_process_claude_comment_body(self, mock_debug_log):
+        """Test _process_claude_comment_body correctly parses PR information from Claude's comment"""
+        # Setup
+        self.config.CODING_AGENT = "CLAUDE_CODE"
+        issue_number = 103
+        remediation_id = "1REM-FAKE-ABCD"
+
+        # Sample comment body from Claude with parentheses in PR body
+        comment_body = """**Claude finished @dougj-smartfix[bot]'s task** —— [View job](https://github.com/dougj-contrast/django_vuln/actions/runs/17865365571) • [`claude/issue-103-20250919-1726`](https://github.com/dougj-contrast/django_vuln/tree/claude/issue-103-20250919-1726) • [Create PR ➔](https://github.com/dougj-contrast/django_vuln/compare/main...claude/issue-103-20250919-1726?quick_pull=1&title=fix%3A%20NoSQL%20Injection%20vulnerability%20in%20nosql_injection%20endpoint&body=This%20PR%20fixes%20the%20NoSQL%20injection%20vulnerability%20identified%20by%20Contrast%20Security%20(ID%3A%2096ZY-WRVY-LCJ6-M31C).%0A%0A**Changes%3A**%0A-%20Replaced%20vulnerable%20implementation%20that%20allowed%20MongoDB%20operators%20in%20query%20parameters%0A-%20Added%20proper%20sanitization%20that%20rejects%20parameter%20names%20with%20'%24'%20and%20'.'%20characters%0A-%20Modified%20template%20to%20explain%20the%20security%20implementation%0A%0ACloses%20%23103%0A%0AGenerated%20with%20%5BClaude%20Code%5D(https%3A%2F%2Fclaude.ai%2Fcode))"""
+
+        # Create agent and call the method
+        agent = ExternalCodingAgent(self.config)
+        result = agent._process_claude_comment_body(comment_body, remediation_id, issue_number)
+
+        # Assert the correct data was extracted
+        self.assertEqual(result["head_branch_from_url"], "claude/issue-103-20250919-1726")
+        self.assertEqual(result["pr_title"], "fix: NoSQL Injection vulnerability in nosql_injection endpoint")
+
+        # Check PR body was extracted correctly with the parentheses
+        self.assertIn("Contrast Security (ID: 96ZY-WRVY-LCJ6-M31C)", result["pr_body"])
+        self.assertIn("Closes #103", result["pr_body"])
+        self.assertIn("Generated with [Claude Code](https://claude.ai/code)", result["pr_body"])
+        self.assertIn("Powered by Contrast AI SmartFix", result["pr_body"])
+
+        # Verify method extracts branch from the backticks in comment when issue number matches
+        self.assertEqual(result["head_branch_from_url"], "claude/issue-103-20250919-1726")
+
+        # Also ensure this method can extract branch from URL if backtick approach fails
+        with patch('re.search', side_effect=[None,
+                                            re.search(r'/compare/[^.]+\.\.\.([^?)\s]+)',
+                                            'https://github.com/dougj-contrast/django_vuln/compare/main...claude/issue-103-20250919-1726?quick_pull=1')]):
+            result2 = agent._process_claude_comment_body(comment_body, remediation_id, issue_number)
+            self.assertEqual(result2["head_branch_from_url"], "claude/issue-103-20250919-1726")
 
 
 if __name__ == '__main__':
