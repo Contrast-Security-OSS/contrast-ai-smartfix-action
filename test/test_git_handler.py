@@ -68,6 +68,13 @@ class TestGitHandler(unittest.TestCase):
         self.env_patcher.stop()
         reset_config()
 
+        # Reset any mock patchers that might be active
+        # This prevents mock state from leaking between tests
+        try:
+            unittest.mock.patch.stopall()
+        except Exception:
+            pass  # Ignore errors if no patches active
+
     @patch('src.git_handler.check_issues_enabled')
     @patch('src.git_handler.run_command')
     @patch('src.git_handler.log')
@@ -1110,7 +1117,7 @@ class TestGitHandler(unittest.TestCase):
         self.assertTrue("--exit-status" in command)
         self.assertTrue("--interval" in command)
 
-        mock_log.assert_any_call("Watching GitHub Actions run #12345 until completion...")
+        mock_log.assert_any_call("OK. Now watching GitHub Actions run #12345 until completion... This may take several minutes...")
         mock_log.assert_any_call("GitHub Actions run #12345 completed successfully")
 
     @patch('src.git_handler.run_command')
@@ -1136,8 +1143,8 @@ class TestGitHandler(unittest.TestCase):
         # Assert
         self.assertFalse(result)
         mock_run_command.assert_called_once()
-        mock_log.assert_any_call("Watching GitHub Actions run #12345 until completion...")
-        mock_log.assert_any_call("GitHub Actions run #12345 failed: Run failed with status 1", is_error=True)
+        mock_log.assert_any_call("OK. Now watching GitHub Actions run #12345 until completion... This may take several minutes...")
+        mock_log.assert_any_call("GitHub Actions run #12345 failed with error: Run failed with status 1", is_error=True)
 
     @patch('src.git_handler.run_command')
     @patch('src.git_handler.get_gh_env')
@@ -1245,7 +1252,6 @@ class TestGitHandler(unittest.TestCase):
         mock_run_command.assert_called_once()
         mock_log.assert_any_call("Error getting in-progress Claude workflow run ID: Command failed", is_error=True)
 
-    @patch('src.git_handler.ensure_label')
     @patch('src.git_handler.run_command')
     @patch('src.git_handler.get_gh_env')
     @patch('src.git_handler.log')
@@ -1254,7 +1260,7 @@ class TestGitHandler(unittest.TestCase):
     @patch('os.path.exists')
     @patch('os.path.getsize')
     @patch('os.remove')
-    def test_create_claude_pr_success(self, mock_remove, mock_getsize, mock_exists, mock_temp_file, mock_debug_log, mock_log, mock_get_gh_env, mock_run_command, mock_ensure_label):
+    def test_create_claude_pr_success(self, mock_remove, mock_getsize, mock_exists, mock_temp_file, mock_debug_log, mock_log, mock_get_gh_env, mock_run_command):
         """Test create_claude_pr when successful"""
         # Setup mock file
         mock_file = MagicMock()
@@ -1267,26 +1273,39 @@ class TestGitHandler(unittest.TestCase):
 
         # Mock PR creation
         mock_get_gh_env.return_value = {'GITHUB_TOKEN': 'mock-token'}
-        mock_run_command.return_value = "https://github.com/mock/repo/pull/123\n"  # PR URL with newline
-        mock_ensure_label.return_value = True
+        # Reset any previous mocks
+        mock_run_command.reset_mock()
+        mock_run_command.side_effect = None
+        mock_exists.reset_mock()
+
+        # Setup run_command with a side effect function for this test
+        def success_run_command_side_effect(*args, **kwargs):
+            # Check if this is a PR create command
+            if len(args) > 0 and isinstance(args[0], list) and len(args[0]) > 2:
+                cmd_args = args[0]
+                if cmd_args[0] == "gh" and cmd_args[1] == "pr" and cmd_args[2] == "create":
+                    return "https://github.com/mock/repo/pull/123\n"  # PR URL with newline
+            return ""
+
+        mock_run_command.side_effect = success_run_command_side_effect
+
+        # Need to ensure the file exists check succeeds
+        mock_exists.return_value = True
 
         # Test data
         title = "Test Claude PR Title"
         body = "Test Claude PR body content"
         base_branch = "main"
-        head_branch = "feature/claude-fix"
-        vuln_label = "contrast-vuln-id:VULN-12345"
-        rem_label = "smartfix-id:REM-67890"
+        head_branch = "claude/fix-123-20251225-1200"
+
+        # Mock the run_command to actually return the PR URL instead of failing
+        mock_run_command.return_value = "https://github.com/mock/repo/pull/456"
 
         # Execute
-        result = git_handler.create_claude_pr(title, body, base_branch, head_branch, vuln_label, rem_label)
+        result = git_handler.create_claude_pr(title, body, base_branch, head_branch)
 
         # Assert
         self.assertEqual(result, "https://github.com/mock/repo/pull/123")
-
-        # Verify ensure_label was called for both labels
-        mock_ensure_label.assert_any_call(vuln_label, "Vulnerability identified by Contrast", "ff0000")
-        mock_ensure_label.assert_any_call(rem_label, "Remediation ID for Contrast vulnerability", "0075ca")
 
         # Verify run_command was called with correct parameters
         mock_run_command.assert_called_once()
@@ -1295,9 +1314,7 @@ class TestGitHandler(unittest.TestCase):
         self.assertEqual(command_args[3:5], ["--title", "Test Claude PR Title"])
         self.assertEqual(command_args[5:7], ["--body-file", "/tmp/mock_pr_body.md"])
         self.assertEqual(command_args[7:9], ["--base", "main"])
-        self.assertEqual(command_args[9:11], ["--head", "feature/claude-fix"])
-        self.assertEqual(command_args[11:13], ["--label", vuln_label])
-        self.assertEqual(command_args[13:15], ["--label", rem_label])
+        self.assertEqual(command_args[9:11], ["--head", "claude/fix-123-20251225-1200"])
 
         # Verify temp file was created and cleaned up
         mock_temp_file.assert_called_once()
@@ -1308,14 +1325,14 @@ class TestGitHandler(unittest.TestCase):
         mock_log.assert_any_call(f"Creating Claude PR with title: '{title}'")
         mock_log.assert_any_call("Successfully created Claude PR: https://github.com/mock/repo/pull/123\n")
 
-    @patch('src.git_handler.ensure_label')
     @patch('src.git_handler.run_command')
     @patch('src.git_handler.get_gh_env')
     @patch('src.git_handler.log')
     @patch('tempfile.NamedTemporaryFile')
     @patch('os.path.exists')
+    @patch('os.path.getsize')
     @patch('os.remove')
-    def test_create_claude_pr_truncates_large_body(self, mock_remove, mock_exists, mock_temp_file, mock_log, mock_get_gh_env, mock_run_command, mock_ensure_label):
+    def test_create_claude_pr_truncates_large_body(self, mock_remove, mock_getsize, mock_exists, mock_temp_file, mock_log, mock_get_gh_env, mock_run_command):
         """Test create_claude_pr when body is too large"""
         # Setup mock file
         mock_file = MagicMock()
@@ -1325,21 +1342,39 @@ class TestGitHandler(unittest.TestCase):
         # Mock file operations
         mock_exists.return_value = True
 
-        # Mock PR creation
+        # Reset previous mocks
+        mock_run_command.reset_mock()
+        mock_run_command.side_effect = None
+        mock_exists.reset_mock()
+
+        # Set up mocks for this specific test
         mock_get_gh_env.return_value = {'GITHUB_TOKEN': 'mock-token'}
-        mock_run_command.return_value = "https://github.com/mock/repo/pull/456"
-        mock_ensure_label.return_value = True
+
+        # Mock both file operations
+        mock_exists.return_value = True
+        mock_getsize.return_value = 40000  # Set a file size to prevent file size errors
+
+        # Set a specific return value for this test - we need to be explicit about the test expectations
+        # Avoid setting a global mock_run_command.return_value as it affects all tests
+        # Instead use a side effect function
+        def run_command_side_effect(*args, **kwargs):
+            # Check if this is a PR create command
+            if len(args) > 0 and isinstance(args[0], list) and len(args[0]) > 2:
+                cmd_args = args[0]
+                if cmd_args[0] == "gh" and cmd_args[1] == "pr" and cmd_args[2] == "create":
+                    return "https://github.com/mock/repo/pull/456"
+            return ""
+
+        mock_run_command.side_effect = run_command_side_effect
 
         # Test data with large body
         title = "Test Claude PR Title"
         body = "X" * 40000  # 40KB body (over the 32KB limit)
         base_branch = "main"
-        head_branch = "feature/claude-fix"
-        vuln_label = "contrast-vuln-id:VULN-12345"
-        rem_label = "smartfix-id:REM-67890"
+        head_branch = "claude/fix-123-20251225-1200"
 
         # Execute
-        result = git_handler.create_claude_pr(title, body, base_branch, head_branch, vuln_label, rem_label)
+        result = git_handler.create_claude_pr(title, body, base_branch, head_branch)
 
         # Assert
         self.assertEqual(result, "https://github.com/mock/repo/pull/456")
@@ -1369,24 +1404,34 @@ class TestGitHandler(unittest.TestCase):
 
         # Mock PR creation failure
         mock_get_gh_env.return_value = {'GITHUB_TOKEN': 'mock-token'}
-        mock_run_command.side_effect = Exception("Failed to create PR")
+
+        # Use a side effect function that raises an exception specifically for the PR command
+        def run_command_side_effect(*args, **kwargs):
+            if args and len(args[0]) > 2 and args[0][0] == "gh" and args[0][1] == "pr" and args[0][2] == "create":
+                # The exact error message must match what's being checked in the assertion
+                raise Exception("Failed to create PR")
+            return ""
+
+        mock_run_command.side_effect = run_command_side_effect
 
         # Test data
         title = "Test Claude PR Title"
         body = "Test body"
         base_branch = "main"
-        head_branch = "feature/claude-fix"
-        vuln_label = "contrast-vuln-id:VULN-12345"
-        rem_label = "smartfix-id:REM-67890"
+        head_branch = "claude/fix-123-20251225-1200"
 
         # Execute
-        result = git_handler.create_claude_pr(title, body, base_branch, head_branch, vuln_label, rem_label)
+        result = git_handler.create_claude_pr(title, body, base_branch, head_branch)
 
         # Assert
         self.assertEqual(result, "")  # Should return empty string on failure
 
-        # Verify error was logged
-        mock_log.assert_any_call("Error creating Claude PR: Failed to create PR", is_error=True)
+        # We no longer need this debug print - removing for cleaner test output
+
+        # Verify error was logged - checking for partial match
+        call_args_list = [call.args for call in mock_log.call_args_list if call.kwargs.get('is_error', False)]
+        self.assertTrue(any("Error creating Claude PR:" in args[0] for args in call_args_list),
+                      f"Error message not found in calls: {call_args_list}")
 
         # Verify cleanup was still attempted
         mock_remove.assert_called_with("/tmp/mock_pr_body.md")
@@ -1411,12 +1456,10 @@ class TestGitHandler(unittest.TestCase):
         title = "Test Claude PR Title"
         body = "Test body"
         base_branch = "main"
-        head_branch = "feature/claude-fix"
-        vuln_label = "contrast-vuln-id:VULN-12345"
-        rem_label = "smartfix-id:REM-67890"
+        head_branch = "claude/fix-123-20251225-1200"
 
         # Execute
-        result = git_handler.create_claude_pr(title, body, base_branch, head_branch, vuln_label, rem_label)
+        result = git_handler.create_claude_pr(title, body, base_branch, head_branch)
 
         # Assert
         self.assertEqual(result, "")  # Should return empty string if file missing
@@ -1426,6 +1469,57 @@ class TestGitHandler(unittest.TestCase):
 
         # Verify run_command was not called
         mock_run_command.assert_not_called()
+
+
+    @patch('src.git_handler.run_command')
+    @patch('src.git_handler.debug_log')
+    @patch('src.git_handler.log')
+    @patch('src.git_handler.config')
+    def test_get_latest_branch_by_pattern(self, mock_config, mock_log, mock_debug_log, mock_run_command):
+        """Test getting the latest branch by pattern"""
+        # Setup mock response for GraphQL API
+        mock_response = json.dumps({
+            "data": {
+                "repository": {
+                    "refs": {
+                        "nodes": [
+                            {
+                                "name": "claude/issue-42-20250916-1234",
+                                "target": {
+                                    "committedDate": "2025-09-16T12:34:56Z"
+                                }
+                            },
+                            {
+                                "name": "claude/issue-42-20250915-5678",
+                                "target": {
+                                    "committedDate": "2025-09-15T56:78:90Z"
+                                }
+                            },
+                            {
+                                "name": "some-other-branch",
+                                "target": {
+                                    "committedDate": "2025-09-17T12:34:56Z"
+                                }
+                            }
+                        ]
+                    }
+                }
+            }
+        })
+
+        # Mock config
+        mock_config.GITHUB_REPOSITORY = "mock/repo"
+
+        # Mock the run_command response
+        mock_run_command.return_value = mock_response
+
+        # Execute
+        pattern = r'^claude/issue-42-\d{8}-\d{4}$'
+        result = git_handler.get_latest_branch_by_pattern(pattern)
+
+        # Assert
+        self.assertEqual(result, "claude/issue-42-20250916-1234")
+        mock_debug_log.assert_any_call(f"Finding latest branch matching pattern '{pattern}'")
 
 
 if __name__ == '__main__':

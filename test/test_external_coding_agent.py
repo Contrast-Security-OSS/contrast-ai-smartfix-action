@@ -740,12 +740,15 @@ class TestExternalCodingAgent(unittest.TestCase):
         # Log messages
         mock_log.assert_any_call(f"Successfully created PR #123 for Claude Code fix")
 
+    @patch('src.github.external_coding_agent.error_exit')
     @patch('src.git_handler.get_claude_workflow_run_id')
     @patch('src.git_handler.watch_github_action_run')
     @patch('src.github.external_coding_agent.time.sleep')
     @patch('src.github.external_coding_agent.debug_log')
-    def test_process_external_coding_agent_claude_code_workflow_fails(self, mock_debug_log, mock_sleep,
-                                                                 mock_watch_action, mock_get_workflow_id):
+    @patch('src.github.external_coding_agent.log')
+    def test_process_external_coding_agent_claude_code_workflow_fails(self, mock_log, mock_debug_log, mock_sleep,
+                                                                 mock_watch_action, mock_get_workflow_id,
+                                                                 mock_error_exit):
         """Test _process_external_coding_agent_run with Claude Code when workflow fails"""
         # Setup
         self.config.CODING_AGENT = "CLAUDE_CODE"
@@ -760,11 +763,18 @@ class TestExternalCodingAgent(unittest.TestCase):
         # Mock workflow run failure
         mock_watch_action.return_value = False
 
+        # Set up error_exit to raise SystemExit to simulate the actual behavior
+        mock_error_exit.side_effect = SystemExit("Mocked exit for workflow failure")
+
         # Create agent
         agent = ExternalCodingAgent(self.config)
 
-        # Execute
-        result = agent._process_external_coding_agent_run(
+        # Initialize result as None before the test
+        result = None
+
+        # Execute - since error_exit is called, this should raise SystemExit
+        with self.assertRaises(SystemExit):
+            result = agent._process_external_coding_agent_run(
             issue_number=issue_number,
             remediation_id=remediation_id,
             vulnerability_label=vulnerability_label,
@@ -776,17 +786,19 @@ class TestExternalCodingAgent(unittest.TestCase):
         # Assert
         self.assertIsNone(result)
         mock_watch_action.assert_any_call(17776654036)
-        mock_debug_log.assert_any_call(f"GitHub Action run #17776654036 failed for issue #{issue_number}")
+        mock_log.assert_any_call(f"GitHub Action run #17776654036 failed for issue #{issue_number}", is_error=True)
         # Not asserting on mock_sleep since it might be called in a loop
 
+    @patch('src.github.external_coding_agent.error_exit')
     @patch('src.git_handler.get_claude_workflow_run_id')
     @patch('src.git_handler.watch_github_action_run')
     @patch('src.git_handler.get_issue_comments')
     @patch('src.github.external_coding_agent.time.sleep')
     @patch('src.github.external_coding_agent.debug_log')
-    def test_process_external_coding_agent_claude_code_no_comments(self, mock_debug_log, mock_sleep,
+    @patch('src.github.external_coding_agent.log')
+    def test_process_external_coding_agent_claude_code_no_comments(self, mock_log, mock_debug_log, mock_sleep,
                                                               mock_get_comments, mock_watch_action,
-                                                              mock_get_workflow_id):
+                                                              mock_get_workflow_id, mock_error_exit):
         """Test _process_external_coding_agent_run with Claude Code when no comments found"""
         # Setup
         self.config.CODING_AGENT = "CLAUDE_CODE"
@@ -804,11 +816,18 @@ class TestExternalCodingAgent(unittest.TestCase):
         # Mock empty comments
         mock_get_comments.return_value = []
 
+        # Set up error_exit to raise SystemExit to simulate the actual behavior
+        mock_error_exit.side_effect = SystemExit("Mocked exit for no comments")
+
         # Create agent
         agent = ExternalCodingAgent(self.config)
 
-        # Execute
-        result = agent._process_external_coding_agent_run(
+        # Initialize result as None before the test
+        result = None
+
+        # Execute - since error_exit is called, this should raise SystemExit
+        with self.assertRaises(SystemExit):
+            result = agent._process_external_coding_agent_run(
             issue_number=issue_number,
             remediation_id=remediation_id,
             vulnerability_label=vulnerability_label,
@@ -820,17 +839,18 @@ class TestExternalCodingAgent(unittest.TestCase):
         # Assert
         self.assertIsNone(result)
         mock_get_comments.assert_any_call(issue_number)
-        mock_debug_log.assert_any_call(f"No Claude comments found for issue #{issue_number}")
+        mock_log.assert_any_call(f"No Claude comments found for issue #{issue_number}", is_error=True)
         # Not asserting on mock_sleep since it might be called in a loop
 
+    @patch('src.github.external_coding_agent.error_exit')
     @patch('src.git_handler.get_claude_workflow_run_id')
     @patch('src.git_handler.watch_github_action_run')
     @patch('src.git_handler.get_issue_comments')
     @patch('src.github.external_coding_agent.time.sleep')
-    @patch('src.github.external_coding_agent.log')
-    def test_process_external_coding_agent_claude_code_invalid_comment(self, mock_log, mock_sleep,
+    @patch('src.github.external_coding_agent.debug_log')
+    def test_process_external_coding_agent_claude_code_invalid_comment(self, mock_debug_log, mock_sleep,
                                                                   mock_get_comments, mock_watch_action,
-                                                                  mock_get_workflow_id):
+                                                                  mock_get_workflow_id, mock_error_exit):
         """Test _process_external_coding_agent_run with Claude Code when comment doesn't contain PR info"""
         # Setup
         self.config.CODING_AGENT = "CLAUDE_CODE"
@@ -869,9 +889,10 @@ class TestExternalCodingAgent(unittest.TestCase):
         # Assert
         self.assertIsNone(result)
         mock_get_comments.assert_any_call(issue_number)
-        mock_log.assert_any_call("Could not find Create PR URL in Claude comment", is_error=True)
+        mock_debug_log.assert_any_call("Could not find Create PR URL in Claude comment using ultimate fallback", is_error=True)
         # Not asserting on mock_sleep since it might be called in a loop
 
+    @patch('src.github.external_coding_agent.error_exit')
     @patch('src.git_handler.get_claude_workflow_run_id')
     @patch('src.git_handler.watch_github_action_run')
     @patch('src.git_handler.get_issue_comments')
@@ -880,7 +901,8 @@ class TestExternalCodingAgent(unittest.TestCase):
     @patch('src.github.external_coding_agent.log')
     def test_process_external_coding_agent_claude_code_pr_creation_fails(self, mock_log, mock_sleep,
                                                                     mock_create_claude_pr, mock_get_comments,
-                                                                    mock_watch_action, mock_get_workflow_id):
+                                                                    mock_watch_action, mock_get_workflow_id,
+                                                                    mock_error_exit):
         """Test _process_external_coding_agent_run with Claude Code when PR creation fails"""
         # Setup
         self.config.CODING_AGENT = "CLAUDE_CODE"
@@ -910,11 +932,18 @@ class TestExternalCodingAgent(unittest.TestCase):
         # Mock PR creation failure
         mock_create_claude_pr.return_value = ""
 
+        # Set up error_exit to raise SystemExit to simulate the actual behavior
+        mock_error_exit.side_effect = SystemExit("Mocked exit for PR creation failure")
+
         # Create agent
         agent = ExternalCodingAgent(self.config)
 
-        # Execute
-        result = agent._process_external_coding_agent_run(
+        # Initialize result as None before the test
+        result = None
+
+        # Execute - since error_exit is called, this should raise SystemExit
+        with self.assertRaises(SystemExit):
+            result = agent._process_external_coding_agent_run(
             issue_number=issue_number,
             remediation_id=remediation_id,
             vulnerability_label=vulnerability_label,

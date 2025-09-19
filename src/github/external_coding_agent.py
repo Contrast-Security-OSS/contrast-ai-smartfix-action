@@ -231,7 +231,7 @@ Please review this security vulnerability and implement appropriate fixes to add
         for attempt in range(1, max_attempts + 1):
             debug_log(f"Polling attempt {attempt}/{max_attempts} for PR related to issue #{issue_number}")
             if self.config.CODING_AGENT == CodingAgents.CLAUDE_CODE.name:
-                pr_info = self._process_claude_workflow_run(issue_number, vulnerability_label, remediation_label, remediation_id)
+                pr_info = self._process_claude_workflow_run(issue_number, remediation_id)
             else:
                 # GitHub Copilot agent
                 pr_info = git_handler.find_open_pr_for_issue(issue_number)
@@ -276,8 +276,8 @@ Please review this security vulnerability and implement appropriate fixes to add
         log(f"No PR found for issue #{issue_number} after {max_attempts} polling attempts", is_error=True)
         return None
 
-    def _process_claude_workflow_run(self, issue_number: int, vulnerability_label: str,
-                                     remediation_label: str, remediation_id: str,) -> Optional[dict]:
+
+    def _process_claude_workflow_run(self, issue_number: int, remediation_id: str,) -> Optional[dict]:
         """
         Process the Claude Code workflow run and extract PR information from Claude's comment.
 
@@ -287,8 +287,7 @@ Please review this security vulnerability and implement appropriate fixes to add
 
         Args:
             issue_number: The issue number Claude is working on
-            vulnerability_label: The vulnerability label to add to the PR
-            remediation_label: The remediation label to add to the PR
+            remediation_id: The remediation ID for telemetry and API notification
 
         Returns:
             Optional[dict]: PR information if successfully created, None otherwise
@@ -310,7 +309,7 @@ Please review this security vulnerability and implement appropriate fixes to add
             #debug_log(f"GitHub Action run #{workflow_run_id} failed for issue #{issue_number}")
             log(f"GitHub Action run #{workflow_run_id} failed for issue #{issue_number}", is_error=True)
             telemetry_handler.update_telemetry("resultInfo.prCreated", False)
-            telemetry_handler.update_telemetry("resultInfo.failureReason", "Claude processing has bugs or issues")
+            telemetry_handler.update_telemetry("resultInfo.failureReason", "Claude workflow failed")
             telemetry_handler.update_telemetry("resultInfo.failureCategory", FailureCategory.AGENT_FAILURE.name)
             error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
 
@@ -333,92 +332,14 @@ Please review this security vulnerability and implement appropriate fixes to add
         comment_body = full_comment_body.split('\n\n---\n')[0] if '\n\n---\n' in full_comment_body else full_comment_body
         debug_log(f"Using truncated claude comment_body (first section only): {comment_body}")
 
-        # Debug just the first 100 characters to avoid overwhelming logs
-        #debug_log(f"Comment body preview: {comment_body[:100]}...")
-
-        # Parse data from the comment body
         try:
-            # Extract PR title and body from the URL parameters
             import re
-            import urllib.parse
 
-            # Find the Create PR URL that contains the title and body
-            # Two-pass approach for internationalization support:
-
-            # First, try to find any link that looks like a GitHub PR URL with 'compare' and 'quick_pull=1'
-            # This pattern works with any UI language - focusing on the URL structure which doesn't change
-            create_pr_match = None
-
-            # 1. English specific pattern first - most reliable and common case
-            #    This pattern specifically looks for the "Create PR →" text which is a clear indicator
-            create_pr_match = re.search(r'\[Create PR ➔]\((https?://.*?)\)', comment_body)
-            if create_pr_match:
-                create_pr_url = create_pr_match.group(1)
-                debug_log(f"Found PR URL using English pattern: {create_pr_url[:100]}...")
-            else:
-                # 2. Try to find any markdown link with GitHub compare URL containing quick_pull parameter
-                #    This captures PR URLs regardless of the link text language
-                create_pr_matches = re.findall(r'\[.*?]\((https?://.*?/compare/.*?quick_pull=1.*?)\)', comment_body)
-                if create_pr_matches and len(create_pr_matches) > 0:
-                    create_pr_url = create_pr_matches[0]
-                    debug_log(f"Found PR URL using internationalized pattern: {create_pr_url[:100]}...")
-                else:
-                    # 3. Ultimate fallback: try any link with compare in it as a last resort
-                    create_pr_match = re.search(r'\[.*?]\((https?://.*?/compare/.*?)\)', comment_body)
-
-                if not create_pr_match:
-                    log(f"Could not find Create PR URL in Claude comment", is_error=True)
-                    return None
-
-                create_pr_url = create_pr_match.group(1)
-                debug_log(f"Found PR URL using fallback pattern: {create_pr_url[:50]}...")
-
-            # Save the full URL for debugging
-            debug_log(f"Complete PR URL: {create_pr_url}")
-
-            # Extract branch name from URL if possible (the part after the ...)
-            branch_from_url_match = re.search(r'/compare/.*?\.\.\.(.*?)(?:\?|$)', create_pr_url)
-            if branch_from_url_match:
-                head_branch_from_url = branch_from_url_match.group(1)
-                debug_log(f"Found branch name from URL: {head_branch_from_url}")
-            else:
-                head_branch_from_url = None
-
-            # Extract query parameters from URL
-            params = {}
-            if '?' in create_pr_url:
-                query = create_pr_url.split('?', 1)[1]
-                param_pairs = query.split('&')
-                for pair in param_pairs:
-                    if '=' in pair:
-                        key, value = pair.split('=', 1)
-                        params[key] = urllib.parse.unquote(value)
-
-                debug_log(f"Found {len(params)} URL parameters: {', '.join(params.keys())}")
-            else:
-                debug_log("No query parameters found in URL")
-
-            # Extract title and body
-            pr_title = params.get('title', '')
-            if pr_title:
-                # Show only the first 50 chars of title in logs
-                debug_log(f"Found PR title: {pr_title[:50]}{'...' if len(pr_title) > 50 else ''}")
-            else:
-                debug_log("Could not extract PR title from URL parameters")
-
-            pr_body = params.get('body', '')
-            if pr_body:
-                # Show only the first 50 chars of body in logs
-                debug_log(f"Found PR body: {pr_body[:50]}{'...' if len(pr_body) > 50 else ''}")
-            else:
-                debug_log("Could not extract PR body from URL parameters")
-
-            if not pr_title or not pr_body:
-                log(f"Could not extract PR title or body from Claude comment", is_error=True)
-                telemetry_handler.update_telemetry("resultInfo.prCreated", False)
-                telemetry_handler.update_telemetry("resultInfo.failureReason", "Claude processing has bugs or issues")
-                telemetry_handler.update_telemetry("resultInfo.failureCategory", FailureCategory.AGENT_FAILURE.name)
-                error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
+            # Extract PR information from the comment body
+            comment_body_pr_data = self._process_claude_comment_body(comment_body, remediation_id)
+            head_branch_from_url = comment_body_pr_data["head_branch_from_url"]
+            pr_title = comment_body_pr_data["pr_title"]
+            pr_body = comment_body_pr_data["pr_body"]
 
             # Attempt to get the branch name using multiple methods in order of preference
             head_branch = None
@@ -462,9 +383,7 @@ Please review this security vulnerability and implement appropriate fixes to add
                 title=pr_title,
                 body=pr_body,
                 base_branch=base_branch,
-                head_branch=head_branch,
-                vulnerability_label=vulnerability_label,
-                remediation_label=remediation_label
+                head_branch=head_branch
             )
             debug_log(f"claude create PR returned: {pr_url}")
 
@@ -499,5 +418,102 @@ Please review this security vulnerability and implement appropriate fixes to add
         except Exception as e:
             log(f"Error parsing Claude comment: {str(e)}", is_error=True)
             return None
+
+    def _process_claude_comment_body(self, comment_body: str, remediation_id: str) -> dict:
+        """
+        Process Claude's comment body to extract PR information.
+
+        Args:
+            comment_body: The comment body from Claude
+            remediation_id: The remediation ID for telemetry and error handling
+
+        Returns:
+            dict: A dictionary containing head_branch_from_url, pr_title, and pr_body
+        """
+        # Extract PR title and body from the URL parameters
+        import re
+        import urllib.parse
+
+        # Find the Create PR URL that contains the title and body
+        # Two-pass approach for internationalization support:
+
+        # 1. English specific pattern first - most reliable and common case
+        #   This pattern specifically looks for the "Create PR →" text which is a clear indicator
+        create_pr_match = re.search(r'\[Create PR ➔]\((https?://.*?)\)', comment_body)
+        if create_pr_match:
+            create_pr_url = create_pr_match.group(1)
+            debug_log(f"Found PR URL using English pattern: {create_pr_url}...")
+        else:
+            # 2. Try to find any markdown link with GitHub compare URL containing quick_pull parameter
+            #    This captures PR URLs regardless of the link text language
+            create_pr_match = re.findall(r'\[.*?]\((https?://.*?/compare/.*?quick_pull=1.*?)\)', comment_body)
+            if create_pr_match and len(create_pr_match) > 0:
+                create_pr_url = create_pr_match[0]
+                debug_log(f"Found PR URL using internationalized pattern: {create_pr_url}...")
+            else:
+                # 3. Ultimate fallback: try any link with compare in it as a last resort
+                create_pr_match = re.search(r'\[.*?]\((https?://.*?/compare/.*?)\)', comment_body)
+
+                if not create_pr_match:
+                    debug_log(f"Could not find Create PR URL in Claude comment using ultimate fallback", is_error=True)
+                    telemetry_handler.update_telemetry("resultInfo.prCreated", False)
+                    telemetry_handler.update_telemetry("resultInfo.failureReason", "Could not extract Create PR URL")
+                    telemetry_handler.update_telemetry("resultInfo.failureCategory", FailureCategory.AGENT_FAILURE.name)
+                    error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
+
+                create_pr_url = create_pr_match.group(1)
+                debug_log(f"Found PR URL using ultimate fallback pattern: {create_pr_url}...")
+
+        # Save the full URL for debugging
+        debug_log(f"Complete PR URL: {create_pr_url}")
+
+        # Extract query parameters from URL
+        params = {}
+        if '?' in create_pr_url:
+            query = create_pr_url.split('?', 1)[1]
+            param_pairs = query.split('&')
+            for pair in param_pairs:
+                if '=' in pair:
+                    key, value = pair.split('=', 1)
+                    params[key] = urllib.parse.unquote(value)
+
+            debug_log(f"Found {len(params)} URL parameters: {', '.join(params.keys())}")
+        else:
+            debug_log("No query parameters found in URL")
+
+        # Extract title and body
+        pr_title = params.get('title', '')
+        if pr_title:
+            debug_log(f"Found PR title: {pr_title}")
+        else:
+            debug_log("Could not extract PR title from URL parameters")
+
+        pr_body = params.get('body', '')
+        if pr_body:
+            debug_log(f"Found PR body: {pr_body}")
+        else:
+            debug_log("Could not extract PR body from URL parameters")
+
+        if not pr_title or not pr_body:
+            log(f"Could not extract PR title or body from Claude comment", is_error=True)
+            telemetry_handler.update_telemetry("resultInfo.prCreated", False)
+            telemetry_handler.update_telemetry("resultInfo.failureReason", "Claude processing failed to extract PR title or body.")
+            telemetry_handler.update_telemetry("resultInfo.failureCategory", FailureCategory.AGENT_FAILURE.name)
+            error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
+
+        # Extract branch name from URL if possible (the part after the ...)
+        branch_from_url_match = re.search(r'/compare/.*?\.\.\.(.*)(?:\?|$)', create_pr_url)
+        if branch_from_url_match:
+            head_branch_from_url = branch_from_url_match.group(1)
+            debug_log(f"Found branch name from URL: {head_branch_from_url}")
+        else:
+            head_branch_from_url = None
+
+        contrast_pr_body = f"{pr_body}\n Powered by Contrast AI SmartFix"
+        return {
+            "head_branch_from_url": head_branch_from_url,
+            "pr_title": pr_title,
+            "pr_body": contrast_pr_body
+        }
 
     # Additional methods will be implemented later

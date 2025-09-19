@@ -871,14 +871,59 @@ def extract_issue_number_from_branch(branch_name: str) -> Optional[int]:
     return None
 
 
+def add_labels_to_pr(pr_number: int, labels: List[str]) -> bool:
+    """
+    Add labels to an existing pull request.
+
+    Args:
+        pr_number: The PR number to add labels to
+        labels: List of label names to add
+
+    Returns:
+        bool: True if labels were successfully added, False otherwise
+    """
+    if not labels:
+        debug_log("No labels provided to add to PR")
+        return True
+
+    log(f"Adding labels to PR #{pr_number}: {labels}")
+    gh_env = get_gh_env()
+
+    # First ensure all labels exist
+    for label_name in labels:
+        if label_name.startswith("contrast-vuln-id:"):
+            ensure_label(label_name, "Vulnerability identified by Contrast", "ff0000")  # Red
+        elif label_name.startswith("smartfix-id:"):
+            ensure_label(label_name, "Remediation ID for Contrast vulnerability", "0075ca")  # Blue
+        else:
+            # For other labels, use default description and color
+            ensure_label(label_name, "Label added by Contrast AI SmartFix", "cccccc")  # Gray
+
+    # Add labels to the PR
+    add_labels_command = [
+        "gh", "pr", "edit",
+        "--repo", config.GITHUB_REPOSITORY,
+        str(pr_number),
+        "--add-label", ",".join(labels)
+    ]
+
+    try:
+        run_command(add_labels_command, env=gh_env, check=True)
+        log(f"Successfully added labels to PR #{pr_number}: {labels}")
+        return True
+    except Exception as e:
+        log(f"Failed to add labels to PR #{pr_number}: {e}", is_error=True)
+        return False
+
+
 def get_issue_comments(issue_number: int, author: str = "claude") -> List[dict]:
     """
-    Gets comments on a GitHub issue by issue number.
-    Returns latest comments by author claude first (sorted in reverse chronological order).
+    Gets comments on a GitHub issue by issue number. Returns latest comments
+    by author (defaults to claude) first  (sorted in reverse chronological order).
 
     Args:
         issue_number: The issue number to fetch comments from
-        author: The author username to filter comments by
+        author: The author username to filter comments by [default: "claude"]
 
     Returns:
         List[dict]: A list of comment data dictionaries or empty list if no comments or error
@@ -924,9 +969,9 @@ def watch_github_action_run(run_id: int) -> bool:
     Returns:
         bool: True if the run completed successfully, False if it failed
     """
-    log(f"OK Now watching GitHub Actions run #{run_id} until completion... This may take several minutes.")
-    gh_env = get_gh_env()
+    log(f"OK. Now watching GitHub Actions run #{run_id} until completion... This may take several minutes...")
 
+    gh_env = get_gh_env()
     watch_command = [
         "gh", "run", "watch",
         str(run_id),
@@ -945,7 +990,7 @@ def watch_github_action_run(run_id: int) -> bool:
     except Exception as e:
         # If run_command throws an exception, it means the gh command returned a non-zero exit code,
         # which with --exit-status means the workflow failed
-        log(f"GitHub Actions run #{run_id} failed: {e}", is_error=True)
+        log(f"GitHub Actions run #{run_id} failed with error: {e}", is_error=True)
         return False
 
 
@@ -962,14 +1007,9 @@ def get_latest_branch_by_pattern(pattern: str) -> Optional[str]:
     Returns:
         Optional[str]: The latest matching branch name or None if no matches found
     """
-    #import re
-    #import json
-    #from src.utils import run_command, debug_log, log
-    # Avoid circular import
 
     debug_log(f"Finding latest branch matching pattern '{pattern}'")
 
-    # Ignore author parameter - we'll find branches by pattern only
     # Construct GraphQL query to get branches
     # Limit to 100 most recent branches, ordered by commit date descending
     graphql_query = """
@@ -993,24 +1033,21 @@ def get_latest_branch_by_pattern(pattern: str) -> Optional[str]:
     """
 
     try:
-        # Parse repository owner and name from config
-        #from src.config import get_config
-        #config = get_config()
-        repo_parts = config.GITHUB_REPOSITORY.split('/')
-        if len(repo_parts) != 2:
+        repo_data = config.GITHUB_REPOSITORY.split('/')
+        if len(repo_data) != 2:
             log(f"Invalid repository format: {config.GITHUB_REPOSITORY}", is_error=True)
             return None
 
-        repo_owner, repo_name = repo_parts
+        repo_owner, repo_name = repo_data
 
-        # Execute GraphQL query using GitHub CLI
         gh_env = get_gh_env()
-        result = run_command([
+        latest_branch_command = [
             'gh', 'api', 'graphql',
             '-f', f'query={graphql_query}',
             '-f', f'repo_owner={repo_owner}',
             '-f', f'repo_name={repo_name}'
-        ], env=gh_env, check=False)
+        ]
+        result = run_command(latest_branch_command, env=gh_env, check=False)
 
         if not result:
             debug_log("Failed to get branches from GitHub API")
@@ -1060,8 +1097,8 @@ def get_claude_workflow_run_id() -> int:
         int: The workflow run ID if found, or None if no in-progress runs are found
     """
     log("Getting in-progress Claude workflow run ID")
-    gh_env = get_gh_env()
 
+    gh_env = get_gh_env()
     workflow_command = [
         "gh", "run", "list",
         "--repo", config.GITHUB_REPOSITORY,
@@ -1104,18 +1141,15 @@ def get_claude_workflow_run_id() -> int:
         return None
 
 
-def create_claude_pr(title: str, body: str, base_branch: str, head_branch: str, vulnerability_label: str, remediation_label: str) -> str:
+def create_claude_pr(title: str, body: str, base_branch: str, head_branch: str) -> str:
     """
     Creates a GitHub Pull Request specifically for Claude fixes using the GitHub CLI.
-    Applies vulnerability and remediation labels to the PR automatically.
 
     Args:
         title: The title of the PR
         body: The body content of the PR
         base_branch: The branch to merge into (target branch)
         head_branch: The branch containing the changes (source branch)
-        vulnerability_label: The vulnerability label to apply (contrast-vuln-id:*)
-        remediation_label: The remediation label to apply (smartfix-id:*)
 
     Returns:
         str: The URL of the created pull request, or empty string if creation failed
@@ -1148,20 +1182,12 @@ def create_claude_pr(title: str, body: str, base_branch: str, head_branch: str, 
             return ""
 
         gh_env = get_gh_env()
-
-        # Ensure both labels exist
-        ensure_label(vulnerability_label, "Vulnerability identified by Contrast", "ff0000")
-        ensure_label(remediation_label, "Remediation ID for Contrast vulnerability", "0075ca")
-
-        # Build the PR command with labels
         pr_command = [
             "gh", "pr", "create",
             "--title", title,
             "--body-file", temp_file_path,
             "--base", base_branch,
-            "--head", head_branch,
-            "--label", vulnerability_label,
-            "--label", remediation_label
+            "--head", head_branch
         ]
 
         # Run the command and capture the output (PR URL)
@@ -1181,48 +1207,3 @@ def create_claude_pr(title: str, body: str, base_branch: str, head_branch: str, 
                 debug_log(f"Temporary PR body file {temp_file_path} removed.")
             except OSError as e:
                 log(f"Could not remove temporary file {temp_file_path}: {e}", is_error=True)
-
-
-def add_labels_to_pr(pr_number: int, labels: List[str]) -> bool:
-    """
-    Add labels to an existing pull request.
-
-    Args:
-        pr_number: The PR number to add labels to
-        labels: List of label names to add
-
-    Returns:
-        bool: True if labels were successfully added, False otherwise
-    """
-    if not labels:
-        debug_log("No labels provided to add to PR")
-        return True
-
-    log(f"Adding labels to PR #{pr_number}: {labels}")
-    gh_env = get_gh_env()
-
-    # First ensure all labels exist
-    for label_name in labels:
-        if label_name.startswith("contrast-vuln-id:"):
-            ensure_label(label_name, "Vulnerability identified by Contrast", "ff0000")  # Red
-        elif label_name.startswith("smartfix-id:"):
-            ensure_label(label_name, "Remediation ID for Contrast vulnerability", "0075ca")  # Blue
-        else:
-            # For other labels, use default description and color
-            ensure_label(label_name, "Label added by Contrast AI SmartFix", "cccccc")  # Gray
-
-    # Add labels to the PR
-    add_labels_command = [
-        "gh", "pr", "edit",
-        "--repo", config.GITHUB_REPOSITORY,
-        str(pr_number),
-        "--add-label", ",".join(labels)
-    ]
-
-    try:
-        run_command(add_labels_command, env=gh_env, check=True)
-        log(f"Successfully added labels to PR #{pr_number}: {labels}")
-        return True
-    except Exception as e:
-        log(f"Failed to add labels to PR #{pr_number}: {e}", is_error=True)
-        return False
