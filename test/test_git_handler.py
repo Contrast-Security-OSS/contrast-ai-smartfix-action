@@ -366,7 +366,7 @@ class TestGitHandler(unittest.TestCase):
         self.assertEqual(comment_command[0], "gh")
         self.assertEqual(comment_command[1], "issue")
         self.assertEqual(comment_command[2], "comment")
-        self.assertEqual(comment_command[5], str(issue_number))
+        self.assertEqual(comment_command[3], str(issue_number))
         
         # Verify comment body contains '@claude' and the remediation label
         comment_body = comment_command[-1]

@@ -1014,14 +1014,11 @@ def get_latest_branch_by_pattern(pattern: str) -> Optional[str]:
     graphql_query = """
     query($repo_owner: String!, $repo_name: String!) {
       repository(owner: $repo_owner, name: $repo_name) {
-        refs(refPrefix: "refs/heads/", first: 100) {
+        refs(refPrefix: "refs/heads/", first: 100, orderBy: {field: TAG_COMMIT_DATE, direction: DESC}) {
           nodes {
             name
             target {
               ... on Commit {
-                author {
-                  user { login }
-                }
                 committedDate
               }
             }

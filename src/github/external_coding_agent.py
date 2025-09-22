@@ -304,7 +304,7 @@ Please review this security vulnerability and implement appropriate fixes to add
             workflow_success = git_handler.watch_github_action_run(workflow_run_id)
 
             pattern = fr'^claude/issue-{issue_number}-\d{{8}}-\d{{4}}$'
-            debug_log(f"TESTING: GraphQL API call method with pattern: {pattern}")
+            #debug_log(f"TESTING: GraphQL API call method with pattern: {pattern}")
             head_branch = git_handler.get_latest_branch_by_pattern(pattern)
             debug_log(f"TESTING result: head_branch = {head_branch}")
 
