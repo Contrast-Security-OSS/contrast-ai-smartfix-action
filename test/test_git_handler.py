@@ -355,7 +355,7 @@ class TestGitHandler(unittest.TestCase):
         self.assertTrue(result)
         
         # Check that Claude-specific logic was executed
-        mock_debug_log.assert_any_call("CLAUDE_CODE agent detected need to add a comment and tag @claude for reprocessing")
+        mock_debug_log.assert_any_call("Claude code agent detected need to add a comment and tag @claude for reprocessing")
         mock_log.assert_any_call(f"Added new comment tagging @claude to issue #{issue_number}")
         
         # Verify the comment command

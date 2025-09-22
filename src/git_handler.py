@@ -713,7 +713,7 @@ def reset_issue(issue_number: int, remediation_label: str) -> bool:
 
         # If using CLAUDE_CODE, skip reassignment and tag @claude in comment
         if config.CODING_AGENT == CodingAgents.CLAUDE_CODE.name:
-            debug_log("CLAUDE_CODE agent detected need to add a comment and tag @claude for reprocessing")
+            debug_log("Claude code agent detected need to add a comment and tag @claude for reprocessing")
             # Add a comment to the existing issue to notify @claude to reprocess
             comment:str = f"@claude reprocess this issue with the new remediation label: `{remediation_label}` and attempt a fix."
             comment_command = [
@@ -940,6 +940,7 @@ def get_issue_comments(issue_number: int, author: str = "claude") -> List[dict]:
         "--jq", jq_filter
     ]
 
+    comment_output = None
     try:
         comment_output = run_command(issue_comment_command, env=gh_env, check=False)
 
@@ -1050,7 +1051,7 @@ def get_latest_branch_by_pattern(pattern: str) -> Optional[str]:
         result = run_command(latest_branch_command, env=gh_env, check=False)
 
         if not result:
-            debug_log("Failed to get branches from GitHub API")
+            debug_log("Failed to get branches from GitHub GraphQL API")
             return None
 
         # Parse JSON response
@@ -1104,7 +1105,6 @@ def get_claude_workflow_run_id() -> int:
         "--repo", config.GITHUB_REPOSITORY,
         "--status", "in_progress",
         "--workflow", "claude.yml",
-        #"--event", "issues",
         "--limit", "1",
         "--json", "databaseId"
     ]

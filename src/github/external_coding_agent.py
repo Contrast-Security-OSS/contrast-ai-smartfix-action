@@ -280,7 +280,8 @@ Please review this security vulnerability and implement appropriate fixes to add
 
     def _process_claude_workflow_run(self, issue_number: int, remediation_id: str,) -> Optional[dict]:
         """
-        Process the Claude Code workflow run and extract PR information from Claude's comment.
+        Process the Claude Code workflow run and extract PR information from Claude's comment
+        and then create the PR using the claude produced information.
 
         Args:
             issue_number: The issue number Claude is working on
@@ -295,7 +296,7 @@ Please review this security vulnerability and implement appropriate fixes to add
 
             if not workflow_run_id:
                 # If no workflow run ID found yet, continue polling
-                log(f"claude workflow_run_id not found, checking again...")
+                debug_log(f"Claude workflow_run_id not found, checking again...")
                 return None
 
             # Watch the claude GitHub action run
@@ -340,7 +341,7 @@ Please review this security vulnerability and implement appropriate fixes to add
                 base_branch=base_branch,
                 head_branch=head_branch
             )
-            debug_log(f"claude create PR returned: {pr_url}")
+            debug_log(f"Claude create PR returned url: {pr_url}")
 
             if not pr_url:
                 log(f"Failed to create PR for Claude Code fix", is_error=True)
@@ -378,7 +379,8 @@ Please review this security vulnerability and implement appropriate fixes to add
 
     def _process_claude_comment_body(self, comment_body: str, remediation_id: str, issue_number: int) -> dict:
         """
-        Process Claude's comment body to extract PR information using a simplified approach.
+        Process Claude's comment body to extract PR information. Returning the pr_title
+        and pr_body are required for this method to be successful and to create the PR.
 
         Args:
             comment_body: The comment body from Claude
@@ -397,11 +399,11 @@ Please review this security vulnerability and implement appropriate fixes to add
             head_branch_from_url = branch_match.group(1)
             debug_log(f"Found branch name from backticks: {head_branch_from_url}")
 
-        # Find the URL starting with "Create PR" English support only
+        # Find the URL starting with "Create PR" English support only atm
         start_marker = '[Create PR ➔]('
         pr_title = ''
         pr_body = ''
-        create_pr_url = None
+        #create_pr_url = None
 
         if start_marker in comment_body:
             start_idx = comment_body.find(start_marker) + len(start_marker)
@@ -467,7 +469,7 @@ Please review this security vulnerability and implement appropriate fixes to add
 
         # Verify we have required pr_title and pr_body data
         if not (pr_title and pr_body):
-            error_msg = f"Could not extract required PR title and body data"
+            error_msg = f"Could not extract required PR title and body data from comment_body: {comment_body}"
             debug_log(error_msg, is_error=True)
             self._update_telemetry_and_exit_claude_agent_failure(error_msg, remediation_id, issue_number)
 
@@ -502,7 +504,7 @@ Please review this security vulnerability and implement appropriate fixes to add
         # Method 1: Try to use the branch name extracted from URL in comment body
         if head_branch_from_url:
             head_branch = head_branch_from_url
-            debug_log(f"Using head branch from URL: {head_branch}")
+            debug_log(f"Using head branch extracted from URL: {head_branch}")
             return head_branch
 
         # Method 2: Try to extract from backtick-formatted branch in comment
