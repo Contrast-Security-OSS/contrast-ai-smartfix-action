@@ -303,6 +303,11 @@ Please review this security vulnerability and implement appropriate fixes to add
             debug_log(f"OK, found claude workflow_run_id value: {workflow_run_id}")
             workflow_success = git_handler.watch_github_action_run(workflow_run_id)
 
+            pattern = fr'^claude/issue-{issue_number}-\d{{8}}-\d{{4}}$'
+            debug_log(f"TESTING: GraphQL API call method with pattern: {pattern}")
+            head_branch = git_handler.get_latest_branch_by_pattern(pattern)
+            debug_log(f"TESTING result: head_branch = {head_branch}")
+
             if not workflow_success:
                 log(f"Claude workflow run #{workflow_run_id} failed for issue #{issue_number}", is_error=True)
                 reason: str = f"Claude workflow run #{workflow_run_id} failed processing with non-zero exit status"
@@ -403,7 +408,6 @@ Please review this security vulnerability and implement appropriate fixes to add
         start_marker = '[Create PR ➔]('
         pr_title = ''
         pr_body = ''
-        #create_pr_url = None
 
         if start_marker in comment_body:
             start_idx = comment_body.find(start_marker) + len(start_marker)
