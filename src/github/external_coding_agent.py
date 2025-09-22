@@ -20,16 +20,18 @@
 import time
 from typing import Optional
 from src.utils import log, debug_log, error_exit, tail_string
-from src.contrast_api import FailureCategory, notify_remediation_pr_opened
 from src.config import Config
 from src import git_handler
 from src import telemetry_handler
-from src.coding_agents import CodingAgents
+from src.contrast_api import FailureCategory, notify_remediation_pr_opened
+from src.smartfix.domains.agents import CodingAgents
+from src.smartfix.domains.agents.coding_agent import CodingAgentStrategy
+from src.smartfix.domains.agents.agent_session import AgentSession, AgentSessionStatus
 
 
-class ExternalCodingAgent:
+class ExternalCodingAgent(CodingAgentStrategy):
     """
-    A class that interfaces with an external coding agent through an API or command line.
+    A GitHub-specific class that interfaces with external coding agents (GitHub Copilot, Claude Code).
     This agent is used as an alternative to the built-in SmartFix coding agent.
     """
 
@@ -42,6 +44,149 @@ class ExternalCodingAgent:
         """
         self.config = config
         debug_log("Initialized ExternalCodingAgent")
+
+    def remediate(self, context) -> AgentSession:
+        """
+        Remediate vulnerabilities using external coding agent.
+
+        Args:
+            context: Remediation context containing vulnerability details
+
+        Returns:
+            AgentSession: Complete remediation session with success status and events
+        """
+        session = AgentSession.from_config(self.config)
+
+        # Extract vulnerability details from RemediationContext
+        vulnerability = context.vulnerability
+        vuln_uuid = vulnerability.uuid
+        vuln_title = vulnerability.title
+        remediation_id = context.remediation_id
+        issue_body = getattr(context, 'issue_body', '')
+
+        session.add_event(
+            prompt=f"External coding agent ({self.config.CODING_AGENT}) starting remediation",
+            response=f"Processing vulnerability: {vuln_title}"
+        )
+
+        try:
+            # Check if this should be handled by SMARTFIX instead
+            if hasattr(self.config, 'CODING_AGENT') and self.config.CODING_AGENT == CodingAgents.SMARTFIX.name:
+                debug_log("SMARTFIX agent detected, ExternalCodingAgent should not be used")
+                session.complete_session(
+                    status=AgentSessionStatus.ERROR,
+                    pr_body="Wrong agent type - should use SMARTFIX"
+                )
+                return session
+
+            # === CORE EXTERNAL AGENT LOGIC (moved from generate_fixes()) ===
+
+            log(f"\n::group::--- Using External Coding Agent ({self.config.CODING_AGENT}) ---")
+            telemetry_handler.update_telemetry("additionalAttributes.codingAgent", "EXTERNAL-COPILOT")
+
+            # Generate labels and issue details
+            vulnerability_label = f"contrast-vuln-id:VULN-{vuln_uuid}"
+            remediation_label = f"smartfix-id:{remediation_id}"
+            issue_title = vuln_title
+
+            if self.config.CODING_AGENT == CodingAgents.CLAUDE_CODE.name:
+                debug_log("CLAUDE_CODE agent detected, tagging @claude in issue title for processing")
+                issue_title = f"@claude fix: {issue_title}"
+
+            # Validate issue_body
+            if issue_body is None:
+                session.complete_session(
+                    status=AgentSessionStatus.ERROR,
+                    pr_body="Failed to generate issue body"
+                )
+                log(f"Failed to generate issue body for vulnerability id {vuln_uuid}", is_error=True)
+                error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
+
+            # Use git_handler to find if there's an existing issue with this label
+            issue_number = git_handler.find_issue_with_label(vulnerability_label)
+
+            if issue_number is None:
+                # Check if this is because Issues are disabled
+                if not git_handler.check_issues_enabled():
+                    session.complete_session(
+                        status=AgentSessionStatus.ERROR,
+                        pr_body="GitHub Issues disabled"
+                    )
+                    log("GitHub Issues are disabled for this repository. External coding agent requires Issues to be enabled.", is_error=True)
+                    error_exit(remediation_id, FailureCategory.GIT_COMMAND_FAILURE.value)
+
+                debug_log(f"No GitHub issue found with label {vulnerability_label}")
+                issue_number = git_handler.create_issue(issue_title, issue_body, vulnerability_label, remediation_label)
+                if not issue_number:
+                    session.complete_session(
+                        status=AgentSessionStatus.ERROR,
+                        pr_body="Failed to create GitHub issue"
+                    )
+                    log(f"Failed to create issue with labels {vulnerability_label}, {remediation_label}", is_error=True)
+                    error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
+            else:
+                debug_log(f"Found existing GitHub issue #{issue_number} with label {vulnerability_label}")
+                if not git_handler.reset_issue(issue_number, remediation_label):
+                    session.complete_session(
+                        status=AgentSessionStatus.ERROR,
+                        pr_body="Failed to reset GitHub issue"
+                    )
+                    log(f"Failed to reset issue #{issue_number} with labels {vulnerability_label}, {remediation_label}", is_error=True)
+                    error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
+
+            telemetry_handler.update_telemetry("additionalAttributes.externalIssueNumber", issue_number)
+
+            if self.config.CODING_AGENT == CodingAgents.CLAUDE_CODE.name:
+                # temporary short-circuit for Claude until we implement the PR processing logic
+                session.complete_session(
+                    status=AgentSessionStatus.ERROR,
+                    pr_body="Claude processing not implemented"
+                )
+                log("Claude agent processing support is not implemented as of yet so stop processing and log agent failure", is_error=True)
+                telemetry_handler.update_telemetry("resultInfo.prCreated", False)
+                telemetry_handler.update_telemetry("resultInfo.failureReason", "Claude processing not implemented")
+                telemetry_handler.update_telemetry("resultInfo.failureCategory", FailureCategory.AGENT_FAILURE.name)
+                error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
+
+            # Poll for PR creation by the external agent
+            log(f"Waiting for external agent to create a PR for issue #{issue_number}")
+
+            # Poll for a PR to be created by the external agent (100 attempts, 5 seconds apart = ~8.3 minutes max)
+            pr_info = self._poll_for_pr(issue_number, remediation_id, vulnerability_label, remediation_label, max_attempts=100, sleep_seconds=5)
+
+            log("\n::endgroup::")
+
+            if pr_info:
+                pr_number = pr_info.get("number")
+                pr_url = pr_info.get("url")
+                log(f"External agent created PR #{pr_number} at {pr_url}")
+                telemetry_handler.update_telemetry("resultInfo.prCreated", True)
+                telemetry_handler.update_telemetry("additionalAttributes.prStatus", "OPEN")
+                telemetry_handler.update_telemetry("additionalAttributes.prNumber", pr_number)
+                telemetry_handler.update_telemetry("additionalAttributes.prUrl", pr_url)
+
+                session.complete_session(
+                    status=AgentSessionStatus.SUCCESS,
+                    pr_body="External agent successfully created PR"
+                )
+                return session
+            else:
+                session.complete_session(
+                    status=AgentSessionStatus.ERROR,
+                    pr_body="External agent failed to create PR"
+                )
+                log("External agent failed to create a PR within the timeout period", is_error=True)
+                telemetry_handler.update_telemetry("resultInfo.prCreated", False)
+                telemetry_handler.update_telemetry("resultInfo.failureReason", "PR creation timeout")
+                telemetry_handler.update_telemetry("resultInfo.failureCategory", FailureCategory.AGENT_FAILURE.name)
+                return session
+
+        except Exception as e:
+            session.complete_session(
+                status=AgentSessionStatus.ERROR,
+                pr_body=f"External agent error: {str(e)}"
+            )
+            return session
 
     def assemble_issue_body(self, vulnerability_details: dict) -> str:
         """
@@ -130,93 +275,6 @@ Please review this security vulnerability and implement appropriate fixes to add
 
         debug_log(f"Assembled issue body with {len(issue_body)} characters")
         return issue_body
-
-    def generate_fixes(self, vuln_uuid: str, remediation_id: str, vuln_title: str, issue_body: str = None) -> bool:
-        """
-        Generate fixes for vulnerabilities.
-
-        Args:
-            vuln_uuid: The vulnerability UUID
-            remediation_id: The remediation ID
-            vuln_title: The vulnerability title
-            issue_body: The issue body content (optional, uses default if not provided)
-
-        Returns:
-            bool: False if the CODING_AGENT is SMARTFIX, True otherwise
-        """
-        if hasattr(self.config, 'CODING_AGENT') and self.config.CODING_AGENT == CodingAgents.SMARTFIX.name:
-            debug_log("SMARTFIX agent detected, ExternalCodingAgent.generate_fixes returning False")
-            return False
-
-        log(f"\n::group::--- Using External Coding Agent ({self.config.CODING_AGENT}) ---")
-        telemetry_handler.update_telemetry("additionalAttributes.codingAgent", "EXTERNAL-COPILOT")
-
-        # Generate labels and issue details
-        vulnerability_label = f"contrast-vuln-id:VULN-{vuln_uuid}"
-        remediation_label = f"smartfix-id:{remediation_id}"
-        issue_title = vuln_title
-
-        if self.config.CODING_AGENT == CodingAgents.CLAUDE_CODE.name:
-            debug_log("CLAUDE_CODE agent detected, tagging @claude in issue title for processing")
-            issue_title = f"@claude fix: {issue_title}"
-
-        # Use the provided issue_body or fall back to default
-        if issue_body is None:
-            log(f"Failed to generate issue body for vulnerability id {vuln_uuid}", is_error=True)
-            error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
-
-        # Use git_handler to find if there's an existing issue with this label
-        issue_number = git_handler.find_issue_with_label(vulnerability_label)
-
-        if issue_number is None:
-            # Check if this is because Issues are disabled
-            if not git_handler.check_issues_enabled():
-                log("GitHub Issues are disabled for this repository. External coding agent requires Issues to be enabled.", is_error=True)
-                error_exit(remediation_id, FailureCategory.GIT_COMMAND_FAILURE.value)
-
-            debug_log(f"No GitHub issue found with label {vulnerability_label}")
-            issue_number = git_handler.create_issue(issue_title, issue_body, vulnerability_label, remediation_label)
-            if not issue_number:
-                log(f"Failed to create issue with labels {vulnerability_label}, {remediation_label}", is_error=True)
-                error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
-        else:
-            debug_log(f"Found existing GitHub issue #{issue_number} with label {vulnerability_label}")
-            if not git_handler.reset_issue(issue_number, remediation_label):
-                log(f"Failed to reset issue #{issue_number} with labels {vulnerability_label}, {remediation_label}", is_error=True)
-                error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
-
-        telemetry_handler.update_telemetry("additionalAttributes.externalIssueNumber", issue_number)
-
-        if self.config.CODING_AGENT == CodingAgents.CLAUDE_CODE.name:
-            # temporary short-circuit for Claude until we implement the PR processing logic
-            log("Claude agent processing support is not implemented as of yet so stop processing and log agent failure", is_error=True)
-            telemetry_handler.update_telemetry("resultInfo.prCreated", False)
-            telemetry_handler.update_telemetry("resultInfo.failureReason", "Claude processing not implemented")
-            telemetry_handler.update_telemetry("resultInfo.failureCategory", FailureCategory.AGENT_FAILURE.name)
-            error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
-
-        # Poll for PR creation by the external agent
-        log(f"Waiting for external agent to create a PR for issue #{issue_number}")
-
-        # Poll for a PR to be created by the external agent (100 attempts, 5 seconds apart = ~8.3 minutes max)
-        pr_info = self._poll_for_pr(issue_number, remediation_id, vulnerability_label, remediation_label, max_attempts=100, sleep_seconds=5)
-
-        log("\n::endgroup::")
-        if pr_info:
-            pr_number = pr_info.get("number")
-            pr_url = pr_info.get("url")
-            log(f"External agent created PR #{pr_number} at {pr_url}")
-            telemetry_handler.update_telemetry("resultInfo.prCreated", True)
-            telemetry_handler.update_telemetry("additionalAttributes.prStatus", "OPEN")
-            telemetry_handler.update_telemetry("additionalAttributes.prNumber", pr_number)
-            telemetry_handler.update_telemetry("additionalAttributes.prUrl", pr_url)
-            return True
-        else:
-            log("External agent failed to create a PR within the timeout period", is_error=True)
-            telemetry_handler.update_telemetry("resultInfo.prCreated", False)
-            telemetry_handler.update_telemetry("resultInfo.failureReason", "PR creation timeout")
-            telemetry_handler.update_telemetry("resultInfo.failureCategory", FailureCategory.AGENT_FAILURE.name)
-            return False
 
     def _poll_for_pr(self, issue_number: int, remediation_id: str, vulnerability_label: str,
                      remediation_label: str, max_attempts: int = 100, sleep_seconds: int = 5) -> Optional[dict]:

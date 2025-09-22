@@ -28,7 +28,7 @@ from asyncio.proactor_events import _ProactorBasePipeTransport
 
 # Import configurations and utilities
 from src.config import get_config
-from src.coding_agents import CodingAgents
+from src.smartfix.domains.agents import CodingAgents
 from src.utils import debug_log, log, error_exit
 from src import telemetry_handler
 from src.qa_handler import run_build_command
@@ -41,8 +41,9 @@ from src import agent_handler
 from src import git_handler
 
 # Import domain models
-from src.smartfix.domains.vulnerability.context import PromptConfiguration, BuildConfiguration, RepositoryConfiguration
+from src.smartfix.domains.vulnerability.context import PromptConfiguration, BuildConfiguration, RepositoryConfiguration, RemediationContext
 from src.smartfix.domains.vulnerability.processor import VulnerabilityProcessor
+from src.smartfix.domains.vulnerability import Vulnerability
 from src import qa_handler
 from src.github.external_coding_agent import ExternalCodingAgent
 
@@ -390,13 +391,34 @@ def main():  # noqa: C901
         log("\n::endgroup::")
         log(f"\n\033[0;33m Selected vuln to fix: {vuln_title} \033[0m")
 
+        # --- Create Common Remediation Context ---
+        # Process vulnerability data using domain service
+        if config.CODING_AGENT == CodingAgents.SMARTFIX.name:
+            # For SmartFix, use the vulnerability processor
+            vulnerability = vulnerability_processor.process_api_vulnerability_data(vulnerability_data)
+            context = vulnerability_processor.create_remediation_context(
+                remediation_id=remediation_id,
+                vulnerability=vulnerability,
+                prompts=prompts,
+                build_config=build_config,
+                repo_config=repo_config
+            )
+        else:
+            # For external agents, create vulnerability and context directly
+            vulnerability = Vulnerability.from_dict(vulnerability_data)
+            context = RemediationContext.create(remediation_id, vulnerability, config)
+
         # --- Check if we need to use the external coding agent ---
         if config.CODING_AGENT != CodingAgents.SMARTFIX.name:
             external_agent = ExternalCodingAgent(config)
             # Assemble the issue body from vulnerability details
             issue_body = external_agent.assemble_issue_body(vulnerability_data)
-            # Pass the assembled issue body to generate_fixes()
-            if external_agent.generate_fixes(vuln_uuid, remediation_id, vuln_title, issue_body):
+            # Add issue_body for external agent compatibility
+            context.issue_body = issue_body
+
+            result = external_agent.remediate(context)
+
+            if result.success:
                 log("\n\n--- External Coding Agent successfully generated fixes ---")
                 processed_one = True
                 contrast_api.send_telemetry_data()
@@ -423,18 +445,6 @@ def main():  # noqa: C901
             error_exit(remediation_id, contrast_api.FailureCategory.INITIAL_BUILD_FAILURE.value)  # Exit if the build is broken, no point in proceeding
 
         # --- Run AI Fix Agent (SmartFix) ---
-        # Process vulnerability data using domain service
-        vulnerability = vulnerability_processor.process_api_vulnerability_data(vulnerability_data)
-
-        # Create remediation context using domain service with API-provided ID
-        context = vulnerability_processor.create_remediation_context(
-            remediation_id=remediation_id,
-            vulnerability=vulnerability,
-            prompts=prompts,
-            build_config=build_config,
-            repo_config=repo_config
-        )
-
         ai_fix_summary_full = agent_handler.run_ai_fix_agent(context)
 
         # Check if the fix agent encountered an error

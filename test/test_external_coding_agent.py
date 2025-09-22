@@ -24,6 +24,8 @@ from unittest.mock import patch, MagicMock
 # Test setup imports (path is set up by conftest.py)
 from src.config import get_config, reset_config
 from src.github.external_coding_agent import ExternalCodingAgent
+from src.smartfix.domains.vulnerability import Vulnerability
+from src.smartfix.domains.vulnerability.context import RemediationContext
 
 
 class TestExternalCodingAgent(unittest.TestCase):
@@ -38,6 +40,24 @@ class TestExternalCodingAgent(unittest.TestCase):
         """Clean up after each test"""
         reset_config()
 
+    def _create_test_context(self, remediation_id="REM-789", vuln_uuid="1234-FAKE-ABCD", vuln_title="Fake Vulnerability Title"):
+        """Helper method to create a proper test RemediationContext"""
+        from src.smartfix.domains.vulnerability import VulnerabilitySeverity
+
+        # Create a mock vulnerability with correct parameters
+        vulnerability = Vulnerability(
+            uuid=vuln_uuid,
+            title=vuln_title,
+            rule_name="TestRule",
+            severity=VulnerabilitySeverity.HIGH
+        )
+
+        # Create remediation context
+        context = RemediationContext.create(remediation_id, vulnerability, self.config)
+        # Add issue_body for external agent compatibility
+        context.issue_body = "Test issue body"
+        return context
+
     @patch('src.github.external_coding_agent.log')
     def test_constructor(self, mock_log):
         """Test that we can construct an ExternalCodingAgent object"""
@@ -48,37 +68,38 @@ class TestExternalCodingAgent(unittest.TestCase):
         self.assertEqual(agent.config, self.config)
 
     @patch('src.github.external_coding_agent.debug_log')
-    def test_generate_fixes_with_smartfix(self, mock_debug_log):
-        """Test generate_fixes returns False when CODING_AGENT is SMARTFIX"""
+    def test_remediate_with_smartfix(self, mock_debug_log):
+        """Test remediate returns error result when CODING_AGENT is SMARTFIX"""
         # Set CODING_AGENT to SMARTFIX
         self.config.CODING_AGENT = "SMARTFIX"
 
         # Create an ExternalCodingAgent object
         agent = ExternalCodingAgent(self.config)
 
-        # Call generate_fixes
-        result = agent.generate_fixes("1234-FAKE-ABCD", "1REM-FAKE-ABCD", "Fake Vulnerability Title", "Fake issue body.")
+        # Create proper test context
+        context = self._create_test_context()        # Call remediate
+        result = agent.remediate(context)
 
         # Assert that result is False
-        self.assertFalse(result)
+        self.assertFalse(result.success)
 
         # Assert that debug_log was called with the expected message
-        mock_debug_log.assert_called_with("SMARTFIX agent detected, ExternalCodingAgent.generate_fixes returning False")
+        mock_debug_log.assert_called_with("SMARTFIX agent detected, ExternalCodingAgent should not be used")
 
     @patch('src.github.external_coding_agent.error_exit')
     @patch('src.git_handler.find_issue_with_label')
     @patch('src.git_handler.create_issue')
     @patch('src.git_handler.add_labels_to_pr')
     @patch('src.git_handler.find_open_pr_for_issue')
-    @patch('src.github.external_coding_agent.notify_remediation_pr_opened')
+    @patch('src.contrast_api.notify_remediation_pr_opened')
     @patch('src.github.external_coding_agent.time.sleep')  # Mock sleep to speed up tests
     @patch('src.telemetry_handler.update_telemetry')
     @patch('src.github.external_coding_agent.debug_log')
     @patch('src.github.external_coding_agent.log')
-    def test_generate_fixes_with_external_agent_pr_created(self, mock_log, mock_debug_log, mock_update_telemetry,
-                                                           mock_sleep, mock_notify, mock_find_pr, mock_add_labels, mock_create_issue,
-                                                           mock_find_issue, mock_error_exit):
-        """Test generate_fixes when PR is created successfully"""
+    def test_remediate_with_external_agent_pr_created(self, mock_log, mock_debug_log, mock_update_telemetry,
+                                                       mock_sleep, mock_notify, mock_find_pr, mock_add_labels, mock_create_issue,
+                                                       mock_find_issue, mock_error_exit):
+        """Test remediate when PR is created successfully"""
         # Set CODING_AGENT to GITHUB_COPILOT
         self.config.CODING_AGENT = "GITHUB_COPILOT"
 
@@ -98,11 +119,16 @@ class TestExternalCodingAgent(unittest.TestCase):
         # Create an ExternalCodingAgent object
         agent = ExternalCodingAgent(self.config)
 
-        # Call generate_fixes
-        result = agent.generate_fixes("1234-FAKE-ABCD", "1REM-FAKE-ABCD", "Fake Vulnerability Title", "Fake issue body.")
+        # Create proper test context
+        context = self._create_test_context(remediation_id='1REM-FAKE-ABCD')
+        # Add issue_body for external agent compatibility
+        context.issue_body = 'Fake issue body.'
 
-        # Assert that result is True
-        self.assertTrue(result)
+        # Call remediate
+        result = agent.remediate(context)
+
+        # Assert that result is successful
+        self.assertTrue(result.success)
 
         # Verify log calls
         mock_log.assert_any_call("Waiting for external agent to create a PR for issue #42")
@@ -123,9 +149,9 @@ class TestExternalCodingAgent(unittest.TestCase):
     @patch('src.telemetry_handler.update_telemetry')
     @patch('src.github.external_coding_agent.debug_log')
     @patch('src.github.external_coding_agent.log')
-    def test_generate_fixes_with_external_agent_pr_timeout(self, mock_log, mock_debug_log, mock_update_telemetry,
-                                                           mock_sleep, mock_find_pr, mock_create_issue, mock_find_issue, mock_error_exit):
-        """Test generate_fixes when PR creation times out"""
+    def test_remediate_with_external_agent_pr_timeout(self, mock_log, mock_debug_log, mock_update_telemetry,
+                                                       mock_sleep, mock_find_pr, mock_create_issue, mock_find_issue, mock_error_exit):
+        """Test remediate when PR creation times out"""
         # Set CODING_AGENT to GITHUB_COPILOT
         self.config.CODING_AGENT = "GITHUB_COPILOT"
 
@@ -143,12 +169,17 @@ class TestExternalCodingAgent(unittest.TestCase):
         original_poll_for_pr = agent._poll_for_pr
         agent._poll_for_pr = mock_poll_for_pr
 
+        # Create proper test context
+        context = self._create_test_context(remediation_id='1REM-FAKE-ABCD')
+        # Add issue_body for external agent compatibility
+        context.issue_body = 'Fake issue body.'
+
         try:
-            # Call generate_fixes
-            result = agent.generate_fixes("1234-FAKE-ABCD", "1REM-FAKE-ABCD", "Fake Vulnerability Title", "Fake issue body.")
+            # Call remediate
+            result = agent.remediate(context)
 
             # Assert that result is False when PR is not created
-            self.assertFalse(result)
+            self.assertFalse(result.success)
 
             # Verify _poll_for_pr was called with the right parameters
             mock_poll_for_pr.assert_called_once_with(42, "1REM-FAKE-ABCD", 'contrast-vuln-id:VULN-1234-FAKE-ABCD', 'smartfix-id:1REM-FAKE-ABCD', max_attempts=100, sleep_seconds=5)
@@ -169,15 +200,15 @@ class TestExternalCodingAgent(unittest.TestCase):
     @patch('src.git_handler.find_issue_with_label')
     @patch('src.git_handler.reset_issue')
     @patch('src.git_handler.find_open_pr_for_issue')
-    @patch('src.github.external_coding_agent.notify_remediation_pr_opened')
+    @patch('src.contrast_api.notify_remediation_pr_opened')
     @patch('src.github.external_coding_agent.time.sleep')
     @patch('src.telemetry_handler.update_telemetry')
     @patch('src.github.external_coding_agent.debug_log')
     @patch('src.github.external_coding_agent.log')
-    def test_generate_fixes_with_existing_issue(self, mock_log, mock_debug_log, mock_update_telemetry,
-                                                mock_sleep, mock_notify, mock_find_pr, mock_reset_issue,
-                                                mock_find_issue):
-        """Test generate_fixes when an existing GitHub issue is found"""
+    def test_remediate_with_existing_issue(self, mock_log, mock_debug_log, mock_update_telemetry,
+                                            mock_sleep, mock_notify, mock_find_pr, mock_reset_issue,
+                                            mock_find_issue):
+        """Test remediate when an existing GitHub issue is found"""
         # Set CODING_AGENT to GITHUB_COPILOT
         self.config.CODING_AGENT = "GITHUB_COPILOT"
 
@@ -201,12 +232,17 @@ class TestExternalCodingAgent(unittest.TestCase):
         original_poll_for_pr = agent._poll_for_pr
         agent._poll_for_pr = mock_poll_for_pr
 
-        try:
-            # Call generate_fixes
-            result = agent.generate_fixes("1234-FAKE-ABCD", "1REM-FAKE-ABCD", "Fake Vulnerability Title", "Fake issue body.")
+        # Create proper test context
+        context = self._create_test_context(remediation_id='1REM-FAKE-ABCD')
+        # Add issue_body for external agent compatibility
+        context.issue_body = 'Fake issue body.'
 
-            # Assert that result is True
-            self.assertTrue(result)
+        try:
+            # Call remediate
+            result = agent.remediate(context)
+
+            # Assert that result is successful
+            self.assertTrue(result.success)
 
             # Verify poll was called correctly
             mock_poll_for_pr.assert_called_once_with(42, "1REM-FAKE-ABCD", 'contrast-vuln-id:VULN-1234-FAKE-ABCD', 'smartfix-id:1REM-FAKE-ABCD', max_attempts=100, sleep_seconds=5)
@@ -227,8 +263,8 @@ class TestExternalCodingAgent(unittest.TestCase):
     @patch('src.github.external_coding_agent.error_exit')
     @patch('src.github.external_coding_agent.log')
     @patch('src.github.external_coding_agent.debug_log')
-    def test_generate_fixes_with_issues_disabled(self, mock_debug_log, mock_log, mock_error_exit, mock_sleep, mock_create_issue, mock_find_issue, mock_check_issues):
-        """Test generate_fixes when GitHub Issues are disabled"""
+    def test_remediate_with_issues_disabled(self, mock_debug_log, mock_log, mock_error_exit, mock_sleep, mock_create_issue, mock_find_issue, mock_check_issues):
+        """Test remediate when GitHub Issues are disabled"""
         from src.contrast_api import FailureCategory
 
         # Configure mock data
@@ -248,9 +284,14 @@ class TestExternalCodingAgent(unittest.TestCase):
         agent = ExternalCodingAgent(self.config)
         agent.config.CODING_AGENT = "GITHUB_COPILOT"  # Set to external agent to avoid early return
 
+        # Create proper test context
+        context = self._create_test_context(remediation_id=remediation_id, vuln_uuid=vuln_uuid, vuln_title=vuln_title)
+        # Add issue_body for external agent compatibility
+        context.issue_body = issue_body
+
         # Execute and expect SystemExit due to Issues being disabled
         with self.assertRaises(SystemExit):
-            agent.generate_fixes(vuln_uuid, remediation_id, vuln_title, issue_body)
+            agent.remediate(context)
 
         # Verify Issues disabled check was called and error_exit was triggered
         mock_find_issue.assert_called_once_with("contrast-vuln-id:VULN-vuln-uuid-123")
@@ -350,7 +391,7 @@ class TestExternalCodingAgent(unittest.TestCase):
             self.assertEqual(call[0][0], 0.01)  # Verify sleep called with 0.01 seconds
 
     @patch('src.git_handler.find_open_pr_for_issue')
-    @patch('src.github.external_coding_agent.notify_remediation_pr_opened')
+    @patch('src.contrast_api.notify_remediation_pr_opened')
     @patch('src.github.external_coding_agent.time.sleep')
     @patch('src.github.external_coding_agent.log')
     @patch('src.github.external_coding_agent.debug_log')
