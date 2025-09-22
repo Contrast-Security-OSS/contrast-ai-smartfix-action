@@ -179,7 +179,7 @@ class TestExternalCodingAgent(unittest.TestCase):
             self.assertFalse(result)
 
             # Verify _poll_for_pr was called with the right parameters
-            mock_poll_for_pr.assert_called_once_with(42, "1REM-FAKE-ABCD", 'contrast-vuln-id:VULN-1234-FAKE-ABCD', 'smartfix-id:1REM-FAKE-ABCD', max_attempts=60, sleep_seconds=5)
+            mock_poll_for_pr.assert_called_once_with(42, "1REM-FAKE-ABCD", 'contrast-vuln-id:VULN-1234-FAKE-ABCD', 'smartfix-id:1REM-FAKE-ABCD', max_attempts=100, sleep_seconds=5)
         finally:
             # Restore original method
             agent._process_external_coding_agent_run = original_poll_for_pr
@@ -237,7 +237,7 @@ class TestExternalCodingAgent(unittest.TestCase):
             self.assertTrue(result)
 
             # Verify poll was called correctly
-            mock_poll_for_pr.assert_called_once_with(42, "1REM-FAKE-ABCD", 'contrast-vuln-id:VULN-1234-FAKE-ABCD', 'smartfix-id:1REM-FAKE-ABCD', max_attempts=60, sleep_seconds=5)
+            mock_poll_for_pr.assert_called_once_with(42, "1REM-FAKE-ABCD", 'contrast-vuln-id:VULN-1234-FAKE-ABCD', 'smartfix-id:1REM-FAKE-ABCD', max_attempts=100, sleep_seconds=5)
         finally:
             # Restore original method
             agent._process_external_coding_agent_run = original_poll_for_pr
@@ -787,7 +787,7 @@ class TestExternalCodingAgent(unittest.TestCase):
         # Assert
         self.assertIsNone(result)
         mock_watch_action.assert_any_call(17776654036)
-        mock_log.assert_any_call(f"Claude action run #17776654036 failed for issue #{issue_number}", is_error=True)
+        mock_log.assert_any_call(f"Claude workflow run #17776654036 failed for issue #{issue_number}", is_error=True)
         # Not asserting on mock_sleep since it might be called in a loop
 
     @patch('src.github.external_coding_agent.error_exit')

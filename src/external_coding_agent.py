@@ -159,7 +159,7 @@ Please review this security vulnerability and implement appropriate fixes to add
 
         if self.config.CODING_AGENT == CodingAgents.CLAUDE_CODE.name:
             debug_log("CLAUDE_CODE agent detected, tagging @claude in issue title for processing")
-            issue_title = f"@claude fix: {issue_title}"
+            issue_title = f"@claude Fix: {issue_title}"
 
         # Use the provided issue_body or fall back to default
         if issue_body is None:

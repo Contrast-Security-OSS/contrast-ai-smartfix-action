@@ -158,7 +158,7 @@ Please review this security vulnerability and implement appropriate fixes to add
 
         if self.config.CODING_AGENT == CodingAgents.CLAUDE_CODE.name:
             debug_log("CLAUDE_CODE agent detected, tagging @claude in issue title for processing")
-            issue_title = f"@claude fix: {issue_title}"
+            issue_title = f"@claude Fix: {issue_title}"
 
         # Use the provided issue_body or fall back to default
         if issue_body is None:
@@ -193,7 +193,7 @@ Please review this security vulnerability and implement appropriate fixes to add
         log(f"Waiting for external agent to create a PR for issue #{issue_number}")
 
         # Poll for a PR to be created by the external agent (100 attempts, 5 seconds apart = ~8.3 minutes max)
-        pr_info = self._process_external_coding_agent_run(issue_number, remediation_id, vulnerability_label, remediation_label, max_attempts=60, sleep_seconds=5)
+        pr_info = self._process_external_coding_agent_run(issue_number, remediation_id, vulnerability_label, remediation_label, max_attempts=100, sleep_seconds=5)
 
         log("\n::endgroup::")
         if pr_info:
@@ -307,9 +307,9 @@ Please review this security vulnerability and implement appropriate fixes to add
 
         if not workflow_success:
             #debug_log(f"GitHub Action run #{workflow_run_id} failed for issue #{issue_number}")
-            log(f"Claude action run #{workflow_run_id} failed for issue #{issue_number}", is_error=True)
+            log(f"Claude workflow run #{workflow_run_id} failed for issue #{issue_number}", is_error=True)
             telemetry_handler.update_telemetry("resultInfo.prCreated", False)
-            telemetry_handler.update_telemetry("resultInfo.failureReason", "Claude workflow failed processing")
+            telemetry_handler.update_telemetry("resultInfo.failureReason", "Claude workflow run failed processing")
             telemetry_handler.update_telemetry("resultInfo.failureCategory", FailureCategory.AGENT_FAILURE.name)
             error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
 
@@ -320,7 +320,7 @@ Please review this security vulnerability and implement appropriate fixes to add
             #debug_log(f"No Claude comments found for issue #{issue_number}")
             log(f"No Claude comments found for issue #{issue_number}", is_error=True)
             telemetry_handler.update_telemetry("resultInfo.prCreated", False)
-            telemetry_handler.update_telemetry("resultInfo.failureReason", "Could not find Claude comment")
+            telemetry_handler.update_telemetry("resultInfo.failureReason", "Could not find Claude comment on issue")
             telemetry_handler.update_telemetry("resultInfo.failureCategory", FailureCategory.AGENT_FAILURE.name)
             error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
 
@@ -330,53 +330,20 @@ Please review this security vulnerability and implement appropriate fixes to add
 
         # Truncate the comment body to focus only on the header section before the markdown separator
         # This makes regex pattern matching more reliable and efficient
-        comment_body = full_comment_body.split('\n\n---\n')[0] if '\n\n---\n' in full_comment_body else full_comment_body
-        debug_log(f"Using truncated claude comment_body (first section only): {comment_body}")
+        truncated_comment_body = full_comment_body.split('\n\n---\n')[0] if '\n\n---\n' in full_comment_body else full_comment_body
+        debug_log(f"Using truncated claude comment_body (first section only): {truncated_comment_body}")
 
         try:
             import re
 
             # Extract PR information from the comment body
-            comment_body_pr_data = self._process_claude_comment_body(comment_body, remediation_id, issue_number)
+            comment_body_pr_data = self._process_claude_comment_body(truncated_comment_body, remediation_id, issue_number)
             head_branch_from_url = comment_body_pr_data["head_branch_from_url"]
             pr_title = comment_body_pr_data["pr_title"]
             pr_body = comment_body_pr_data["pr_body"]
 
             # Attempt to get the branch name using multiple methods in order of preference
-            head_branch = None
-
-            # Method 1: Try to use the branch name extracted from URL
-            if head_branch_from_url:
-                head_branch = head_branch_from_url
-                debug_log(f"Using head branch from URL: {head_branch}")
-
-            # Method 2: Try to extract from backtick-formatted branch in comment
-            if not head_branch:
-                # Look for the branch name in backtick format inside square brackets in the comment
-                branch_match = re.search(fr'\[`(claude/issue-{issue_number}-\d{{8}}-\d{{4}})`\]', full_comment_body)
-
-                if branch_match:
-                    head_branch = branch_match.group(1)
-                    debug_log(f"Using head branch from backtick format in comment: {head_branch}")
-
-            # Method 3: Use the API to get the latest branch by pattern if all else fails
-            if not head_branch:
-                # Pattern to match claude/issue-NUMBER-YYYYMMDD-HHMM format
-                pattern = fr'^claude/issue-{issue_number}-\d{{8}}-\d{{4}}$'
-                debug_log(f"Falling back to API method with pattern: {pattern}")
-                # Note: We don't filter by author anymore since the branch could be created in a workflow
-                head_branch = git_handler.get_latest_branch_by_pattern(pattern)
-
-                if head_branch:
-                    debug_log(f"Using head branch from API call: {head_branch}")
-
-            # Final check - if no branch could be found by any method, fail gracefully
-            if not head_branch:
-                log(f"Could not determine branch name using any available method", is_error=True)
-                telemetry_handler.update_telemetry("resultInfo.prCreated", False)
-                telemetry_handler.update_telemetry("resultInfo.failureReason", "Could not extract Claude head_branch for PR")
-                telemetry_handler.update_telemetry("resultInfo.failureCategory", FailureCategory.AGENT_FAILURE.name)
-                error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
+            head_branch = self._get_claude_head_branch(head_branch_from_url, full_comment_body, issue_number, remediation_id)
 
             # Create PR using extracted information
             base_branch = self.config.BASE_BRANCH
@@ -391,7 +358,7 @@ Please review this security vulnerability and implement appropriate fixes to add
             if not pr_url:
                 log(f"Failed to create PR for Claude Code fix", is_error=True)
                 telemetry_handler.update_telemetry("resultInfo.prCreated", False)
-                telemetry_handler.update_telemetry("resultInfo.failureReason", "Claude processing has bugs or issues")
+                telemetry_handler.update_telemetry("resultInfo.failureReason", "Could not create Claude PR due to processing issues")
                 telemetry_handler.update_telemetry("resultInfo.failureCategory", FailureCategory.AGENT_FAILURE.name)
                 error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
 
@@ -419,6 +386,7 @@ Please review this security vulnerability and implement appropriate fixes to add
         except Exception as e:
             log(f"Error parsing Claude comment: {str(e)}", is_error=True)
             return None
+
 
     def _process_claude_comment_body(self, comment_body: str, remediation_id: str, issue_number: int) -> dict:
         """
@@ -538,5 +506,63 @@ Please review this security vulnerability and implement appropriate fixes to add
             "pr_title": pr_title,
             "pr_body": contrast_pr_body
         }
+
+
+    def _get_claude_head_branch(self, head_branch_from_url: str,
+                                comment_body: str,
+                                issue_number: int,
+                                remediation_id: str) -> str:
+        """
+        Get Claude's head branch that was created during the workflow run so a
+        PR can be created.
+
+        Args:
+            head_branch_from_url: the possible head_branch extracted from the URL in the comment body
+            comment_body: The comment body from Claude
+            remediation_id: The remediation ID for telemetry and error handling
+            issue_number: The issue number Claude is working on
+
+        Returns:
+            str: A String containing head_branch that the claude code workflow created
+        """
+
+        import re
+        # Attempt to get the branch name using multiple methods in order of preference
+        head_branch = None
+
+        # Method 1: Try to use the branch name extracted from URL in comment body
+        if head_branch_from_url:
+            head_branch = head_branch_from_url
+            debug_log(f"Using head branch from URL: {head_branch}")
+            return head_branch
+
+        # Method 2: Try to extract from backtick-formatted branch in comment
+        if not head_branch:
+            # Look for the branch name in backtick format inside square brackets in the comment
+            branch_match = re.search(fr'\[`(claude/issue-{issue_number}-\d{{8}}-\d{{4}})`\]', comment_body)
+
+            if branch_match:
+                head_branch = branch_match.group(1)
+                debug_log(f"Using head branch from backtick format match in comment: {head_branch}")
+
+        # Method 3: Use the API to get the latest branch by pattern if all else fails
+        if not head_branch:
+            # Pattern to match claude/issue-NUMBER-YYYYMMDD-HHMM format
+            pattern = fr'^claude/issue-{issue_number}-\d{{8}}-\d{{4}}$'
+            debug_log(f"Falling back to GraphQL API call method with pattern: {pattern}")
+            head_branch = git_handler.get_latest_branch_by_pattern(pattern)
+
+            if head_branch:
+                debug_log(f"Using head branch from GitHub GraphQl API call: {head_branch}")
+
+        # Final check - if no branch could be found by any method, fail gracefully
+        if not head_branch:
+            log(f"Could not determine branch name using any available method", is_error=True)
+            telemetry_handler.update_telemetry("resultInfo.prCreated", False)
+            telemetry_handler.update_telemetry("resultInfo.failureReason", "Could not extract Claude head_branch needed for PR creation")
+            telemetry_handler.update_telemetry("resultInfo.failureCategory", FailureCategory.AGENT_FAILURE.name)
+            error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
+
+        return head_branch
 
     # Additional methods will be implemented later
