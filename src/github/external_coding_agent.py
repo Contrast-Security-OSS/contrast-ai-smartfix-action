@@ -305,14 +305,14 @@ Please review this security vulnerability and implement appropriate fixes to add
 
             if not workflow_success:
                 log(f"Claude workflow run #{workflow_run_id} failed for issue #{issue_number}", is_error=True)
-                reason: str = f"Claude workflow run #{workflow_run_id} failed processing with non-zero exit status"
+                reason = f"Claude workflow run #{workflow_run_id} failed processing with non-zero exit status"
                 self._update_telemetry_and_exit_claude_agent_failure(reason, remediation_id, issue_number)
 
             # Get the issue comments to find Claude's response
             claude_comments = git_handler.get_issue_comments(issue_number)
 
             if not claude_comments or len(claude_comments) == 0:
-                msg: str = f"No Claude comments found for issue #{issue_number}"
+                msg = f"No Claude comments found for issue #{issue_number}"
                 log(msg, is_error=True)
                 self._update_telemetry_and_exit_claude_agent_failure(msg, remediation_id, issue_number)
 
@@ -345,13 +345,13 @@ Please review this security vulnerability and implement appropriate fixes to add
 
             if not pr_url:
                 log(f"Failed to create PR for Claude Code fix", is_error=True)
-                reason: str = f"Could not create Claude PR due to processing issues"
+                reason = f"Could not create Claude PR due to processing issues"
                 self._update_telemetry_and_exit_claude_agent_failure(reason, remediation_id, issue_number)
 
             # Extract PR number from URL
             pr_number_match = re.search(r'/pull/(\d+)$', pr_url)
             if not pr_number_match:
-                msg: str = f"Could not extract PR number from URL: {pr_url}"
+                msg = f"Could not extract PR number from URL: {pr_url}"
                 log(msg, is_error=True)
                 self._update_telemetry_and_exit_claude_agent_failure(msg, remediation_id, issue_number)
 
@@ -371,7 +371,7 @@ Please review this security vulnerability and implement appropriate fixes to add
             return pr_info
 
         except Exception as e:
-            msg: str = f"Error processing Claude external agent run : {str(e)}"
+            msg = f"Error processing Claude external agent run : {str(e)}"
             log(msg, is_error=True)
             self._update_telemetry_and_exit_claude_agent_failure(msg, remediation_id, issue_number)
             return None
@@ -528,7 +528,7 @@ Please review this security vulnerability and implement appropriate fixes to add
         # Final check - if no branch could be found by any method, fail gracefully
         if not head_branch:
             log(f"Could not determine claude branch name using any available method", is_error=True)
-            reason: str = f"Could not extract Claude head_branch needed for PR creation"
+            reason = f"Could not extract Claude head_branch needed for PR creation"
             self._update_telemetry_and_exit_claude_agent_failure(reason, remediation_id, issue_number)
 
         return head_branch
