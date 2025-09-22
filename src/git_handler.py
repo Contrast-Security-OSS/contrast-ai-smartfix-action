@@ -968,7 +968,7 @@ def watch_github_action_run(run_id: int) -> bool:
     Returns:
         bool: True if the run completed successfully, False if it failed
     """
-    log(f"OK. Now watching GitHub Actions run #{run_id} until completion... This may take several minutes...")
+    log(f"OK. Now watching GitHub action run #{run_id} until completion... This may take several minutes...")
 
     gh_env = get_gh_env()
     watch_command = [
@@ -984,12 +984,12 @@ def watch_github_action_run(run_id: int) -> bool:
         # run_command will return the command's output if successful
         # Since --exit-status is used, the command will exit with status 0 for success, non-zero for failure
         run_command(watch_command, env=gh_env, check=False)
-        log(f"GitHub Actions run #{run_id} completed successfully")
+        log(f"GitHub action run #{run_id} completed successfully")
         return True
     except Exception as e:
         # If run_command throws an exception, it means the gh command returned a non-zero exit code,
         # which with --exit-status means the workflow failed
-        log(f"GitHub Actions run #{run_id} failed with error: {e}", is_error=True)
+        log(f"GitHub action run #{run_id} failed with error: {e}", is_error=True)
         return False
 
 

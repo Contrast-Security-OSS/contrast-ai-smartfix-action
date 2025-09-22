@@ -1117,8 +1117,8 @@ class TestGitHandler(unittest.TestCase):
         self.assertTrue("--exit-status" in command)
         self.assertTrue("--interval" in command)
 
-        mock_log.assert_any_call("OK. Now watching GitHub Actions run #12345 until completion... This may take several minutes...")
-        mock_log.assert_any_call("GitHub Actions run #12345 completed successfully")
+        mock_log.assert_any_call("OK. Now watching GitHub action run #12345 until completion... This may take several minutes...")
+        mock_log.assert_any_call("GitHub action run #12345 completed successfully")
 
     @patch('src.git_handler.run_command')
     @patch('src.git_handler.get_gh_env')
@@ -1143,8 +1143,8 @@ class TestGitHandler(unittest.TestCase):
         # Assert
         self.assertFalse(result)
         mock_run_command.assert_called_once()
-        mock_log.assert_any_call("OK. Now watching GitHub Actions run #12345 until completion... This may take several minutes...")
-        mock_log.assert_any_call("GitHub Actions run #12345 failed with error: Run failed with status 1", is_error=True)
+        mock_log.assert_any_call("OK. Now watching GitHub action run #12345 until completion... This may take several minutes...")
+        mock_log.assert_any_call("GitHub action run #12345 failed with error: Run failed with status 1", is_error=True)
 
     @patch('src.git_handler.run_command')
     @patch('src.git_handler.get_gh_env')
