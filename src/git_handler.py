@@ -718,10 +718,8 @@ def reset_issue(issue_number: int, remediation_label: str) -> bool:
             comment:str = f"@claude reprocess this issue with the new remediation label: `{remediation_label}` and attempt a fix."
             comment_command = [
                 "gh", "issue", "comment",
-                "--repo", config.GITHUB_REPOSITORY,
                 str(issue_number),
-                "--create-if-none",
-                "--edit-last",
+                "--repo", config.GITHUB_REPOSITORY,
                 "--body", comment
             ]
 
