@@ -542,7 +542,7 @@ def create_issue(title: str, body: str, vuln_label: str, remediation_label: str)
             log(f"Issue number extracted: {issue_number}")
 
             if config.CODING_AGENT == CodingAgents.CLAUDE_CODE.name:
-                debug_log("CLAUDE_CODE agent detected no need to edit issue for assignment")
+                debug_log("Claude code external agent detected no need to edit issue for assignment")
                 return issue_number
 
             # Now try to assign to @copilot separately

@@ -890,7 +890,6 @@ class TestExternalCodingAgent(unittest.TestCase):
         # Assert
         self.assertIsNone(result)
         mock_get_comments.assert_any_call(issue_number)
-        mock_debug_log.assert_any_call("Could not find Create PR URL in Claude comment using ultimate fallback", is_error=True)
         # Not asserting on mock_sleep since it might be called in a loop
 
     @patch('src.github.external_coding_agent.error_exit')

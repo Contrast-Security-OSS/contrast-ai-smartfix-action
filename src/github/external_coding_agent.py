@@ -17,6 +17,7 @@
 # #L%
 #
 
+import re
 import time
 from typing import Optional
 from src.utils import log, debug_log, error_exit, tail_string
@@ -281,10 +282,6 @@ Please review this security vulnerability and implement appropriate fixes to add
         """
         Process the Claude Code workflow run and extract PR information from Claude's comment.
 
-        Supports internationalization by using language-agnostic patterns to extract information
-        from Claude's comments. This allows the code to work correctly even when GitHub's UI
-        is displayed in non-English languages.
-
         Args:
             issue_number: The issue number Claude is working on
             remediation_id: The remediation ID for telemetry and API notification
@@ -293,14 +290,12 @@ Please review this security vulnerability and implement appropriate fixes to add
             Optional[dict]: PR information if successfully created, None otherwise
         """
         try:
-            import re
-
             # Check for Claude workflow run ID
             workflow_run_id = git_handler.get_claude_workflow_run_id()
 
             if not workflow_run_id:
                 # If no workflow run ID found yet, continue polling
-                debug_log(f"claude workflow_run_id not found, checking again...")
+                log(f"claude workflow_run_id not found, checking again...")
                 return None
 
             # Watch the claude GitHub action run
@@ -322,7 +317,6 @@ Please review this security vulnerability and implement appropriate fixes to add
 
             # Parse the most recent comment body to extract PR info
             full_comment_body = claude_comments[0].get('body', '')
-            debug_log(f"Using claude full_comment_body: {full_comment_body}")
 
             # Truncate the comment body to focus only on the header section before the markdown separator
             # This makes regex pattern matching more reliable and efficient
@@ -394,7 +388,6 @@ Please review this security vulnerability and implement appropriate fixes to add
         Returns:
             dict: A dictionary containing head_branch_from_url, pr_title, and pr_body
         """
-        import re
         import urllib.parse
 
         # Extract head branch from backticks inside square brackets (most reliable method)
@@ -427,7 +420,7 @@ Please review this security vulnerability and implement appropriate fixes to add
 
             if end_idx > start_idx:
                 create_pr_url = comment_body[start_idx:end_idx]
-                debug_log(f"Found PR URL: {create_pr_url[:100]}...")
+                debug_log(f"Found PR URL: {create_pr_url}...")
 
                 # If no branch yet, extract it from URL
                 if not head_branch_from_url and '...' in create_pr_url:
@@ -472,14 +465,6 @@ Please review this security vulnerability and implement appropriate fixes to add
                 head_branch_from_url = compare_match.group(1)
                 debug_log(f"Found branch name using fallback: {head_branch_from_url}")
 
-        # Check if we found a Create PR URL
-        # if not create_pr_url:
-        #     debug_log("Could not find Create PR URL in Claude comment using ultimate fallback", is_error=True)
-        #     telemetry_handler.update_telemetry("resultInfo.prCreated", False)
-        #     telemetry_handler.update_telemetry("resultInfo.failureReason", "Could not extract Create PR URL")
-        #     telemetry_handler.update_telemetry("resultInfo.failureCategory", FailureCategory.AGENT_FAILURE.name)
-        #     error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
-
         # Verify we have required pr_title and pr_body data
         if not (pr_title and pr_body):
             error_msg = f"Could not extract required PR title and body data"
@@ -511,8 +496,6 @@ Please review this security vulnerability and implement appropriate fixes to add
         Returns:
             str: A String containing head_branch that the claude code workflow created
         """
-
-        import re
         # Attempt to get the branch name using multiple methods in order of preference
         head_branch = None
 
