@@ -292,49 +292,42 @@ Please review this security vulnerability and implement appropriate fixes to add
         Returns:
             Optional[dict]: PR information if successfully created, None otherwise
         """
-        # Check for Claude workflow run ID
-        workflow_run_id = git_handler.get_claude_workflow_run_id()
-
-        if not workflow_run_id:
-            # If no workflow run ID found yet, continue polling
-            debug_log(f"claude workflow_run_id not found, checking again...")
-            return None
-
-        # Watch the github action run
-        debug_log(f"OK, found claude workflow_run_id value: {workflow_run_id}")
-        workflow_success = git_handler.watch_github_action_run(workflow_run_id)
-        debug_log(f"OK, watch_github_action_run returned: {workflow_success}")
-
-        if not workflow_success:
-            #debug_log(f"GitHub Action run #{workflow_run_id} failed for issue #{issue_number}")
-            log(f"Claude workflow run #{workflow_run_id} failed for issue #{issue_number}", is_error=True)
-            telemetry_handler.update_telemetry("resultInfo.prCreated", False)
-            telemetry_handler.update_telemetry("resultInfo.failureReason", "Claude workflow run failed processing")
-            telemetry_handler.update_telemetry("resultInfo.failureCategory", FailureCategory.AGENT_FAILURE.name)
-            error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
-
-        # Get the issue comments to find Claude's response
-        claude_comments = git_handler.get_issue_comments(issue_number)
-
-        if not claude_comments or len(claude_comments) == 0:
-            #debug_log(f"No Claude comments found for issue #{issue_number}")
-            log(f"No Claude comments found for issue #{issue_number}", is_error=True)
-            telemetry_handler.update_telemetry("resultInfo.prCreated", False)
-            telemetry_handler.update_telemetry("resultInfo.failureReason", "Could not find Claude comment on issue")
-            telemetry_handler.update_telemetry("resultInfo.failureCategory", FailureCategory.AGENT_FAILURE.name)
-            error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
-
-        # Parse the most recent comment body to extract PR info
-        full_comment_body = claude_comments[0].get('body', '')
-        debug_log(f"Using claude full_comment_body: {full_comment_body}")
-
-        # Truncate the comment body to focus only on the header section before the markdown separator
-        # This makes regex pattern matching more reliable and efficient
-        truncated_comment_body = full_comment_body.split('\n\n---\n')[0] if '\n\n---\n' in full_comment_body else full_comment_body
-        debug_log(f"Using truncated claude comment_body (first section only): {truncated_comment_body}")
-
         try:
             import re
+
+            # Check for Claude workflow run ID
+            workflow_run_id = git_handler.get_claude_workflow_run_id()
+
+            if not workflow_run_id:
+                # If no workflow run ID found yet, continue polling
+                debug_log(f"claude workflow_run_id not found, checking again...")
+                return None
+
+            # Watch the claude GitHub action run
+            debug_log(f"OK, found claude workflow_run_id value: {workflow_run_id}")
+            workflow_success = git_handler.watch_github_action_run(workflow_run_id)
+
+            if not workflow_success:
+                log(f"Claude workflow run #{workflow_run_id} failed for issue #{issue_number}", is_error=True)
+                reason: str = f"Claude workflow run #{workflow_run_id} failed processing with non-zero exit status"
+                self._update_telemetry_and_exit_claude_agent_failure(reason, remediation_id, issue_number)
+
+            # Get the issue comments to find Claude's response
+            claude_comments = git_handler.get_issue_comments(issue_number)
+
+            if not claude_comments or len(claude_comments) == 0:
+                msg: str = f"No Claude comments found for issue #{issue_number}"
+                log(msg, is_error=True)
+                self._update_telemetry_and_exit_claude_agent_failure(msg, remediation_id, issue_number)
+
+            # Parse the most recent comment body to extract PR info
+            full_comment_body = claude_comments[0].get('body', '')
+            debug_log(f"Using claude full_comment_body: {full_comment_body}")
+
+            # Truncate the comment body to focus only on the header section before the markdown separator
+            # This makes regex pattern matching more reliable and efficient
+            truncated_comment_body = full_comment_body.split('\n\n---\n')[0] if '\n\n---\n' in full_comment_body else full_comment_body
+            debug_log(f"Using truncated claude comment_body (first section only): {truncated_comment_body}")
 
             # Extract PR information from the comment body
             comment_body_pr_data = self._process_claude_comment_body(truncated_comment_body, remediation_id, issue_number)
@@ -357,16 +350,15 @@ Please review this security vulnerability and implement appropriate fixes to add
 
             if not pr_url:
                 log(f"Failed to create PR for Claude Code fix", is_error=True)
-                telemetry_handler.update_telemetry("resultInfo.prCreated", False)
-                telemetry_handler.update_telemetry("resultInfo.failureReason", "Could not create Claude PR due to processing issues")
-                telemetry_handler.update_telemetry("resultInfo.failureCategory", FailureCategory.AGENT_FAILURE.name)
-                error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
+                reason: str = f"Could not create Claude PR due to processing issues"
+                self._update_telemetry_and_exit_claude_agent_failure(reason, remediation_id, issue_number)
 
             # Extract PR number from URL
             pr_number_match = re.search(r'/pull/(\d+)$', pr_url)
             if not pr_number_match:
-                log(f"Could not extract PR number from URL: {pr_url}", is_error=True)
-                return None
+                msg: str = f"Could not extract PR number from URL: {pr_url}"
+                log(msg, is_error=True)
+                self._update_telemetry_and_exit_claude_agent_failure(msg, remediation_id, issue_number)
 
             pr_number = int(pr_number_match.group(1))
 
@@ -384,7 +376,9 @@ Please review this security vulnerability and implement appropriate fixes to add
             return pr_info
 
         except Exception as e:
-            log(f"Error parsing Claude comment: {str(e)}", is_error=True)
+            msg: str = f"Error processing Claude external agent run : {str(e)}"
+            log(msg, is_error=True)
+            self._update_telemetry_and_exit_claude_agent_failure(msg, remediation_id, issue_number)
             return None
 
 
@@ -479,26 +473,18 @@ Please review this security vulnerability and implement appropriate fixes to add
                 debug_log(f"Found branch name using fallback: {head_branch_from_url}")
 
         # Check if we found a Create PR URL
-        if not create_pr_url:
-            debug_log("Could not find Create PR URL in Claude comment using ultimate fallback", is_error=True)
-            telemetry_handler.update_telemetry("resultInfo.prCreated", False)
-            telemetry_handler.update_telemetry("resultInfo.failureReason", "Could not extract Create PR URL")
-            telemetry_handler.update_telemetry("resultInfo.failureCategory", FailureCategory.AGENT_FAILURE.name)
-            error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
+        # if not create_pr_url:
+        #     debug_log("Could not find Create PR URL in Claude comment using ultimate fallback", is_error=True)
+        #     telemetry_handler.update_telemetry("resultInfo.prCreated", False)
+        #     telemetry_handler.update_telemetry("resultInfo.failureReason", "Could not extract Create PR URL")
+        #     telemetry_handler.update_telemetry("resultInfo.failureCategory", FailureCategory.AGENT_FAILURE.name)
+        #     error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
 
-        # Verify we have all required data
-        if not (pr_title and pr_body and head_branch_from_url):
-            missing = []
-            if not pr_title: missing.append("PR title")
-            if not pr_body: missing.append("PR body")
-            if not head_branch_from_url: missing.append("branch name")
-
-            error_msg = f"Could not extract required PR data: {', '.join(missing)}"
+        # Verify we have required pr_title and pr_body data
+        if not (pr_title and pr_body):
+            error_msg = f"Could not extract required PR title and body data"
             debug_log(error_msg, is_error=True)
-            telemetry_handler.update_telemetry("resultInfo.prCreated", False)
-            telemetry_handler.update_telemetry("resultInfo.failureReason", error_msg)
-            telemetry_handler.update_telemetry("resultInfo.failureCategory", FailureCategory.AGENT_FAILURE.name)
-            error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
+            self._update_telemetry_and_exit_claude_agent_failure(error_msg, remediation_id, issue_number)
 
         contrast_pr_body = f"{pr_body}\n Powered by Contrast AI SmartFix"
         return {
@@ -557,12 +543,26 @@ Please review this security vulnerability and implement appropriate fixes to add
 
         # Final check - if no branch could be found by any method, fail gracefully
         if not head_branch:
-            log(f"Could not determine branch name using any available method", is_error=True)
-            telemetry_handler.update_telemetry("resultInfo.prCreated", False)
-            telemetry_handler.update_telemetry("resultInfo.failureReason", "Could not extract Claude head_branch needed for PR creation")
-            telemetry_handler.update_telemetry("resultInfo.failureCategory", FailureCategory.AGENT_FAILURE.name)
-            error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
+            log(f"Could not determine claude branch name using any available method", is_error=True)
+            reason: str = f"Could not extract Claude head_branch needed for PR creation"
+            self._update_telemetry_and_exit_claude_agent_failure(reason, remediation_id, issue_number)
 
         return head_branch
+
+    def _update_telemetry_and_exit_claude_agent_failure(self, reason: str, remediation_id: str, issue_number: int):
+        """
+        Update telemetry for a Claude Code agent failure and exit.
+
+        Args:
+            reason: The reason for the failure
+            remediation_id: The remediation ID for telemetry and error handling
+            issue_number: The issue number Claude is working on
+        """
+        log(f"Claude Code agent failure for issue #{issue_number}: {reason}", is_error=True)
+        telemetry_handler.update_telemetry("resultInfo.prCreated", False)
+        telemetry_handler.update_telemetry("resultInfo.issueNumber", issue_number)
+        telemetry_handler.update_telemetry("resultInfo.failureReason", reason)
+        telemetry_handler.update_telemetry("resultInfo.failureCategory", FailureCategory.AGENT_FAILURE.name)
+        error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
 
     # Additional methods will be implemented later
