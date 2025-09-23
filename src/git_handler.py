@@ -928,7 +928,8 @@ def get_issue_comments(issue_number: int, author: str = None) -> List[dict]:
     """
     log(f"Getting comments for issue #{issue_number} and author: {author}")
     gh_env = get_gh_env()
-    jq_filter = f'.comments | map(select(.author.login == "{author}")) | sort_by(.createdAt) | reverse'
+    author_filter = f"| map(select(.author.login == \"{author}\")) " if author else ""
+    jq_filter = f'.comments {author_filter}| sort_by(.createdAt) | reverse'
 
     issue_comment_command = [
         "gh", "issue", "view",
