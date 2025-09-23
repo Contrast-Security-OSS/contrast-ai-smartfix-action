@@ -914,7 +914,7 @@ def add_labels_to_pr(pr_number: int, labels: List[str]) -> bool:
         return False
 
 
-def get_issue_comments(issue_number: int, author: str = "claude") -> List[dict]:
+def get_issue_comments(issue_number: int, author: str = None) -> List[dict]:
     """
     Gets comments on a GitHub issue by issue number. Returns latest comments
     by author (defaults to claude) first  (sorted in reverse chronological order).

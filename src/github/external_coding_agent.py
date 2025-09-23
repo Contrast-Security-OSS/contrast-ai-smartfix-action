@@ -291,6 +291,15 @@ Please review this security vulnerability and implement appropriate fixes to add
             Optional[dict]: PR information if successfully created, None otherwise
         """
         try:
+            # poll to get the initial issue comments to find the author.login
+            initial_comments = git_handler.get_issue_comments(issue_number)
+            if not initial_comments or len(initial_comments) == 0:
+                debug_log(f"Initial comment not added to issue yet, checking again...")
+                return None
+
+            author_login = initial_comments[0].get("author", {}).get("login")
+            debug_log(f"Found initial issue comment author login: {author_login}")
+
             # Check for Claude workflow run ID
             workflow_run_id = git_handler.get_claude_workflow_run_id()
 
@@ -308,8 +317,9 @@ Please review this security vulnerability and implement appropriate fixes to add
                 reason = f"Claude workflow run #{workflow_run_id} failed processing with non-zero exit status"
                 self._update_telemetry_and_exit_claude_agent_failure(reason, remediation_id, issue_number)
 
-            # Get the issue comments to find Claude's response
-            claude_comments = git_handler.get_issue_comments(issue_number)
+            # Get the issue comments to find the comment author's response default claude
+            author_login = author_login if author_login else "claude"
+            claude_comments = git_handler.get_issue_comments(issue_number, author_login)
 
             if not claude_comments or len(claude_comments) == 0:
                 msg = f"No Claude comments found for issue #{issue_number}"

@@ -744,11 +744,12 @@ class TestExternalCodingAgent(unittest.TestCase):
     @patch('src.github.external_coding_agent.error_exit')
     @patch('src.git_handler.get_claude_workflow_run_id')
     @patch('src.git_handler.watch_github_action_run')
+    @patch('src.git_handler.get_issue_comments')
     @patch('src.github.external_coding_agent.time.sleep')
     @patch('src.github.external_coding_agent.debug_log')
     @patch('src.github.external_coding_agent.log')
     def test_process_external_coding_agent_claude_code_workflow_fails(self, mock_log, mock_debug_log, mock_sleep,
-                                                                 mock_watch_action, mock_get_workflow_id,
+                                                                 mock_get_comments, mock_watch_action, mock_get_workflow_id,
                                                                  mock_error_exit):
         """Test _process_external_coding_agent_run with Claude Code when workflow fails"""
         # Setup
@@ -757,6 +758,14 @@ class TestExternalCodingAgent(unittest.TestCase):
         remediation_id = "1REM-FAKE-ABCD"
         vulnerability_label = "contrast-vuln-id:VULN-1234-FAKE"
         remediation_label = "smartfix-id:1REM-FAKE-ABCD"
+
+        # Mock comment with author login "claude"
+        mock_comments = [{
+            "author": {"login": "claude"},
+            "body": "I'm still analyzing this issue...",
+            "createdAt": "2025-09-16T19:22:10Z"
+        }]
+        mock_get_comments.return_value = mock_comments
 
         # Mock the workflow ID
         mock_get_workflow_id.return_value = 17776654036
@@ -798,7 +807,7 @@ class TestExternalCodingAgent(unittest.TestCase):
     @patch('src.github.external_coding_agent.debug_log')
     @patch('src.github.external_coding_agent.log')
     def test_process_external_coding_agent_claude_code_no_comments(self, mock_log, mock_debug_log, mock_sleep,
-                                                              mock_get_comments, mock_watch_action,
+                                                                   mock_get_comments, mock_watch_action,
                                                               mock_get_workflow_id, mock_error_exit):
         """Test _process_external_coding_agent_run with Claude Code when no comments found"""
         # Setup
@@ -807,6 +816,14 @@ class TestExternalCodingAgent(unittest.TestCase):
         remediation_id = "1REM-FAKE-ABCD"
         vulnerability_label = "contrast-vuln-id:VULN-1234-FAKE"
         remediation_label = "smartfix-id:1REM-FAKE-ABCD"
+
+        # Mock comment with author login "claude"
+        mock_comments_first_call = [{
+            "author": {"login": "claude"},
+            "body": "I'm still analyzing this issue...",
+            "createdAt": "2025-09-16T19:22:10Z"
+        }]
+        mock_get_comments.side_effect = [mock_comments_first_call, []]
 
         # Mock the workflow ID
         mock_get_workflow_id.return_value = 17776654036
@@ -839,6 +856,7 @@ class TestExternalCodingAgent(unittest.TestCase):
 
         # Assert
         self.assertIsNone(result)
+        self.assertEqual(mock_get_comments.call_count, 2)
         mock_get_comments.assert_any_call(issue_number)
         mock_log.assert_any_call(f"No Claude comments found for issue #{issue_number}", is_error=True)
         # Not asserting on mock_sleep since it might be called in a loop

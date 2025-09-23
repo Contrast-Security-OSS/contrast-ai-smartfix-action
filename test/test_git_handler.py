@@ -985,7 +985,7 @@ class TestGitHandler(unittest.TestCase):
         _ = get_config(testing=True)
 
         # Execute
-        result = git_handler.get_issue_comments(issue_number)
+        result = git_handler.get_issue_comments(issue_number, "claude")
 
         # Assert
         self.assertEqual(result, comment_data)
@@ -1027,7 +1027,7 @@ class TestGitHandler(unittest.TestCase):
                 _ = get_config(testing=True)
 
                 # Execute
-                result = git_handler.get_issue_comments(issue_number)
+                result = git_handler.get_issue_comments(issue_number, "claude")
 
                 # Assert
                 self.assertEqual(result, [])
@@ -1050,7 +1050,7 @@ class TestGitHandler(unittest.TestCase):
         _ = get_config(testing=True)
 
         # Execute
-        result = git_handler.get_issue_comments(issue_number)
+        result = git_handler.get_issue_comments(issue_number, "claude")
 
         # Assert
         self.assertEqual(result, [])
@@ -1078,7 +1078,7 @@ class TestGitHandler(unittest.TestCase):
         _ = get_config(testing=True)
 
         # Execute
-        result = git_handler.get_issue_comments(issue_number)
+        result = git_handler.get_issue_comments(issue_number, "claude")
 
         # Assert
         self.assertEqual(result, [])
