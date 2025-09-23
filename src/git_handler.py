@@ -983,7 +983,8 @@ def watch_github_action_run(run_id: int) -> bool:
     try:
         # run_command will return the command's output if successful
         # Since --exit-status is used, the command will exit with status 0 for success, non-zero for failure
-        run_command(watch_command, env=gh_env, check=False)
+        watch_run_output = run_command(watch_command, env=gh_env, check=False)
+        debug_log(f"TEST: gh run watch output: {watch_run_output}")
         log(f"GitHub action run #{run_id} completed successfully")
         return True
     except Exception as e:
