@@ -9,6 +9,13 @@ Key Components:
 - SmartFixLlmAgent: Enhanced LLM agent with advanced capabilities
 """
 
+import warnings
+
+# Suppress specific Pydantic field shadowing warnings from ADK library
+# This suppresses warnings about SequentialAgent.config_type shadowing BaseAgent.config_type
+warnings.filterwarnings('ignore', message='.*config_type.*shadows.*', category=UserWarning)
+warnings.filterwarnings('ignore', message='.*shadows an attribute.*', category=UserWarning)
+
 # Import classes for easy access
 try:
     from src.smartfix.extensions.smartfix_litellm import SmartFixLiteLlm  # noqa: F401
