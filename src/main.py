@@ -30,6 +30,7 @@ from asyncio.proactor_events import _ProactorBasePipeTransport
 from src.config import get_config
 from src.smartfix.domains.agents import CodingAgents
 from src.smartfix.domains.agents import AgentFactory
+from src.smartfix.domains.agents.agent_session import AgentSessionStatus
 from src.utils import debug_log, log, error_exit
 from src import telemetry_handler
 from src.qa_handler import run_build_command
@@ -451,7 +452,7 @@ def main():  # noqa: C901
         session = smartfix_agent.remediate(context)
 
         # Extract results from the session
-        if session.status == session.status.COMPLETED:
+        if session.status == AgentSessionStatus.SUCCESS:
             ai_fix_summary_full = session.pr_body if session.pr_body else "Fix completed successfully"
         else:
             # Agent failed - handle the error
