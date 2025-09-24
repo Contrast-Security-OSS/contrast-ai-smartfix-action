@@ -1158,7 +1158,11 @@ class TestGitHandler(unittest.TestCase):
         mock_get_gh_env.return_value = {'GITHUB_TOKEN': 'mock-token'}
 
         # Sample response with a workflow run ID
-        run_data = [{"databaseId": 12345678}]
+        run_data = {"conclusion": "success",
+                    "databaseId": 12345678,
+                    "createdAt": "2025-09-24T19:09:32Z",
+                    "event": "issues",
+                    "status": "completed"}
         mock_run_command.return_value = json.dumps(run_data)
 
         # Execute

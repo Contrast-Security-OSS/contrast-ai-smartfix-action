@@ -1113,18 +1113,18 @@ def get_claude_workflow_run_id() -> int:
             debug_log("No in-progress or completed Claude workflow runs found")
             return None
 
-        runs_data = json.loads(run_output)
+        run_data = json.loads(run_output)
 
-        if not runs_data or len(runs_data) == 0:
+        if not run_data:
             debug_log("No in-progress or completed Claude workflow runs found in JSON response")
             return None
 
         # Extract the databaseId from the first (and only) run in the response
-        workflow_run_id = runs_data[0].get("databaseId")
-        event = runs_data[0].get("event")
-        status = runs_data[0].get("status")
-        created_at = runs_data[0].get("createdAt")
-        conclusion = runs_data[0].get("conclusion")
+        workflow_run_id = run_data.get("databaseId")
+        event = run_data.get("event")
+        status = run_data.get("status")
+        created_at = run_data.get("createdAt")
+        conclusion = run_data.get("conclusion")
         debug_log(f"Found workflow run - ID: {workflow_run_id}, Event: {event}, Status: {status}, CreatedAt: {created_at}, conclusion: {conclusion}")
 
         if workflow_run_id is not None:
