@@ -212,7 +212,9 @@ class SmartFixAgent(CodingAgentStrategy):
                     success, changed_files, error_message, qa_logs = self._run_qa_loop_internal(
                         context=context,
                         max_qa_attempts=1,  # Single attempt per iteration
-                        initial_changed_files=initial_changed_files
+                        initial_changed_files=initial_changed_files,
+                        current_attempt=qa_attempts,
+                        total_attempts=self.max_qa_attempts
                     )
                     # Convert to expected format for compatibility
                     qa_result = {
@@ -377,7 +379,14 @@ class SmartFixAgent(CodingAgentStrategy):
             debug_log("Warning: <pr_body> tags not found in agent response. Using full summary for PR body.")
             return agent_summary_str
 
-    def _run_qa_loop_internal(self, context: RemediationContext, max_qa_attempts: int, initial_changed_files: List[str]) -> Tuple[bool, List[str], Optional[str], List[str]]:
+    def _run_qa_loop_internal(
+        self,
+        context: RemediationContext,
+        max_qa_attempts: int,
+        initial_changed_files: List[str],
+        current_attempt: int = 1,
+        total_attempts: int = None
+    ) -> Tuple[bool, List[str], Optional[str], List[str]]:
         """
         Runs the build and QA agent loop.
 
@@ -385,6 +394,8 @@ class SmartFixAgent(CodingAgentStrategy):
             context: RemediationContext containing vulnerability and configuration.
             max_qa_attempts: Maximum number of QA attempts.
             initial_changed_files: List of files changed by the initial fix agent.
+            current_attempt: Current attempt number from outer loop (for display).
+            total_attempts: Total attempts from outer loop (for display).
 
         Returns:
             A tuple containing:
@@ -407,7 +418,10 @@ class SmartFixAgent(CodingAgentStrategy):
 
         while qa_attempts < max_qa_attempts:
             qa_attempts += 1
-            log(f"\n--- QA Attempt {qa_attempts}/{max_qa_attempts} ---")
+            # Use outer loop counters for display if provided
+            display_current = current_attempt if total_attempts else qa_attempts
+            display_total = total_attempts if total_attempts else max_qa_attempts
+            log(f"\n--- QA Attempt {display_current}/{display_total} ---")
 
             # Try building first
             build_success, build_output = run_build_command(build_command, repo_root, remediation_id)

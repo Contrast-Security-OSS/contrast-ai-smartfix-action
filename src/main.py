@@ -481,9 +481,9 @@ def main():  # noqa: C901
 
             if not config.SKIP_QA_REVIEW and build_config.has_build_command():
                 # QA was expected to run - check session results
-                if session.qa_success is not None:  # QA was attempted
+                if session.qa_attempts > 0:  # QA was attempted
                     qa_section += f"*   **Build Run:** Yes (`{build_config.build_command}`)\n"
-                    if session.qa_success:
+                    if session.success:
                         qa_section += "*   **Final Build Status:** Success \n"
                     else:
                         qa_section += "*   **Final Build Status:** Failure \n"
