@@ -949,6 +949,7 @@ def get_issue_comments(issue_number: int, author: str = None) -> List[dict]:
 
         comments_data = json.loads(comment_output)
         debug_log(f"Found {len(comments_data)} comments on issue #{issue_number}")
+        debug_log(f"All comments data: {comments_data}")
         return comments_data
     except json.JSONDecodeError as e:
         log(f"Could not parse JSON output from gh issue view: {e}. Output: {comment_output}", is_error=True)
