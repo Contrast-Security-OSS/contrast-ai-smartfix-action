@@ -297,7 +297,7 @@ Please review this security vulnerability and implement appropriate fixes to add
                 debug_log(f"Initial comment not added to issue yet, checking again...")
                 return None
 
-            author_login = initial_comments[0].get("author", {}).get("login")
+            author_login = initial_comments[0].get("author", {}).get("login", '')
             debug_log(f"Found initial issue comment author login: {author_login}")
 
             # Check for Claude workflow run ID
