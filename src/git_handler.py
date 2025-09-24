@@ -23,7 +23,7 @@ import subprocess
 import re
 from typing import List, Optional
 from src.utils import run_command, debug_log, log, error_exit
-from src.contrast_api import FailureCategory
+from src.smartfix.shared.failure_categories import FailureCategory
 from src.config import get_config
 from src.smartfix.domains.agents import CodingAgents
 config = get_config()

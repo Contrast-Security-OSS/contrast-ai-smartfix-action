@@ -265,7 +265,7 @@ class TestExternalCodingAgent(unittest.TestCase):
     @patch('src.github.external_coding_agent.debug_log')
     def test_remediate_with_issues_disabled(self, mock_debug_log, mock_log, mock_error_exit, mock_sleep, mock_create_issue, mock_find_issue, mock_check_issues):
         """Test remediate when GitHub Issues are disabled"""
-        from src.contrast_api import FailureCategory
+        from src.smartfix.shared.failure_categories import FailureCategory
 
         # Configure mock data
         vuln_uuid = 'vuln-uuid-123'

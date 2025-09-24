@@ -17,35 +17,33 @@
 # #L%
 #
 
-import logging
-import warnings
-
 import asyncio
-import sys
+import datetime
+import logging
 import platform
-
-# Explicitly import Windows-specific event loop policy to ensure proper subprocess support
-if platform.system() == 'Windows':
-    from asyncio import WindowsProactorEventLoopPolicy
+import re
+import sys
+import traceback
+import warnings
 from pathlib import Path
 from typing import Optional, List
-import re
-import traceback
 
-# Import configurations and utilities
 from src.config import get_config
 from src.utils import debug_log, log, error_exit, tail_string
-from src.contrast_api import FailureCategory
+from src.smartfix.shared.failure_categories import FailureCategory
 from src.smartfix.domains.vulnerability.context import PromptConfiguration, RepositoryConfiguration, RemediationContext
 import src.telemetry_handler as telemetry_handler
-import datetime  # For timestamps
-
-config = get_config()
 
 # Suppress warnings before importing libraries that might trigger them
 warnings.filterwarnings('ignore', category=UserWarning)
 # Suppress specific Pydantic field shadowing warning from ADK library
 warnings.filterwarnings('ignore', message='Field name "config_type" in "SequentialAgent" shadows an attribute in parent "BaseAgent"')
+
+# Explicitly import Windows-specific event loop policy to ensure proper subprocess support
+if platform.system() == 'Windows':
+    from asyncio import WindowsProactorEventLoopPolicy
+
+config = get_config()
 
 # --- ADK Setup (Conditional Import) ---
 ADK_AVAILABLE = False

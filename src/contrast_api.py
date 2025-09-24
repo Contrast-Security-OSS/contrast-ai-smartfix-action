@@ -20,27 +20,11 @@
 import requests
 import json
 import sys
-from enum import Enum
 from src.config import get_config
 from src.utils import debug_log, log
 from src import telemetry_handler
 
 config = get_config()
-
-# Define failure categories as an enum to ensure consistency
-
-
-class FailureCategory(Enum):
-    INITIAL_BUILD_FAILURE = "INITIAL_BUILD_FAILURE"
-    EXCEEDED_QA_ATTEMPTS = "EXCEEDED_QA_ATTEMPTS"
-    QA_AGENT_FAILURE = "QA_AGENT_FAILURE"
-    GIT_COMMAND_FAILURE = "GIT_COMMAND_FAILURE"
-    AGENT_FAILURE = "AGENT_FAILURE"
-    GENERATE_PR_FAILURE = "GENERATE_PR_FAILURE"
-    GENERAL_FAILURE = "GENERAL_FAILURE"
-    EXCEEDED_TIMEOUT = "EXCEEDED_TIMEOUT"
-    EXCEEDED_AGENT_EVENTS = "EXCEEDED_AGENT_EVENTS"
-    INVALID_LLM_CONFIG = "INVALID_LLM_CONFIG"
 
 
 def normalize_host(host: str) -> str:

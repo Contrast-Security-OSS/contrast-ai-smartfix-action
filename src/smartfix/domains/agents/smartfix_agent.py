@@ -13,7 +13,7 @@ from src.qa_handler import run_build_command  # Note: will migrate run_qa_loop
 from src.agent_handler import _run_agent_in_event_loop, _run_agent_internal_with_prompts
 from src.build_output_analyzer import extract_build_errors
 from src.utils import debug_log, log, error_exit, tail_string
-from src.contrast_api import FailureCategory
+from src.smartfix.shared.failure_categories import FailureCategory
 from src import telemetry_handler
 
 from .coding_agent import CodingAgentStrategy

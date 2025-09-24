@@ -23,7 +23,8 @@ from src.utils import log, debug_log, error_exit, tail_string
 from src.config import Config
 from src import git_handler
 from src import telemetry_handler
-from src.contrast_api import FailureCategory, notify_remediation_pr_opened
+from src.contrast_api import notify_remediation_pr_opened
+from src.smartfix.shared.failure_categories import FailureCategory
 from src.smartfix.domains.agents import CodingAgents
 from src.smartfix.domains.agents.coding_agent import CodingAgentStrategy
 from src.smartfix.domains.agents.agent_session import AgentSession, AgentSessionStatus
