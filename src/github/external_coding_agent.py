@@ -232,6 +232,7 @@ Please review this security vulnerability and implement appropriate fixes to add
         for attempt in range(1, max_attempts + 1):
             debug_log(f"Polling attempt {attempt}/{max_attempts} for PR related to issue #{issue_number}")
             if self.config.CODING_AGENT == CodingAgents.CLAUDE_CODE.name:
+                time.sleep(sleep_seconds)
                 pr_info = self._process_claude_workflow_run(issue_number, remediation_id)
             else:
                 # GitHub Copilot agent
