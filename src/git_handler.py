@@ -1096,11 +1096,10 @@ def get_claude_workflow_run_id() -> int:
     log("Getting in-progress or completed Claude workflow run ID")
 
     gh_env = get_gh_env()
-    jq_filter = f"map(select(.event == \"issues\" or .event == \"issue_comment\") | select(.status == \"in_progress\" or .status == \"completed\")) | sort_by(.createdAt) | reverse | .[0]"
+    jq_filter = f"'map(select(.event == \"issues\" or .event == \"issue_comment\") | select(.status == \"in_progress\" or .status == \"completed\") | select(.conclusion != \"skipped\")) | sort_by(.createdAt) | reverse | .[0]'"
     workflow_command = [
         "gh", "run", "list",
         "--repo", config.GITHUB_REPOSITORY,
-        #"--status", "in_progress",
         "--workflow", "claude.yml",
         "--limit", "5",
         "--json", "databaseId,status,event,createdAt",
@@ -1108,7 +1107,7 @@ def get_claude_workflow_run_id() -> int:
     ]
 
     try:
-        run_output = run_command(workflow_command, env=gh_env, check=False)
+        run_output = run_command(workflow_command, env=gh_env, check=True)
 
         if not run_output or run_output.strip() == "[]":
             debug_log("No in-progress or completed Claude workflow runs found")
