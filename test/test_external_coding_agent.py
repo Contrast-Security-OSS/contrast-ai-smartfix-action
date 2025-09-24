@@ -97,8 +97,8 @@ class TestExternalCodingAgent(unittest.TestCase):
     @patch('src.github.external_coding_agent.debug_log')
     @patch('src.github.external_coding_agent.log')
     def test_remediate_with_external_agent_pr_created(self, mock_log, mock_debug_log, mock_update_telemetry,
-                                                       mock_sleep, mock_notify, mock_find_pr, mock_add_labels, mock_create_issue,
-                                                       mock_find_issue, mock_error_exit):
+                                                      mock_sleep, mock_notify, mock_find_pr, mock_add_labels, mock_create_issue,
+                                                      mock_find_issue, mock_error_exit):
         """Test remediate when PR is created successfully"""
         # Set CODING_AGENT to GITHUB_COPILOT
         self.config.CODING_AGENT = "GITHUB_COPILOT"
@@ -150,7 +150,7 @@ class TestExternalCodingAgent(unittest.TestCase):
     @patch('src.github.external_coding_agent.debug_log')
     @patch('src.github.external_coding_agent.log')
     def test_remediate_with_external_agent_pr_timeout(self, mock_log, mock_debug_log, mock_update_telemetry,
-                                                       mock_sleep, mock_find_pr, mock_create_issue, mock_find_issue, mock_error_exit):
+                                                      mock_sleep, mock_find_pr, mock_create_issue, mock_find_issue, mock_error_exit):
         """Test remediate when PR creation times out"""
         # Set CODING_AGENT to GITHUB_COPILOT
         self.config.CODING_AGENT = "GITHUB_COPILOT"
@@ -206,8 +206,8 @@ class TestExternalCodingAgent(unittest.TestCase):
     @patch('src.github.external_coding_agent.debug_log')
     @patch('src.github.external_coding_agent.log')
     def test_remediate_with_existing_issue(self, mock_log, mock_debug_log, mock_update_telemetry,
-                                            mock_sleep, mock_notify, mock_find_pr, mock_reset_issue,
-                                            mock_find_issue):
+                                           mock_sleep, mock_notify, mock_find_pr, mock_reset_issue,
+                                           mock_find_issue):
         """Test remediate when an existing GitHub issue is found"""
         # Set CODING_AGENT to GITHUB_COPILOT
         self.config.CODING_AGENT = "GITHUB_COPILOT"

@@ -19,7 +19,6 @@
 
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Optional
 
 from src.smartfix.domains.vulnerability import RemediationContext
 from .agent_session import AgentSession

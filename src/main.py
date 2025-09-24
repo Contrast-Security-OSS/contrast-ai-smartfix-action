@@ -29,6 +29,7 @@ from asyncio.proactor_events import _ProactorBasePipeTransport
 # Import configurations and utilities
 from src.config import get_config
 from src.smartfix.domains.agents import CodingAgents
+from src.smartfix.domains.agents import AgentFactory
 from src.utils import debug_log, log, error_exit
 from src import telemetry_handler
 from src.qa_handler import run_build_command
@@ -37,14 +38,12 @@ from src.build_output_analyzer import extract_build_errors
 
 # Import domain-specific handlers
 from src import contrast_api
-from src import agent_handler
 from src import git_handler
 
 # Import domain models
 from src.smartfix.domains.vulnerability.context import PromptConfiguration, BuildConfiguration, RepositoryConfiguration, RemediationContext
 from src.smartfix.domains.vulnerability.processor import VulnerabilityProcessor
 from src.smartfix.domains.vulnerability import Vulnerability
-from src import qa_handler
 from src.github.external_coding_agent import ExternalCodingAgent
 
 config = get_config()
@@ -444,15 +443,28 @@ def main():  # noqa: C901
             log(f"Build output:\n{error_analysis}")
             error_exit(remediation_id, contrast_api.FailureCategory.INITIAL_BUILD_FAILURE.value)  # Exit if the build is broken, no point in proceeding
 
-        # --- Run AI Fix Agent (SmartFix) ---
-        ai_fix_summary_full = agent_handler.run_ai_fix_agent(context)
+        # --- Run SmartFix Agent ---
+        # Create SmartFix agent using the domain factory
+        smartfix_agent = AgentFactory.get_default_agent({'max_qa_attempts': max_qa_attempts_setting})
 
-        # Check if the fix agent encountered an error
-        if ai_fix_summary_full.startswith("Error during AI fix agent execution:"):
-            log("Fix agent encountered an unrecoverable error. Skipping this vulnerability.")
-            error_message = ai_fix_summary_full[len("Error during AI fix agent execution:"):].strip()
-            log(f"Error details: {error_message}")
-            error_exit(remediation_id, contrast_api.FailureCategory.AGENT_FAILURE.value)
+        # Run the agent remediation process
+        session = smartfix_agent.remediate(context)
+
+        # Extract results from the session
+        if session.status == session.status.COMPLETED:
+            ai_fix_summary_full = session.pr_body if session.pr_body else "Fix completed successfully"
+        else:
+            # Agent failed - handle the error
+            last_event = session.events[-1] if session.events else None
+            error_message = last_event.response if last_event else "Unknown agent failure"
+
+            if "SystemExit" in error_message or "error_exit" in error_message:
+                # Agent called error_exit, which already handled cleanup
+                continue
+            else:
+                log("Fix agent encountered an unrecoverable error. Skipping this vulnerability.")
+                log(f"Error details: {error_message}")
+                error_exit(remediation_id, contrast_api.FailureCategory.AGENT_FAILURE.value)
 
         # --- Git and GitHub Operations ---
         log("\n--- Proceeding with Git & GitHub Operations ---")
@@ -461,47 +473,30 @@ def main():  # noqa: C901
         if git_handler.check_status():
             commit_message = git_handler.generate_commit_message(vuln_title, vuln_uuid)
             git_handler.commit_changes(commit_message)
-            initial_changed_files = git_handler.get_last_commit_changed_files()
+
+            # Generate QA section based on session results
+            # The SmartFix agent already handled the QA loop internally
+            qa_section = "\n\n---\n\n## Review \n\n"
 
             if not config.SKIP_QA_REVIEW and build_config.has_build_command():
-                debug_log("Proceeding with QA Review as SKIP_QA_REVIEW is false and BUILD_COMMAND is provided.")
-                build_success, final_changed_files, used_build_command, qa_summary_log = qa_handler.run_qa_loop(
-                    context=context,
-                    max_qa_attempts=max_qa_attempts_setting,
-                    initial_changed_files=initial_changed_files
-                )
-
-                qa_section = "\n\n---\n\n## Review \n\n"
-
-                if used_build_command:
-                    qa_section += f"*   **Build Run:** Yes (`{used_build_command}`)\n"
-
-                    if build_success:
+                # QA was expected to run - check session results
+                if session.qa_success is not None:  # QA was attempted
+                    qa_section += f"*   **Build Run:** Yes (`{build_config.build_command}`)\n"
+                    if session.qa_success:
                         qa_section += "*   **Final Build Status:** Success \n"
                     else:
                         qa_section += "*   **Final Build Status:** Failure \n"
-                else:
-                    qa_section += "*   **Build Run:** No"
-                    if not used_build_command:
-                        qa_section += " (BUILD_COMMAND not provided)\n"
-                    qa_section += "\n*   **Final Build Status:** Skipped\n"
 
-                # Skip PR creation if QA was run and the build is failing
-                # or if the QA agent encountered an error (detected by checking qa_summary_log entries)
-                if (used_build_command and not build_success) or any(s.startswith("Error during QA agent execution:") for s in qa_summary_log):
-                    failure_category = ""
-
-                    if any(s.startswith("Error during QA agent.execution:") for s in qa_summary_log):
-                        log("\n--- Skipping PR creation as QA Agent encountered an error ---")
-                        failure_category = contrast_api.FailureCategory.QA_AGENT_FAILURE.value
-                    else:
+                        # Check if we should skip PR creation due to QA failure
                         log("\n--- Skipping PR creation as QA Agent failed to fix build issues ---")
-                        # Check if we've exhausted all retry attempts
-                        if len(qa_summary_log) >= max_qa_attempts_setting:
-                            failure_category = contrast_api.FailureCategory.EXCEEDED_QA_ATTEMPTS.value
 
-                    # Notify the Remediation service about the failed remediation if we have a failure category
-                    if failure_category:
+                        # Determine failure category based on session events
+                        failure_category = contrast_api.FailureCategory.EXCEEDED_QA_ATTEMPTS.value
+                        qa_events = [e for e in session.events if "QA" in e.prompt]
+                        if any("Error during QA agent execution:" in e.response for e in qa_events):
+                            failure_category = contrast_api.FailureCategory.QA_AGENT_FAILURE.value
+
+                        # Notify the Remediation service about the failed remediation
                         remediation_notified = contrast_api.notify_remediation_failed(
                             remediation_id=remediation_id,
                             failure_category=failure_category,
@@ -517,24 +512,26 @@ def main():  # noqa: C901
                         else:
                             log(f"Failed to notify Remediation service about {failure_category} for remediation {remediation_id}.", is_warning=True)
 
-                    git_handler.cleanup_branch(new_branch_name)
-                    contrast_api.send_telemetry_data()
-                    continue  # Move to the next vulnerability
-
-            else:  # QA is skipped
+                        git_handler.cleanup_branch(new_branch_name)
+                        contrast_api.send_telemetry_data()
+                        continue  # Move to the next vulnerability
+                else:
+                    qa_section += "*   **Build Run:** No (BUILD_COMMAND not provided)\n"
+                    qa_section += "*   **Final Build Status:** Skipped\n"
+            else:  # QA was skipped
                 qa_section = ""  # Ensure qa_section is empty if QA is skipped
                 if config.SKIP_QA_REVIEW:
-                    log("Skipping QA Review based on SKIP_QA_REVIEW setting.")
+                    log("QA Review was skipped based on SKIP_QA_REVIEW setting.")
                 elif not build_config.has_build_command():
-                    log("Skipping QA Review as no BUILD_COMMAND was provided.")
+                    log("QA Review was skipped as no BUILD_COMMAND was provided.")
 
             # --- Create Pull Request ---
             pr_title = git_handler.generate_pr_title(vuln_title)
-            # Use the result from agent_handler.run_ai_fix_agent directly as the base PR body.
-            # agent_handler.run_ai_fix_agent is expected to return the PR body content
-            # (extracted from <pr_body> tags) or the full agent summary if extraction fails.
+            # Use the result from SmartFix agent remediation as the base PR body.
+            # The agent returns the PR body content (extracted from <pr_body> tags)
+            # or the full agent summary if extraction fails.
             pr_body_base = ai_fix_summary_full
-            debug_log("Using agent's output (processed by agent_handler) as PR body base.")
+            debug_log("Using SmartFix agent's output as PR body base.")
 
             # --- Push and Create PR ---
             git_handler.push_branch(new_branch_name)  # Push the final commit (original or amended)

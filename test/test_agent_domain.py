@@ -71,7 +71,7 @@ class TestSmartFixAgent(unittest.TestCase):
         """
         self.assertTrue(issubclass(SmartFixAgent, CodingAgentStrategy))
 
-    @patch('src.agent_handler.run_ai_fix_agent')
+    @patch('src.smartfix.domains.agents.smartfix_agent.SmartFixAgent._run_ai_fix_agent')
     @patch('src.qa_handler.run_build_command')
     @patch('src.build_output_analyzer.extract_build_errors')
     def test_remediate_method_exists(self, mock_extract_errors, mock_run_build, mock_run_ai_fix):
@@ -150,7 +150,7 @@ class TestSmartFixAgent(unittest.TestCase):
         self.assertEqual(len(session.events), 1)
         self.assertIn("Build failed", session.events[0].response)
 
-    @patch('src.smartfix.domains.agents.smartfix_agent.run_ai_fix_agent')
+    @patch('src.smartfix.domains.agents.smartfix_agent.SmartFixAgent._run_ai_fix_agent')
     def test_run_fix_agent_success(self, mock_run_ai_fix):
         """
         Tests successful fix agent execution.
@@ -174,7 +174,7 @@ class TestSmartFixAgent(unittest.TestCase):
         self.assertEqual(len(session.events), 1)
         self.assertIn("Fix vulnerability", session.events[0].prompt)
 
-    @patch('src.agent_handler.run_ai_fix_agent')
+    @patch('src.smartfix.domains.agents.smartfix_agent.SmartFixAgent._run_ai_fix_agent')
     def test_run_fix_agent_error(self, mock_run_ai_fix):
         """
         Tests fix agent execution with error.
@@ -195,7 +195,7 @@ class TestSmartFixAgent(unittest.TestCase):
         self.assertEqual(len(session.events), 1)
         self.assertIn("Error", session.events[0].response)
 
-    @patch('src.smartfix.domains.agents.smartfix_agent.run_qa_loop')
+    @patch('src.smartfix.domains.agents.smartfix_agent.SmartFixAgent._run_qa_loop_internal')
     def test_run_qa_loop_success(self, mock_run_qa):
         """
         Tests successful QA loop execution.
