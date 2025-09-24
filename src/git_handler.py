@@ -1102,7 +1102,7 @@ def get_claude_workflow_run_id() -> int:
         "--repo", config.GITHUB_REPOSITORY,
         "--workflow", "claude.yml",
         "--limit", "5",
-        "--json", "databaseId,status,event,createdAt",
+        "--json", "databaseId,status,event,createdAt,conclusion",
         "--jq", jq_filter
     ]
 
@@ -1124,7 +1124,8 @@ def get_claude_workflow_run_id() -> int:
         event = runs_data[0].get("event")
         status = runs_data[0].get("status")
         created_at = runs_data[0].get("createdAt")
-        debug_log(f"Found workflow run - ID: {workflow_run_id}, Event: {event}, Status: {status}, CreatedAt: {created_at}")
+        conclusion = runs_data[0].get("conclusion")
+        debug_log(f"Found workflow run - ID: {workflow_run_id}, Event: {event}, Status: {status}, CreatedAt: {created_at}, conclusion: {conclusion}")
 
         if workflow_run_id is not None:
             workflow_run_id = int(workflow_run_id)

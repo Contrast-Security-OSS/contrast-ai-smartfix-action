@@ -1178,7 +1178,7 @@ class TestGitHandler(unittest.TestCase):
         self.assertTrue("--jq" in command)
 
         self.assertEqual(command[command.index("--workflow") + 1], "claude.yml")
-        self.assertEqual(command[command.index("--json") + 1], "databaseId,status,event,createdAt")
+        self.assertEqual(command[command.index("--json") + 1], "databaseId,status,event,createdAt,conclusion")
         self.assertEqual(command[command.index("--jq") + 1], f"'map(select(.event == \"issues\" or .event == \"issue_comment\") | select(.status == \"in_progress\" or .status == \"completed\") | select(.conclusion != \"skipped\")) | sort_by(.createdAt) | reverse | .[0]'")
 
 
