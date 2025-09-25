@@ -1003,7 +1003,7 @@ class TestGitHandler(unittest.TestCase):
         self.assertIn('author.login == "claude"', command[jq_index])
         self.assertIn('sort_by(.createdAt) | reverse', command[jq_index])
 
-        mock_log.assert_any_call("Getting comments for issue #94 and author: claude")
+        mock_debug_log.assert_any_call("Getting comments for issue #94 and author: claude")
         mock_debug_log.assert_any_call("Found 1 comments on issue #94")
 
     @patch('src.git_handler.run_command')
@@ -1032,12 +1032,13 @@ class TestGitHandler(unittest.TestCase):
                 # Assert
                 self.assertEqual(result, [])
                 mock_debug_log.assert_any_call(f"No comments found for issue #{issue_number}")
-                mock_log.assert_any_call(f"Getting comments for issue #{issue_number} and author: claude")
+                mock_debug_log.assert_any_call(f"Getting comments for issue #{issue_number} and author: claude")
 
     @patch('src.git_handler.run_command')
     @patch('src.git_handler.get_gh_env')
+    @patch('src.git_handler.debug_log')
     @patch('src.git_handler.log')
-    def test_get_issue_comments_json_error(self, mock_log, mock_get_gh_env, mock_run_command):
+    def test_get_issue_comments_json_error(self, mock_log, mock_debug_log, mock_get_gh_env, mock_run_command):
         """Test getting comments from an issue when JSON parsing error occurs"""
         # Setup
         issue_number = 42
@@ -1055,7 +1056,7 @@ class TestGitHandler(unittest.TestCase):
         # Assert
         self.assertEqual(result, [])
         mock_run_command.assert_called_once()
-        mock_log.assert_any_call(f"Getting comments for issue #{issue_number} and author: claude")
+        mock_debug_log.assert_any_call(f"Getting comments for issue #{issue_number} and author: claude")
         # Use assertIn rather than assert_any_call to check for partial match
         # since the actual error message includes JSON exception details
         log_calls = [call[0][0] for call in mock_log.call_args_list if call[1].get('is_error', False)]
@@ -1064,8 +1065,9 @@ class TestGitHandler(unittest.TestCase):
 
     @patch('src.git_handler.run_command')
     @patch('src.git_handler.get_gh_env')
+    @patch('src.git_handler.debug_log')
     @patch('src.git_handler.log')
-    def test_get_issue_comments_exception(self, mock_log, mock_get_gh_env, mock_run_command):
+    def test_get_issue_comments_exception(self, mock_log, mock_debug_log, mock_get_gh_env, mock_run_command):
         """Test getting comments from an issue when an exception occurs"""
         # Setup
         issue_number = 42
@@ -1083,7 +1085,7 @@ class TestGitHandler(unittest.TestCase):
         # Assert
         self.assertEqual(result, [])
         mock_run_command.assert_called_once()
-        mock_log.assert_any_call(f"Getting comments for issue #{issue_number} and author: claude")
+        mock_debug_log.assert_any_call(f"Getting comments for issue #{issue_number} and author: claude")
         mock_log.assert_any_call(f"Error getting comments for issue #{issue_number}: Command failed", is_error=True)
 
     @patch('src.git_handler.run_command')
@@ -1186,8 +1188,8 @@ class TestGitHandler(unittest.TestCase):
         self.assertEqual(command[command.index("--jq") + 1], 'map(select(.event == "issues" or .event == "issue_comment") | select(.status == "in_progress") | select(.conclusion != "skipped")) | sort_by(.createdAt) | reverse | .[0]')
 
 
-        mock_log.assert_any_call("Getting in-progress Claude workflow run ID")
-        mock_log.assert_any_call(f"Found in-progress Claude workflow run ID: 12345678")
+        mock_debug_log.assert_any_call("Getting in-progress Claude workflow run ID")
+        mock_debug_log.assert_any_call(f"Found in-progress Claude workflow run ID: 12345678")
 
     @patch('src.git_handler.run_command')
     @patch('src.git_handler.get_gh_env')
@@ -1326,7 +1328,7 @@ class TestGitHandler(unittest.TestCase):
 
         # Verify appropriate logs were created
         mock_log.assert_any_call(f"Creating Claude PR with title: '{title}'")
-        mock_log.assert_any_call("Successfully created Claude PR: https://github.com/mock/repo/pull/123\n")
+        mock_debug_log.assert_any_call("Successfully created Claude PR: https://github.com/mock/repo/pull/123\n")
 
     @patch('src.git_handler.run_command')
     @patch('src.git_handler.get_gh_env')

@@ -927,7 +927,7 @@ def get_issue_comments(issue_number: int, author: str = None) -> List[dict]:
         List[dict]: A list of comment data dictionaries or empty list if no comments or error
     """
     author_log = f"and author: {author}" if author  else ""
-    log(f"Getting comments for issue #{issue_number} {author_log}")
+    debug_log(f"Getting comments for issue #{issue_number} {author_log}")
     gh_env = get_gh_env()
     author_filter = f"| map(select(.author.login == \"{author}\")) " if author else ""
     jq_filter = f'.comments {author_filter}| sort_by(.createdAt) | reverse'
@@ -1095,7 +1095,7 @@ def get_claude_workflow_run_id() -> int:
     Returns:
         int: The workflow run ID if found, or None if no in-progress runs are found
     """
-    log("Getting in-progress Claude workflow run ID")
+    debug_log("Getting in-progress Claude workflow run ID")
 
     gh_env = get_gh_env()
     jq_filter = 'map(select(.event == "issues" or .event == "issue_comment") | select(.status == "in_progress") | select(.conclusion != "skipped")) | sort_by(.createdAt) | reverse | .[0]'
@@ -1131,7 +1131,7 @@ def get_claude_workflow_run_id() -> int:
 
         if workflow_run_id is not None:
             workflow_run_id = int(workflow_run_id)
-            log(f"Found in-progress Claude workflow run ID: {workflow_run_id}")
+            debug_log(f"Found in-progress Claude workflow run ID: {workflow_run_id}")
             return workflow_run_id
         else:
             debug_log("No databaseId found in workflow run data")
@@ -1197,7 +1197,7 @@ def create_claude_pr(title: str, body: str, base_branch: str, head_branch: str) 
         # Run the command and capture the output (PR URL)
         pr_url = run_command(pr_command, env=gh_env, check=True)
         if pr_url:
-            log(f"Successfully created Claude PR: {pr_url}")
+            debug_log(f"Successfully created Claude PR: {pr_url}")
         return pr_url.strip() if pr_url else ""
 
     except Exception as e:
