@@ -802,7 +802,7 @@ class TestExternalCodingAgent(unittest.TestCase):
         # Assert
         self.assertIsNone(result)
         mock_watch_action.assert_any_call(17776654036)
-        mock_log.assert_any_call(f"Claude workflow run #17776654036 failed for issue #{issue_number}", is_error=True)
+        mock_log.assert_any_call(f"Claude workflow run #17776654036 failed for issue #{issue_number} terminating SmartFix run.", is_error=True)
         # Not asserting on mock_sleep since it might be called in a loop
 
     @patch('src.github.external_coding_agent.error_exit')
@@ -865,7 +865,7 @@ class TestExternalCodingAgent(unittest.TestCase):
         self.assertIsNone(result)
         self.assertEqual(mock_get_comments.call_count, 2)
         mock_get_comments.assert_any_call(issue_number)
-        mock_log.assert_any_call(f"No Claude comments found for issue #{issue_number} terminating run.", is_error=True)
+        mock_log.assert_any_call(f"No Claude comments found for issue #{issue_number}.", is_error=True)
         # Not asserting on mock_sleep since it might be called in a loop
 
     @patch('src.github.external_coding_agent.error_exit')

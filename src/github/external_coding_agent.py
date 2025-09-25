@@ -324,7 +324,7 @@ Please review this security vulnerability and implement appropriate fixes to add
             workflow_success = git_handler.watch_github_action_run(workflow_run_id)
 
             if not workflow_success:
-                log(f"Claude workflow run #{workflow_run_id} failed for issue #{issue_number}", is_error=True)
+                log(f"Claude workflow run #{workflow_run_id} failed for issue #{issue_number} terminating SmartFix run.", is_error=True)
                 reason = f"Claude workflow run #{workflow_run_id} failed processing with non-zero exit status"
                 self._update_telemetry_and_exit_claude_agent_failure(reason, remediation_id, issue_number)
 
@@ -333,7 +333,7 @@ Please review this security vulnerability and implement appropriate fixes to add
             claude_comments = git_handler.get_issue_comments(issue_number, author_login)
 
             if not claude_comments or len(claude_comments) == 0:
-                msg = f"No Claude comments found for issue #{issue_number} terminating run."
+                msg = f"No Claude comments found for issue #{issue_number}."
                 log(msg, is_error=True)
                 self._update_telemetry_and_exit_claude_agent_failure(msg, remediation_id, issue_number)
 
@@ -343,7 +343,6 @@ Please review this security vulnerability and implement appropriate fixes to add
             # Truncate the comment body to focus only on the header section before the markdown separator
             # This makes regex pattern matching more reliable and efficient
             truncated_comment_body = full_comment_body.split('\n\n---\n')[0] if '\n\n---\n' in full_comment_body else full_comment_body
-            #debug_log(f"Using truncated claude comment_body (first section only): {truncated_comment_body}")
 
             # Extract PR information from the comment body
             comment_body_pr_data = self._process_claude_comment_body(truncated_comment_body, remediation_id, issue_number)
@@ -404,7 +403,7 @@ Please review this security vulnerability and implement appropriate fixes to add
         and pr_body are required for this method to be successful and to create the PR.
 
         Args:
-            comment_body: The comment body from Claude
+            comment_body: The truncated comment body from Claude
             remediation_id: The remediation ID for telemetry and error handling
             issue_number: The issue number Claude is working on
 
@@ -511,7 +510,7 @@ Please review this security vulnerability and implement appropriate fixes to add
 
         Args:
             head_branch_from_url: the possible head_branch extracted from the URL in the comment body
-            comment_body: The comment body from Claude
+            comment_body: The full comment body from Claude
             remediation_id: The remediation ID for telemetry and error handling
             issue_number: The issue number Claude is working on
 
