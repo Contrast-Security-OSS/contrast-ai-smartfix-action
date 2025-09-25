@@ -179,7 +179,7 @@ class TestExternalCodingAgent(unittest.TestCase):
             self.assertFalse(result)
 
             # Verify _poll_for_pr was called with the right parameters
-            mock_poll_for_pr.assert_called_once_with(42, "1REM-FAKE-ABCD", 'contrast-vuln-id:VULN-1234-FAKE-ABCD', 'smartfix-id:1REM-FAKE-ABCD', max_attempts=100, sleep_seconds=5)
+            mock_poll_for_pr.assert_called_once_with(42, "1REM-FAKE-ABCD", 'contrast-vuln-id:VULN-1234-FAKE-ABCD', 'smartfix-id:1REM-FAKE-ABCD', True, max_attempts=100, sleep_seconds=5)
         finally:
             # Restore original method
             agent._process_external_coding_agent_run = original_poll_for_pr
@@ -237,7 +237,7 @@ class TestExternalCodingAgent(unittest.TestCase):
             self.assertTrue(result)
 
             # Verify poll was called correctly
-            mock_poll_for_pr.assert_called_once_with(42, "1REM-FAKE-ABCD", 'contrast-vuln-id:VULN-1234-FAKE-ABCD', 'smartfix-id:1REM-FAKE-ABCD', max_attempts=100, sleep_seconds=5)
+            mock_poll_for_pr.assert_called_once_with(42, "1REM-FAKE-ABCD", 'contrast-vuln-id:VULN-1234-FAKE-ABCD', 'smartfix-id:1REM-FAKE-ABCD', True, max_attempts=100, sleep_seconds=5)
         finally:
             # Restore original method
             agent._process_external_coding_agent_run = original_poll_for_pr
@@ -317,6 +317,7 @@ class TestExternalCodingAgent(unittest.TestCase):
             remediation_id="REM-789",
             vulnerability_label="contrast-vuln-id:VULN-1234-FAKE-ABCD",
             remediation_label="smartfix-id:1REM-FAKE-ABCD",
+            is_existing_issue= False,
             max_attempts=3,
             sleep_seconds=0.01
         )
@@ -363,6 +364,7 @@ class TestExternalCodingAgent(unittest.TestCase):
             remediation_id="REM-789",
             vulnerability_label="contrast-vuln-id:VULN-12345",
             remediation_label="smartfix-id:remediation-67890",
+            is_existing_issue= False,
             max_attempts=3,
             sleep_seconds=0.01
         )
@@ -394,6 +396,7 @@ class TestExternalCodingAgent(unittest.TestCase):
             remediation_id="REM-789",
             vulnerability_label="contrast-vuln-id:VULN-12345",
             remediation_label="smartfix-id:remediation-67890",
+            is_existing_issue= False,
             max_attempts=3,
             sleep_seconds=0.01
         )
@@ -432,6 +435,7 @@ class TestExternalCodingAgent(unittest.TestCase):
             remediation_id="REM-789",
             vulnerability_label="contrast-vuln-id:VULN-12345",
             remediation_label="smartfix-id:remediation-67890",
+            is_existing_issue= False,
             max_attempts=3,
             sleep_seconds=0.01
         )
@@ -707,6 +711,7 @@ class TestExternalCodingAgent(unittest.TestCase):
             remediation_id=remediation_id,
             vulnerability_label=vulnerability_label,
             remediation_label=remediation_label,
+            is_existing_issue= False,
             max_attempts=3,
             sleep_seconds=0.01
         )
@@ -789,6 +794,7 @@ class TestExternalCodingAgent(unittest.TestCase):
             remediation_id=remediation_id,
             vulnerability_label=vulnerability_label,
             remediation_label=remediation_label,
+            is_existing_issue= False,
             max_attempts=3,
             sleep_seconds=0.01
         )
@@ -850,6 +856,7 @@ class TestExternalCodingAgent(unittest.TestCase):
             remediation_id=remediation_id,
             vulnerability_label=vulnerability_label,
             remediation_label=remediation_label,
+            is_existing_issue= False,
             max_attempts=3,
             sleep_seconds=0.01
         )
@@ -858,7 +865,7 @@ class TestExternalCodingAgent(unittest.TestCase):
         self.assertIsNone(result)
         self.assertEqual(mock_get_comments.call_count, 2)
         mock_get_comments.assert_any_call(issue_number)
-        mock_log.assert_any_call(f"No Claude comments found for issue #{issue_number}", is_error=True)
+        mock_log.assert_any_call(f"No Claude comments found for issue #{issue_number} terminating run.", is_error=True)
         # Not asserting on mock_sleep since it might be called in a loop
 
     @patch('src.github.external_coding_agent.error_exit')
@@ -901,6 +908,7 @@ class TestExternalCodingAgent(unittest.TestCase):
             remediation_id=remediation_id,
             vulnerability_label=vulnerability_label,
             remediation_label=remediation_label,
+            is_existing_issue= False,
             max_attempts=3,
             sleep_seconds=0.01
         )
@@ -966,6 +974,7 @@ class TestExternalCodingAgent(unittest.TestCase):
             remediation_id=remediation_id,
             vulnerability_label=vulnerability_label,
             remediation_label=remediation_label,
+            is_existing_issue= False,
             max_attempts=3,
             sleep_seconds=0.01
         )

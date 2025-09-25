@@ -926,7 +926,8 @@ def get_issue_comments(issue_number: int, author: str = None) -> List[dict]:
     Returns:
         List[dict]: A list of comment data dictionaries or empty list if no comments or error
     """
-    log(f"Getting comments for issue #{issue_number} and author: {author}")
+    author_log = f" and author: {author}" if author  else ""
+    log(f"Getting comments for issue #{issue_number} {author_log}")
     gh_env = get_gh_env()
     author_filter = f"| map(select(.author.login == \"{author}\")) " if author else ""
     jq_filter = f'.comments {author_filter}| sort_by(.createdAt) | reverse'

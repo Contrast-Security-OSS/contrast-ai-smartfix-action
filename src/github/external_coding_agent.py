@@ -169,6 +169,7 @@ Please review this security vulnerability and implement appropriate fixes to add
         # Use git_handler to find if there's an existing issue with this label
         issue_number = git_handler.find_issue_with_label(vulnerability_label)
 
+        is_existing_issue = False
         if issue_number is None:
             # Check if this is because Issues are disabled
             if not git_handler.check_issues_enabled():
@@ -182,9 +183,11 @@ Please review this security vulnerability and implement appropriate fixes to add
                 error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
         else:
             debug_log(f"Found existing GitHub issue #{issue_number} with label {vulnerability_label}")
-            if not git_handler.reset_issue(issue_number, remediation_label):
+            reset_issue_result = git_handler.reset_issue(issue_number, remediation_label)
+            if not reset_issue_result:
                 log(f"Failed to reset issue #{issue_number} with labels {vulnerability_label}, {remediation_label}", is_error=True)
                 error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
+            is_existing_issue = True
 
         telemetry_handler.update_telemetry("additionalAttributes.externalIssueNumber", issue_number)
 
@@ -194,7 +197,7 @@ Please review this security vulnerability and implement appropriate fixes to add
         log(f"Waiting for external agent to create a PR for issue #{issue_number}")
 
         # Poll for a PR to be created by the external agent (100 attempts, 5 seconds apart = ~8.3 minutes max)
-        pr_info = self._process_external_coding_agent_run(issue_number, remediation_id, vulnerability_label, remediation_label, max_attempts=100, sleep_seconds=5)
+        pr_info = self._process_external_coding_agent_run(issue_number, remediation_id, vulnerability_label, remediation_label, is_existing_issue, max_attempts=100, sleep_seconds=5)
 
         log("\n::endgroup::")
         if pr_info:
@@ -214,7 +217,8 @@ Please review this security vulnerability and implement appropriate fixes to add
             return False
 
     def _process_external_coding_agent_run(self, issue_number: int, remediation_id: str, vulnerability_label: str,
-                                           remediation_label: str, max_attempts: int = 100, sleep_seconds: int = 5) -> Optional[dict]:
+                                           remediation_label: str, is_existing_issue: bool,
+                                           max_attempts: int = 100, sleep_seconds: int = 5) -> Optional[dict]:
         """
         Poll for a PR to be created by the external agent.
 
@@ -232,8 +236,10 @@ Please review this security vulnerability and implement appropriate fixes to add
         for attempt in range(1, max_attempts + 1):
             debug_log(f"Polling attempt {attempt}/{max_attempts} for PR related to issue #{issue_number}")
             if self.config.CODING_AGENT == CodingAgents.CLAUDE_CODE.name:
-                # let's wait a couple seconds to ensure the claude workflow run has started
-                time.sleep(sleep_seconds)
+                if is_existing_issue:
+                    debug_log(f"Reprocessing an exiting issue #{issue_number} assigned to claude.")
+                    # let's wait 15 seconds to ensure the claude workflow run has started
+                    time.sleep(15)
                 pr_info = self._process_claude_workflow_run(issue_number, remediation_id)
             else:
                 # GitHub Copilot agent
@@ -296,11 +302,11 @@ Please review this security vulnerability and implement appropriate fixes to add
             # poll to get the latest issue comments to find the author.login
             latest_comments = git_handler.get_issue_comments(issue_number)
             if not latest_comments or len(latest_comments) == 0:
-                debug_log(f"No comments added to issue yet, checking again...")
+                debug_log(f"No comments added to issue, checking again...")
                 return None
 
             author_login = latest_comments[0].get("author", {}).get("login", '')
-            debug_log(f"Found initial issue comment author login: {author_login}")
+            debug_log(f"Found latest issue comment author login: {author_login}")
 
             # Check for Claude workflow run ID
             workflow_run_id = git_handler.get_claude_workflow_run_id()
@@ -324,7 +330,7 @@ Please review this security vulnerability and implement appropriate fixes to add
             claude_comments = git_handler.get_issue_comments(issue_number, author_login)
 
             if not claude_comments or len(claude_comments) == 0:
-                msg = f"No Claude comments found for issue #{issue_number}"
+                msg = f"No Claude comments found for issue #{issue_number} terminating run."
                 log(msg, is_error=True)
                 self._update_telemetry_and_exit_claude_agent_failure(msg, remediation_id, issue_number)
 
