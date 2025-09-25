@@ -1098,7 +1098,7 @@ def get_claude_workflow_run_id() -> int:
     log("Getting in-progress Claude workflow run ID")
 
     gh_env = get_gh_env()
-    jq_filter = 'map(select(.event == "issues" or .event == "issue_comment") | select(.status == "in_progress" or .status == "completed") | select(.conclusion != "skipped")) | sort_by(.createdAt) | reverse | .[0]'
+    jq_filter = 'map(select(.event == "issues" or .event == "issue_comment") | select(.status == "in_progress") | select(.conclusion != "skipped")) | sort_by(.createdAt) | reverse | .[0]'
     workflow_command = [
         "gh", "run", "list",
         "--repo", config.GITHUB_REPOSITORY,
