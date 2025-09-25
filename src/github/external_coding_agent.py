@@ -183,8 +183,7 @@ Please review this security vulnerability and implement appropriate fixes to add
                 error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
         else:
             debug_log(f"Found existing GitHub issue #{issue_number} with label {vulnerability_label}")
-            reset_issue_result = git_handler.reset_issue(issue_number, remediation_label)
-            if not reset_issue_result:
+            if not git_handler.reset_issue(issue_number, remediation_label):
                 log(f"Failed to reset issue #{issue_number} with labels {vulnerability_label}, {remediation_label}", is_error=True)
                 error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
             is_existing_issue = True
@@ -225,6 +224,9 @@ Please review this security vulnerability and implement appropriate fixes to add
         Args:
             issue_number: The issue number to check for a PR
             remediation_id: The remediation ID for telemetry and API notification
+            vulnerability_label: The vulnerability label to add to the PR
+            remediation_label: The remediation label to add to the PR
+            is_existing_issue: Flag indicating if this is an existing issue being reprocessed
             max_attempts: Maximum number of polling attempts (default: 100)
             sleep_seconds: Time to sleep between attempts (default: 5 seconds)
 
@@ -237,8 +239,9 @@ Please review this security vulnerability and implement appropriate fixes to add
             debug_log(f"Polling attempt {attempt}/{max_attempts} for PR related to issue #{issue_number}")
             if self.config.CODING_AGENT == CodingAgents.CLAUDE_CODE.name:
                 if is_existing_issue:
-                    debug_log(f"Reprocessing an exiting issue #{issue_number} assigned to claude.")
-                    # let's wait 15 seconds to ensure the claude workflow run has started
+                    debug_log(f"Claude is going to reprocess exiting issue #{issue_number}.")
+                    # Let's wait 15 seconds to ensure the claude workflow run has started
+                    # This should ensure we get the latest comment and workflow run ID
                     time.sleep(15)
                 pr_info = self._process_claude_workflow_run(issue_number, remediation_id)
             else:
@@ -299,15 +302,6 @@ Please review this security vulnerability and implement appropriate fixes to add
             Optional[dict]: PR information if successfully created, None otherwise
         """
         try:
-            # poll to get the latest issue comments to find the author.login
-            latest_comments = git_handler.get_issue_comments(issue_number)
-            if not latest_comments or len(latest_comments) == 0:
-                debug_log(f"No comments added to issue, checking again...")
-                return None
-
-            author_login = latest_comments[0].get("author", {}).get("login", '')
-            debug_log(f"Found latest issue comment author login: {author_login}")
-
             # Check for Claude workflow run ID
             workflow_run_id = git_handler.get_claude_workflow_run_id()
 
@@ -315,6 +309,15 @@ Please review this security vulnerability and implement appropriate fixes to add
                 # If no workflow run ID found yet, continue polling
                 debug_log(f"Claude workflow_run_id not found, checking again...")
                 return None
+
+            # Get all issue comments to find the latest comment author.login
+            issue_comments = git_handler.get_issue_comments(issue_number)
+            if not issue_comments or len(issue_comments) == 0:
+                debug_log(f"No comments added to issue, checking again...")
+                return None
+
+            author_login = issue_comments[0].get("author", {}).get("login", '')
+            debug_log(f"Found latest issue comment author login: {author_login}")
 
             # Watch the claude GitHub action run
             debug_log(f"OK, found claude workflow_run_id value: {workflow_run_id}")
@@ -325,7 +328,7 @@ Please review this security vulnerability and implement appropriate fixes to add
                 reason = f"Claude workflow run #{workflow_run_id} failed processing with non-zero exit status"
                 self._update_telemetry_and_exit_claude_agent_failure(reason, remediation_id, issue_number)
 
-            # Get the issue comments to find the comment author's response default claude
+            # Get the issue comments to find the comment author's response to create the PR [default claude]
             author_login = author_login if author_login else "claude"
             claude_comments = git_handler.get_issue_comments(issue_number, author_login)
 
@@ -340,7 +343,7 @@ Please review this security vulnerability and implement appropriate fixes to add
             # Truncate the comment body to focus only on the header section before the markdown separator
             # This makes regex pattern matching more reliable and efficient
             truncated_comment_body = full_comment_body.split('\n\n---\n')[0] if '\n\n---\n' in full_comment_body else full_comment_body
-            debug_log(f"Using truncated claude comment_body (first section only): {truncated_comment_body}")
+            #debug_log(f"Using truncated claude comment_body (first section only): {truncated_comment_body}")
 
             # Extract PR information from the comment body
             comment_body_pr_data = self._process_claude_comment_body(truncated_comment_body, remediation_id, issue_number)

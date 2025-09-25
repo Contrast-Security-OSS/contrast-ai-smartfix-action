@@ -926,7 +926,7 @@ def get_issue_comments(issue_number: int, author: str = None) -> List[dict]:
     Returns:
         List[dict]: A list of comment data dictionaries or empty list if no comments or error
     """
-    author_log = f" and author: {author}" if author  else ""
+    author_log = f"and author: {author}" if author  else ""
     log(f"Getting comments for issue #{issue_number} {author_log}")
     gh_env = get_gh_env()
     author_filter = f"| map(select(.author.login == \"{author}\")) " if author else ""
@@ -950,8 +950,6 @@ def get_issue_comments(issue_number: int, author: str = None) -> List[dict]:
 
         comments_data = json.loads(comment_output)
         debug_log(f"Found {len(comments_data)} comments on issue #{issue_number}")
-        for comment in comments_data:
-            debug_log(f"Each comment data: {comment}")
 
         return comments_data
     except json.JSONDecodeError as e:
@@ -1091,13 +1089,13 @@ def get_latest_branch_by_pattern(pattern: str) -> Optional[str]:
 
 def get_claude_workflow_run_id() -> int:
     """
-    Lists in-progress or completed Claude GitHub workflow runs and returns the workflow run ID.
-    Uses the GitHub CLI to find the most recent in-progress or completed workflow run for claude.yml.
+    Lists in-progress Claude GitHub workflow runs and returns the workflow run ID.
+    Uses the GitHub CLI to find the most recent in-progress workflow run for claude.yml.
 
     Returns:
-        int: The workflow run ID if found, or None if no in-progress or completed runs are found
+        int: The workflow run ID if found, or None if no in-progress runs are found
     """
-    log("Getting in-progress or completed Claude workflow run ID")
+    log("Getting in-progress Claude workflow run ID")
 
     gh_env = get_gh_env()
     jq_filter = 'map(select(.event == "issues" or .event == "issue_comment") | select(.status == "in_progress" or .status == "completed") | select(.conclusion != "skipped")) | sort_by(.createdAt) | reverse | .[0]'
@@ -1114,13 +1112,13 @@ def get_claude_workflow_run_id() -> int:
         run_output = run_command(workflow_command, env=gh_env, check=True)
 
         if not run_output or run_output.strip() == "[]":
-            debug_log("No in-progress or completed Claude workflow runs found")
+            debug_log("No in-progress Claude workflow runs found")
             return None
 
         run_data = json.loads(run_output)
 
         if not run_data:
-            debug_log("No in-progress or completed Claude workflow runs found in JSON response")
+            debug_log("No in-progress Claude workflow runs found in JSON response")
             return None
 
         # Extract the databaseId from the first (and only) run in the response
@@ -1133,7 +1131,7 @@ def get_claude_workflow_run_id() -> int:
 
         if workflow_run_id is not None:
             workflow_run_id = int(workflow_run_id)
-            log(f"Found in-progress or completed Claude workflow run ID: {workflow_run_id}")
+            log(f"Found in-progress Claude workflow run ID: {workflow_run_id}")
             return workflow_run_id
         else:
             debug_log("No databaseId found in workflow run data")
@@ -1143,7 +1141,7 @@ def get_claude_workflow_run_id() -> int:
         log(f"Could not parse JSON output from gh run list: {e}", is_error=True)
         return None
     except Exception as e:
-        log(f"Error getting in-progress or completed Claude workflow run ID: {e}", is_error=True)
+        log(f"Error getting in-progress Claude workflow run ID: {e}", is_error=True)
         return None
 
 

@@ -1186,8 +1186,8 @@ class TestGitHandler(unittest.TestCase):
         self.assertEqual(command[command.index("--jq") + 1], 'map(select(.event == "issues" or .event == "issue_comment") | select(.status == "in_progress" or .status == "completed") | select(.conclusion != "skipped")) | sort_by(.createdAt) | reverse | .[0]')
 
 
-        mock_log.assert_any_call("Getting in-progress or completed Claude workflow run ID")
-        mock_log.assert_any_call(f"Found in-progress or completed Claude workflow run ID: 12345678")
+        mock_log.assert_any_call("Getting in-progress Claude workflow run ID")
+        mock_log.assert_any_call(f"Found in-progress Claude workflow run ID: 12345678")
 
     @patch('src.git_handler.run_command')
     @patch('src.git_handler.get_gh_env')
@@ -1208,7 +1208,7 @@ class TestGitHandler(unittest.TestCase):
         # Assert
         self.assertIsNone(result)
         mock_run_command.assert_called_once()
-        mock_debug_log.assert_any_call("No in-progress or completed Claude workflow runs found")
+        mock_debug_log.assert_any_call("No in-progress Claude workflow runs found")
 
     @patch('src.git_handler.run_command')
     @patch('src.git_handler.get_gh_env')
@@ -1253,7 +1253,7 @@ class TestGitHandler(unittest.TestCase):
         # Assert
         self.assertIsNone(result)
         mock_run_command.assert_called_once()
-        mock_log.assert_any_call("Error getting in-progress or completed Claude workflow run ID: Command failed", is_error=True)
+        mock_log.assert_any_call("Error getting in-progress Claude workflow run ID: Command failed", is_error=True)
 
     @patch('src.git_handler.run_command')
     @patch('src.git_handler.get_gh_env')
