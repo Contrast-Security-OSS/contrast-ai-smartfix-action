@@ -232,6 +232,7 @@ Please review this security vulnerability and implement appropriate fixes to add
         for attempt in range(1, max_attempts + 1):
             debug_log(f"Polling attempt {attempt}/{max_attempts} for PR related to issue #{issue_number}")
             if self.config.CODING_AGENT == CodingAgents.CLAUDE_CODE.name:
+                # let's wait a couple seconds to ensure the claude workflow run has started
                 time.sleep(sleep_seconds)
                 pr_info = self._process_claude_workflow_run(issue_number, remediation_id)
             else:
@@ -292,13 +293,13 @@ Please review this security vulnerability and implement appropriate fixes to add
             Optional[dict]: PR information if successfully created, None otherwise
         """
         try:
-            # poll to get the initial issue comments to find the author.login
-            initial_comments = git_handler.get_issue_comments(issue_number)
-            if not initial_comments or len(initial_comments) == 0:
-                debug_log(f"Initial comment not added to issue yet, checking again...")
+            # poll to get the latest issue comments to find the author.login
+            latest_comments = git_handler.get_issue_comments(issue_number)
+            if not latest_comments or len(latest_comments) == 0:
+                debug_log(f"No comments added to issue yet, checking again...")
                 return None
 
-            author_login = initial_comments[0].get("author", {}).get("login", '')
+            author_login = latest_comments[0].get("author", {}).get("login", '')
             debug_log(f"Found initial issue comment author login: {author_login}")
 
             # Check for Claude workflow run ID
