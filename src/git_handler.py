@@ -715,7 +715,7 @@ def reset_issue(issue_number: int, remediation_label: str) -> bool:
         if config.CODING_AGENT == CodingAgents.CLAUDE_CODE.name:
             debug_log("CLAUDE_CODE agent detected need to add a comment and tag @claude for reprocessing")
             # Add a comment to the existing issue to notify @claude to reprocess
-            comment:str = f"@claude reprocess this issue with the new remediation label: {remediation_label} and attempt a fix."
+            comment: str = f"@claude reprocess this issue with the new remediation label: {remediation_label} and attempt a fix."
             comment_command = [
                 "gh", "issue", "comment",
                 "--repo", config.GITHUB_REPOSITORY,
@@ -805,7 +805,7 @@ def find_open_pr_for_issue(issue_number: int) -> dict:
             ]
 
             pr_list_output = run_command(claude_pr_list_command, env=gh_env, check=False)
-            
+
             if not pr_list_output or pr_list_output.strip() == "[]":
                 debug_log(f"No open PRs found for issue #{issue_number} with either Copilot or Claude branch pattern")
                 return None
