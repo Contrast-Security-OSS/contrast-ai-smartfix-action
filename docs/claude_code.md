@@ -22,8 +22,15 @@ When the `@claude` handle is mentioned in the title of a SmartFix-created GitHub
 
 * **Contrast Assess:** You need an active Contrast Assess deployment identifying vulnerabilities in your application.
 * **GitHub:** Your project must be hosted on GitHub and use GitHub Actions.  In the GitHub repository's Settings, enable the Actions > General > Workflow Permissions checkbox for "Allow GitHub Actions to create and approve pull requests".
+* **Claude Code Requirements:**
+  * GitHub repository with **Issues** and **GitHub Copilot** enabled
+  * GitHub Personal Access Token (PAT) with:
+    * `meta` (read permissions)
+    * `actions` (read permissions)
+    * `pulls` (read-write permissions)
+    * `issues` (read-write permissions)
+  * **Suggestion:** Set up a GitHub service account and use that to make the PAT for more explicit tracking of SmartFix's work in GitHub.
 * **Contrast API Credentials:** You will need your Contrast Host, Organization ID, Application ID, Authorization Key, and API Key.
-* **GitHub Token Permissions:** The GitHub token must have `contents: write` and `pull-requests: write` permissions. These permissions must be explicitly set in your workflow file.  Note, SmartFix uses the internal GitHub token for Actions; you do not need to create a Personal Access Token (PAT).
 * **LLM Access:** Ensure that you have access to one of our recommended LLMs for use with SmartFix.  If using an AWS Bedrock model, please see Amazon's User Guide on [model access](https://docs.aws.amazon.com/bedrock/latest/userguide/model-access-modify.html).
 
 Set the gathered values as secrets and variables for the GitHub repository at Settings tab > Secrets and Variables in the sidebar > Actions.
@@ -54,10 +61,6 @@ on:
     - cron: '0 0 * * *' # Runs daily at midnight UTC, adjust as needed
   workflow_dispatch: # Allows manual triggering
 
-permissions:
-  contents: write
-  pull-requests: write
-
 jobs:
   generate_fixes:
     name: Generate Fixes
@@ -82,18 +85,17 @@ jobs:
           contrast_api_key: ${{ secrets.CONTRAST_API_KEY }}
 
           # GitHub Configuration
-          github_token: ${{ secrets.PAT_TOKEN }} # Necessary for creating Issues and mentioning Claude Code (@claude). This token should have read permission for metadata and read-write permission for issues and pulls. A best practice is to have an GitHub Organization service account create the PAT (an Organization admin may need to approve it)
+          github_token: ${{ secrets.PAT_TOKEN }} # Necessary for creating Issues and mentioning Claude Code (@claude). This token should have read permission for metadata, read permissions on actions and read-write permission for issues and pulls. A best practice is to have an GitHub Organization service account create the PAT (an Organization admin may need to approve it)
           base_branch: '${{ github.event.repository.default_branch }}' # This will default to your repo default branch (other common base branches are 'main', 'master' or 'develop')
           coding_agent: 'CLAUDE_CODE' # Specify the use of Claude Code instead of the default SmartFix internal coding agent
 
           # Other Optional Inputs (see action.yml for defaults and more options)
-          # formatting_command: 'mvn spotless:apply' # Or the command appropriate for your project to correct the formatting of SmartFix's changes.  This ensures that SmartFix follows your coding standards.
           # max_open_prs: 5 # This is the maximum limit for the number of PRs that SmartFix will have open at single time
 
   handle_pr_merge:
     name: Handle PR Merge
     runs-on: ubuntu-latest
-    if: github.event.pull_request.merged == true && contains(join(github.event.pull_request.labels.*.name), 'contrast-vuln-id:VULN-')
+    if: github.event.pull_request.merged == true && contains(github.event.pull_request.head.ref, 'claude/issue-')
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -105,7 +107,7 @@ jobs:
         with:
           run_task: merge
           # --- GitHub Token ---
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ secrets.PAT_TOKEN }}
           # --- Contrast API Credentials ---
           contrast_host: ${{ vars.CONTRAST_HOST }}
           contrast_org_id: ${{ vars.CONTRAST_ORG_ID }}
@@ -118,7 +120,7 @@ jobs:
   handle_pr_closed:
     name: Handle PR Close
     runs-on: ubuntu-latest
-    if: github.event.pull_request.merged == false && contains(join(github.event.pull_request.labels.*.name), 'contrast-vuln-id:VULN-')
+    if: github.event.pull_request.merged == false && contains(github.event.pull_request.head.ref, 'claude/issue-')
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -130,7 +132,7 @@ jobs:
         with:
           run_task: closed
           # --- GitHub Token ---
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ secrets.PAT_TOKEN }}
           # --- Contrast API Credentials ---
           contrast_host: ${{ vars.CONTRAST_HOST }}
           contrast_org_id: ${{ vars.CONTRAST_ORG_ID }}
@@ -146,7 +148,7 @@ jobs:
 * Store all sensitive values (API keys, tokens) as GitHub Secrets in your repository or Github organization settings.
 * Replace `v1` with the specific version of the SmartFix GitHub Action you intend to use.
 * The `contrast_app_id` must correspond to the Contrast Application ID for the code in the repository where this action runs.  To find the app ID, visit the application page in the Contrast web UI, then use the last UUID in the URL (immediately after `/applications/`) as the app ID value.
-* Set the `coding_agent` value to `CLAUDE_CODE` to force the SmartFix GitHub Action to use the GitHub Copilot coding agent.
+* Set the `coding_agent` value to `CLAUDE_CODE` to force the SmartFix GitHub Action to use the Claude Code coding agent.
 
 ### Supported Languages
 
@@ -234,7 +236,7 @@ SmartFix collects telemetry data to help improve the service and diagnose issues
   * Ensure the that the repository / organization has GitHub Issues enabled and that the Claude Code GitHub App has been installed on the repository
   * Check the GitHub Action logs for specific error messages from the Claude Code agent.
 * **PR Creation Failures:**
-  * Ensure the `PAT_token` has the necessary permissions to create and read Issues and PRs in the repository.
+  * Ensure the `PAT_token` has the necessary permissions to create and read Actions, Issues and PRs in the repository.
   * Check for branch protection rules that might prevent PR creation.
 * **No Fixes Generated:**
   * Confirm there are eligible CRITICAL or HIGH severity vulnerabilities in Contrast Assess for the configured `contrast_app_id`. SmartFix only attempts to fix vulnerabilities that are in the REPORTED state.

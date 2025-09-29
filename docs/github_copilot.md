@@ -28,7 +28,7 @@ When assigned to a SmartFix-created GitHub Issue describing a Contrast-discovere
     * `meta` (read permissions)
     * `pulls` (read-write permissions)
     * `issues` (read-write permissions)
-  * **Suggestion:** Setup a GitHub service account and use that to make the PAT for more explicit tracking of SmartFix's work in GitHub.
+  * **Suggestion:** Set up a GitHub service account and use that to make the PAT for more explicit tracking of SmartFix's work in GitHub.
 * **Contrast API Credentials:** You will need your Contrast Host, Organization ID, Application ID, Authorization Key, and API Key.
 
 Set the gathered values as secrets and variables for the GitHub repository at Settings tab > Secrets and Variables in the sidebar > Actions.
@@ -59,10 +59,6 @@ on:
     - cron: '0 0 * * *' # Runs daily at midnight UTC, adjust as needed
   workflow_dispatch: # Allows manual triggering
 
-permissions:
-  contents: write
-  pull-requests: write
-
 jobs:
   generate_fixes:
     name: Generate Fixes
@@ -91,17 +87,13 @@ jobs:
           base_branch: '${{ github.event.repository.default_branch }}' # This will default to your repo default branch (other common base branches are 'main', 'master' or 'develop')
           coding_agent: 'GITHUB_COPILOT' # Specify the use of GitHub Copilot instead of the default SmartFix internal coding agent
 
-          # Required Runtime Configuration
-          build_command: 'mvn clean install' # Or the build command appropriate for your project.  SmartFix will use this command to ensure that its changes work correctly with your project.
-
           # Other Optional Inputs (see action.yml for defaults and more options)
-          # formatting_command: 'mvn spotless:apply' # Or the command appropriate for your project to correct the formatting of SmartFix's changes.  This ensures that SmartFix follows your coding standards.
           # max_open_prs: 5 # This is the maximum limit for the number of PRs that SmartFix will have open at single time
 
   handle_pr_merge:
     name: Handle PR Merge
     runs-on: ubuntu-latest
-    if: github.event.pull_request.merged == true && contains(join(github.event.pull_request.labels.*.name), 'contrast-vuln-id:VULN-')
+    if: github.event.pull_request.merged == true && contains(github.event.pull_request.head.ref, 'copilot/fix-')
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -113,7 +105,7 @@ jobs:
         with:
           run_task: merge
           # --- GitHub Token ---
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ secrets.PAT_TOKEN }}
           # --- Contrast API Credentials ---
           contrast_host: ${{ vars.CONTRAST_HOST }}
           contrast_org_id: ${{ vars.CONTRAST_ORG_ID }}
@@ -126,7 +118,7 @@ jobs:
   handle_pr_closed:
     name: Handle PR Close
     runs-on: ubuntu-latest
-    if: github.event.pull_request.merged == false && contains(join(github.event.pull_request.labels.*.name), 'contrast-vuln-id:VULN-')
+    if: github.event.pull_request.merged == false && contains(github.event.pull_request.head.ref, 'copilot/fix-')
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -138,7 +130,7 @@ jobs:
         with:
           run_task: closed
           # --- GitHub Token ---
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ secrets.PAT_TOKEN }}
           # --- Contrast API Credentials ---
           contrast_host: ${{ vars.CONTRAST_HOST }}
           contrast_org_id: ${{ vars.CONTRAST_ORG_ID }}

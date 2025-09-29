@@ -115,7 +115,7 @@ jobs:
   handle_pr_merge:
     name: Handle PR Merge
     runs-on: ubuntu-latest
-    if: github.event.pull_request.merged == true && contains(join(github.event.pull_request.labels.*.name), 'contrast-vuln-id:VULN-')
+    if: github.event.pull_request.merged == true && contains(github.event.pull_request.head.ref, 'smartfix/remediation-')
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -140,7 +140,7 @@ jobs:
   handle_pr_closed:
     name: Handle PR Close
     runs-on: ubuntu-latest
-    if: github.event.pull_request.merged == false && contains(join(github.event.pull_request.labels.*.name), 'contrast-vuln-id:VULN-')
+    if: github.event.pull_request.merged == false && contains(github.event.pull_request.head.ref, 'smartfix/remediation-')
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
