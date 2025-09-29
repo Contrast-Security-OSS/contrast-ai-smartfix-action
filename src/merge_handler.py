@@ -83,7 +83,7 @@ def _extract_remediation_info(pull_request: dict) -> tuple:
             debug_log(f"Extracted external issue number from branch name: {issue_number}")
         else:
             debug_log(f"Could not extract issue number from branch name: {branch_name}")
-        
+
         # Set the external coding agent in telemetry based on branch prefix
         coding_agent = "EXTERNAL-CLAUDE-CODE" if branch_name.startswith("claude/") else "EXTERNAL-COPILOT"
         debug_log(f"Determined external coding agent to be: {coding_agent}")
