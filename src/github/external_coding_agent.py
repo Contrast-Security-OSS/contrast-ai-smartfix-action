@@ -193,10 +193,13 @@ Please review this security vulnerability and implement appropriate fixes to add
         # Proceed with PR polling for all agent types
 
         # Poll for PR creation by the external agent
-        log(f"Waiting for external agent to create a PR for issue #{issue_number}")
+        log(f"Waiting for external agent to create a PR for issue #{issue_number}, '{issue_title}'")
 
         # Poll for a PR to be created by the external agent (100 attempts, 5 seconds apart = ~8.3 minutes max)
-        pr_info = self._process_external_coding_agent_run(issue_number, remediation_id, vulnerability_label, remediation_label, is_existing_issue, max_attempts=100, sleep_seconds=5)
+        pr_info = self._process_external_coding_agent_run(
+            issue_number, issue_title, remediation_id, vulnerability_label,
+            remediation_label, is_existing_issue, max_attempts=100, sleep_seconds=5
+        )
 
         log("\n::endgroup::")
         if pr_info:
@@ -215,7 +218,7 @@ Please review this security vulnerability and implement appropriate fixes to add
             telemetry_handler.update_telemetry("resultInfo.failureCategory", FailureCategory.AGENT_FAILURE.name)
             return False
 
-    def _process_external_coding_agent_run(self, issue_number: int, remediation_id: str, vulnerability_label: str,
+    def _process_external_coding_agent_run(self, issue_number: int, issue_title: str, remediation_id: str, vulnerability_label: str,
                                            remediation_label: str, is_existing_issue: bool,
                                            max_attempts: int = 100, sleep_seconds: int = 5) -> Optional[dict]:
         """
@@ -246,7 +249,7 @@ Please review this security vulnerability and implement appropriate fixes to add
                 pr_info = self._process_claude_workflow_run(issue_number, remediation_id)
             else:
                 # GitHub Copilot agent
-                pr_info = git_handler.find_open_pr_for_issue(issue_number)
+                pr_info = git_handler.find_open_pr_for_issue(issue_number, issue_title)
 
             if pr_info:
                 pr_number = pr_info.get("number")
@@ -288,7 +291,6 @@ Please review this security vulnerability and implement appropriate fixes to add
         log(f"No PR found for issue #{issue_number} after {max_attempts} polling attempts", is_error=True)
         return None
 
-
     def _process_claude_workflow_run(self, issue_number: int, remediation_id: str,) -> Optional[dict]:
         """
         Process the Claude Code workflow run and extract PR information from Claude's comment
@@ -307,13 +309,13 @@ Please review this security vulnerability and implement appropriate fixes to add
 
             if not workflow_run_id:
                 # If no workflow run ID found yet, continue polling
-                debug_log(f"Claude workflow_run_id not found, checking again...")
+                debug_log("Claude workflow_run_id not found, checking again...")
                 return None
 
             # Get all issue comments to find the latest comment author.login
             issue_comments = git_handler.get_issue_comments(issue_number)
             if not issue_comments or len(issue_comments) == 0:
-                debug_log(f"No comments added to issue, checking again...")
+                debug_log("No comments added to issue, checking again...")
                 return None
 
             author_login = issue_comments[0].get("author", {}).get("login", '')
@@ -364,8 +366,8 @@ Please review this security vulnerability and implement appropriate fixes to add
             debug_log(f"Claude create PR returned url: {pr_url}")
 
             if not pr_url:
-                log(f"Failed to create PR for Claude Code fix", is_error=True)
-                reason = f"Could not create Claude PR due to processing issues"
+                log("Failed to create PR for Claude Code fix", is_error=True)
+                reason = "Could not create Claude PR due to processing issues"
                 self._update_telemetry_and_exit_claude_agent_failure(reason, remediation_id, issue_number)
 
             # Extract PR number from URL
@@ -396,8 +398,7 @@ Please review this security vulnerability and implement appropriate fixes to add
             self._update_telemetry_and_exit_claude_agent_failure(msg, remediation_id, issue_number)
             return None
 
-
-    def _process_claude_comment_body(self, comment_body: str, remediation_id: str, issue_number: int) -> dict:
+    def _process_claude_comment_body(self, comment_body: str, remediation_id: str, issue_number: int) -> dict:  # noqa: C901
         """
         Process Claude's comment body to extract PR information. Returning the pr_title
         and pr_body are required for this method to be successful and to create the PR.
@@ -499,7 +500,6 @@ Please review this security vulnerability and implement appropriate fixes to add
             "pr_body": contrast_pr_body
         }
 
-
     def _get_claude_head_branch(self, head_branch_from_url: str,
                                 comment_body: str,
                                 issue_number: int,
@@ -547,8 +547,8 @@ Please review this security vulnerability and implement appropriate fixes to add
 
         # Final check - if no branch could be found by any method, fail gracefully
         if not head_branch:
-            log(f"Could not determine claude branch name using any available method", is_error=True)
-            reason = f"Could not extract Claude head_branch needed for PR creation"
+            log("Could not determine claude branch name using any available method", is_error=True)
+            reason = "Could not extract Claude head_branch needed for PR creation"
             self._update_telemetry_and_exit_claude_agent_failure(reason, remediation_id, issue_number)
 
         return head_branch

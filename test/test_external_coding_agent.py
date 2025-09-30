@@ -133,7 +133,7 @@ class TestExternalCodingAgent(unittest.TestCase):
         self.assertTrue(result)
 
         # Verify log calls
-        mock_log.assert_any_call("Waiting for external agent to create a PR for issue #42")
+        mock_log.assert_any_call("Waiting for external agent to create a PR for issue #42, 'Fake Vulnerability Title'")
         mock_log.assert_any_call("External agent created PR #123 at https://github.com/owner/repo/pull/123")
 
         # Verify telemetry updates
@@ -179,13 +179,17 @@ class TestExternalCodingAgent(unittest.TestCase):
             self.assertFalse(result)
 
             # Verify _poll_for_pr was called with the right parameters
-            mock_poll_for_pr.assert_called_once_with(42, "1REM-FAKE-ABCD", 'contrast-vuln-id:VULN-1234-FAKE-ABCD', 'smartfix-id:1REM-FAKE-ABCD', True, max_attempts=100, sleep_seconds=5)
+            mock_poll_for_pr.assert_called_once_with(
+                42, "Fake Vulnerability Title", "1REM-FAKE-ABCD",
+                'contrast-vuln-id:VULN-1234-FAKE-ABCD', 'smartfix-id:1REM-FAKE-ABCD',
+                True, max_attempts=100, sleep_seconds=5
+            )
         finally:
             # Restore original method
             agent._process_external_coding_agent_run = original_poll_for_pr
 
         # Verify log calls
-        mock_log.assert_any_call("Waiting for external agent to create a PR for issue #42")
+        mock_log.assert_any_call("Waiting for external agent to create a PR for issue #42, 'Fake Vulnerability Title'")
         mock_log.assert_any_call("External agent failed to create a PR within the timeout period", is_error=True)
 
         # Verify telemetry updates
@@ -237,7 +241,11 @@ class TestExternalCodingAgent(unittest.TestCase):
             self.assertTrue(result)
 
             # Verify poll was called correctly
-            mock_poll_for_pr.assert_called_once_with(42, "1REM-FAKE-ABCD", 'contrast-vuln-id:VULN-1234-FAKE-ABCD', 'smartfix-id:1REM-FAKE-ABCD', True, max_attempts=100, sleep_seconds=5)
+            mock_poll_for_pr.assert_called_once_with(
+                42, "Fake Vulnerability Title", "1REM-FAKE-ABCD",
+                'contrast-vuln-id:VULN-1234-FAKE-ABCD', 'smartfix-id:1REM-FAKE-ABCD',
+                True, max_attempts=100, sleep_seconds=5
+            )
         finally:
             # Restore original method
             agent._process_external_coding_agent_run = original_poll_for_pr
@@ -314,17 +322,18 @@ class TestExternalCodingAgent(unittest.TestCase):
         # Use very small max_attempts and sleep_seconds to speed up tests
         result = agent._process_external_coding_agent_run(
             issue_number=456,
+            issue_title="Test Issue Title",
             remediation_id="REM-789",
             vulnerability_label="contrast-vuln-id:VULN-1234-FAKE-ABCD",
             remediation_label="smartfix-id:1REM-FAKE-ABCD",
-            is_existing_issue= False,
+            is_existing_issue=False,
             max_attempts=3,
             sleep_seconds=0.01
         )
 
         # Verify results
         self.assertEqual(result, pr_info)
-        mock_find_pr.assert_called_once_with(456)
+        mock_find_pr.assert_called_once_with(456, "Test Issue Title")
         mock_notify.assert_called_once_with(
             remediation_id="REM-789",
             pr_number=123,
@@ -361,10 +370,11 @@ class TestExternalCodingAgent(unittest.TestCase):
         # Use very small max_attempts and sleep_seconds to speed up tests
         result = agent._process_external_coding_agent_run(
             issue_number=456,
+            issue_title="Test Issue Title",
             remediation_id="REM-789",
             vulnerability_label="contrast-vuln-id:VULN-12345",
             remediation_label="smartfix-id:remediation-67890",
-            is_existing_issue= False,
+            is_existing_issue=False,
             max_attempts=3,
             sleep_seconds=0.01
         )
@@ -393,10 +403,11 @@ class TestExternalCodingAgent(unittest.TestCase):
         # Use very small max_attempts and sleep_seconds to speed up tests
         result = agent._process_external_coding_agent_run(
             issue_number=456,
+            issue_title="Test Issue Title",
             remediation_id="REM-789",
             vulnerability_label="contrast-vuln-id:VULN-12345",
             remediation_label="smartfix-id:remediation-67890",
-            is_existing_issue= False,
+            is_existing_issue=False,
             max_attempts=3,
             sleep_seconds=0.01
         )
@@ -432,10 +443,11 @@ class TestExternalCodingAgent(unittest.TestCase):
         # Use very small max_attempts and sleep_seconds to speed up tests
         result = agent._process_external_coding_agent_run(
             issue_number=456,
+            issue_title="Test Issue Title",
             remediation_id="REM-789",
             vulnerability_label="contrast-vuln-id:VULN-12345",
             remediation_label="smartfix-id:remediation-67890",
-            is_existing_issue= False,
+            is_existing_issue=False,
             max_attempts=3,
             sleep_seconds=0.01
         )
@@ -662,7 +674,6 @@ class TestExternalCodingAgent(unittest.TestCase):
             expected_length = len(result)
             mock_debug_log.assert_called_with(f"Assembled issue body with {expected_length} characters")
 
-
     @patch('src.git_handler.get_claude_workflow_run_id')
     @patch('src.git_handler.watch_github_action_run')
     @patch('src.git_handler.get_issue_comments')
@@ -670,9 +681,10 @@ class TestExternalCodingAgent(unittest.TestCase):
     @patch('src.github.external_coding_agent.time.sleep')
     @patch('src.github.external_coding_agent.log')
     @patch('src.github.external_coding_agent.debug_log')
-    def test_process_external_coding_agent_claude_code_success(self, mock_debug_log, mock_log, mock_sleep,
-                                                          mock_create_claude_pr, mock_get_comments,
-                                                          mock_watch_action, mock_get_workflow_id):
+    def test_process_external_coding_agent_claude_code_success(
+            self, mock_debug_log, mock_log, mock_sleep,
+            mock_create_claude_pr, mock_get_comments,
+            mock_watch_action, mock_get_workflow_id):
         """Test _process_external_coding_agent_run with Claude Code when successful"""
         # Setup
         self.config.CODING_AGENT = "CLAUDE_CODE"
@@ -689,7 +701,47 @@ class TestExternalCodingAgent(unittest.TestCase):
         mock_watch_action.return_value = True
 
         # Sample comment body from Claude
-        comment_body = """**Claude finished @dougj-smartfix[bot]'s task** —— [View job](https://github.com/dougj-contrast/django_vuln/actions/runs/17776654036) • [`claude/issue-95-20250916-1922`](https://github.com/dougj-contrast/django_vuln/tree/claude/issue-95-20250916-1922) • [Create PR ➔](https://github.com/dougj-contrast/django_vuln/compare/main...claude/issue-95-20250916-1922?quick_pull=1&title=fix%3A%20Prevent%20NoSQL%20injection%20in%20nosql_injection%20endpoint&body=This%20PR%20fixes%20a%20NoSQL%20injection%20vulnerability%20in%20the%20nosql_injection%20view%20by%3A%0A%0A1.%20Validating%20and%20sanitizing%20user%20input%0A2.%20Rejecting%20parameters%20with%20MongoDB%20operators%0A3.%20Using%20a%20whitelist%20approach%20for%20allowed%20field%20names%0A4.%20Implementing%20strict%20parameter%20sanitization%0A%0AResolves%20%2395%0A%0AGenerated%20with%20%5BClaude%20Code%5D(https%3A%2F%2Fclaude.ai%2Fcode))\n\n---\nI've fixed the NoSQL injection vulnerability in the application!\n\n### Todo List:\n- [x] Analyze issue details to understand the NoSQL injection vulnerability\n- [x] Search for the vulnerable code in the codebase\n- [x] Examine the vulnerable code path and identify the NoSQL injection issue\n- [x] Develop a fix for the NoSQL injection vulnerability\n- [x] Test the fix to ensure it properly addresses the vulnerability\n- [x] Commit the changes with a descriptive message\n- [x] Push the changes and provide a PR link\n\n### Identified Vulnerability\n\nI found the NoSQL injection vulnerability in the `nosql_injection` function in `views.py` (lines 113-193). The issue was in line 176 where user-supplied parameters were directly used in the MongoDB query: `result = db['user'].find(query_params)`.\n\nThe code processed MongoDB operators in query parameters without proper validation, allowing attackers to inject malicious MongoDB operators like `$ne`, `$regex`, and `$in` to bypass authentication and extract sensitive data.\n\n### Fix Implemented\n\nI've implemented a fix with the following security improvements:\n\n1. **Input Validation**: Reject any parameters containing MongoDB operators ($) or special characters\n2. **Field Whitelisting**: Only allow specific field names (username, name, surname, email)\n3. **Parameter Sanitization**: Prevent operator injection by using strict equality matching only\n4. **Educational Enhancement**: Display both original and secure queries for learning purposes\n\n### Security Analysis\n\nThe fix effectively prevents all the NoSQL injection attack vectors mentioned in the template:\n- `?username[$ne]=admin&password[$ne]=none` - Filtered out (contains operators)\n- `?username=admin&password[$regex]=^s` - Filtered out (contains operators)\n- `?username[$in][]=admin&username[$in][]=john` - Filtered out (contains array notation)\n- `?password[$exists]=true` - Filtered out (contains operators)\n\n### PR Link"""
+        comment_body = (
+            "**Claude finished @dougj-smartfix[bot]'s task** —— "
+            "[View job](https://github.com/dougj-contrast/django_vuln/actions/runs/17776654036) • "
+            "[`claude/issue-95-20250916-1922`](https://github.com/dougj-contrast/django_vuln/tree/claude/issue-95-20250916-1922) • "
+            "[Create PR ➔](https://github.com/dougj-contrast/django_vuln/compare/main...claude/issue-95-20250916-1922?"
+            "quick_pull=1&title=fix%3A%20Prevent%20NoSQL%20injection%20in%20nosql_injection%20endpoint&"
+            "body=This%20PR%20fixes%20a%20NoSQL%20injection%20vulnerability%20in%20the%20nosql_injection%20view%20by%3A%0A%0A"
+            "1.%20Validating%20and%20sanitizing%20user%20input%0A"
+            "2.%20Rejecting%20parameters%20with%20MongoDB%20operators%0A"
+            "3.%20Using%20a%20whitelist%20approach%20for%20allowed%20field%20names%0A"
+            "4.%20Implementing%20strict%20parameter%20sanitization%0A%0A"
+            "Resolves%20%2395%0A%0AGenerated%20with%20%5BClaude%20Code%5D(https%3A%2F%2Fclaude.ai%2Fcode))\n\n---\n"
+            "I've fixed the NoSQL injection vulnerability in the application!\n\n"
+            "### Todo List:\n"
+            "- [x] Analyze issue details to understand the NoSQL injection vulnerability\n"
+            "- [x] Search for the vulnerable code in the codebase\n"
+            "- [x] Examine the vulnerable code path and identify the NoSQL injection issue\n"
+            "- [x] Develop a fix for the NoSQL injection vulnerability\n"
+            "- [x] Test the fix to ensure it properly addresses the vulnerability\n"
+            "- [x] Commit the changes with a descriptive message\n"
+            "- [x] Push the changes and provide a PR link\n\n"
+            "### Identified Vulnerability\n\n"
+            "I found the NoSQL injection vulnerability in the `nosql_injection` function in `views.py` (lines 113-193). "
+            "The issue was in line 176 where user-supplied parameters were directly used in the MongoDB query: "
+            "`result = db['user'].find(query_params)`.\n\n"
+            "The code processed MongoDB operators in query parameters without proper validation, allowing attackers to inject "
+            "malicious MongoDB operators like `$ne`, `$regex`, and `$in` to bypass authentication and extract sensitive data.\n\n"
+            "### Fix Implemented\n\n"
+            "I've implemented a fix with the following security improvements:\n\n"
+            "1. **Input Validation**: Reject any parameters containing MongoDB operators ($) or special characters\n"
+            "2. **Field Whitelisting**: Only allow specific field names (username, name, surname, email)\n"
+            "3. **Parameter Sanitization**: Prevent operator injection by using strict equality matching only\n"
+            "4. **Educational Enhancement**: Display both original and secure queries for learning purposes\n\n"
+            "### Security Analysis\n\n"
+            "The fix effectively prevents all the NoSQL injection attack vectors mentioned in the template:\n"
+            "- `?username[$ne]=admin&password[$ne]=none` - Filtered out (contains operators)\n"
+            "- `?username=admin&password[$regex]=^s` - Filtered out (contains operators)\n"
+            "- `?username[$in][]=admin&username[$in][]=john` - Filtered out (contains array notation)\n"
+            "- `?password[$exists]=true` - Filtered out (contains operators)\n\n"
+            "### PR Link"
+        )
 
         # Mock comment data
         mock_comments = [{
@@ -708,10 +760,11 @@ class TestExternalCodingAgent(unittest.TestCase):
         # Execute
         result = agent._process_external_coding_agent_run(
             issue_number=issue_number,
+            issue_title="Test Issue Title",
             remediation_id=remediation_id,
             vulnerability_label=vulnerability_label,
             remediation_label=remediation_label,
-            is_existing_issue= False,
+            is_existing_issue=False,
             max_attempts=3,
             sleep_seconds=0.01
         )
@@ -744,7 +797,7 @@ class TestExternalCodingAgent(unittest.TestCase):
         mock_sleep.assert_called_once_with(0.01)
 
         # Log messages
-        mock_log.assert_any_call(f"Successfully created PR #123 for Claude Code fix")
+        mock_log.assert_any_call("Successfully created PR #123 for Claude Code fix")
 
     @patch('src.github.external_coding_agent.error_exit')
     @patch('src.git_handler.get_claude_workflow_run_id')
@@ -753,9 +806,10 @@ class TestExternalCodingAgent(unittest.TestCase):
     @patch('src.github.external_coding_agent.time.sleep')
     @patch('src.github.external_coding_agent.debug_log')
     @patch('src.github.external_coding_agent.log')
-    def test_process_external_coding_agent_claude_code_workflow_fails(self, mock_log, mock_debug_log, mock_sleep,
-                                                                 mock_get_comments, mock_watch_action, mock_get_workflow_id,
-                                                                 mock_error_exit):
+    def test_process_external_coding_agent_claude_code_workflow_fails(
+            self, mock_log, mock_debug_log, mock_sleep,
+            mock_get_comments, mock_watch_action, mock_get_workflow_id,
+            mock_error_exit):
         """Test _process_external_coding_agent_run with Claude Code when workflow fails"""
         # Setup
         self.config.CODING_AGENT = "CLAUDE_CODE"
@@ -790,14 +844,15 @@ class TestExternalCodingAgent(unittest.TestCase):
         # Execute - since error_exit is called, this should raise SystemExit
         with self.assertRaises(SystemExit):
             result = agent._process_external_coding_agent_run(
-            issue_number=issue_number,
-            remediation_id=remediation_id,
-            vulnerability_label=vulnerability_label,
-            remediation_label=remediation_label,
-            is_existing_issue= False,
-            max_attempts=3,
-            sleep_seconds=0.01
-        )
+                issue_number=issue_number,
+                issue_title="Test Issue Title",
+                remediation_id=remediation_id,
+                vulnerability_label=vulnerability_label,
+                remediation_label=remediation_label,
+                is_existing_issue=False,
+                max_attempts=3,
+                sleep_seconds=0.01
+            )
 
         # Assert
         self.assertIsNone(result)
@@ -812,9 +867,10 @@ class TestExternalCodingAgent(unittest.TestCase):
     @patch('src.github.external_coding_agent.time.sleep')
     @patch('src.github.external_coding_agent.debug_log')
     @patch('src.github.external_coding_agent.log')
-    def test_process_external_coding_agent_claude_code_no_comments(self, mock_log, mock_debug_log, mock_sleep,
-                                                                   mock_get_comments, mock_watch_action,
-                                                              mock_get_workflow_id, mock_error_exit):
+    def test_process_external_coding_agent_claude_code_no_comments(
+            self, mock_log, mock_debug_log, mock_sleep,
+            mock_get_comments, mock_watch_action,
+            mock_get_workflow_id, mock_error_exit):
         """Test _process_external_coding_agent_run with Claude Code when no comments found"""
         # Setup
         self.config.CODING_AGENT = "CLAUDE_CODE"
@@ -852,14 +908,15 @@ class TestExternalCodingAgent(unittest.TestCase):
         # Execute - since error_exit is called, this should raise SystemExit
         with self.assertRaises(SystemExit):
             result = agent._process_external_coding_agent_run(
-            issue_number=issue_number,
-            remediation_id=remediation_id,
-            vulnerability_label=vulnerability_label,
-            remediation_label=remediation_label,
-            is_existing_issue= False,
-            max_attempts=3,
-            sleep_seconds=0.01
-        )
+                issue_number=issue_number,
+                issue_title="Test Issue Title",
+                remediation_id=remediation_id,
+                vulnerability_label=vulnerability_label,
+                remediation_label=remediation_label,
+                is_existing_issue=False,
+                max_attempts=3,
+                sleep_seconds=0.01
+            )
 
         # Assert
         self.assertIsNone(result)
@@ -874,9 +931,10 @@ class TestExternalCodingAgent(unittest.TestCase):
     @patch('src.git_handler.get_issue_comments')
     @patch('src.github.external_coding_agent.time.sleep')
     @patch('src.github.external_coding_agent.debug_log')
-    def test_process_external_coding_agent_claude_code_invalid_comment(self, mock_debug_log, mock_sleep,
-                                                                  mock_get_comments, mock_watch_action,
-                                                                  mock_get_workflow_id, mock_error_exit):
+    def test_process_external_coding_agent_claude_code_invalid_comment(
+            self, mock_debug_log, mock_sleep,
+            mock_get_comments, mock_watch_action,
+            mock_get_workflow_id, mock_error_exit):
         """Test _process_external_coding_agent_run with Claude Code when comment doesn't contain PR info"""
         # Setup
         self.config.CODING_AGENT = "CLAUDE_CODE"
@@ -905,10 +963,11 @@ class TestExternalCodingAgent(unittest.TestCase):
         # Execute
         result = agent._process_external_coding_agent_run(
             issue_number=issue_number,
+            issue_title="Test Issue Title",
             remediation_id=remediation_id,
             vulnerability_label=vulnerability_label,
             remediation_label=remediation_label,
-            is_existing_issue= False,
+            is_existing_issue=False,
             max_attempts=3,
             sleep_seconds=0.01
         )
@@ -925,10 +984,11 @@ class TestExternalCodingAgent(unittest.TestCase):
     @patch('src.git_handler.create_claude_pr')
     @patch('src.github.external_coding_agent.time.sleep')
     @patch('src.github.external_coding_agent.log')
-    def test_process_external_coding_agent_claude_code_pr_creation_fails(self, mock_log, mock_sleep,
-                                                                    mock_create_claude_pr, mock_get_comments,
-                                                                    mock_watch_action, mock_get_workflow_id,
-                                                                    mock_error_exit):
+    def test_process_external_coding_agent_claude_code_pr_creation_fails(
+            self, mock_log, mock_sleep,
+            mock_create_claude_pr, mock_get_comments,
+            mock_watch_action, mock_get_workflow_id,
+            mock_error_exit):
         """Test _process_external_coding_agent_run with Claude Code when PR creation fails"""
         # Setup
         self.config.CODING_AGENT = "CLAUDE_CODE"
@@ -945,7 +1005,19 @@ class TestExternalCodingAgent(unittest.TestCase):
         mock_watch_action.return_value = True
 
         # Sample comment body from Claude
-        comment_body = """**Claude finished @dougj-smartfix[bot]'s task** —— [View job](https://github.com/dougj-contrast/django_vuln/actions/runs/17776654036) • [`claude/issue-95-20250916-1922`](https://github.com/dougj-contrast/django_vuln/tree/claude/issue-95-20250916-1922) • [Create PR ➔](https://github.com/dougj-contrast/django_vuln/compare/main...claude/issue-95-20250916-1922?quick_pull=1&title=fix%3A%20Prevent%20NoSQL%20injection%20in%20nosql_injection%20endpoint&body=This%20PR%20fixes%20a%20NoSQL%20injection%20vulnerability%20in%20the%20nosql_injection%20view%20by%3A%0A%0A1.%20Validating%20and%20sanitizing%20user%20input%0A2.%20Rejecting%20parameters%20with%20MongoDB%20operators%0A3.%20Using%20a%20whitelist%20approach%20for%20allowed%20field%20names%0A4.%20Implementing%20strict%20parameter%20sanitization%0A%0AResolves%20%2395%0A%0AGenerated%20with%20%5BClaude%20Code%5D(https%3A%2F%2Fclaude.ai%2Fcode))"""
+        comment_body = (
+            "**Claude finished @dougj-smartfix[bot]'s task** —— "
+            "[View job](https://github.com/dougj-contrast/django_vuln/actions/runs/17776654036) • "
+            "[`claude/issue-95-20250916-1922`](https://github.com/dougj-contrast/django_vuln/tree/claude/issue-95-20250916-1922) • "
+            "[Create PR ➔](https://github.com/dougj-contrast/django_vuln/compare/main...claude/issue-95-20250916-1922?"
+            "quick_pull=1&title=fix%3A%20Prevent%20NoSQL%20injection%20in%20nosql_injection%20endpoint&"
+            "body=This%20PR%20fixes%20a%20NoSQL%20injection%20vulnerability%20in%20the%20nosql_injection%20view%20by%3A%0A%0A"
+            "1.%20Validating%20and%20sanitizing%20user%20input%0A"
+            "2.%20Rejecting%20parameters%20with%20MongoDB%20operators%0A"
+            "3.%20Using%20a%20whitelist%20approach%20for%20allowed%20field%20names%0A"
+            "4.%20Implementing%20strict%20parameter%20sanitization%0A%0A"
+            "Resolves%20%2395%0A%0AGenerated%20with%20%5BClaude%20Code%5D(https%3A%2F%2Fclaude.ai%2Fcode))"
+        )
 
         # Mock comment data
         mock_comments = [{
@@ -970,14 +1042,15 @@ class TestExternalCodingAgent(unittest.TestCase):
         # Execute - since error_exit is called, this should raise SystemExit
         with self.assertRaises(SystemExit):
             result = agent._process_external_coding_agent_run(
-            issue_number=issue_number,
-            remediation_id=remediation_id,
-            vulnerability_label=vulnerability_label,
-            remediation_label=remediation_label,
-            is_existing_issue= False,
-            max_attempts=3,
-            sleep_seconds=0.01
-        )
+                issue_number=issue_number,
+                issue_title="Test Issue Title",
+                remediation_id=remediation_id,
+                vulnerability_label=vulnerability_label,
+                remediation_label=remediation_label,
+                is_existing_issue=False,
+                max_attempts=3,
+                sleep_seconds=0.01
+            )
 
         # Assert
         self.assertIsNone(result)
@@ -986,7 +1059,6 @@ class TestExternalCodingAgent(unittest.TestCase):
         mock_create_claude_pr.assert_called()
         mock_log.assert_any_call("Failed to create PR for Claude Code fix", is_error=True)
         # Not asserting on mock_sleep since it might be called in a loop
-
 
     @patch('src.github.external_coding_agent.debug_log')
     def test_process_claude_comment_body(self, mock_debug_log):
@@ -997,7 +1069,19 @@ class TestExternalCodingAgent(unittest.TestCase):
         remediation_id = "1REM-FAKE-ABCD"
 
         # Sample comment body from Claude with parentheses in PR body
-        comment_body = """**Claude finished @dougj-smartfix[bot]'s task** —— [View job](https://github.com/dougj-contrast/django_vuln/actions/runs/17865365571) • [`claude/issue-103-20250919-1726`](https://github.com/dougj-contrast/django_vuln/tree/claude/issue-103-20250919-1726) • [Create PR ➔](https://github.com/dougj-contrast/django_vuln/compare/main...claude/issue-103-20250919-1726?quick_pull=1&title=fix%3A%20NoSQL%20Injection%20vulnerability%20in%20nosql_injection%20endpoint&body=This%20PR%20fixes%20the%20NoSQL%20injection%20vulnerability%20identified%20by%20Contrast%20Security%20(ID%3A%2096ZY-WRVY-LCJ6-M31C).%0A%0A**Changes%3A**%0A-%20Replaced%20vulnerable%20implementation%20that%20allowed%20MongoDB%20operators%20in%20query%20parameters%0A-%20Added%20proper%20sanitization%20that%20rejects%20parameter%20names%20with%20'%24'%20and%20'.'%20characters%0A-%20Modified%20template%20to%20explain%20the%20security%20implementation%0A%0ACloses%20%23103%0A%0AGenerated%20with%20%5BClaude%20Code%5D(https%3A%2F%2Fclaude.ai%2Fcode))"""
+        comment_body = (
+            "**Claude finished @dougj-smartfix[bot]'s task** —— "
+            "[View job](https://github.com/dougj-contrast/django_vuln/actions/runs/17865365571) • "
+            "[`claude/issue-103-20250919-1726`](https://github.com/dougj-contrast/django_vuln/tree/claude/issue-103-20250919-1726) • "
+            "[Create PR ➔](https://github.com/dougj-contrast/django_vuln/compare/main...claude/issue-103-20250919-1726?"
+            "quick_pull=1&title=fix%3A%20NoSQL%20Injection%20vulnerability%20in%20nosql_injection%20endpoint&"
+            "body=This%20PR%20fixes%20the%20NoSQL%20injection%20vulnerability%20identified%20by%20Contrast%20Security%20(ID%3A%2096ZY-WRVY-LCJ6-M31C).%0A%0A"
+            "**Changes%3A**%0A"
+            "-%20Replaced%20vulnerable%20implementation%20that%20allowed%20MongoDB%20operators%20in%20query%20parameters%0A"
+            "-%20Added%20proper%20sanitization%20that%20rejects%20parameter%20names%20with%20'%24'%20and%20'.'%20characters%0A"
+            "-%20Modified%20template%20to%20explain%20the%20security%20implementation%0A%0A"
+            "Closes%20%23103%0A%0AGenerated%20with%20%5BClaude%20Code%5D(https%3A%2F%2Fclaude.ai%2Fcode))"
+        )
 
         # Create agent and call the method
         agent = ExternalCodingAgent(self.config)
@@ -1018,8 +1102,8 @@ class TestExternalCodingAgent(unittest.TestCase):
 
         # Also ensure this method can extract branch from URL if backtick approach fails
         with patch('re.search', side_effect=[None,
-                                            re.search(r'/compare/[^.]+\.\.\.([^?)\s]+)',
-                                            'https://github.com/dougj-contrast/django_vuln/compare/main...claude/issue-103-20250919-1726?quick_pull=1')]):
+                                             re.search(r'/compare/[^.]+\.\.\.([^?)\s]+)',
+                                                       'https://github.com/dougj-contrast/django_vuln/compare/main...claude/issue-103-20250919-1726?quick_pull=1')]):
             result2 = agent._process_claude_comment_body(comment_body, remediation_id, issue_number)
             self.assertEqual(result2["head_branch_from_url"], "claude/issue-103-20250919-1726")
 

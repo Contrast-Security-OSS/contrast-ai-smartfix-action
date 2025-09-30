@@ -759,7 +759,7 @@ def reset_issue(issue_number: int, remediation_label: str) -> bool:
         return False
 
 
-def find_open_pr_for_issue(issue_number: int) -> dict:
+def find_open_pr_for_issue(issue_number: int, issue_title: str) -> dict:
     """
     Finds an open pull request associated with the given issue number.
     Specifically looks for PRs with branch names matching the pattern 'copilot/fix-{issue_number}'
@@ -805,8 +805,21 @@ def find_open_pr_for_issue(issue_number: int) -> dict:
             pr_list_output = run_command(claude_pr_list_command, env=gh_env, check=False)
 
             if not pr_list_output or pr_list_output.strip() == "[]":
-                debug_log(f"No open PRs found for issue #{issue_number} with either Copilot or Claude branch pattern")
-                return None
+                copilot_issue_title_search_pattern = f"in:title \"[WIP] {issue_title}\""
+                copilot_issue_title_list_command = [
+                    "gh", "pr", "list",
+                    "--repo", config.GITHUB_REPOSITORY,
+                    "--state", "open",
+                    "--search", copilot_issue_title_search_pattern,
+                    "--limit", "1",
+                    "--json", "number,url,title,headRefName,baseRefName,state"
+                ]
+
+                pr_list_output = run_command(copilot_issue_title_list_command, env=gh_env, check=False)
+
+                if not pr_list_output or pr_list_output.strip() == "[]":
+                    debug_log(f"No open PRs found for issue #{issue_number} with either Copilot or Claude branch pattern")
+                    return None
 
         prs_data = json.loads(pr_list_output)
 
@@ -926,7 +939,7 @@ def get_issue_comments(issue_number: int, author: str = None) -> List[dict]:
     Returns:
         List[dict]: A list of comment data dictionaries or empty list if no comments or error
     """
-    author_log = f"and author: {author}" if author  else ""
+    author_log = f"and author: {author}" if author else ""
     debug_log(f"Getting comments for issue #{issue_number} {author_log}")
     gh_env = get_gh_env()
     author_filter = f"| map(select(.author.login == \"{author}\")) " if author else ""
@@ -1098,7 +1111,11 @@ def get_claude_workflow_run_id() -> int:
     debug_log("Getting in-progress Claude workflow run ID")
 
     gh_env = get_gh_env()
-    jq_filter = 'map(select(.event == "issues" or .event == "issue_comment") | select(.status == "in_progress") | select(.conclusion != "skipped")) | sort_by(.createdAt) | reverse | .[0]'
+    jq_filter = (
+        'map(select(.event == "issues" or .event == "issue_comment") | '
+        'select(.status == "in_progress") | select(.conclusion != "skipped")) | '
+        'sort_by(.createdAt) | reverse | .[0]'
+    )
     workflow_command = [
         "gh", "run", "list",
         "--repo", config.GITHUB_REPOSITORY,
