@@ -22,9 +22,12 @@ When the `@claude` handle is mentioned in the title of a SmartFix-created GitHub
 
 * **Contrast Assess:** You need an active Contrast Assess deployment identifying vulnerabilities in your application.
 * **GitHub:** Your project must be hosted on GitHub and use GitHub Actions.  In the GitHub repository's Settings, enable the Actions > General > Workflow Permissions checkbox for "Allow GitHub Actions to create and approve pull requests".
-* **Claude Code Requirements:**
-  * GitHub repository with **Issues** and **GitHub Copilot** enabled
-  * GitHub Personal Access Token (PAT) with:
+* **Claude Code Requirements:** 
+    * Follow the Claude setup docs: [Claude Code GitHub Actions](https://docs.claude.com/en/docs/claude-code/github-actions#setup)
+    * Install the [Claude Code GitHub App](https://github.com/apps/claude) on your GitHub repository.
+    * Copy the [claude.yml](https://github.com/anthropics/claude-code-action/blob/main/examples/claude.yml) workflow file example into your GitHub repository
+* GitHub repository with **Issues** enabled
+* GitHub Personal Access Token (PAT) with:
     * `meta` (read permissions)
     * `actions` (read permissions)
     * `pulls` (read-write permissions)
@@ -68,6 +71,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     steps:
       # When using Claude Code, it is unnecessary to authenticate with an LLM API from this step.
+      # You must authenticate with your LLM provider in the claude.yml workflow file instead.
 
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -106,6 +110,7 @@ jobs:
         uses: Contrast-Security-OSS/contrast-ai-smartfix-action@v1 # Replace with the latest version
         with:
           run_task: merge
+          coding_agent: 'CLAUDE_CODE'
           # --- GitHub Token ---
           github_token: ${{ secrets.PAT_TOKEN }}
           # --- Contrast API Credentials ---
@@ -131,6 +136,7 @@ jobs:
         uses: Contrast-Security-OSS/contrast-ai-smartfix-action@v1 # Replace with the latest version
         with:
           run_task: closed
+          coding_agent: 'CLAUDE_CODE'
           # --- GitHub Token ---
           github_token: ${{ secrets.PAT_TOKEN }}
           # --- Contrast API Credentials ---
@@ -193,7 +199,7 @@ SmartFix focuses on remediating:
 
 ## Configuration Inputs
 
-The following are key inputs for the SmartFix GitHub Action using the GitHub Copilot coding agent. Refer to the `action.yml` in the SmartFix GitHub Action repository for a complete list and default values.
+The following are key inputs for the SmartFix GitHub Action using the GitHub Claude code coding agent. Refer to the `action.yml` in the SmartFix GitHub Action repository for a complete list and default values.
 
 | Input | Description | Required | Default |
 | :---- | :---- | :---- | :---- |
