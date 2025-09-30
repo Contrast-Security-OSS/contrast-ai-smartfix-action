@@ -248,7 +248,7 @@ class TestGitHandler(unittest.TestCase):
         _ = get_config(testing=True)
 
         # Execute
-        result = git_handler.reset_issue(issue_number, remediation_label)
+        result = git_handler.reset_issue(issue_number, "Test Issue Title", remediation_label)
 
         # Assert
         mock_check_issues.assert_called_once()
@@ -275,7 +275,7 @@ class TestGitHandler(unittest.TestCase):
         _ = get_config(testing=True)
 
         # Execute
-        result = git_handler.reset_issue(issue_number, remediation_label)
+        result = git_handler.reset_issue(issue_number, "Test Issue Title", remediation_label)
 
         # Assert
         mock_check_issues.assert_called_once()
@@ -302,10 +302,10 @@ class TestGitHandler(unittest.TestCase):
         _ = get_config(testing=True)
 
         # Execute
-        result = git_handler.reset_issue(issue_number, remediation_label)
+        result = git_handler.reset_issue(issue_number, "Test Issue Title", remediation_label)
 
         # Assert
-        mock_find_open_pr.assert_called_once_with(issue_number)
+        mock_find_open_pr.assert_called_once_with(issue_number, "Test Issue Title")
         self.assertFalse(result)
         mock_log.assert_any_call(
             "Cannot reset issue #42 because it has an open PR #123: https://github.com/mock/repo/pull/123",
@@ -347,7 +347,7 @@ class TestGitHandler(unittest.TestCase):
         mock_ensure_label.return_value = True
 
         # Execute
-        result = git_handler.reset_issue(issue_number, remediation_label)
+        result = git_handler.reset_issue(issue_number, "Test Issue Title", remediation_label)
 
         # Assert
         mock_check_issues.assert_called_once()
@@ -407,7 +407,7 @@ class TestGitHandler(unittest.TestCase):
         mock_ensure_label.return_value = True
 
         # Execute
-        result = git_handler.reset_issue(issue_number, remediation_label)
+        result = git_handler.reset_issue(issue_number, "Test Issue Title", remediation_label)
 
         # Assert
         mock_check_issues.assert_called_once()
@@ -941,7 +941,7 @@ class TestGitHandler(unittest.TestCase):
         _ = get_config(testing=True)
 
         # Execute
-        result = git_handler.reset_issue(issue_number, remediation_label)
+        result = git_handler.reset_issue(issue_number, "Test Issue Title", remediation_label)
 
         # Assert
         self.assertFalse(result)

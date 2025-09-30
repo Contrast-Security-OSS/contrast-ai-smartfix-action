@@ -254,7 +254,7 @@ class TestExternalCodingAgent(unittest.TestCase):
         mock_debug_log.assert_any_call("Found existing GitHub issue #42 with label contrast-vuln-id:VULN-1234-FAKE-ABCD")
 
         # Verify reset_issue was called
-        mock_reset_issue.assert_called_once_with(42, "smartfix-id:1REM-FAKE-ABCD")
+        mock_reset_issue.assert_called_once_with(42, "Fake Vulnerability Title", "smartfix-id:1REM-FAKE-ABCD")
 
     @patch('src.git_handler.check_issues_enabled')
     @patch('src.git_handler.find_issue_with_label')

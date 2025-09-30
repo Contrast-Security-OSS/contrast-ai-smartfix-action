@@ -183,7 +183,7 @@ Please review this security vulnerability and implement appropriate fixes to add
                 error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
         else:
             debug_log(f"Found existing GitHub issue #{issue_number} with label {vulnerability_label}")
-            if not git_handler.reset_issue(issue_number, remediation_label):
+            if not git_handler.reset_issue(issue_number, issue_title, remediation_label):
                 log(f"Failed to reset issue #{issue_number} with labels {vulnerability_label}, {remediation_label}", is_error=True)
                 error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
             is_existing_issue = True

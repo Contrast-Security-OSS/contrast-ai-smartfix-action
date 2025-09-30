@@ -625,7 +625,7 @@ def find_issue_with_label(label: str) -> int:
         return None
 
 
-def reset_issue(issue_number: int, remediation_label: str) -> bool:
+def reset_issue(issue_number: int, issue_title: str, remediation_label: str) -> bool:
     """
     Resets a GitHub issue by:
     1. Removing all existing labels that start with "smartfix-id:"
@@ -650,7 +650,7 @@ def reset_issue(issue_number: int, remediation_label: str) -> bool:
         return False
 
     # First check if there's an open PR for this issue
-    open_pr = find_open_pr_for_issue(issue_number)
+    open_pr = find_open_pr_for_issue(issue_number, issue_title)
     if open_pr:
         pr_number = open_pr.get("number")
         pr_url = open_pr.get("url")
