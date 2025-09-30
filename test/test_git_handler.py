@@ -21,7 +21,7 @@
 import sys
 import unittest
 import unittest.mock
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import patch, MagicMock
 import os
 import json
 
@@ -248,7 +248,7 @@ class TestGitHandler(unittest.TestCase):
         _ = get_config(testing=True)
 
         # Execute
-        result = git_handler.reset_issue(issue_number, remediation_label)
+        result = git_handler.reset_issue(issue_number, "Test Issue Title", remediation_label)
 
         # Assert
         mock_check_issues.assert_called_once()
@@ -275,7 +275,7 @@ class TestGitHandler(unittest.TestCase):
         _ = get_config(testing=True)
 
         # Execute
-        result = git_handler.reset_issue(issue_number, remediation_label)
+        result = git_handler.reset_issue(issue_number, "Test Issue Title", remediation_label)
 
         # Assert
         mock_check_issues.assert_called_once()
@@ -302,10 +302,10 @@ class TestGitHandler(unittest.TestCase):
         _ = get_config(testing=True)
 
         # Execute
-        result = git_handler.reset_issue(issue_number, remediation_label)
+        result = git_handler.reset_issue(issue_number, "Test Issue Title", remediation_label)
 
         # Assert
-        mock_find_open_pr.assert_called_once_with(issue_number)
+        mock_find_open_pr.assert_called_once_with(issue_number, "Test Issue Title")
         self.assertFalse(result)
         mock_log.assert_any_call(
             "Cannot reset issue #42 because it has an open PR #123: https://github.com/mock/repo/pull/123",
@@ -347,7 +347,7 @@ class TestGitHandler(unittest.TestCase):
         mock_ensure_label.return_value = True
 
         # Execute
-        result = git_handler.reset_issue(issue_number, remediation_label)
+        result = git_handler.reset_issue(issue_number, "Test Issue Title", remediation_label)
 
         # Assert
         mock_check_issues.assert_called_once()
@@ -407,7 +407,7 @@ class TestGitHandler(unittest.TestCase):
         mock_ensure_label.return_value = True
 
         # Execute
-        result = git_handler.reset_issue(issue_number, remediation_label)
+        result = git_handler.reset_issue(issue_number, "Test Issue Title", remediation_label)
 
         # Assert
         mock_check_issues.assert_called_once()
@@ -440,7 +440,7 @@ class TestGitHandler(unittest.TestCase):
         _ = get_config(testing=True)
 
         # Execute
-        result = git_handler.find_open_pr_for_issue(issue_number)
+        result = git_handler.find_open_pr_for_issue(issue_number, "Test Issue Title")
 
         # Assert
         self.assertEqual(result, pr_data[0])
@@ -461,13 +461,13 @@ class TestGitHandler(unittest.TestCase):
         _ = get_config(testing=True)
 
         # Execute
-        result = git_handler.find_open_pr_for_issue(issue_number)
+        result = git_handler.find_open_pr_for_issue(issue_number, "Test Issue Title")
 
         # Assert
         self.assertIsNone(result)
-        # The modified find_open_pr_for_issue function now makes up to 2 calls to run_command
-        # First for Copilot branch pattern, and second for Claude branch pattern if the first one fails
-        self.assertLessEqual(mock_run_command.call_count, 2)
+        # The modified find_open_pr_for_issue function now makes up to 3 calls to run_command
+        # First for Copilot branch pattern, second for Claude branch pattern, and third for Copilot title pattern if the first two fail
+        self.assertLessEqual(mock_run_command.call_count, 3)
         mock_debug_log.assert_any_call("Searching for open PR related to issue #42")
         mock_debug_log.assert_any_call("No open PRs found for issue #42 with either Copilot or Claude branch pattern")
 
@@ -484,7 +484,7 @@ class TestGitHandler(unittest.TestCase):
         _ = get_config(testing=True)
 
         # Execute
-        result = git_handler.find_open_pr_for_issue(issue_number)
+        result = git_handler.find_open_pr_for_issue(issue_number, "Test Issue Title")
 
         # Assert
         self.assertIsNone(result)
@@ -941,7 +941,7 @@ class TestGitHandler(unittest.TestCase):
         _ = get_config(testing=True)
 
         # Execute
-        result = git_handler.reset_issue(issue_number, remediation_label)
+        result = git_handler.reset_issue(issue_number, "Test Issue Title", remediation_label)
 
         # Assert
         self.assertFalse(result)
@@ -966,7 +966,13 @@ class TestGitHandler(unittest.TestCase):
                     "login": "claude"
                 },
                 "authorAssociation": "NONE",
-                "body": "Claude Code is working… <img src=\"https://github.com/user-attachments/assets/5ac382c7-e004-429b-8e35-7feb3e8f9c6f\" width=\"14px\" height=\"14px\" style=\"vertical-align: middle; margin-left: 4px;\" />\n\nI'll analyze this and get back to you.\n\n[View job run](https://github.com/dougj-contrast/django_vuln/actions/runs/17774252155)",
+                "body": (
+                    "Claude Code is working… "
+                    "<img src=\"https://github.com/user-attachments/assets/5ac382c7-e004-429b-8e35-7feb3e8f9c6f\" "
+                    "width=\"14px\" height=\"14px\" style=\"vertical-align: middle; margin-left: 4px;\" />\n\n"
+                    "I'll analyze this and get back to you.\n\n"
+                    "[View job run](https://github.com/dougj-contrast/django_vuln/actions/runs/17774252155)"
+                ),
                 "createdAt": "2025-09-16T17:40:22Z",
                 "id": "IC_kwDOPOy2L87ErgSF",
                 "includesCreatedEdit": False,
@@ -1059,7 +1065,7 @@ class TestGitHandler(unittest.TestCase):
         mock_debug_log.assert_any_call(f"Getting comments for issue #{issue_number} and author: claude")
         # Use assertIn rather than assert_any_call to check for partial match
         # since the actual error message includes JSON exception details
-        log_calls = [call[0][0] for call in mock_log.call_args_list if call[1].get('is_error', False)]
+        log_calls = [call_item[0][0] for call_item in mock_log.call_args_list if call_item[1].get('is_error', False)]
         self.assertTrue(any("Could not parse JSON output from gh issue view:" in msg for msg in log_calls))
         self.assertTrue(any("{invalid json}" in msg for msg in log_calls))
 
@@ -1185,11 +1191,15 @@ class TestGitHandler(unittest.TestCase):
 
         self.assertEqual(command[command.index("--workflow") + 1], "claude.yml")
         self.assertEqual(command[command.index("--json") + 1], "databaseId,status,event,createdAt,conclusion")
-        self.assertEqual(command[command.index("--jq") + 1], 'map(select(.event == "issues" or .event == "issue_comment") | select(.status == "in_progress") | select(.conclusion != "skipped")) | sort_by(.createdAt) | reverse | .[0]')
-
+        expected_jq = (
+            'map(select(.event == "issues" or .event == "issue_comment") | '
+            'select(.status == "in_progress") | select(.conclusion != "skipped")) | '
+            'sort_by(.createdAt) | reverse | .[0]'
+        )
+        self.assertEqual(command[command.index("--jq") + 1], expected_jq)
 
         mock_debug_log.assert_any_call("Getting in-progress Claude workflow run ID")
-        mock_debug_log.assert_any_call(f"Found in-progress Claude workflow run ID: 12345678")
+        mock_debug_log.assert_any_call("Found in-progress Claude workflow run ID: 12345678")
 
     @patch('src.git_handler.run_command')
     @patch('src.git_handler.get_gh_env')
@@ -1233,7 +1243,7 @@ class TestGitHandler(unittest.TestCase):
         mock_run_command.assert_called_once()
 
         # Check that error was logged with correct prefix
-        log_calls = [call[0][0] for call in mock_log.call_args_list if call[1].get('is_error', False)]
+        log_calls = [call_item[0][0] for call_item in mock_log.call_args_list if call_item[1].get('is_error', False)]
         self.assertTrue(any("Could not parse JSON output from gh run list:" in msg for msg in log_calls))
 
     @patch('src.git_handler.run_command')
@@ -1389,7 +1399,7 @@ class TestGitHandler(unittest.TestCase):
         mock_file.write.assert_called_with(expected_truncated_body)
 
         # Verify warning log was created
-        mock_log.assert_any_call(f"PR body is too large (40000 chars). Truncating to 32000 chars.", is_warning=True)
+        mock_log.assert_any_call("PR body is too large (40000 chars). Truncating to 32000 chars.", is_warning=True)
 
     @patch('src.git_handler.run_command')
     @patch('src.git_handler.get_gh_env')
@@ -1434,9 +1444,9 @@ class TestGitHandler(unittest.TestCase):
         # We no longer need this debug print - removing for cleaner test output
 
         # Verify error was logged - checking for partial match
-        call_args_list = [call.args for call in mock_log.call_args_list if call.kwargs.get('is_error', False)]
+        call_args_list = [call_item.args for call_item in mock_log.call_args_list if call_item.kwargs.get('is_error', False)]
         self.assertTrue(any("Error creating Claude PR:" in args[0] for args in call_args_list),
-                      f"Error message not found in calls: {call_args_list}")
+                        f"Error message not found in calls: {call_args_list}")
 
         # Verify cleanup was still attempted
         mock_remove.assert_called_with("/tmp/mock_pr_body.md")
@@ -1474,7 +1484,6 @@ class TestGitHandler(unittest.TestCase):
 
         # Verify run_command was not called
         mock_run_command.assert_not_called()
-
 
     @patch('src.git_handler.run_command')
     @patch('src.git_handler.debug_log')
