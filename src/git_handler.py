@@ -805,7 +805,8 @@ def find_open_pr_for_issue(issue_number: int, issue_title: str) -> dict:
             pr_list_output = run_command(claude_pr_list_command, env=gh_env, check=False)
 
             if not pr_list_output or pr_list_output.strip() == "[]":
-                copilot_issue_title_search_pattern = f"in:title \"[WIP] {issue_title}\""
+                escaped_issue_title = issue_title.replace('"', '\\"')
+                copilot_issue_title_search_pattern = f"in:title \"[WIP] {escaped_issue_title}\""
                 copilot_issue_title_list_command = [
                     "gh", "pr", "list",
                     "--repo", config.GITHUB_REPOSITORY,
@@ -1228,3 +1229,5 @@ def create_claude_pr(title: str, body: str, base_branch: str, head_branch: str) 
                 debug_log(f"Temporary PR body file {temp_file_path} removed.")
             except OSError as e:
                 log(f"Could not remove temporary file {temp_file_path}: {e}", is_error=True)
+
+# %%
