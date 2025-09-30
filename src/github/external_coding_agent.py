@@ -240,9 +240,9 @@ Please review this security vulnerability and implement appropriate fixes to add
             if self.config.CODING_AGENT == CodingAgents.CLAUDE_CODE.name:
                 if is_existing_issue:
                     debug_log(f"Claude is going to reprocess exiting issue #{issue_number}.")
-                    # Let's wait 15 seconds to ensure the claude workflow run has started
+                    # Let's wait 25 seconds to ensure the claude workflow run has started
                     # This should ensure we get the latest comment and workflow run ID
-                    time.sleep(15)
+                    time.sleep(25)
                 pr_info = self._process_claude_workflow_run(issue_number, remediation_id)
             else:
                 # GitHub Copilot agent
