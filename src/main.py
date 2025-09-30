@@ -28,6 +28,7 @@ from asyncio.proactor_events import _ProactorBasePipeTransport
 
 # Import configurations and utilities
 from src.config import get_config
+from src.coding_agents import CodingAgents
 from src.utils import debug_log, log, error_exit
 from src import telemetry_handler
 from src.qa_handler import run_build_command
@@ -39,7 +40,7 @@ from src import contrast_api
 from src import agent_handler
 from src import git_handler
 from src import qa_handler
-from src.external_coding_agent import ExternalCodingAgent
+from src.github.external_coding_agent import ExternalCodingAgent
 
 config = get_config()
 telemetry_handler.initialize_telemetry()
@@ -310,7 +311,7 @@ def main():  # noqa: C901
             break
 
         # --- Fetch Next Vulnerability Data from API ---
-        if config.CODING_AGENT == "SMARTFIX":
+        if config.CODING_AGENT == CodingAgents.SMARTFIX.name:
             # For SMARTFIX, get vulnerability with prompts
             log("\n::group::--- Fetching next vulnerability and prompts from Contrast API ---")
             vulnerability_data = contrast_api.get_vulnerability_with_prompts(
@@ -333,7 +334,7 @@ def main():  # noqa: C901
             qa_system_prompt = vulnerability_data['qaSystemPrompt']
             qa_user_prompt = vulnerability_data['qaUserPrompt']
         else:
-            # For external coding agents (like GITHUB_COPILOT), get vulnerability details
+            # For external coding agents (GITHUB_COPILOT/CLAUDE_CODE), get vulnerability details
             log("\n::group::--- Fetching next vulnerability details from Contrast API ---")
             vulnerability_data = contrast_api.get_vulnerability_details(
                 config.CONTRAST_HOST, config.CONTRAST_ORG_ID, config.CONTRAST_APP_ID,
@@ -382,7 +383,7 @@ def main():  # noqa: C901
         log(f"\n\033[0;33m Selected vuln to fix: {vuln_title} \033[0m")
 
         # --- Check if we need to use the external coding agent ---
-        if config.CODING_AGENT != "SMARTFIX":
+        if config.CODING_AGENT != CodingAgents.SMARTFIX.name:
             external_agent = ExternalCodingAgent(config)
             # Assemble the issue body from vulnerability details
             issue_body = external_agent.assemble_issue_body(vulnerability_data)

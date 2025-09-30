@@ -25,6 +25,7 @@ from typing import List, Optional
 from src.utils import run_command, debug_log, log, error_exit
 from src.contrast_api import FailureCategory
 from src.config import get_config
+from src.coding_agents import CodingAgents
 config = get_config()
 
 
@@ -540,6 +541,10 @@ def create_issue(title: str, body: str, vuln_label: str, remediation_label: str)
             issue_number = int(os.path.basename(issue_url.strip()))
             log(f"Issue number extracted: {issue_number}")
 
+            if config.CODING_AGENT == CodingAgents.CLAUDE_CODE.name:
+                debug_log("Claude code external agent detected no need to edit issue for assignment")
+                return issue_number
+
             # Now try to assign to @copilot separately
             assign_command = [
                 "gh", "issue", "edit",
@@ -620,12 +625,13 @@ def find_issue_with_label(label: str) -> int:
         return None
 
 
-def reset_issue(issue_number: int, remediation_label: str) -> bool:
+def reset_issue(issue_number: int, issue_title: str, remediation_label: str) -> bool:
     """
     Resets a GitHub issue by:
     1. Removing all existing labels that start with "smartfix-id:"
     2. Adding the specified remediation label
-    3. Unassigning the @Copilot user and reassigning the issue to @Copilot
+    3. If coding agent is CoPilot then unassigning the @Copilot user and reassigning the issue to @Copilot
+    4. If coding agent is Claude Code then adding a comment to notify @claude to reprocess the issue
 
     The reset will not occur if there's an open PR for the issue.
 
@@ -644,7 +650,7 @@ def reset_issue(issue_number: int, remediation_label: str) -> bool:
         return False
 
     # First check if there's an open PR for this issue
-    open_pr = find_open_pr_for_issue(issue_number)
+    open_pr = find_open_pr_for_issue(issue_number, issue_title)
     if open_pr:
         pr_number = open_pr.get("number")
         pr_url = open_pr.get("url")
@@ -705,6 +711,23 @@ def reset_issue(issue_number: int, remediation_label: str) -> bool:
         run_command(add_label_command, env=gh_env, check=True)
         log(f"Added new remediation label to issue #{issue_number}")
 
+        # If using CLAUDE_CODE, skip reassignment and tag @claude in comment
+        if config.CODING_AGENT == CodingAgents.CLAUDE_CODE.name:
+            debug_log("Claude code agent detected need to add a comment and tag @claude for reprocessing")
+            # Add a comment to the existing issue to notify @claude to reprocess
+            comment: str = f"@claude reprocess this issue with the new remediation label: `{remediation_label}` and attempt a fix."
+            comment_command = [
+                "gh", "issue", "comment",
+                str(issue_number),
+                "--repo", config.GITHUB_REPOSITORY,
+                "--body", comment
+            ]
+
+            # add a new comment and use the @claude handle to reprocess the issue
+            run_command(comment_command, env=gh_env, check=True)
+            log(f"Added new comment tagging @claude to issue #{issue_number}")
+            return True
+
         # Unassign from @Copilot (if assigned)
         unassign_command = [
             "gh", "issue", "edit",
@@ -736,10 +759,11 @@ def reset_issue(issue_number: int, remediation_label: str) -> bool:
         return False
 
 
-def find_open_pr_for_issue(issue_number: int) -> dict:
+def find_open_pr_for_issue(issue_number: int, issue_title: str) -> dict:
     """
     Finds an open pull request associated with the given issue number.
-    Specifically looks for PRs with branch names matching the pattern 'copilot/fix-{issue_number}'.
+    Specifically looks for PRs with branch names matching the pattern 'copilot/fix-{issue_number}'
+    or 'claude/issue-{issue_number}-'.
 
     Args:
         issue_number: The issue number to find a PR for
@@ -750,8 +774,8 @@ def find_open_pr_for_issue(issue_number: int) -> dict:
     debug_log(f"Searching for open PR related to issue #{issue_number}")
     gh_env = get_gh_env()
 
-    # Use a search pattern that matches PRs with branch names following the 'copilot/fix-{issue_number}' pattern
-    # IDEA: Whenever we start supporting other coding agents the proper branch prefix will need to be passed in
+    # Use search patterns that match PRs with branch names for both Copilot and Claude Code
+    # First try to find PRs with Copilot branch pattern
     search_pattern = f"head:copilot/fix-{issue_number}"
 
     pr_list_command = [
@@ -767,8 +791,36 @@ def find_open_pr_for_issue(issue_number: int) -> dict:
         pr_list_output = run_command(pr_list_command, env=gh_env, check=False)
 
         if not pr_list_output or pr_list_output.strip() == "[]":
-            debug_log(f"No open PRs found for issue #{issue_number}")
-            return None
+            # Try again with claude branch pattern
+            claude_search_pattern = f"head:claude/issue-{issue_number}-"
+            claude_pr_list_command = [
+                "gh", "pr", "list",
+                "--repo", config.GITHUB_REPOSITORY,
+                "--state", "open",
+                "--search", claude_search_pattern,
+                "--limit", "1",
+                "--json", "number,url,title,headRefName,baseRefName,state"
+            ]
+
+            pr_list_output = run_command(claude_pr_list_command, env=gh_env, check=False)
+
+            if not pr_list_output or pr_list_output.strip() == "[]":
+                escaped_issue_title = issue_title.replace('"', '\\"')
+                copilot_issue_title_search_pattern = f"in:title \"[WIP] {escaped_issue_title}\""
+                copilot_issue_title_list_command = [
+                    "gh", "pr", "list",
+                    "--repo", config.GITHUB_REPOSITORY,
+                    "--state", "open",
+                    "--search", copilot_issue_title_search_pattern,
+                    "--limit", "1",
+                    "--json", "number,url,title,headRefName,baseRefName,state"
+                ]
+
+                pr_list_output = run_command(copilot_issue_title_list_command, env=gh_env, check=False)
+
+                if not pr_list_output or pr_list_output.strip() == "[]":
+                    debug_log(f"No open PRs found for issue #{issue_number} with either Copilot or Claude branch pattern")
+                    return None
 
         prs_data = json.loads(pr_list_output)
 
@@ -797,7 +849,8 @@ def find_open_pr_for_issue(issue_number: int) -> dict:
 
 def extract_issue_number_from_branch(branch_name: str) -> Optional[int]:
     """
-    Extracts the GitHub issue number from a branch name with format 'copilot/fix-<issue_number>'.
+    Extracts the GitHub issue number from a branch name with format 'copilot/fix-<issue_number>'
+    or 'claude/issue-<issue_number>-YYYYMMDD-HHMM'.
 
     Args:
         branch_name: The branch name to extract the issue number from
@@ -808,10 +861,14 @@ def extract_issue_number_from_branch(branch_name: str) -> Optional[int]:
     if not branch_name:
         return None
 
-    # Use regex to match the exact pattern: copilot/fix-<number>
-    # This ensures we only match the expected format and extract just the number
-    pattern = r'^copilot/fix-(\d+)$'
-    match = re.match(pattern, branch_name)
+    # Check for copilot branch format: copilot/fix-<number>
+    copilot_pattern = r'^copilot/fix-(\d+)$'
+    match = re.match(copilot_pattern, branch_name)
+
+    if not match:
+        # Check for claude branch format: claude/issue-<number>-YYYYMMDD-HHMM
+        claude_pattern = r'^claude/issue-(\d+)-\d{8}-\d{4}$'
+        match = re.match(claude_pattern, branch_name)
 
     if match:
         try:
@@ -820,8 +877,7 @@ def extract_issue_number_from_branch(branch_name: str) -> Optional[int]:
             if issue_number > 0:
                 return issue_number
         except ValueError:
-            # This shouldn't happen since \d+ only matches digits, but being safe
-            debug_log(f"Failed to convert extracted issue number '{match.group(1)}' to int")
+            debug_log(f"Failed to convert extracted issue number '{match.group(1)}' from copilot or claude branch to int")
             pass
 
     return None
@@ -870,3 +926,306 @@ def add_labels_to_pr(pr_number: int, labels: List[str]) -> bool:
     except Exception as e:
         log(f"Failed to add labels to PR #{pr_number}: {e}", is_error=True)
         return False
+
+
+def get_issue_comments(issue_number: int, author: str = None) -> List[dict]:
+    """
+    Gets comments on a GitHub issue by issue number. Returns latest comments
+    by author (defaults to claude) first  (sorted in reverse chronological order).
+
+    Args:
+        issue_number: The issue number to fetch comments from
+        author: The author username to filter comments by [default: "claude"]
+
+    Returns:
+        List[dict]: A list of comment data dictionaries or empty list if no comments or error
+    """
+    author_log = f"and author: {author}" if author else ""
+    debug_log(f"Getting comments for issue #{issue_number} {author_log}")
+    gh_env = get_gh_env()
+    author_filter = f"| map(select(.author.login == \"{author}\")) " if author else ""
+    jq_filter = f'.comments {author_filter}| sort_by(.createdAt) | reverse'
+
+    issue_comment_command = [
+        "gh", "issue", "view",
+        str(issue_number),
+        "--repo", config.GITHUB_REPOSITORY,
+        "--json", "comments",
+        "--jq", jq_filter
+    ]
+
+    comment_output = None
+    try:
+        comment_output = run_command(issue_comment_command, env=gh_env, check=False)
+
+        if not comment_output or comment_output.strip() == "[]" or comment_output.strip() == "null":
+            debug_log(f"No comments found for issue #{issue_number}")
+            return []
+
+        comments_data = json.loads(comment_output)
+        debug_log(f"Found {len(comments_data)} comments on issue #{issue_number}")
+
+        return comments_data
+    except json.JSONDecodeError as e:
+        log(f"Could not parse JSON output from gh issue view: {e}. Output: {comment_output}", is_error=True)
+        return []
+    except Exception as e:
+        log(f"Error getting comments for issue #{issue_number}: {e}", is_error=True)
+        return []
+
+
+def watch_github_action_run(run_id: int) -> bool:
+    """
+    Watches a GitHub Actions workflow run until it completes.
+    Uses 'gh run watch' to poll the run status with 10-second intervals.
+
+    Args:
+        run_id: The GitHub Actions run ID to watch
+
+    Returns:
+        bool: True if the run completed successfully, False if it failed
+    """
+    log(f"OK. Now watching GitHub action run #{run_id} until completion... This may take several minutes...")
+
+    gh_env = get_gh_env()
+    watch_command = [
+        "gh", "run", "watch",
+        str(run_id),
+        "--repo", config.GITHUB_REPOSITORY,
+        "--compact",
+        "--exit-status",
+        "--interval", "10"
+    ]
+
+    try:
+        # run_command will return the command's output if successful
+        # Since --exit-status is used, the command will exit with status 0 for success, non-zero for failure
+        run_command(watch_command, env=gh_env, check=True)
+        log(f"GitHub action run #{run_id} completed successfully")
+        return True
+    except Exception as e:
+        # If run_command throws an exception, it means the gh command returned a non-zero exit code,
+        # which with --exit-status means the workflow failed
+        log(f"GitHub action run #{run_id} failed with error: {e}", is_error=True)
+        return False
+
+
+def get_latest_branch_by_pattern(pattern: str) -> Optional[str]:
+    """
+    Gets the latest branch matching a specific pattern, ignoring author information.
+
+    This function is particularly useful for finding Claude-generated branches
+    which follow a specific naming pattern regardless of the commit author.
+
+    Args:
+        pattern: The regex pattern to match branch names against
+
+    Returns:
+        Optional[str]: The latest matching branch name or None if no matches found
+    """
+
+    debug_log(f"Finding latest branch matching pattern '{pattern}'")
+
+    # Construct GraphQL query to get branches
+    # Limit to 100 most recent branches, ordered by commit date descending
+    graphql_query = """
+    query($repo_owner: String!, $repo_name: String!) {
+      repository(owner: $repo_owner, name: $repo_name) {
+        refs(refPrefix: "refs/heads/", first: 100, orderBy: {field: TAG_COMMIT_DATE, direction: DESC}) {
+          nodes {
+            name
+            target {
+              ... on Commit {
+                committedDate
+              }
+            }
+          }
+        }
+      }
+    }
+    """
+
+    try:
+        repo_data = config.GITHUB_REPOSITORY.split('/')
+        if len(repo_data) != 2:
+            log(f"Invalid repository format: {config.GITHUB_REPOSITORY}", is_error=True)
+            return None
+
+        repo_owner, repo_name = repo_data
+
+        gh_env = get_gh_env()
+        latest_branch_command = [
+            'gh', 'api', 'graphql',
+            '-f', f'query={graphql_query}',
+            '-f', f'repo_owner={repo_owner}',
+            '-f', f'repo_name={repo_name}'
+        ]
+        result = run_command(latest_branch_command, env=gh_env, check=False)
+
+        if not result:
+            debug_log("Failed to get branches from GitHub GraphQL API")
+            return None
+
+        # Parse JSON response
+        data = json.loads(result)
+        branches = data.get('data', {}).get('repository', {}).get('refs', {}).get('nodes', [])
+
+        # Compile regex pattern
+        pattern_regex = re.compile(pattern)
+
+        # Filter branches by pattern only (ignoring author)
+        matching_branches = []
+        for branch in branches:
+            branch_name = branch.get('name')
+            if not branch_name or not pattern_regex.match(branch_name):
+                continue
+
+            # Always collect the committed date for sorting
+            committed_date = branch.get('target', {}).get('committedDate')
+            if committed_date:
+                matching_branches.append((branch_name, committed_date))
+
+        # Sort by commit date in descending order (newest first)
+        matching_branches.sort(key=lambda x: x[1], reverse=True)
+
+        if matching_branches:
+            latest_branch = matching_branches[0][0]
+            debug_log(f"Found latest matching branch: {latest_branch}")
+            return latest_branch
+        else:
+            debug_log(f"No branches found matching pattern '{pattern}'")
+            return None
+
+    except Exception as e:
+        log(f"Error finding latest branch: {str(e)}", is_error=True)
+        return None
+
+
+def get_claude_workflow_run_id() -> int:
+    """
+    Lists in-progress Claude GitHub workflow runs and returns the workflow run ID.
+    Uses the GitHub CLI to find the most recent in-progress workflow run for claude.yml.
+
+    Returns:
+        int: The workflow run ID if found, or None if no in-progress runs are found
+    """
+    debug_log("Getting in-progress Claude workflow run ID")
+
+    gh_env = get_gh_env()
+    jq_filter = (
+        'map(select(.event == "issues" or .event == "issue_comment") | '
+        'select(.status == "in_progress") | select(.conclusion != "skipped")) | '
+        'sort_by(.createdAt) | reverse | .[0]'
+    )
+    workflow_command = [
+        "gh", "run", "list",
+        "--repo", config.GITHUB_REPOSITORY,
+        "--workflow", "claude.yml",
+        "--limit", "5",
+        "--json", "databaseId,status,event,createdAt,conclusion",
+        "--jq", jq_filter
+    ]
+
+    try:
+        run_output = run_command(workflow_command, env=gh_env, check=True)
+
+        if not run_output or run_output.strip() == "[]":
+            debug_log("No in-progress Claude workflow runs found")
+            return None
+
+        run_data = json.loads(run_output)
+
+        if not run_data:
+            debug_log("No in-progress Claude workflow runs found in JSON response")
+            return None
+
+        # Extract the databaseId from the first (and only) run in the response
+        workflow_run_id = run_data.get("databaseId")
+        event = run_data.get("event")
+        status = run_data.get("status")
+        created_at = run_data.get("createdAt")
+        conclusion = run_data.get("conclusion")
+        debug_log(f"Found workflow run - ID: {workflow_run_id}, Event: {event}, Status: {status}, CreatedAt: {created_at}, conclusion: {conclusion}")
+
+        if workflow_run_id is not None:
+            workflow_run_id = int(workflow_run_id)
+            debug_log(f"Found in-progress Claude workflow run ID: {workflow_run_id}")
+            return workflow_run_id
+        else:
+            debug_log("No databaseId found in workflow run data")
+            return None
+
+    except json.JSONDecodeError as e:
+        log(f"Could not parse JSON output from gh run list: {e}", is_error=True)
+        return None
+    except Exception as e:
+        log(f"Error getting in-progress Claude workflow run ID: {e}", is_error=True)
+        return None
+
+
+def create_claude_pr(title: str, body: str, base_branch: str, head_branch: str) -> str:
+    """
+    Creates a GitHub Pull Request specifically for Claude fixes using the GitHub CLI.
+
+    Args:
+        title: The title of the PR
+        body: The body content of the PR
+        base_branch: The branch to merge into (target branch)
+        head_branch: The branch containing the changes (source branch)
+
+    Returns:
+        str: The URL of the created pull request, or empty string if creation failed
+    """
+    log(f"Creating Claude PR with title: '{title}'")
+    import tempfile
+    import os.path
+
+    # Set a maximum PR body size (GitHub recommends keeping it under 65536 chars)
+    max_pr_body_size = 32000
+
+    # Truncate PR body if too large
+    if len(body) > max_pr_body_size:
+        log(f"PR body is too large ({len(body)} chars). Truncating to {max_pr_body_size} chars.", is_warning=True)
+        body = body[:max_pr_body_size] + "\n\n...[Content truncated due to size limits]..."
+
+    # Create a temporary file to store the PR body
+    with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.md') as temp_file:
+        temp_file_path = temp_file.name
+        temp_file.write(body)
+        debug_log(f"PR body written to temporary file: {temp_file_path}")
+
+    try:
+        # Check file exists and print size for debugging
+        if os.path.exists(temp_file_path):
+            file_size = os.path.getsize(temp_file_path)
+            debug_log(f"Temporary file exists: {temp_file_path}, size: {file_size} bytes")
+        else:
+            log(f"Error: Temporary file {temp_file_path} does not exist", is_error=True)
+            return ""
+
+        gh_env = get_gh_env()
+        pr_command = [
+            "gh", "pr", "create",
+            "--title", title,
+            "--body-file", temp_file_path,
+            "--base", base_branch,
+            "--head", head_branch
+        ]
+
+        # Run the command and capture the output (PR URL)
+        pr_url = run_command(pr_command, env=gh_env, check=True)
+        if pr_url:
+            debug_log(f"Successfully created Claude PR: {pr_url}")
+        return pr_url.strip() if pr_url else ""
+
+    except Exception as e:
+        log(f"Error creating Claude PR: {e}", is_error=True)
+        return ""
+    finally:
+        # Clean up the temporary file
+        if os.path.exists(temp_file_path):
+            try:
+                os.remove(temp_file_path)
+                debug_log(f"Temporary PR body file {temp_file_path} removed.")
+            except OSError as e:
+                log(f"Could not remove temporary file {temp_file_path}: {e}", is_error=True)

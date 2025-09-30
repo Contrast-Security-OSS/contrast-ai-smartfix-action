@@ -22,6 +22,7 @@ import sys
 import json
 from pathlib import Path
 from typing import Optional, Any, Dict, List
+from src.coding_agents import CodingAgents
 
 
 def _log_config_message(message: str, is_error: bool = False, is_warning: bool = False):
@@ -65,7 +66,7 @@ class Config:
 
         # --- AI Agent Configuration ---
         self.CODING_AGENT = self._get_coding_agent()
-        is_smartfix_coding_agent = self.CODING_AGENT == "SMARTFIX"
+        is_smartfix_coding_agent = self.CODING_AGENT == CodingAgents.SMARTFIX.name
 
         default_agent_model = ""
         if is_smartfix_coding_agent:
@@ -165,11 +166,19 @@ class Config:
 
     def _get_coding_agent(self) -> str:
         coding_agent = self._get_env_var("CODING_AGENT", required=False, default="SMARTFIX")
-        valid_agents = ["SMARTFIX", "GITHUB_COPILOT"]
-        if coding_agent.upper() not in valid_agents:
-            _log_config_message(f"Warning: Invalid CODING_AGENT '{coding_agent}'. Must be one of {valid_agents}. Defaulting to 'SMARTFIX'.", is_warning=True)
-            return "SMARTFIX"
-        return coding_agent.upper()
+        try:
+            # Try to convert string to Enum
+            CodingAgents[coding_agent.upper()]
+            return coding_agent.upper()
+        except (KeyError, ValueError):
+            agent_names = [agent.name for agent in CodingAgents]
+            default_name = CodingAgents.SMARTFIX.name
+            _log_config_message(
+                f"Warning: Invalid CODING_AGENT '{coding_agent}'. Must be one of {agent_names}. "
+                f"Defaulting to '{default_name}'.",
+                is_warning=True
+            )
+            return CodingAgents.SMARTFIX.name
 
     def _parse_and_validate_severities(self, json_str: Optional[str]) -> List[str]:
         default_severities = ["CRITICAL", "HIGH"]
