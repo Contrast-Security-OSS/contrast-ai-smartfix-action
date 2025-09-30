@@ -1229,5 +1229,3 @@ def create_claude_pr(title: str, body: str, base_branch: str, head_branch: str) 
                 debug_log(f"Temporary PR body file {temp_file_path} removed.")
             except OSError as e:
                 log(f"Could not remove temporary file {temp_file_path}: {e}", is_error=True)
-
-# %%
