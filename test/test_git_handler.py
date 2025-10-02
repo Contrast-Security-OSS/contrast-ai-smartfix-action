@@ -20,7 +20,7 @@
 
 import unittest
 import unittest.mock
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 import json
 
 # Test setup imports (path is set up by conftest.py)
@@ -338,7 +338,9 @@ class TestGitHandler(unittest.TestCase):
         self.assertEqual(comment_command[0], "gh")
         self.assertEqual(comment_command[1], "issue")
         self.assertEqual(comment_command[2], "comment")
-        self.assertEqual(comment_command[5], str(issue_number))
+        self.assertEqual(comment_command[3], str(issue_number))
+        self.assertEqual(comment_command[4], "--repo")
+        self.assertEqual(comment_command[5], "mock/repo")
 
         # Verify comment body contains '@claude' and the remediation label
         comment_body = comment_command[-1]

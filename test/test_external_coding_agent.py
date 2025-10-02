@@ -18,6 +18,7 @@
 # #L%
 #
 
+import re
 import unittest
 from unittest.mock import patch, MagicMock
 
