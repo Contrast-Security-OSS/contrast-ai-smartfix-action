@@ -18,18 +18,12 @@
 # #L%
 #
 
-import sys
 import unittest
 from unittest.mock import patch, MagicMock
-import os
+import requests
 
-# Add project root to path for imports
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-# Now import project modules (after path modification)
-import requests  # noqa: E402
-from src.config import reset_config, get_config  # noqa: E402
-from src import contrast_api  # noqa: E402
+from src.config import reset_config, get_config
+from src import contrast_api
 
 
 class TestContrastApiFailureCategories(unittest.TestCase):
@@ -40,19 +34,8 @@ class TestContrastApiFailureCategories(unittest.TestCase):
         reset_config()
         self.config = get_config()
 
-        # Mock environment variables
-        self.env_patcher = patch.dict(os.environ, {
-            'CONTRAST_HOST': 'test.contrastsecurity.com',
-            'CONTRAST_ORG_ID': 'test-org-id',
-            'CONTRAST_APP_ID': 'test-app-id',
-            'CONTRAST_AUTHORIZATION_KEY': 'test-auth-key',
-            'CONTRAST_API_KEY': 'test-api-key',
-        })
-        self.env_patcher.start()
-
     def tearDown(self):
         """Clean up after each test"""
-        self.env_patcher.stop()
         reset_config()
 
     def test_failure_category_enum_all_values(self):

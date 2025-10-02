@@ -2,17 +2,12 @@ import io
 import os
 import contextlib
 import unittest
-import sys
 import tempfile
 from unittest.mock import patch, MagicMock
 
-# Add src directory to Python path for proper imports
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from src.config import reset_config, get_config  # noqa: E402
-# Initialize config with testing flag
-_ = get_config(testing=True)
-# Now import main which depends on config
-from src.main import main  # noqa: E402
+# Test setup imports (path is set up by conftest.py)
+from src.config import reset_config
+from src.main import main
 
 
 class TestSmartFixAction(unittest.TestCase):

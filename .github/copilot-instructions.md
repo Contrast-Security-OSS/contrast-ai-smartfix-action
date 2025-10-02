@@ -1,168 +1,88 @@
 # GitHub Copilot Instructions for Contrast AI SmartFix
 
-This document provides guidelines for GitHub Copilot when working on the Contrast AI SmartFix project.
+## FUNDAMENTAL RULE: Test-First Simplicity
 
-## Core Development Principles
+**EVERY change follows this pattern:**
+1. **Write tests FIRST** - Before writing any production code
+2. **Question every requirement** - Is this actually needed? (*Exception: When executing planned refactoring tasks from ai-dev/tasks.md*)
+3. **Delete unnecessary parts** - Remove complexity, don't add it
+4. **Make tests pass** - Simplest implementation that works
+5. **Look around and refactor downstream** - Fix related code that uses your changes
 
-### 1. Code Quality & Linting
-- **All code changes MUST pass linting** - Use flake8 with the project's configuration (`.flake8`)
-- Follow PEP 8 style guidelines strictly
-- Maximum line length: 180 characters (as configured in `.flake8`)
-- Use type hints for all function parameters and return values
-- Ensure proper docstrings for all functions, classes, and modules
+## Working with Planned vs. Unplanned Work
 
-### 2. Testing Requirements
-- **New code MUST have unit tests** - No exceptions for new functionality
-- **Existing code modifications MUST include tests** - When editing existing code, write comprehensive unit tests
-- Use pytest as the testing framework
-- Maintain minimum 80% code coverage for new code
-- Tests should follow the Arrange-Act-Assert pattern
-- Mock external dependencies appropriately (GitHub API, Contrast API, file system operations)
+### Planned Tasks (ai-dev/tasks.md):
+- Follow the task plan - requirements pre-analyzed
+- Test each task's deliverables before implementing
+- Keep implementations simple even if architecture is complex
+- Question implementation details, not the overall plan
 
-### 3. Object-Oriented Design & Domain-Driven Design
-- **New code MUST follow Object-Oriented principles** - Encapsulation, inheritance, polymorphism
-- **Refactor existing procedural code to OOP** - When editing old code, take the opportunity to make it Object-Oriented
-- Apply Domain-Driven Design (DDD) principles to identify and model domain objects:
+### Unplanned Work:
+- Question everything - apply full YAGNI principles
+- Start minimal - build only what's needed right now
+- Delete unused code immediately
 
-#### Domain Objects to Consider:
-- **Vulnerability** - Represents security vulnerabilities with properties like severity, rule, UUID
-- **Remediation** - Encapsulates the process of fixing a vulnerability
-- **BuildResult** - Represents build execution results and status
-- **GitRepository** - Manages git operations and repository state
-- **PullRequest** - Represents GitHub pull request with metadata and operations
-- **Agent** - Abstracts AI agent behavior (FixAgent, QAAgent)
-- **TelemetryEvent** - Structured telemetry data collection
-- **ConfigurationContext** - Environment and configuration management
+## Core Workflow
 
-#### Design Patterns to Use:
-- **Strategy Pattern** - For different coding agents (SmartFix vs External)
-- **Factory Pattern** - For creating agents, configurations, and API clients
-- **Repository Pattern** - For data access (GitHub, Contrast API)
-- **Command Pattern** - For git operations and build commands
-- **Observer Pattern** - For telemetry and logging events
+### Testing (DO THIS FIRST)
+- Write tests before production code - no exceptions
+- Run `./test/run_tests.sh` after every change
+- All tests must pass before moving on
+- Delete tests for deleted features
 
-### 4. Error Handling & Resilience
-- Use custom exception classes that inherit from appropriate base exceptions
-- Implement proper logging at appropriate levels (DEBUG, INFO, WARNING, ERROR)
-- Handle external API failures gracefully with retries where appropriate
-- Validate inputs at boundaries (API responses, user inputs, configuration)
+### Complete Refactoring (Not Partial)
+- When you touch code, look around - what else uses this?
+- Follow the dependency chain - update ALL callers
+- Clean up as you go - remove dead imports, unused variables
 
-### 5. Async/Await Best Practices
-- Use async/await consistently for I/O operations
-- Properly handle asyncio event loops and cleanup
-- Use context managers for resource management
-- Handle cancellation and timeout scenarios
+### Anti-Over-Engineering
+- YAGNI - don't build for imaginary future requirements
+- Question every class/method - can this be a simple function?
+- Delete unused code immediately
+- Favor simple functions over complex class hierarchies
 
-## File Organization & Architecture
+### Red Flags - Stop and Simplify
+- Classes with 1 method → use a function
+- Enums/constants nobody uses → delete them
+- More than 3 levels of abstraction → flatten it
+- Configuration for imaginary features → remove it
 
-### 6. Module Structure
-- Keep modules focused on single responsibilities
-- Use dependency injection instead of global state where possible
-- Separate domain logic from infrastructure concerns
-- Group related functionality into cohesive modules
+## Code Standards
+- All changes must pass flake8 linting
+- Type hints for public interfaces
+- Max line length: 180 characters
+- Fix whitespace: `sed -i '' 's/[[:space:]]*$//' path/to/file.py`
 
-### 7. Configuration Management
-- Centralize configuration in the `Config` class
-- Use environment variables with sensible defaults
-- Validate configuration at startup
-- Support testing configurations
+## File Management - CLEAN UP INTERMEDIATE FILES
+- **Never leave duplicate files** - If you create `file_clean.py`, `file_backup.py`, `file_new.py` while editing, DELETE the extras
+- **Check for duplicates before finishing** - Run `ls -la` to spot files with similar names
+- **One source of truth** - Each logical unit should have exactly one file
+- **Remove failed attempts** - If you mess up editing and start over, delete the corrupted version
+- **Common duplicate patterns to avoid:**
+  - `test_something.py` and `test_something_clean.py`
+  - `module.py` and `module_backup.py`
+  - `config.py` and `config_new.py`
 
-## Security & Performance
+## When Refactoring Existing Code
+1. **Write tests for current behavior first** - Capture existing functionality
+2. **Check for planned migration path** - Is there a tasks.md plan for this area?
+3. **For planned refactoring**: Follow the task sequence and dependencies
+4. **For unplanned refactoring**: Question what can be deleted - Unused code, over-complex abstractions
+5. **Refactor incrementally** - Small, safe changes with tests between each
+6. **Follow the chain** - Update ALL code that depends on your changes
+7. **Clean up afterwards** - Remove dead imports, fix related issues
 
-### 8. Security Considerations
-- Never log sensitive data (API keys, tokens)
-- Sanitize user inputs and API responses
-- Use secure defaults for all configurations
-- Validate file paths to prevent directory traversal
+## Additional Red Flags - Stop and Simplify (Even in Planned Work)
+- **Complex class hierarchies** - Can the implementation be simpler?
+- **More than 3 levels of abstraction** - Flatten the implementation
+- **Circular dependencies** - Break them up during implementation
+- **Classes with 1 method** - Could this be a function instead?
+- **Enums or constants nobody uses** - Delete them even if planned
+- **Configuration for imaginary future features** - Remove it
 
-### 9. Performance Guidelines
-- Use efficient data structures and algorithms
-- Implement proper caching where beneficial
-- Avoid blocking operations in async contexts
-- Monitor memory usage for large operations
-
-## Documentation & Maintenance
-
-### 10. Code Documentation
-- Write clear, concise docstrings for all public methods
-- Include usage examples in docstrings for complex functions
-- Document complex business logic with inline comments
-- Keep README.md updated with architectural changes
-
-### 11. Git & Version Control
-- Use descriptive commit messages following conventional commits
-- Keep commits atomic and focused
-- Write meaningful branch names
-- Update version numbers appropriately
-
-## Testing Patterns
-
-### 12. Test Structure
-```python
-class TestClassName:
-    """Test class for ClassName functionality."""
-    
-    def setup_method(self):
-        """Set up test fixtures before each test method."""
-        pass
-    
-    def test_method_name_should_expected_behavior(self):
-        """Test that method_name produces expected behavior under specific conditions."""
-        # Arrange
-        # Act
-        # Assert
-        pass
-```
-
-### 13. Mock Usage
-- Mock external dependencies (APIs, file system, network)
-- Use `unittest.mock.patch` appropriately
-- Verify mock calls when testing side effects
-- Use `pytest.fixture` for reusable test data
-
-## Legacy Code Refactoring
-
-### 14. When Editing Existing Code
-- **Identify domain objects** - Look for data and behavior that belong together
-- **Extract classes** - Convert function clusters into cohesive classes
-- **Introduce interfaces** - Abstract complex dependencies
-- **Add tests first** - Write tests for existing behavior before refactoring
-- **Refactor incrementally** - Make small, safe changes
-
-### 15. Gradual Modernization
-- Replace global variables with dependency injection
-- Convert procedural code to class-based approaches
-- Introduce type hints to existing functions
-- Add comprehensive error handling
-
-## Example Refactoring Approach
-
-**Before (Procedural):**
-```python
-def process_vulnerability(vuln_data, repo_path, config):
-    # 50+ lines of mixed concerns
-    pass
-```
-
-**After (Object-Oriented):**
-```python
-class VulnerabilityProcessor:
-    def __init__(self, repository: GitRepository, agent_factory: AgentFactory):
-        self._repository = repository
-        self._agent_factory = agent_factory
-    
-    def process(self, vulnerability: Vulnerability) -> RemediationResult:
-        agent = self._agent_factory.create_fix_agent()
-        return agent.remediate(vulnerability, self._repository)
-```
-
-## Continuous Improvement
-
-- Regularly review and update these guidelines
-- Incorporate learnings from code reviews
-- Stay updated with Python and testing best practices
-- Monitor code quality metrics and improve accordingly
-
----
-
-**Remember:** These guidelines ensure maintainable, testable, and robust code that follows industry best practices and domain-driven design principles.
+## Balancing Planning vs. Simplicity
+- **Respect the architecture plan** - Don't change overall structure during task execution
+- **Keep implementations simple** - Complex architecture ≠ complex implementation
+- **Suggest alternatives** - If you see over-engineering opportunities during implementation
+- **Focus on YAGNI for implementation details** - Don't add features not required by the current task
+- **Test thoroughly** - Especially important when following complex architectural plans

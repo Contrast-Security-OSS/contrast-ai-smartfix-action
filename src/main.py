@@ -39,6 +39,10 @@ from src.build_output_analyzer import extract_build_errors
 from src import contrast_api
 from src import agent_handler
 from src import git_handler
+
+# Import domain models
+from src.smartfix.domains.vulnerability.context import PromptConfiguration, BuildConfiguration, RepositoryConfiguration
+from src.smartfix.domains.vulnerability.processor import VulnerabilityProcessor
 from src import qa_handler
 from src.github.external_coding_agent import ExternalCodingAgent
 
@@ -239,15 +243,17 @@ def main():  # noqa: C901
     # --- Version Check ---
     do_version_check()
 
-    # --- Use Build Command and Max Attempts/PRs from Config ---
-    build_command = config.BUILD_COMMAND
-    debug_log(f"Build command specified: {build_command}")
+    # --- Create Configuration Objects ---
+    build_config = BuildConfiguration.from_config(config)
+    repo_config = RepositoryConfiguration.from_config(config)
 
-    formatting_command = config.FORMATTING_COMMAND
-    if formatting_command:
-        debug_log(f"Formatting command specified: {formatting_command}")
-    else:
-        debug_log("FORMATTING_COMMAND not set or empty, formatting will be skipped.")
+    # Create vulnerability processor for domain service operations
+    vulnerability_processor = VulnerabilityProcessor()
+
+    debug_log(f"Build command: {build_config.build_command}")
+    debug_log(f"Formatting command: {build_config.formatting_command}")
+    debug_log(f"Max QA attempts: {config.MAX_QA_ATTEMPTS}")
+    debug_log(f"Repository path: {repo_config.repo_path}")
 
     # Use the validated and normalized settings from config module
     # These values are already processed in config.py with appropriate validation and defaults
@@ -329,10 +335,14 @@ def main():  # noqa: C901
             vuln_uuid = vulnerability_data['vulnerabilityUuid']
             vuln_title = vulnerability_data['vulnerabilityTitle']
             remediation_id = vulnerability_data['remediationId']
-            fix_system_prompt = vulnerability_data['fixSystemPrompt']
-            fix_user_prompt = vulnerability_data['fixUserPrompt']
-            qa_system_prompt = vulnerability_data['qaSystemPrompt']
-            qa_user_prompt = vulnerability_data['qaUserPrompt']
+
+            # Create prompt configuration for SmartFix agent
+            prompts = PromptConfiguration.for_smartfix_agent(
+                fix_system_prompt=vulnerability_data['fixSystemPrompt'],
+                fix_user_prompt=vulnerability_data['fixUserPrompt'],
+                qa_system_prompt=vulnerability_data['qaSystemPrompt'],
+                qa_user_prompt=vulnerability_data['qaUserPrompt']
+            )
         else:
             # For external coding agents (GITHUB_COPILOT/CLAUDE_CODE), get vulnerability details
             log("\n::group::--- Fetching next vulnerability details from Contrast API ---")
@@ -351,11 +361,9 @@ def main():  # noqa: C901
             vuln_uuid = vulnerability_data['vulnerabilityUuid']
             vuln_title = vulnerability_data['vulnerabilityTitle']
             remediation_id = vulnerability_data['remediationId']
-            # No prompts available for external coding agents
-            fix_system_prompt = None
-            fix_user_prompt = None
-            qa_system_prompt = None
-            qa_user_prompt = None
+
+            # Create prompt configuration for external agent (no prompts required)
+            prompts = PromptConfiguration.for_external_agent()
 
         # Populate vulnInfo in telemetry
         telemetry_handler.update_telemetry("vulnInfo.vulnId", vuln_uuid)
@@ -406,7 +414,7 @@ def main():  # noqa: C901
 
         # Ensure the build is not broken before running the fix agent
         log("\n--- Running Build Before Fix ---")
-        prefix_build_success, prefix_build_output = run_build_command(build_command, config.REPO_ROOT, remediation_id)
+        prefix_build_success, prefix_build_output = run_build_command(build_config.build_command, config.REPO_ROOT, remediation_id)
         if not prefix_build_success:
             # Analyze build failure and show error summary
             error_analysis = extract_build_errors(prefix_build_output)
@@ -415,9 +423,19 @@ def main():  # noqa: C901
             error_exit(remediation_id, contrast_api.FailureCategory.INITIAL_BUILD_FAILURE.value)  # Exit if the build is broken, no point in proceeding
 
         # --- Run AI Fix Agent (SmartFix) ---
-        ai_fix_summary_full = agent_handler.run_ai_fix_agent(
-            config.REPO_ROOT, fix_system_prompt, fix_user_prompt, remediation_id
+        # Process vulnerability data using domain service
+        vulnerability = vulnerability_processor.process_api_vulnerability_data(vulnerability_data)
+
+        # Create remediation context using domain service with API-provided ID
+        context = vulnerability_processor.create_remediation_context(
+            remediation_id=remediation_id,
+            vulnerability=vulnerability,
+            prompts=prompts,
+            build_config=build_config,
+            repo_config=repo_config
         )
+
+        ai_fix_summary_full = agent_handler.run_ai_fix_agent(context)
 
         # Check if the fix agent encountered an error
         if ai_fix_summary_full.startswith("Error during AI fix agent execution:"):
@@ -435,17 +453,12 @@ def main():  # noqa: C901
             git_handler.commit_changes(commit_message)
             initial_changed_files = git_handler.get_last_commit_changed_files()
 
-            if not config.SKIP_QA_REVIEW and build_command:
+            if not config.SKIP_QA_REVIEW and build_config.has_build_command():
                 debug_log("Proceeding with QA Review as SKIP_QA_REVIEW is false and BUILD_COMMAND is provided.")
                 build_success, final_changed_files, used_build_command, qa_summary_log = qa_handler.run_qa_loop(
-                    build_command=build_command,
-                    repo_root=config.REPO_ROOT,
+                    context=context,
                     max_qa_attempts=max_qa_attempts_setting,
-                    initial_changed_files=initial_changed_files,
-                    formatting_command=formatting_command,
-                    remediation_id=remediation_id,
-                    qa_system_prompt=qa_system_prompt,
-                    qa_user_prompt=qa_user_prompt
+                    initial_changed_files=initial_changed_files
                 )
 
                 qa_section = "\n\n---\n\n## Review \n\n"
@@ -502,7 +515,7 @@ def main():  # noqa: C901
                 qa_section = ""  # Ensure qa_section is empty if QA is skipped
                 if config.SKIP_QA_REVIEW:
                     log("Skipping QA Review based on SKIP_QA_REVIEW setting.")
-                elif not build_command:
+                elif not build_config.has_build_command():
                     log("Skipping QA Review as no BUILD_COMMAND was provided.")
 
             # --- Create Pull Request ---

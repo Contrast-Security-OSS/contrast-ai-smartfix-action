@@ -39,7 +39,7 @@ if [[ $SKIP_INSTALL -eq 0 ]]; then
     fi
 
     echo "Installing dependencies from $REQUIREMENTS_LOCK..."
-    
+
     # Check if UV is installed
     if ! command -v uv &> /dev/null; then
         echo "Error: UV is not installed. Please install it first:"
@@ -48,13 +48,30 @@ if [[ $SKIP_INSTALL -eq 0 ]]; then
         echo "  curl -sSf https://install.uv.dev | python3 -"
         exit 1
     fi
-    
+
     # Install dependencies (with --system flag to install outside of venv)
     if ! uv pip install --system -r "$REQUIREMENTS_LOCK"; then
         echo "Error installing dependencies" >&2
         exit 1
     fi
 fi
+
+# Set essential environment variables before running tests
+export BASE_BRANCH="main"
+export CONTRAST_HOST="test.contrastsecurity.com"
+export CONTRAST_ORG_ID="test-org-id"
+export CONTRAST_APP_ID="test-app-id"
+export CONTRAST_AUTHORIZATION_KEY="test-auth-key"
+export CONTRAST_API_KEY="test-api-key"
+export GITHUB_TOKEN="mock-github-token"
+export GITHUB_REPOSITORY="mock/repo"
+export GITHUB_EVENT_PATH="/tmp/github_event.json"
+export GITHUB_WORKSPACE="/tmp"
+export REPO_ROOT="/tmp/test_repo"
+export BUILD_COMMAND="echo 'test build command'"
+export FORMATTING_COMMAND="echo 'test format command'"
+export DEBUG_MODE="true"
+export TESTING="true"
 
 # Run tests
 if [[ ${#TEST_FILES[@]} -eq 0 ]]; then

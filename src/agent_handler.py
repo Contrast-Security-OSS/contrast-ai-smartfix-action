@@ -36,6 +36,7 @@ import traceback
 from src.config import get_config
 from src.utils import debug_log, log, error_exit, tail_string
 from src.contrast_api import FailureCategory
+from src.smartfix.domains.vulnerability.context import PromptConfiguration, RepositoryConfiguration, RemediationContext
 import src.telemetry_handler as telemetry_handler
 import datetime  # For timestamps
 
@@ -693,14 +694,14 @@ def _extract_pr_body(agent_summary_str: str) -> str:
         return agent_summary_str
 
 
-def _run_fix_agent_execution(repo_root: Path, processed_user_prompt: str, fix_system_prompt: str, remediation_id: str) -> str:
+def _run_fix_agent_execution(repo_config: RepositoryConfiguration, prompts: PromptConfiguration, remediation_id: str) -> str:
     """Execute the fix agent and return the summary."""
     agent_summary_str = _run_agent_in_event_loop(
         _run_agent_internal_with_prompts,
         'fix',
-        repo_root,
-        processed_user_prompt,
-        fix_system_prompt,
+        repo_config.repo_path,
+        prompts.fix_user_prompt,
+        prompts.fix_system_prompt,
         remediation_id
     )
 
@@ -717,24 +718,21 @@ def _run_fix_agent_execution(repo_root: Path, processed_user_prompt: str, fix_sy
     return agent_summary_str
 
 
-def run_ai_fix_agent(repo_root: Path, fix_system_prompt: str, fix_user_prompt: str, remediation_id: str) -> str:
+def run_ai_fix_agent(context: RemediationContext) -> str:
     """Synchronously runs the AI agent to analyze and apply a fix using API-provided prompts."""
 
-    # Process the fix user prompt to handle placeholders and optional SecurityTest removal
-    processed_user_prompt = process_fix_user_prompt(fix_user_prompt)
-
-    # Use the API-provided prompts instead of hardcoded template
+    # Use the API-provided prompts (processing already handled by PromptConfiguration)
     debug_log("Using API-provided fix prompts")
-    debug_log(f"Fix System Prompt Length: {len(fix_system_prompt)} chars")
-    debug_log(f"Fix User Prompt Length: {len(processed_user_prompt)} chars")
+    debug_log(f"Fix System Prompt Length: {len(context.prompts.fix_system_prompt)} chars")
+    debug_log(f"Fix User Prompt Length: {len(context.prompts.fix_user_prompt)} chars")
 
     log("\n--- Preparing to run AI Agent to Apply Fix ---")
-    debug_log(f"Repo Root for Agent Tools: {repo_root}")
+    debug_log(f"Repo Root for Agent Tools: {context.repo_config.repo_path}")
     debug_log(f"Skip Writing Security Test: {config.SKIP_WRITING_SECURITY_TEST}")
 
     try:
         # Execute the fix agent
-        agent_summary_str = _run_fix_agent_execution(repo_root, processed_user_prompt, fix_system_prompt, remediation_id)
+        agent_summary_str = _run_fix_agent_execution(context.repo_config, context.prompts, context.remediation_id)
 
         # Extract analytics data for telemetry
         _extract_analytics_data(agent_summary_str)
@@ -748,33 +746,35 @@ def run_ai_fix_agent(repo_root: Path, fix_system_prompt: str, fix_user_prompt: s
         if "litellm." in str(e).lower():
             failure_code = FailureCategory.INVALID_LLM_CONFIG.value
         # Cleanup any changes made and revert to base branch (no branch name yet)
-        error_exit(remediation_id, failure_code)
+        error_exit(context.remediation_id, failure_code)
 
 
-def run_qa_agent(build_output: str, changed_files: List[str], build_command: str, repo_root: Path,
-                 remediation_id: str, qa_history: Optional[List[str]] = None,
-                 qa_system_prompt: Optional[str] = None, qa_user_prompt: Optional[str] = None) -> str:
+def run_qa_agent(context: RemediationContext, build_output: str, changed_files: List[str],
+                 qa_history: Optional[List[str]] = None) -> str:
     """
     Synchronously runs the QA AI agent to fix build/test errors using API-provided prompts.
 
     Args:
+        context: RemediationContext containing vulnerability and configuration.
         build_output: The output from the build command.
         changed_files: A list of files that were changed by the fix agent.
-        build_command: The build command that was run.
-        repo_root: The root directory of the repository.
-        formatting_command: The formatting command to use if a formatting error is detected.
-        qa_history: List of summaries from previous QA attempts.
-        qa_system_prompt: The QA system prompt from API (optional, uses template if not provided).
-        qa_user_prompt: The QA user prompt from API (optional, uses template if not provided).
+        qa_history: Optional history of previous QA attempts.
 
     Returns:
-        A tuple containing:
-        - str: The summary message from the agent.
-        - Optional[str]: The command requested by the agent to be run, if any.
+        A summary string of the QA agent's actions.
     """
+    # Check if we have QA prompts available
+    if not context.prompts or not context.prompts.has_qa_prompts():
+        log("No QA prompts available. Skipping QA agent execution.")
+        return "No QA prompts available for execution"
+
+    debug_log("Using API-provided QA prompts")
+    debug_log(f"QA System Prompt Length: {len(context.prompts.qa_system_prompt)} chars")
+    debug_log(f"QA User Prompt Length: {len(context.prompts.qa_user_prompt)} chars")
+
     log("\n--- Preparing to run QA Agent to Fix Build/Test Errors ---")
-    debug_log(f"Repo Root for QA Agent Tools: {repo_root}")
-    debug_log(f"Build Command Used: {build_command}")
+    debug_log(f"Repo Root for QA Agent Tools: {context.repo_config.repo_path}")
+    debug_log(f"Build Command Used: {context.build_config.build_command}")
     debug_log(f"Files Changed by Fix Agent: {changed_files}")
     debug_log(f"Build Output Provided (truncated):\n---\n{tail_string(build_output, 1000)}\n---")
 
@@ -786,14 +786,10 @@ def run_qa_agent(build_output: str, changed_files: List[str], build_command: str
             qa_history_section += f"Attempt {i+1}: {summary}\n"
         debug_log(f"Including QA History with {len(qa_history)} previous attempts")
 
-    # Use API-provided prompts if available, otherwise fall back to template-based approach
-    if qa_system_prompt and qa_user_prompt:
-        debug_log("Using API-provided QA prompts")
-        # Process the QA user prompt to replace placeholders
-        qa_query = process_qa_user_prompt(qa_user_prompt, changed_files, build_output, qa_history_section)
-    else:
-        log("Error: No prompts available for QA agent")
-        error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
+    # Use API-provided prompts from PromptConfiguration
+    debug_log("Using API-provided QA prompts")
+    # Process the QA user prompt to replace placeholders
+    qa_query = context.prompts.get_processed_qa_user_prompt(changed_files, build_output, qa_history_section)
 
     qa_summary = "Error during QA agent execution: Unknown error"  # Default error
 
@@ -802,10 +798,10 @@ def run_qa_agent(build_output: str, changed_files: List[str], build_command: str
         qa_summary = _run_agent_in_event_loop(
             _run_agent_internal_with_prompts,
             'qa',
-            repo_root,
+            context.repo_config.repo_path,
             qa_query,
-            qa_system_prompt,
-            remediation_id
+            context.prompts.qa_system_prompt,
+            context.remediation_id
         )
 
         log("--- QA Agent Fix Attempt Completed ---")
@@ -820,64 +816,7 @@ def run_qa_agent(build_output: str, changed_files: List[str], build_command: str
         failure_code = FailureCategory.AGENT_FAILURE.value
         if "litellm." in str(e).lower():
             failure_code = FailureCategory.INVALID_LLM_CONFIG.value
-        error_exit(remediation_id, failure_code)
-
-
-def process_qa_user_prompt(qa_user_prompt: str, changed_files: List[str], build_output: str, qa_history_section: str) -> str:
-    """
-    Process the QA user prompt by replacing placeholders.
-
-    Args:
-        qa_user_prompt: The raw QA user prompt from API
-        changed_files: List of files that were changed by the fix agent
-        build_output: The build command output
-        qa_history_section: Formatted QA history from previous attempts
-
-    Returns:
-        str: The processed QA user prompt with placeholders replaced
-    """
-    # Replace placeholders
-    processed_prompt = qa_user_prompt.replace("{changed_files}", ', '.join(changed_files))
-    processed_prompt = processed_prompt.replace("{build_output}", build_output)
-    processed_prompt = processed_prompt.replace("{qa_history_section}", qa_history_section)
-
-    return processed_prompt
-
-
-def process_fix_user_prompt(fix_user_prompt: str) -> str:
-    """
-    Process the fix user prompt by handling SecurityTest removal.
-
-    Args:
-        fix_user_prompt: The raw fix user prompt from API
-        vuln_uuid: The vulnerability UUID for placeholder replacement
-
-    Returns:
-        Processed fix user prompt
-    """
-    # Replace {vuln_uuid} placeholder
-    processed_prompt = fix_user_prompt
-    if config.SKIP_WRITING_SECURITY_TEST:
-        start_str = "4. Where feasible,"
-        end_str = "   - **CRITICAL: When mocking"
-        replacement_text = ("4. Where feasible, add or update tests to verify the fix.\n"
-                            "    - **Use the 'Original HTTP Request' provided above as a basis for creating "
-                            "realistic mocked input data or request parameters within your test case.** "
-                            "Adapt the request details (method, path, headers, body) as needed for the "
-                            "test framework (e.g., MockMvc in Spring).\n")
-
-        start_index = processed_prompt.find(start_str)
-        end_index = processed_prompt.find(end_str)
-
-        if start_index == -1 or end_index == -1:
-            debug_log("Error: SecurityTest substring not found.")
-            return processed_prompt
-
-        processed_prompt = (
-            processed_prompt[:start_index] + replacement_text + processed_prompt[end_index:]
-        )
-
-    return processed_prompt
+        error_exit(context.remediation_id, failure_code)
 
 
 async def _run_agent_internal_with_prompts(agent_type: str, repo_root: Path, query: str, system_prompt: str, remediation_id: str) -> str:

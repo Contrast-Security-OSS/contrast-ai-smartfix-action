@@ -23,12 +23,12 @@ from pathlib import Path
 from typing import Tuple, List, Optional
 
 # Import configurations and utilities
-from src.config import get_config
 from src.utils import debug_log, run_command, log, error_exit, tail_string
 from src import agent_handler
 from src import git_handler
 from src import telemetry_handler
 from src.build_output_analyzer import extract_build_errors
+from src.smartfix.domains.vulnerability.context import RemediationContext
 
 
 def run_build_command(command: str, repo_root: Path, remediation_id: str) -> Tuple[bool, str]:
@@ -125,26 +125,17 @@ def run_formatting_command(formatting_command: Optional[str], repo_root: Path, r
 
 
 def run_qa_loop(
-    build_command: Optional[str],
-    repo_root: Path,
+    context: RemediationContext,
     max_qa_attempts: int,
-    initial_changed_files: List[str],
-    formatting_command: Optional[str],
-    remediation_id: str,
-    qa_system_prompt: Optional[str] = None,
-    qa_user_prompt: Optional[str] = None
+    initial_changed_files: List[str]
 ) -> Tuple[bool, List[str], Optional[str], List[str]]:
     """
     Runs the build and QA agent loop.
 
     Args:
-        build_command: The build command string.
-        repo_root: Path to the repository root.
+        context: RemediationContext containing vulnerability and configuration.
         max_qa_attempts: Maximum number of QA attempts.
         initial_changed_files: List of files changed by the initial fix agent.
-        formatting_command: The formatting command string.
-        qa_system_prompt: The QA system prompt from API (optional).
-        qa_user_prompt: The QA user prompt from API (optional).
 
     Returns:
         A tuple containing:
@@ -154,12 +145,17 @@ def run_qa_loop(
         - List[str]: A log of QA summaries.
     """
     log("\n--- Starting QA Review Process ---")
-    config = get_config()
+    # Using existing global config
     qa_attempts = 0
     build_success = False
     build_output = "Build not run."
     changed_files = initial_changed_files[:]  # Copy the list
     qa_summary_log = []  # Log QA agent summaries
+
+    # Extract values from domain objects
+    build_command = context.build_config.build_command
+    formatting_command = context.build_config.formatting_command
+    repo_root = context.repo_config.repo_path
 
     if not build_command:
         log("Skipping QA loop: No build command provided.")
@@ -167,13 +163,13 @@ def run_qa_loop(
 
     # Run formatting command before initial build if specified
     if formatting_command:
-        formatting_changed_files = run_formatting_command(formatting_command, repo_root, remediation_id)
+        formatting_changed_files = run_formatting_command(formatting_command, repo_root, context.remediation_id)
         if formatting_changed_files:
             changed_files.extend([f for f in formatting_changed_files if f not in changed_files])
 
     # Try initial build first
     log("\n--- Running Initial Build After Fix ---")
-    initial_build_success, initial_build_output = run_build_command(build_command, repo_root, remediation_id)
+    initial_build_success, initial_build_output = run_build_command(build_command, repo_root, context.remediation_id)
     build_output = initial_build_output  # Store the latest output
 
     if initial_build_success:
@@ -201,14 +197,10 @@ def run_qa_loop(
 
         # Run QA agent
         qa_summary = agent_handler.run_qa_agent(
+            context=context,
             build_output=truncated_output,
             changed_files=changed_files,  # Pass the current list of changed files
-            build_command=build_command,
-            repo_root=config.REPO_ROOT,
-            remediation_id=remediation_id,
-            qa_history=qa_summary_log,  # Pass the history of previous QA attempts
-            qa_system_prompt=qa_system_prompt,
-            qa_user_prompt=qa_user_prompt
+            qa_history=qa_summary_log  # Pass the history of previous QA attempts
         )
 
         # Check if QA agent encountered an error
@@ -231,14 +223,14 @@ def run_qa_loop(
 
                 # Always run formatting command before build, if specified
                 if formatting_command:
-                    formatting_changed_files = run_formatting_command(formatting_command, repo_root, remediation_id)
+                    formatting_changed_files = run_formatting_command(formatting_command, repo_root, context.remediation_id)
                     if formatting_changed_files:
                         changed_files.extend([f for f in formatting_changed_files if f not in changed_files])
                     telemetry_handler.update_telemetry("resultInfo.filesModified", len(changed_files))
 
                 # Re-run the main build command to check if the QA fix worked
                 log("\n--- Re-running Build Command After QA Fix ---")
-                build_success, build_output = run_build_command(build_command, repo_root, remediation_id)
+                build_success, build_output = run_build_command(build_command, repo_root, context.remediation_id)
                 if build_success:
                     log("\n\u2705 Build successful after QA agent fix.")
                     break  # Exit QA loop
