@@ -37,14 +37,6 @@ class TestClosedHandler(unittest.TestCase):
         self.mock_exit = self.exit_patcher.start()
 
         reset_config()
-<<<<<<< HEAD
-
-        # Mock environment variables with complete required vars
-        self.env_patcher = patch.dict(os.environ, TEST_ENV_VARS)
-        self.env_patcher.start()
-
-=======
->>>>>>> main
         self.config = get_config()
 
     def tearDown(self):
