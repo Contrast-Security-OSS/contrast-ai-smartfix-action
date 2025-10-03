@@ -185,9 +185,14 @@ class SmartFixLiteLlm(LiteLlm):
                 or ("anthropic/" in model_lower and "bedrock/" not in model_lower)):
             return
 
+        cache_control_calls = 0  # Counter to limit cache control calls to 4
+
         if "bedrock/" in model_lower and "claude" in model_lower:
             # Bedrock Claude: Convert developer->system and add cache_control
             for i, message in enumerate(messages):
+                if cache_control_calls >= 4:
+                    break
+
                 if isinstance(message, dict):
                     role = message.get('role')
                 elif hasattr(message, 'role'):
@@ -207,16 +212,21 @@ class SmartFixLiteLlm(LiteLlm):
                         message['role'] = 'system'  # Prevent LiteLLM conversion
                         # Add cache_control to content instead of message
                         self._add_cache_control_to_message(message)
+                        cache_control_calls += 1
 
                 # Add cache_control to user and assistant messages as well
                 elif role in ['user', 'assistant']:
                     if isinstance(message, dict):
                         # Add cache_control to content instead of message
                         self._add_cache_control_to_message(message)
+                        cache_control_calls += 1
 
         elif "anthropic/" in model_lower and "bedrock/" not in model_lower:
             # Direct Anthropic API: Just add cache_control (developer role is fine)
             for i, message in enumerate(messages):
+                if cache_control_calls >= 4:
+                    break
+
                 if isinstance(message, dict):
                     role = message.get('role')
                 elif hasattr(message, 'role'):
@@ -235,6 +245,7 @@ class SmartFixLiteLlm(LiteLlm):
                     if isinstance(message, dict):
                         # Add cache_control to content instead of message
                         self._add_cache_control_to_message(message)
+                        cache_control_calls += 1
 
     async def generate_content_async(  # noqa: C901
         self, llm_request: LlmRequest, stream: bool = False
