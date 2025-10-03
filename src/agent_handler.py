@@ -40,6 +40,8 @@ from src.smartfix.domains.vulnerability.context import PromptConfiguration, Repo
 import src.telemetry_handler as telemetry_handler
 import datetime  # For timestamps
 
+from src.smartfix.providers import setup_contrast_provider
+
 config = get_config()
 
 # Suppress warnings before importing libraries that might trigger them
@@ -209,12 +211,27 @@ async def create_agent(target_folder: Path, remediation_id: str, agent_type: str
     agent_name = f"contrast_{agent_type}_agent"
 
     try:
+        # model_instance = SmartFixLiteLlm(
+        #     model=config.AGENT_MODEL,
+        #     temperature=0.2,  # Set low temperature for more deterministic output
+        #     # seed=42, # The random seed for reproducibility (not supported by bedrock/anthropic atm call throws error)
+        #     stream_options={"include_usage": True}
+        # )
+
+        # Call once when module loads
+        setup_contrast_provider()
+
+        # Use your custom model with BOTH API keys
         model_instance = SmartFixLiteLlm(
-            model=config.AGENT_MODEL,
-            temperature=0.2,  # Set low temperature for more deterministic output
-            # seed=42, # The random seed for reproducibility (not supported by bedrock/anthropic atm call throws error)
-            stream_options={"include_usage": True}
+            model="contrast/claude-sonnet-4-5",  # Clean prefix!
+            temperature=0.2,
+            stream_options={"include_usage": True},
+            # Pass second API key as custom header
+            extra_headers={
+                "X-Contrast-Service-Key": "contrast-service-key"  # config.CONTRAST_SERVICE_KEY
+            }
         )
+
         root_agent = SmartFixLlmAgent(
             model=model_instance,
             name=agent_name,
