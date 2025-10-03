@@ -32,6 +32,10 @@ from litellm import Message
 from pydantic import Field
 from src.utils import debug_log
 
+# Enable LiteLLM debug logging
+litellm._turn_on_debug()
+litellm.set_verbose = True
+
 
 class TokenCostAccumulator:
     """Accumulator for tracking token usage and costs across multiple LLM calls."""
