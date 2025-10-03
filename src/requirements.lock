@@ -60,6 +60,8 @@ docstring-parser==0.16
     # via google-cloud-aiplatform
 fastapi==0.115.12
     # via google-adk
+fastuuid==0.13.5
+    # via litellm
 filelock==3.18.0
     # via huggingface-hub
 frozenlist==1.6.2
@@ -219,7 +221,7 @@ jsonschema==4.24.0
     # via litellm
 jsonschema-specifications==2025.4.1
     # via jsonschema
-litellm==1.75.4
+litellm==1.77.5
     # via -r src/requirements.txt
 markupsafe==3.0.2
     # via jinja2
