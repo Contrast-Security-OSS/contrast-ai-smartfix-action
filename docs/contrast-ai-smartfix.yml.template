@@ -49,7 +49,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          
+
       - name: Run Contrast AI SmartFix - Generate Fixes Action
         uses: Contrast-Security-OSS/contrast-ai-smartfix-action@v1
         with:
@@ -80,7 +80,7 @@ jobs:
           # azure_api_base: ${{ secrets.AZURE_API_BASE }}
           # azure_api_version: ${{ secrets.AZURE_API_VERSION }}
           # --- Agent Configuration ---
-          agent_model: ${{ vars.AGENT_MODEL || 'bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0' }}
+          agent_model: ${{ vars.AGENT_MODEL || 'bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0' }}
           # Other Optional Inputs (see action.yml for defaults and more options)
           # formatting_command: 'mvn spotless:apply' # Or the command appropriate for your project to correct the formatting of SmartFix\'s changes.  This ensures that SmartFix follows your coding standards.
           # max_open_prs: 5 # This is the maximum limit for the number of PRs that SmartFix will have open at single time
@@ -99,7 +99,7 @@ jobs:
       - name: Notify Contrast on PR Merge
         uses: Contrast-Security-OSS/contrast-ai-smartfix-action@v1
         with:
-          run_task: merge 
+          run_task: merge
           # --- GitHub Token ---
           github_token: ${{ secrets.GITHUB_TOKEN }}
           # --- Contrast API Credentials ---
@@ -108,9 +108,9 @@ jobs:
           contrast_app_id: ${{ vars.CONTRAST_APP_ID }}
           contrast_authorization_key: ${{ secrets.CONTRAST_AUTHORIZATION_KEY }}
           contrast_api_key: ${{ secrets.CONTRAST_API_KEY }}
-        env: 
+        env:
           GITHUB_EVENT_PATH: ${{ github.event_path }}
-  
+
   handle_pr_closed:
     name: Handle PR Close
     runs-on: ubuntu-latest
@@ -133,5 +133,5 @@ jobs:
           contrast_app_id: ${{ vars.CONTRAST_APP_ID }}
           contrast_authorization_key: ${{ secrets.CONTRAST_AUTHORIZATION_KEY }}
           contrast_api_key: ${{ secrets.CONTRAST_API_KEY }}
-        env: 
+        env:
           GITHUB_EVENT_PATH: ${{ github.event_path }}
