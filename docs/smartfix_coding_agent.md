@@ -97,12 +97,12 @@ jobs:
           # Recommended: Anthropic Claude Sonnet
 
           # Claude Via Direct Anthropic API
-          # agent_model: 'anthropic/claude-3-7-sonnet-20250219' # Check LiteLLM docs for exact model string
+          # agent_model: 'anthropic/claude-sonnet-4-5-20250929' # Check LiteLLM docs for exact model string
           # anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
           # Claude Via AWS Bedrock
           # Setup AWS credentials in the earlier "Configure AWS Credentials" step.
-          agent_model: 'bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0' # Example for Claude Sonnet on Bedrock
+          agent_model: 'bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0' # Example for Claude Sonnet on Bedrock
 
           # Experimental: Google Gemini Pro
           # agent_model: 'gemini/gemini-2.5-pro-preview-05-06' # Check LiteLLM docs for exact model string
@@ -174,12 +174,12 @@ jobs:
 
 The SmartFix Coding Agent uses a "Bring Your Own LLM" (BYOLLM) model. You provide the credentials for your preferred LLM provider.
 
-* **Recommended:** **Anthropic Claude Sonnet (e.g., Claude 3.7 Sonnet via AWS Bedrock or direct Anthropic API)**. This model has been extensively tested.
+* **Recommended:** **Anthropic Claude Sonnet (e.g., Claude 4.5 Sonnet via AWS Bedrock or direct Anthropic API)**. This model has been extensively tested.
   * Option 1 - Direct Anthropic API:
-    * Set `agent_model` to the appropriate model string for Anthropic (e.g. `anthropic/claude-3-7-sonnet-20250219`).
+    * Set `agent_model` to the appropriate model string for Anthropic (e.g. `anthropic/claude-sonnet-4-5-20250929`).
     * Provide your `anthropic_api_key`.
   * Option 2 - AWS Bedrock:
-    * Set `agent_model` to the appropriate model string (e.g., `bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0`).
+    * Set `agent_model` to the appropriate model string (e.g., `bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0`).
     * In order for the action to an AWS Bedrock LLM, you need to provide AWS credentials. We recommend using [aws-actions/configure-aws-credentials](https://github.com/aws-actions/configure-aws-credentials) to configure your credentials for a job.
 
 * **Experimental:** **Google Gemini Pro (e.g., Gemini 2.5 Pro)**. Preliminary testing shows good results.
@@ -193,8 +193,8 @@ Refer to the `action.yml` file within the SmartFix GitHub Action repository and 
 
 Here are several recommended `agent_model` values:
 
-* `bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0`
-* `anthropic/claude-3-7-sonnet-20250219`
+* `bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0`
+* `anthropic/claude-sonnet-4-5-20250929`
 * `gemini/gemini-2.5-pro-preview-05-06`
 
 ### Supported Languages
@@ -260,7 +260,7 @@ The following are key inputs for the SmartFix GitHub Action using SmartFix Codin
 | `contrast_app_id` | Contrast Application ID for the repository. | Yes |  |
 | `contrast_authorization_key` | Contrast Authorization Key. | Yes |  |
 | `contrast_api_key` | Contrast API Key. | Yes |  |
-| `agent_model` | LLM model to use (e.g., `bedrock/anthropic.claude-3-sonnet-20240229-v1:0`). | No | `bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0` |
+| `agent_model` | LLM model to use (e.g., `bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0`). | No | `bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0` |
 | `anthropic_api_key` | Anthropic API key (if using direct Anthropic API). | No |  |
 | `gemini_api_key` | Gemini API key (if using Gemini). | No |  |
 | `build_command` | Command to build the application (for QA). | Yes, for generating fixes |  |
@@ -313,7 +313,7 @@ SmartFix collects telemetry data to help improve the service and diagnose issues
 * **Ensure the `build_command` Runs the Tests:** This allows SmartFix to catch and fix any tests that may fail due to its changes. It also allows it to run the security tests it creates, if that option is enabled.
 * **Review PRs Thoroughly:** Always carefully review the code changes proposed by SmartFix before merging.
 * **Monitor Action Runs:** Regularly check the GitHub Action logs for successful runs and any reported issues.
-* **Use Recommended LLMs:** For the best experience, Contrast recommends using the Anthropic Claude Sonnet 3.7 model.
+* **Use Recommended LLMs:** For the best experience, Contrast recommends using the Anthropic Claude Sonnet 4.5 model.
 
 ## FAQ
 
