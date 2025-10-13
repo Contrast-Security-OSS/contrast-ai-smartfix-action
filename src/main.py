@@ -41,8 +41,8 @@ from src import agent_handler
 from src import git_handler
 
 # Import domain models
-from src.smartfix.domains.vulnerability.context import PromptConfiguration, BuildConfiguration, RepositoryConfiguration
-from src.smartfix.domains.vulnerability.processor import VulnerabilityProcessor
+from src.smartfix.domains.vulnerability.context import RemediationContext, PromptConfiguration, BuildConfiguration, RepositoryConfiguration
+from src.smartfix.domains.vulnerability.models import Vulnerability
 from src import qa_handler
 from src.github.external_coding_agent import ExternalCodingAgent
 
@@ -247,9 +247,6 @@ def main():  # noqa: C901
     build_config = BuildConfiguration.from_config(config)
     repo_config = RepositoryConfiguration.from_config(config)
 
-    # Create vulnerability processor for domain service operations
-    vulnerability_processor = VulnerabilityProcessor()
-
     debug_log(f"Build command: {build_config.build_command}")
     debug_log(f"Formatting command: {build_config.formatting_command}")
     debug_log(f"Max QA attempts: {config.MAX_QA_ATTEMPTS}")
@@ -423,13 +420,10 @@ def main():  # noqa: C901
             error_exit(remediation_id, contrast_api.FailureCategory.INITIAL_BUILD_FAILURE.value)  # Exit if the build is broken, no point in proceeding
 
         # --- Run AI Fix Agent (SmartFix) ---
-        # Process vulnerability data using domain service
-        vulnerability = vulnerability_processor.process_api_vulnerability_data(vulnerability_data)
-
-        # Create remediation context using domain service with API-provided ID
-        context = vulnerability_processor.create_remediation_context(
+        # Create remediation context using domain model classmethod with API-provided ID
+        context = RemediationContext.create_with_components(
             remediation_id=remediation_id,
-            vulnerability=vulnerability,
+            vulnerability=Vulnerability.from_api_data(vulnerability_data),
             prompts=prompts,
             build_config=build_config,
             repo_config=repo_config

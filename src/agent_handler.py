@@ -765,8 +765,8 @@ def run_qa_agent(context: RemediationContext, build_output: str, changed_files: 
     """
     # Check if we have QA prompts available
     if not context.prompts or not context.prompts.has_qa_prompts():
-        log("No QA prompts available. Skipping QA agent execution.")
-        return "No QA prompts available for execution"
+        log("Critical error: No QA prompts available. Cannot proceed with QA agent execution.", is_error=True)
+        error_exit(context.remediation_id, FailureCategory.INVALID_PROMPT_CONFIG.value)
 
     debug_log("Using API-provided QA prompts")
     debug_log(f"QA System Prompt Length: {len(context.prompts.qa_system_prompt)} chars")
