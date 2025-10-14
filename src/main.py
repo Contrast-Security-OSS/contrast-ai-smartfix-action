@@ -42,9 +42,8 @@ from src import contrast_api
 from src import git_handler
 
 # Import domain models
-from src.smartfix.domains.vulnerability.context import PromptConfiguration, BuildConfiguration, RepositoryConfiguration, RemediationContext
-from src.smartfix.domains.vulnerability.processor import VulnerabilityProcessor
-from src.smartfix.domains.vulnerability import Vulnerability
+from src.smartfix.domains.vulnerability.context import RemediationContext, PromptConfiguration, BuildConfiguration, RepositoryConfiguration
+from src.smartfix.domains.vulnerability.models import Vulnerability
 from src.github.external_coding_agent import ExternalCodingAgent
 
 config = get_config()
@@ -248,9 +247,6 @@ def main():  # noqa: C901
     build_config = BuildConfiguration.from_config(config)
     repo_config = RepositoryConfiguration.from_config(config)
 
-    # Create vulnerability processor for domain service operations
-    vulnerability_processor = VulnerabilityProcessor()
-
     debug_log(f"Build command: {build_config.build_command}")
     debug_log(f"Formatting command: {build_config.formatting_command}")
     debug_log(f"Max QA attempts: {config.MAX_QA_ATTEMPTS}")
@@ -394,14 +390,14 @@ def main():  # noqa: C901
         # --- Create Common Remediation Context ---
         # Process vulnerability data using domain service
         if config.CODING_AGENT == CodingAgents.SMARTFIX.name:
-            # For SmartFix, use the vulnerability processor
-            vulnerability = vulnerability_processor.process_api_vulnerability_data(vulnerability_data)
-            context = vulnerability_processor.create_remediation_context(
+            # For SmartFix, create remediation context with all components
+            context = RemediationContext.create_with_components(
                 remediation_id=remediation_id,
-                vulnerability=vulnerability,
+                vulnerability_data=vulnerability_data,
                 prompts=prompts,
                 build_config=build_config,
-                repo_config=repo_config
+                repo_config=repo_config,
+                config=config
             )
         else:
             # For external agents, create vulnerability and context directly
@@ -447,6 +443,15 @@ def main():  # noqa: C901
         # --- Run SmartFix Agent ---
         # Create SmartFix agent using the domain factory
         smartfix_agent = AgentFactory.get_default_agent({'max_qa_attempts': max_qa_attempts_setting})
+
+        # Create remediation context using domain model classmethod with API-provided ID
+        context = RemediationContext.create_with_components(
+            remediation_id=remediation_id,
+            vulnerability=Vulnerability.from_api_data(vulnerability_data),
+            prompts=prompts,
+            build_config=build_config,
+            repo_config=repo_config
+        )
 
         # Run the agent remediation process
         session = smartfix_agent.remediate(context)
@@ -686,3 +691,5 @@ def main():  # noqa: C901
 
 if __name__ == "__main__":
     main()
+
+# %%

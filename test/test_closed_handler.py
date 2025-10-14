@@ -23,7 +23,6 @@ from unittest.mock import patch, mock_open
 import os
 import json
 
-
 from src.config import reset_config, get_config
 from src import closed_handler
 
@@ -254,6 +253,87 @@ class TestClosedHandler(unittest.TestCase):
         mock_extract_vuln.assert_called_once_with([])
         mock_notify.assert_called_once_with("REM-123", 123)
         mock_send_telemetry.assert_called_once()
+
+    @patch('src.telemetry_handler.update_telemetry')
+    def test_extract_remediation_info_copilot_branch(self, mock_update_telemetry):
+        """Test _extract_remediation_info with Copilot branch"""
+        with patch('src.closed_handler.extract_issue_number_from_branch') as mock_extract_issue:
+            with patch('src.closed_handler.extract_remediation_id_from_labels') as mock_extract_remediation_id:
+                # Setup
+                mock_extract_issue.return_value = 42
+                mock_extract_remediation_id.return_value = "REM-456"
+
+                pull_request = {
+                    "head": {"ref": "copilot/fix-42"},
+                    "labels": [{"name": "smartfix-id:REM-456"}]
+                }
+
+                # Execute
+                result = closed_handler._extract_remediation_info(pull_request)
+
+                # Assert
+                self.assertEqual(result, ("REM-456", [{"name": "smartfix-id:REM-456"}]))
+                mock_extract_issue.assert_called_once_with("copilot/fix-42")
+                mock_extract_remediation_id.assert_called_once_with([{"name": "smartfix-id:REM-456"}])
+
+                # Verify telemetry updates
+                mock_update_telemetry.assert_any_call("additionalAttributes.externalIssueNumber", 42)
+                mock_update_telemetry.assert_any_call("additionalAttributes.codingAgent", "EXTERNAL-COPILOT")
+
+    @patch('src.telemetry_handler.update_telemetry')
+    def test_extract_remediation_info_claude_branch(self, mock_update_telemetry):
+        """Test _extract_remediation_info with Claude Code branch"""
+        with patch('src.closed_handler.extract_issue_number_from_branch') as mock_extract_issue:
+            with patch('src.closed_handler.extract_remediation_id_from_labels') as mock_extract_remediation_id:
+                # Setup
+                mock_extract_issue.return_value = 75
+                mock_extract_remediation_id.return_value = "REM-789"
+
+                pull_request = {
+                    "head": {"ref": "claude/issue-75-20250908-1723"},
+                    "labels": [{"name": "smartfix-id:REM-789"}]
+                }
+
+                # Execute
+                result = closed_handler._extract_remediation_info(pull_request)
+
+                # Assert
+                self.assertEqual(result, ("REM-789", [{"name": "smartfix-id:REM-789"}]))
+                mock_extract_issue.assert_called_once_with("claude/issue-75-20250908-1723")
+                mock_extract_remediation_id.assert_called_once_with([{"name": "smartfix-id:REM-789"}])
+
+                # Verify telemetry updates - key assertions for Claude Code
+                mock_update_telemetry.assert_any_call("additionalAttributes.externalIssueNumber", 75)
+                mock_update_telemetry.assert_any_call("additionalAttributes.codingAgent", "EXTERNAL-CLAUDE-CODE")
+
+    @patch('src.telemetry_handler.update_telemetry')
+    def test_extract_remediation_info_claude_branch_no_issue_number(self, mock_update_telemetry):
+        """Test _extract_remediation_info with Claude Code branch without extractable issue number"""
+        with patch('src.closed_handler.extract_issue_number_from_branch') as mock_extract_issue:
+            with patch('src.closed_handler.extract_remediation_id_from_labels') as mock_extract_remediation_id:
+                # Setup - simulate issue number not found
+                mock_extract_issue.return_value = None
+                mock_extract_remediation_id.return_value = "REM-789"
+
+                pull_request = {
+                    "head": {"ref": "claude/issue-75-20250908-1723"},
+                    "labels": [{"name": "smartfix-id:REM-789"}]
+                }
+
+                # Execute
+                result = closed_handler._extract_remediation_info(pull_request)
+
+                # Assert
+                self.assertEqual(result, ("REM-789", [{"name": "smartfix-id:REM-789"}]))
+                mock_extract_issue.assert_called_once_with("claude/issue-75-20250908-1723")
+                mock_extract_remediation_id.assert_called_once_with([{"name": "smartfix-id:REM-789"}])
+
+                # Should NOT call update_telemetry for externalIssueNumber, but SHOULD call it for codingAgent
+                # Verify it is not called with externalIssueNumber
+                for call in mock_update_telemetry.call_args_list:
+                    self.assertNotEqual(call[0][0], "additionalAttributes.externalIssueNumber")
+                # But should still identify as Claude Code agent
+                mock_update_telemetry.assert_any_call("additionalAttributes.codingAgent", "EXTERNAL-CLAUDE-CODE")
 
 
 if __name__ == '__main__':

@@ -49,7 +49,7 @@ class Config:
         self.testing = testing
 
         # --- Preset ---
-        self.VERSION = "v1.0.9"
+        self.VERSION = "v1.0.10"
         self.USER_AGENT = f"contrast-smart-fix {self.VERSION}"
 
         # --- Core Settings ---
@@ -173,8 +173,9 @@ class Config:
             return coding_agent.upper()
         except (KeyError, ValueError):
             _log_config_message(
-                f"Warning: Invalid CODING_AGENT '{coding_agent}'. Must be one of "
-                f"{[agent.name for agent in CodingAgents]}. Defaulting to '{CodingAgents.SMARTFIX.name}'.",
+                f"Warning: Invalid CODING_AGENT '{coding_agent}'. "
+                f"Must be one of {[agent.name for agent in CodingAgents]}. "
+                f"Defaulting to '{CodingAgents.SMARTFIX.name}'.",
                 is_warning=True
             )
             return CodingAgents.SMARTFIX.name
