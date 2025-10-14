@@ -390,14 +390,14 @@ def main():  # noqa: C901
         # --- Create Common Remediation Context ---
         # Process vulnerability data using domain service
         if config.CODING_AGENT == CodingAgents.SMARTFIX.name:
-            # For SmartFix, create remediation context with all components
+            # For SmartFix, create vulnerability and context with all components
+            vulnerability = Vulnerability.from_dict(vulnerability_data)
             context = RemediationContext.create_with_components(
                 remediation_id=remediation_id,
-                vulnerability_data=vulnerability_data,
+                vulnerability=vulnerability,
                 prompts=prompts,
                 build_config=build_config,
-                repo_config=repo_config,
-                config=config
+                repo_config=repo_config
             )
         else:
             # For external agents, create vulnerability and context directly
