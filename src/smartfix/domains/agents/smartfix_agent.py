@@ -17,6 +17,7 @@ from src.build_output_analyzer import extract_build_errors
 from src.utils import debug_log, log, error_exit, tail_string
 from src.smartfix.shared.failure_categories import FailureCategory
 from src import telemetry_handler
+from src.git_handler import get_uncommitted_changed_files
 
 from .coding_agent import CodingAgentStrategy
 from .agent_session import AgentSession, AgentSessionStatus, AgentEvent
@@ -412,7 +413,10 @@ class SmartFixAgent(CodingAgentStrategy):
         qa_attempts = 0
         build_success = False
         build_output = "Build not run."
-        changed_files = initial_changed_files[:]  # Copy the list
+        # Get the current list of uncommitted changed files from git
+        # This is the minimal git operation needed to track what files the agents are modifying
+        changed_files = get_uncommitted_changed_files()
+        debug_log(f"Detected {len(changed_files)} uncommitted changed files at start of QA loop")
         qa_summary_log = []  # Log QA agent summaries
 
         # Extract values from domain objects
@@ -425,11 +429,15 @@ class SmartFixAgent(CodingAgentStrategy):
             log("Skipping QA loop: No build command provided.")
             return True, changed_files, build_command, qa_summary_log  # Assume success if no build command
 
+        # NOTE: The initial commit for the fix agent's changes should be handled by the caller (main.py)
+        # before entering the QA loop. This keeps git operations out of the smartfix domain.
+
         # Run formatting command before initial build if specified
         if formatting_command:
-            formatting_changed_files = run_formatting_command(formatting_command, repo_root, remediation_id)
-            if formatting_changed_files:
-                changed_files.extend([f for f in formatting_changed_files if f not in changed_files])
+            run_formatting_command(formatting_command, repo_root, remediation_id)
+            # Update changed_files list after formatting
+            changed_files = get_uncommitted_changed_files()
+            debug_log(f"After formatting: {len(changed_files)} uncommitted changed files")
 
         # Try initial build first (before entering QA loop)
         log("\n--- Running Initial Build After Fix ---")
@@ -480,37 +488,33 @@ class SmartFixAgent(CodingAgentStrategy):
                 qa_summary_log.append(qa_summary)  # Log the summary
 
                 # --- Handle QA Agent Output ---
-                import src.git_handler as git_handler
-                git_handler.stage_changes()
-                if git_handler.check_status():
-                    git_handler.amend_commit()
-                    changed_files = git_handler.get_last_commit_changed_files()  # Update changed files list
-                    log("Amended commit with QA agent fixes.")
+                # NOTE: Git operations (staging, committing) are handled by main.py after remediate() completes
+                # The QA agent has made changes to files, and we just need to check if the build passes now
 
-                    # Always run formatting command before build, if specified
-                    if formatting_command:
-                        formatting_changed_files = run_formatting_command(formatting_command, repo_root, remediation_id)
-                        if formatting_changed_files:
-                            changed_files.extend([f for f in formatting_changed_files if f not in changed_files])
-                        telemetry_handler.update_telemetry("resultInfo.filesModified", len(changed_files))
+                # Update changed_files list after QA agent made modifications
+                changed_files = get_uncommitted_changed_files()
+                debug_log(f"After QA agent: {len(changed_files)} uncommitted changed files")
 
-                    # Re-run the main build command to check if the QA fix worked
-                    log("\n--- Re-running Build Command After QA Fix ---")
-                    build_success, build_output = run_build_command(build_command, repo_root, remediation_id)
-                    if build_success:
-                        log("\n✅ Build successful after QA agent fix.")
-                        log("\n::endgroup::")  # Close the group for the QA attempt
-                        break  # Exit QA loop
-                    else:
-                        log("\n❌ Build still failing after QA agent fix.")
-                        log("\n::endgroup::")  # Close the group for the QA attempt
-                        continue  # Continue to next QA iteration
-                else:
-                    log("QA agent did not request a command and made no file changes. Build still failing.")
-                    # Break the loop if QA agent isn't making progress
-                    build_success = False
+                # Always run formatting command before build, if specified
+                if formatting_command:
+                    run_formatting_command(formatting_command, repo_root, remediation_id)
+                    # Update changed_files list after formatting
+                    changed_files = get_uncommitted_changed_files()
+                    debug_log(f"After QA formatting: {len(changed_files)} uncommitted changed files")
+
+                telemetry_handler.update_telemetry("resultInfo.filesModified", len(changed_files))
+
+                # Re-run the main build command to check if the QA fix worked
+                log("\n--- Re-running Build Command After QA Fix ---")
+                build_success, build_output = run_build_command(build_command, repo_root, remediation_id)
+                if build_success:
+                    log("\n✅ Build successful after QA agent fix.")
                     log("\n::endgroup::")  # Close the group for the QA attempt
-                    break
+                    break  # Exit QA loop
+                else:
+                    log("\n❌ Build still failing after QA agent fix.")
+                    log("\n::endgroup::")  # Close the group for the QA attempt
+                    continue  # Continue to next QA iteration
 
             except Exception as e:
                 error_msg = f"Error during QA agent execution: {str(e)}"

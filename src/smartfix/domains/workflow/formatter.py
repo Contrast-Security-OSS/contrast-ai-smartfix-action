@@ -65,15 +65,10 @@ def run_formatting_command(formatting_command: Optional[str], repo_root: Path, r
 
     if format_success:
         debug_log("Formatting command successful.")
-        # Import git_handler locally to avoid circular dependency
-        import src.git_handler as git_handler
-        git_handler.stage_changes()  # Stage any changes made by the formatter
-        if not git_handler.check_status():  # Check if formatter made changes
-            log("Formatting command ran but made no changes to commit.")
-        else:
-            debug_log("Formatting command made changes. Committing them.")
-            git_handler.commit_changes(f"Apply formatting via: {formatting_command}")
-            changed_files = git_handler.get_last_commit_changed_files()
+        # NOTE: Git operations are handled by main.py after all agent work completes
+        # We just track which files were changed by the formatter
+        # The formatter modifies files in place, so we don't need to commit here
+        log("Formatting command completed. Changes will be committed by caller.")
     else:
         log(f"::error::Error executing formatting command: {formatting_command}")
         log(f"::error::Error details: {format_output}", is_error=True)

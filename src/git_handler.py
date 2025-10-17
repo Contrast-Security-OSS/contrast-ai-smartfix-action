@@ -196,6 +196,28 @@ def commit_changes(message: str):
     run_command(["git", "commit", "-m", message])  # run_command exits on failure
 
 
+def get_uncommitted_changed_files() -> List[str]:
+    """Gets the list of files that have been modified but not yet committed.
+
+    This is useful for tracking changes made by agents before committing them.
+
+    Returns:
+        List[str]: List of file paths that have been modified, added, or deleted
+    """
+    debug_log("Getting uncommitted changed files...")
+    # Use --no-pager to prevent potential hanging
+    # Use --name-only to get just the file paths
+    # Compare working directory + staged changes against HEAD
+    diff_output = run_command(["git", "--no-pager", "diff", "HEAD", "--name-only"], check=False)
+    if not diff_output:
+        debug_log("No uncommitted changes found")
+        return []
+
+    changed_files = [f for f in diff_output.splitlines() if f.strip()]
+    debug_log(f"Uncommitted changed files: {changed_files}")
+    return changed_files
+
+
 def get_last_commit_changed_files() -> List[str]:
     """Gets the list of files changed in the most recent commit."""
     debug_log("Getting files changed in the last commit...")

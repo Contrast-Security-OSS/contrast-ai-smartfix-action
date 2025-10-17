@@ -454,6 +454,8 @@ def main():  # noqa: C901
         )
 
         # Run the agent remediation process
+        # The agent will run the fix agent and QA loop without doing any git operations
+        # All git operations (staging, committing) happen in main.py after remediate() completes
         session = smartfix_agent.remediate(context)
 
         # Extract results from the session
@@ -473,162 +475,167 @@ def main():  # noqa: C901
                 error_exit(remediation_id, contrast_api.FailureCategory.AGENT_FAILURE.value)
 
         # --- Git and GitHub Operations ---
+        # All file changes from the agent (fix + QA + formatting) are uncommitted at this point
+        # Stage and commit everything together
         log("\n--- Proceeding with Git & GitHub Operations ---")
         git_handler.stage_changes()
 
-        if git_handler.check_status():
-            commit_message = git_handler.generate_commit_message(vuln_title, vuln_uuid)
-            git_handler.commit_changes(commit_message)
+        # Check if there are changes to commit
+        if not git_handler.check_status():
+            # No changes detected - agent didn't make any modifications
+            log("No changes detected from agent execution. Skipping PR creation.")
+            git_handler.cleanup_branch(new_branch_name)
+            continue
 
-            # Generate QA section based on session results
-            # The SmartFix agent already handled the QA loop internally
-            qa_section = "\n\n---\n\n## Review \n\n"
+        # Commit all changes together (fix + QA fixes + formatting)
+        commit_message = git_handler.generate_commit_message(vuln_title, vuln_uuid)
+        git_handler.commit_changes(commit_message)
+        log("Committed all agent changes.")
 
-            if not config.SKIP_QA_REVIEW and build_config.has_build_command():
-                # QA was expected to run - check session results
-                if session.qa_attempts > 0:  # QA was attempted
-                    qa_section += f"*   **Build Run:** Yes (`{build_config.build_command}`)\n"
-                    if session.success:
-                        qa_section += "*   **Final Build Status:** Success \n"
-                    else:
-                        qa_section += "*   **Final Build Status:** Failure \n"
+        # Generate QA section based on session results
+        # The SmartFix agent already handled the QA loop internally
+        qa_section = "\n\n---\n\n## Review \n\n"
 
-                        # Check if we should skip PR creation due to QA failure
-                        log("\n--- Skipping PR creation as QA Agent failed to fix build issues ---")
-
-                        # Determine failure category based on session events
-                        failure_category = contrast_api.FailureCategory.EXCEEDED_QA_ATTEMPTS.value
-                        qa_events = [e for e in session.events if "QA" in e.prompt]
-                        if any("Error during QA agent execution:" in e.response for e in qa_events):
-                            failure_category = contrast_api.FailureCategory.QA_AGENT_FAILURE.value
-
-                        # Notify the Remediation service about the failed remediation
-                        remediation_notified = contrast_api.notify_remediation_failed(
-                            remediation_id=remediation_id,
-                            failure_category=failure_category,
-                            contrast_host=config.CONTRAST_HOST,
-                            contrast_org_id=config.CONTRAST_ORG_ID,
-                            contrast_app_id=config.CONTRAST_APP_ID,
-                            contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
-                            contrast_api_key=config.CONTRAST_API_KEY
-                        )
-
-                        if remediation_notified:
-                            log(f"Successfully notified Remediation service about {failure_category} for remediation {remediation_id}.")
-                        else:
-                            log(f"Failed to notify Remediation service about {failure_category} for remediation {remediation_id}.", is_warning=True)
-
-                        git_handler.cleanup_branch(new_branch_name)
-                        contrast_api.send_telemetry_data()
-                        continue  # Move to the next vulnerability
+        if not config.SKIP_QA_REVIEW and build_config.has_build_command():
+            # QA was expected to run - check session results
+            if session.qa_attempts > 0:  # QA was attempted
+                qa_section += f"*   **Build Run:** Yes (`{build_config.build_command}`)\n"
+                if session.success:
+                    qa_section += "*   **Final Build Status:** Success \n"
                 else:
-                    qa_section += "*   **Build Run:** No (BUILD_COMMAND not provided)\n"
-                    qa_section += "*   **Final Build Status:** Skipped\n"
-            else:  # QA was skipped
-                qa_section = ""  # Ensure qa_section is empty if QA is skipped
-                if config.SKIP_QA_REVIEW:
-                    log("QA Review was skipped based on SKIP_QA_REVIEW setting.")
-                elif not build_config.has_build_command():
-                    log("QA Review was skipped as no BUILD_COMMAND was provided.")
+                    qa_section += "*   **Final Build Status:** Failure \n"
 
-            # --- Create Pull Request ---
-            pr_title = git_handler.generate_pr_title(vuln_title)
-            # Use the result from SmartFix agent remediation as the base PR body.
-            # The agent returns the PR body content (extracted from <pr_body> tags)
-            # or the full agent summary if extraction fails.
-            pr_body_base = ai_fix_summary_full
-            debug_log("Using SmartFix agent's output as PR body base.")
+                    # Check if we should skip PR creation due to QA failure
+                    log("\n--- Skipping PR creation as QA Agent failed to fix build issues ---")
 
-            # --- Push and Create PR ---
-            git_handler.push_branch(new_branch_name)  # Push the final commit (original or amended)
+                    # Determine failure category based on session events
+                    failure_category = contrast_api.FailureCategory.EXCEEDED_QA_ATTEMPTS.value
+                    qa_events = [e for e in session.events if "QA" in e.prompt]
+                    if any("Error during QA agent execution:" in e.response for e in qa_events):
+                        failure_category = contrast_api.FailureCategory.QA_AGENT_FAILURE.value
 
-            label_name, label_desc, label_color = git_handler.generate_label_details(vuln_uuid)
-            label_created = git_handler.ensure_label(label_name, label_desc, label_color)
-
-            if not label_created:
-                log(f"Could not create GitHub label '{label_name}'. PR will be created without a label.", is_warning=True)
-                label_name = ""  # Clear label_name to avoid using it in PR creation
-
-            pr_title = git_handler.generate_pr_title(vuln_title)
-
-            updated_pr_body = pr_body_base + qa_section
-
-            # Create a brief summary for the telemetry aiSummaryReport (limited to 255 chars in DB)
-            # Generate an optimized summary using the dedicated function in telemetry_handler
-            brief_summary = telemetry_handler.create_ai_summary_report(updated_pr_body)
-
-            # Update telemetry with our optimized summary
-            telemetry_handler.update_telemetry("resultInfo.aiSummaryReport", brief_summary)
-
-            try:
-                # Set a flag to track if we should try the fallback approach
-                pr_creation_success = False
-                pr_url = ""  # Initialize pr_url
-
-                # Try to create the PR using the GitHub CLI
-                log("Attempting to create a pull request...")
-                pr_url = git_handler.create_pr(pr_title, updated_pr_body, remediation_id, config.BASE_BRANCH, label_name)
-
-                if pr_url:
-                    pr_creation_success = True
-
-                    # Extract PR number from PR URL
-                    # PR URL format is like: https://github.com/org/repo/pull/123
-                    pr_number = None
-                    try:
-                        # Use a more robust method to extract the PR number
-
-                        pr_match = re.search(r'/pull/(\d+)', pr_url)
-                        debug_log(f"Extracting PR number from URL '{pr_url}', match object: {pr_match}")
-                        if pr_match:
-                            pr_number = int(pr_match.group(1))
-                            debug_log(f"Successfully extracted PR number: {pr_number}")
-                        else:
-                            log(f"Could not find PR number pattern in URL: {pr_url}", is_warning=True)
-                    except (ValueError, IndexError, AttributeError) as e:
-                        log(f"Could not extract PR number from URL: {pr_url} - Error: {str(e)}")
-
-                    # Notify the Remediation backend service about the PR
-                    if pr_number is None:
-                        pr_number = 1
-
-                    remediation_notified = contrast_api.notify_remediation_pr_opened(
+                    # Notify the Remediation service about the failed remediation
+                    remediation_notified = contrast_api.notify_remediation_failed(
                         remediation_id=remediation_id,
-                        pr_number=pr_number,
-                        pr_url=pr_url,
+                        failure_category=failure_category,
                         contrast_host=config.CONTRAST_HOST,
                         contrast_org_id=config.CONTRAST_ORG_ID,
                         contrast_app_id=config.CONTRAST_APP_ID,
                         contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
                         contrast_api_key=config.CONTRAST_API_KEY
                     )
+
                     if remediation_notified:
-                        log(f"Successfully notified Remediation service about PR for remediation {remediation_id}.")
+                        log(f"Successfully notified Remediation service about {failure_category} for remediation {remediation_id}.")
                     else:
-                        log(f"Failed to notify Remediation service about PR for remediation {remediation_id}.", is_warning=True)
+                        log(f"Failed to notify Remediation service about {failure_category} for remediation {remediation_id}.", is_warning=True)
+
+                    git_handler.cleanup_branch(new_branch_name)
+                    contrast_api.send_telemetry_data()
+                    continue  # Move to the next vulnerability
+            else:
+                qa_section += "*   **Build Run:** No (BUILD_COMMAND not provided)\n"
+                qa_section += "*   **Final Build Status:** Skipped\n"
+        else:  # QA was skipped
+            qa_section = ""  # Ensure qa_section is empty if QA is skipped
+            if config.SKIP_QA_REVIEW:
+                log("QA Review was skipped based on SKIP_QA_REVIEW setting.")
+            elif not build_config.has_build_command():
+                log("QA Review was skipped as no BUILD_COMMAND was provided.")
+
+        # --- Create Pull Request ---
+        pr_title = git_handler.generate_pr_title(vuln_title)
+        # Use the result from SmartFix agent remediation as the base PR body.
+        # The agent returns the PR body content (extracted from <pr_body> tags)
+        # or the full agent summary if extraction fails.
+        pr_body_base = ai_fix_summary_full
+        debug_log("Using SmartFix agent's output as PR body base.")
+
+        # --- Push and Create PR ---
+        git_handler.push_branch(new_branch_name)  # Push the final commit (original or amended)
+
+        label_name, label_desc, label_color = git_handler.generate_label_details(vuln_uuid)
+        label_created = git_handler.ensure_label(label_name, label_desc, label_color)
+
+        if not label_created:
+            log(f"Could not create GitHub label '{label_name}'. PR will be created without a label.", is_warning=True)
+            label_name = ""  # Clear label_name to avoid using it in PR creation
+
+        pr_title = git_handler.generate_pr_title(vuln_title)
+
+        updated_pr_body = pr_body_base + qa_section
+
+        # Create a brief summary for the telemetry aiSummaryReport (limited to 255 chars in DB)
+        # Generate an optimized summary using the dedicated function in telemetry_handler
+        brief_summary = telemetry_handler.create_ai_summary_report(updated_pr_body)
+
+        # Update telemetry with our optimized summary
+        telemetry_handler.update_telemetry("resultInfo.aiSummaryReport", brief_summary)
+
+        try:
+            # Set a flag to track if we should try the fallback approach
+            pr_creation_success = False
+            pr_url = ""  # Initialize pr_url
+
+            # Try to create the PR using the GitHub CLI
+            log("Attempting to create a pull request...")
+            pr_url = git_handler.create_pr(pr_title, updated_pr_body, remediation_id, config.BASE_BRANCH, label_name)
+
+            if pr_url:
+                pr_creation_success = True
+
+                # Extract PR number from PR URL
+                # PR URL format is like: https://github.com/org/repo/pull/123
+                pr_number = None
+                try:
+                    # Use a more robust method to extract the PR number
+
+                    pr_match = re.search(r'/pull/(\d+)', pr_url)
+                    debug_log(f"Extracting PR number from URL '{pr_url}', match object: {pr_match}")
+                    if pr_match:
+                        pr_number = int(pr_match.group(1))
+                        debug_log(f"Successfully extracted PR number: {pr_number}")
+                    else:
+                        log(f"Could not find PR number pattern in URL: {pr_url}", is_warning=True)
+                except (ValueError, IndexError, AttributeError) as e:
+                    log(f"Could not extract PR number from URL: {pr_url} - Error: {str(e)}")
+
+                # Notify the Remediation backend service about the PR
+                if pr_number is None:
+                    pr_number = 1
+
+                remediation_notified = contrast_api.notify_remediation_pr_opened(
+                    remediation_id=remediation_id,
+                    pr_number=pr_number,
+                    pr_url=pr_url,
+                    contrast_host=config.CONTRAST_HOST,
+                    contrast_org_id=config.CONTRAST_ORG_ID,
+                    contrast_app_id=config.CONTRAST_APP_ID,
+                    contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
+                    contrast_api_key=config.CONTRAST_API_KEY
+                )
+                if remediation_notified:
+                    log(f"Successfully notified Remediation service about PR for remediation {remediation_id}.")
                 else:
-                    # This case should ideally be handled by create_pr exiting or returning empty
-                    # and then the logic below for SKIP_PR_ON_FAILURE would trigger.
-                    # However, if create_pr somehow returns without a URL but doesn't cause an exit:
-                    log("PR creation did not return a URL. Assuming failure.")
+                    log(f"Failed to notify Remediation service about PR for remediation {remediation_id}.", is_warning=True)
+            else:
+                # This case should ideally be handled by create_pr exiting or returning empty
+                # and then the logic below for SKIP_PR_ON_FAILURE would trigger.
+                # However, if create_pr somehow returns without a URL but doesn't cause an exit:
+                log("PR creation did not return a URL. Assuming failure.")
 
-                telemetry_handler.update_telemetry("resultInfo.prCreated", pr_creation_success)
+            telemetry_handler.update_telemetry("resultInfo.prCreated", pr_creation_success)
 
-                if not pr_creation_success:
-                    log("\n--- PR creation failed ---")
-                    error_exit(remediation_id, contrast_api.FailureCategory.GENERATE_PR_FAILURE.value)
-
-                processed_one = True  # Mark that we successfully processed one
-                log(f"\n--- Successfully processed vulnerability {vuln_uuid}. Continuing to look for next vulnerability... ---")
-            except Exception as e:
-                log(f"Error creating PR: {e}")
+            if not pr_creation_success:
                 log("\n--- PR creation failed ---")
                 error_exit(remediation_id, contrast_api.FailureCategory.GENERATE_PR_FAILURE.value)
-        else:
-            log("Skipping commit, push, and PR creation as no changes were detected by the agent.")
-            # Clean up the branch if no changes were made
-            git_handler.cleanup_branch(new_branch_name)
-            continue  # Try the next vulnerability
+
+            processed_one = True  # Mark that we successfully processed one
+            log(f"\n--- Successfully processed vulnerability {vuln_uuid}. Continuing to look for next vulnerability... ---")
+        except Exception as e:
+            log(f"Error creating PR: {e}")
+            log("\n--- PR creation failed ---")
+            error_exit(remediation_id, contrast_api.FailureCategory.GENERATE_PR_FAILURE.value)
 
         contrast_api.send_telemetry_data()
 

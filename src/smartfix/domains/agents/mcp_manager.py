@@ -26,11 +26,17 @@ configuration for filesystem access in agent operations.
 
 import asyncio
 import platform
+import warnings
 from pathlib import Path
 from typing import List
 
 from src.utils import debug_log, log, error_exit
 from src.smartfix.shared.failure_categories import FailureCategory
+
+# Suppress warnings before importing libraries that might trigger them
+warnings.filterwarnings('ignore', category=UserWarning)
+# Suppress specific Pydantic field shadowing warning from ADK library
+warnings.filterwarnings('ignore', message='Field name "config_type" in "SequentialAgent" shadows an attribute in parent "BaseAgent"')
 
 try:
     from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset, StdioServerParameters, StdioConnectionParams
