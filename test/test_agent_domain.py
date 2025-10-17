@@ -72,7 +72,7 @@ class TestSmartFixAgent(unittest.TestCase):
         self.assertTrue(issubclass(SmartFixAgent, CodingAgentStrategy))
 
     @patch('src.smartfix.domains.agents.smartfix_agent.SmartFixAgent._run_ai_fix_agent')
-    @patch('src.qa_handler.run_build_command')
+    @patch('src.smartfix.domains.workflow.build_runner.run_build_command')
     @patch('src.build_output_analyzer.extract_build_errors')
     def test_remediate_method_exists(self, mock_extract_errors, mock_run_build, mock_run_ai_fix):
         """
