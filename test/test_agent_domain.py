@@ -36,6 +36,7 @@ GIT_HANDLER_PATCHES = [
     'src.git_handler.commit_changes',
     'src.git_handler.amend_commit',
     'src.git_handler.get_last_commit_changed_files',
+    'src.git_handler.get_uncommitted_changed_files',
     'src.git_handler.push_branch',
     'src.git_handler.cleanup_branch'
 ]
@@ -53,9 +54,11 @@ class TestSmartFixAgent(unittest.TestCase):
             self.git_mocks.append((patcher, mock))
 
         # Set up common return values for git mocks
-        # get_last_commit_changed_files should return a list
+        # get_last_commit_changed_files and get_uncommitted_changed_files should return a list
         for patcher, mock in self.git_mocks:
             if 'get_last_commit_changed_files' in patcher.attribute:
+                mock.return_value = ["src/file1.py", "src/file2.py"]
+            elif 'get_uncommitted_changed_files' in patcher.attribute:
                 mock.return_value = ["src/file1.py", "src/file2.py"]
             elif 'check_status' in patcher.attribute:
                 mock.return_value = True  # Has changes

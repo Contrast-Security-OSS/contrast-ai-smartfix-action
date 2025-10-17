@@ -200,74 +200,52 @@ class SmartFixAgent(CodingAgentStrategy):
             session.events.append(event)
             return True
 
-        qa_attempts = 0
+        try:
+            # Run the QA loop directly (no need for nested loops)
+            success, changed_files, error_message, qa_logs = self._run_qa_loop_internal(
+                context=context,
+                max_qa_attempts=self.max_qa_attempts,  # Use the actual max attempts
+                initial_changed_files=getattr(context, 'changed_files', []),
+                current_attempt=1,
+                total_attempts=self.max_qa_attempts
+            )
 
-        while qa_attempts < self.max_qa_attempts:
-            qa_attempts += 1
-            session.qa_attempts = qa_attempts
+            # Update session with final QA attempts count
+            session.qa_attempts = len([log for log in qa_logs if log])  # Count non-empty logs
 
-            try:
-                # Extract initial_changed_files if available
-                initial_changed_files = getattr(context, 'changed_files', [])
-
-                try:
-                    # Use the internal QA loop method
-                    success, changed_files, error_message, qa_logs = self._run_qa_loop_internal(
-                        context=context,
-                        max_qa_attempts=1,  # Single attempt per iteration
-                        initial_changed_files=initial_changed_files,
-                        current_attempt=qa_attempts,
-                        total_attempts=self.max_qa_attempts
-                    )
-                    # Convert to expected format for compatibility
-                    qa_result = {
-                        'success': success,
-                        'error': error_message,
-                        'changed_files': changed_files,
-                        'logs': qa_logs
-                    }
-                except SystemExit:
-                    # run_qa_loop called error_exit() due to failure
-                    qa_result = {'success': False, 'error': 'QA loop failed with SystemExit'}
-
-                if qa_result and qa_result.get('success', False):
-                    # QA loop succeeded
-                    event = AgentEvent(
-                        prompt=f"QA Loop Attempt {qa_attempts}",
-                        response=f"QA review completed successfully after {qa_attempts} attempts"
-                    )
-                    session.events.append(event)
-                    return True
-
-                # QA loop failed but we can retry
-                failure_reason = qa_result.get('error', 'Unknown QA failure') if qa_result else 'QA loop returned None'
+            if success:
+                # QA loop succeeded
                 event = AgentEvent(
-                    prompt=f"QA Loop Attempt {qa_attempts}",
-                    response=f"QA attempt {qa_attempts} failed: {failure_reason}"
+                    prompt="QA Review",
+                    response=f"QA review completed successfully after {session.qa_attempts} attempts"
                 )
                 session.events.append(event)
-
-                if qa_attempts >= self.max_qa_attempts:
-                    # Max attempts reached
-                    final_event = AgentEvent(
-                        prompt="QA Loop Final Result",
-                        response=f"QA loop failed after {qa_attempts} attempts. Max attempts ({self.max_qa_attempts}) reached."
-                    )
-                    session.events.append(final_event)
-                    return False
-
-            except Exception as e:
-                # Exception during QA loop
+                return True
+            else:
+                # QA loop failed
                 event = AgentEvent(
-                    prompt=f"QA Loop Attempt {qa_attempts}",
-                    response=f"Exception during QA loop attempt {qa_attempts}: {str(e)}"
+                    prompt="QA Review",
+                    response=f"QA review failed after {session.qa_attempts} attempts: {error_message}"
                 )
                 session.events.append(event)
+                return False
 
-                if qa_attempts >= self.max_qa_attempts:
-                    return False
-
-        return False
+        except SystemExit:
+            # run_qa_loop called error_exit() due to failure
+            event = AgentEvent(
+                prompt="QA Review",
+                response="QA loop failed with SystemExit"
+            )
+            session.events.append(event)
+            return False
+        except Exception as e:
+            # Exception during QA loop
+            event = AgentEvent(
+                prompt="QA Review",
+                response=f"Exception during QA loop: {str(e)}"
+            )
+            session.events.append(event)
+            return False
 
     def _run_ai_fix_agent(self, context: RemediationContext) -> str:
         """Synchronously runs the AI agent to analyze and apply a fix using API-provided prompts."""
@@ -460,8 +438,9 @@ class SmartFixAgent(CodingAgentStrategy):
 
         while qa_attempts < max_qa_attempts:
             qa_attempts += 1
-            # Use outer loop counters for display if provided
-            log(f"\n::group::---- QA Attempt #{qa_attempts}/{max_qa_attempts} ---")
+            # Use total_attempts for display if provided (from outer loop), otherwise use max_qa_attempts
+            display_total = total_attempts if total_attempts else max_qa_attempts
+            log(f"\n::group::---- QA Attempt #{qa_attempts}/{display_total} ---")
 
             # Truncate build output if too long for the agent
             max_output_length = 15000  # Adjust as needed
