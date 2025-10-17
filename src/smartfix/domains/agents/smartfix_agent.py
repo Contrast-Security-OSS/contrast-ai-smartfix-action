@@ -31,14 +31,10 @@ class SmartFixAgent(CodingAgentStrategy):
     Encapsulates the vulnerability fixing and build validation logic without git operations.
     """
 
-    def __init__(self, max_qa_attempts: int = 5):
-        """
-        Initialize SmartFixAgent.
-
-        Args:
-            max_qa_attempts: Maximum number of QA attempts allowed (default: 5)
-        """
-        self.max_qa_attempts = max_qa_attempts
+    def __init__(self):
+        """Initialize SmartFixAgent using global configuration."""
+        config = get_config()
+        self.max_qa_attempts = config.MAX_QA_ATTEMPTS
 
     def remediate(self, context: RemediationContext) -> AgentSession:
         """

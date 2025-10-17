@@ -17,8 +17,6 @@
 # #L%
 #
 
-from typing import Optional, Dict, Any
-
 from src.smartfix.domains.agents.coding_agent import CodingAgentStrategy, CodingAgents
 from src.smartfix.domains.agents.agent_factory import AgentFactory as DomainAgentFactory
 from .external_coding_agent import ExternalCodingAgent
@@ -33,18 +31,15 @@ class GitHubAgentFactory:
     """
 
     @staticmethod
-    def create_agent(
-        agent_type: CodingAgents,
-        config: Optional[Dict[str, Any]] = None
-    ) -> CodingAgentStrategy:
+    def create_agent(agent_type: CodingAgents) -> CodingAgentStrategy:
         """
         Create a coding agent instance based on the specified type.
 
         Supports both domain agents and GitHub-specific external agents.
+        All agents use the global configuration from src.config.
 
         Args:
             agent_type: The type of agent to create
-            config: Optional configuration dictionary for agent setup
 
         Returns:
             CodingAgentStrategy: Configured coding agent instance
@@ -52,62 +47,15 @@ class GitHubAgentFactory:
         Raises:
             ValueError: If agent_type is not supported
         """
-        config = config or {}
-
         # Delegate domain agents to the domain factory
         if agent_type == CodingAgents.SMARTFIX:
-            return DomainAgentFactory.create_agent(agent_type, config)
+            return DomainAgentFactory.create_agent(agent_type)
 
         # Handle GitHub-specific external agents
-        elif agent_type == CodingAgents.GITHUB_COPILOT:
+        elif agent_type in (CodingAgents.GITHUB_COPILOT, CodingAgents.CLAUDE_CODE):
+            # External agents always use the global config
             from src.config import get_config
-            full_config = get_config()
-            return ExternalCodingAgent(full_config)
-
-        elif agent_type == CodingAgents.CLAUDE_CODE:
-            from src.config import get_config
-            full_config = get_config()
-            return ExternalCodingAgent(full_config)
+            return ExternalCodingAgent(get_config())
 
         else:
             raise ValueError(f"Unsupported agent type: {agent_type}")
-
-    @staticmethod
-    def get_default_agent(config: Optional[Dict[str, Any]] = None) -> CodingAgentStrategy:
-        """
-        Create the default coding agent (SmartFix internal).
-
-        Args:
-            config: Optional configuration dictionary
-
-        Returns:
-            CodingAgentStrategy: Default SmartFix internal agent
-        """
-        return GitHubAgentFactory.create_agent(CodingAgents.SMARTFIX, config)
-
-    @staticmethod
-    def get_available_coding_agents() -> list[CodingAgents]:
-        """
-        Get list of all available coding agent types (domain + GitHub-specific).
-
-        Returns:
-            list[CodingAgents]: List of all supported coding agents
-        """
-        return [
-            CodingAgents.SMARTFIX,
-            CodingAgents.GITHUB_COPILOT,
-            CodingAgents.CLAUDE_CODE
-        ]
-
-    @staticmethod
-    def is_coding_agent_available(coding_agent: CodingAgents) -> bool:
-        """
-        Check if a specific coding agent type is available.
-
-        Args:
-            coding_agent: Coding agent type to check
-
-        Returns:
-            bool: True if coding agent type is available, False otherwise
-        """
-        return coding_agent in GitHubAgentFactory.get_available_coding_agents()

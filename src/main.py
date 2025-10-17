@@ -29,7 +29,6 @@ from asyncio.proactor_events import _ProactorBasePipeTransport
 # Import configurations and utilities
 from src.config import get_config
 from src.smartfix.domains.agents import CodingAgents
-from src.smartfix.domains.agents import AgentFactory
 from src.smartfix.domains.agents.agent_session import AgentSessionStatus
 from src.utils import debug_log, log, error_exit
 from src import telemetry_handler
@@ -42,7 +41,9 @@ from src import git_handler
 # Import domain models
 from src.smartfix.domains.vulnerability.context import RemediationContext, PromptConfiguration, BuildConfiguration, RepositoryConfiguration
 from src.smartfix.domains.vulnerability.models import Vulnerability
-from src.github.external_coding_agent import ExternalCodingAgent
+
+# Import GitHub-specific agent factory
+from src.github.agent_factory import GitHubAgentFactory
 
 config = get_config()
 telemetry_handler.initialize_telemetry()
@@ -252,7 +253,6 @@ def main():  # noqa: C901
 
     # Use the validated and normalized settings from config module
     # These values are already processed in config.py with appropriate validation and defaults
-    max_qa_attempts_setting = config.MAX_QA_ATTEMPTS
     max_open_prs_setting = config.MAX_OPEN_PRS
 
     # --- Initial Setup ---
@@ -404,7 +404,9 @@ def main():  # noqa: C901
 
         # --- Check if we need to use the external coding agent ---
         if config.CODING_AGENT != CodingAgents.SMARTFIX.name:
-            external_agent = ExternalCodingAgent(config)
+            # Create agent using GitHubAgentFactory
+            agent_type = CodingAgents[config.CODING_AGENT]
+            external_agent = GitHubAgentFactory.create_agent(agent_type)
             # Assemble the issue body from vulnerability details
             issue_body = external_agent.assemble_issue_body(vulnerability_data)
             # Add issue_body for external agent compatibility
@@ -430,8 +432,8 @@ def main():  # noqa: C901
 
         # --- Run SmartFix Agent ---
         # NOTE: The agent will validate the initial build before attempting fixes
-        # Create SmartFix agent using the domain factory
-        smartfix_agent = AgentFactory.get_default_agent({'max_qa_attempts': max_qa_attempts_setting})
+        # Create SmartFix agent using the GitHub agent factory
+        smartfix_agent = GitHubAgentFactory.create_agent(CodingAgents.SMARTFIX)
 
         # Create remediation context using domain model classmethod with API-provided ID
         context = RemediationContext.create_with_components(

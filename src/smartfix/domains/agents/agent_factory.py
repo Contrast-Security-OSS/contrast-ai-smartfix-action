@@ -17,8 +17,6 @@
 # #L%
 #
 
-from typing import Optional, Dict, Any
-
 from .coding_agent import CodingAgentStrategy, CodingAgents
 from .smartfix_agent import SmartFixAgent
 
@@ -32,64 +30,20 @@ class AgentFactory:
     """
 
     @staticmethod
-    def create_agent(
-        agent_type: CodingAgents,
-        config: Optional[Dict[str, Any]] = None
-    ) -> CodingAgentStrategy:
+    def create_agent(agent_type: CodingAgents) -> CodingAgentStrategy:
         """
         Create a coding agent instance based on the specified type.
 
         Args:
             agent_type: The type of agent to create
-            config: Optional configuration dictionary for agent setup
 
         Returns:
             CodingAgentStrategy: Configured coding agent instance
 
         Raises:
             ValueError: If agent_type is not supported
-            NotImplementedError: If agent type is not yet implemented
         """
-        config = config or {}
-
         if agent_type == CodingAgents.SMARTFIX:
-            max_qa_attempts = config.get('max_qa_attempts', 5)
-            return SmartFixAgent(max_qa_attempts=max_qa_attempts)
+            return SmartFixAgent()
         else:
             raise ValueError(f"Domain factory only supports SMARTFIX agents. Got: {agent_type}")
-
-    @staticmethod
-    def get_default_agent(config: Optional[Dict[str, Any]] = None) -> CodingAgentStrategy:
-        """
-        Create the default coding agent (SmartFix internal).
-
-        Args:
-            config: Optional configuration dictionary
-
-        Returns:
-            CodingAgentStrategy: Default SmartFix internal agent
-        """
-        return AgentFactory.create_agent(CodingAgents.SMARTFIX, config)
-
-    @staticmethod
-    def get_available_coding_agents() -> list[CodingAgents]:
-        """
-        Get list of available coding agent types in the domain layer.
-
-        Returns:
-            list[CodingAgents]: List of domain-supported coding agents (SMARTFIX only)
-        """
-        return [CodingAgents.SMARTFIX]
-
-    @staticmethod
-    def is_coding_agent_available(coding_agent: CodingAgents) -> bool:
-        """
-        Check if a specific coding agent type is available.
-
-        Args:
-            coding_agent: Coding agent type to check
-
-        Returns:
-            bool: True if coding agent type is available, False otherwise
-        """
-        return coding_agent in AgentFactory.get_available_coding_agents()
