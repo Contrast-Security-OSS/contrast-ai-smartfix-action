@@ -430,17 +430,8 @@ def main():  # noqa: C901
             log(f"Error preparing feature branch {new_branch_name}. Skipping to next vulnerability.")
             continue
 
-        # Ensure the build is not broken before running the fix agent
-        log("\n--- Running Build Before Fix ---")
-        prefix_build_success, prefix_build_output = run_build_command(build_config.build_command, config.REPO_ROOT, remediation_id)
-        if not prefix_build_success:
-            # Analyze build failure and show error summary
-            error_analysis = extract_build_errors(prefix_build_output)
-            log("\n❌ Build is broken ❌ -- No fix attempted.")
-            log(f"Build output:\n{error_analysis}")
-            error_exit(remediation_id, contrast_api.FailureCategory.INITIAL_BUILD_FAILURE.value)  # Exit if the build is broken, no point in proceeding
-
         # --- Run SmartFix Agent ---
+        # NOTE: The agent will validate the initial build before attempting fixes
         # Create SmartFix agent using the domain factory
         smartfix_agent = AgentFactory.get_default_agent({'max_qa_attempts': max_qa_attempts_setting})
 

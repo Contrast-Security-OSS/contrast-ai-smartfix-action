@@ -25,6 +25,7 @@ configuration for filesystem access in agent operations.
 """
 
 import asyncio
+import logging
 import platform
 import warnings
 from pathlib import Path
@@ -33,7 +34,7 @@ from typing import List
 from src.utils import debug_log, log, error_exit
 from src.smartfix.shared.failure_categories import FailureCategory
 
-# Suppress warnings before importing libraries that might trigger them
+# Suppress Python warnings before importing libraries that might trigger them
 warnings.filterwarnings('ignore', category=UserWarning)
 # Suppress specific Pydantic field shadowing warning from ADK library
 warnings.filterwarnings('ignore', message='Field name "config_type" in "SequentialAgent" shadows an attribute in parent "BaseAgent"')
@@ -43,6 +44,10 @@ try:
     MCP_AVAILABLE = True
 except ImportError:
     MCP_AVAILABLE = False
+
+# Configure library loggers to reduce noise from ADK authentication warnings
+library_logger = logging.getLogger("google_adk.google.adk.tools.base_authenticated_tool")
+library_logger.setLevel(logging.ERROR)
 
 
 async def _create_mcp_toolset(target_folder_str: str) -> MCPToolset:
