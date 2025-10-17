@@ -33,9 +33,7 @@ from src.smartfix.domains.agents import AgentFactory
 from src.smartfix.domains.agents.agent_session import AgentSessionStatus
 from src.utils import debug_log, log, error_exit
 from src import telemetry_handler
-from src.smartfix.domains.workflow.build_runner import run_build_command
 from src.version_check import do_version_check
-from src.build_output_analyzer import extract_build_errors
 
 # Import domain-specific handlers
 from src import contrast_api
