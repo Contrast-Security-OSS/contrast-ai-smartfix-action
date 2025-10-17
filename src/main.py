@@ -279,7 +279,7 @@ def main():  # noqa: C901
 
     # --- Main Processing Loop ---
     processed_one = False
-    max_runtime = timedelta(hours=3)  # Set maximum runtime to 3 hours
+    max_runtime = timedelta(minutes=15)  # Set maximum runtime to 3 hours
 
     # Construct GitHub repository URL (used for each API call)
     github_repo_url = f"https://github.com/{config.GITHUB_REPOSITORY}"
@@ -293,7 +293,7 @@ def main():  # noqa: C901
         current_time = datetime.now()
         elapsed_time = current_time - start_time
         if elapsed_time > max_runtime:
-            log(f"\n--- Maximum runtime of 3 hours exceeded (actual: {elapsed_time}). Stopping processing. ---")
+            log(f"\n--- Maximum runtime of 15 mins exceeded (actual: {elapsed_time}). Stopping processing. ---")
             remediation_notified = contrast_api.notify_remediation_failed(
                 remediation_id=remediation_id,
                 failure_category=contrast_api.FailureCategory.EXCEEDED_TIMEOUT.value,
