@@ -406,7 +406,7 @@ def main():  # noqa: C901
         if config.CODING_AGENT != CodingAgents.SMARTFIX.name:
             # Create agent using GitHubAgentFactory
             agent_type = CodingAgents[config.CODING_AGENT]
-            external_agent = GitHubAgentFactory.create_agent(agent_type)
+            external_agent = GitHubAgentFactory.create_agent(agent_type, config)
             # Assemble the issue body from vulnerability details
             issue_body = external_agent.assemble_issue_body(vulnerability_data)
             # Add issue_body for external agent compatibility
@@ -433,7 +433,7 @@ def main():  # noqa: C901
         # --- Run SmartFix Agent ---
         # NOTE: The agent will validate the initial build before attempting fixes
         # Create SmartFix agent using the GitHub agent factory
-        smartfix_agent = GitHubAgentFactory.create_agent(CodingAgents.SMARTFIX)
+        smartfix_agent = GitHubAgentFactory.create_agent(CodingAgents.SMARTFIX, config)
 
         # Create remediation context using domain model classmethod with API-provided ID
         context = RemediationContext.create_with_components(

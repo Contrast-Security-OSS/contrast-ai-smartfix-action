@@ -9,7 +9,7 @@ import datetime
 import re
 from typing import List, Optional, Tuple
 
-from src.config import get_config
+from src.config import Config
 from src.smartfix.domains.workflow.build_runner import run_build_command
 from src.smartfix.domains.workflow.formatter import run_formatting_command
 from src.smartfix.domains.agents.event_loop_utils import _run_agent_in_event_loop, _run_agent_internal_with_prompts
@@ -31,9 +31,14 @@ class SmartFixAgent(CodingAgentStrategy):
     Encapsulates the vulnerability fixing and build validation logic without git operations.
     """
 
-    def __init__(self):
-        """Initialize SmartFixAgent using global configuration."""
-        config = get_config()
+    def __init__(self, config: Config):
+        """
+        Initialize SmartFixAgent with provided configuration.
+
+        Args:
+            config: The application configuration object
+        """
+        self.config = config
         self.max_qa_attempts = config.MAX_QA_ATTEMPTS
 
     def remediate(self, context: RemediationContext) -> AgentSession:
@@ -253,8 +258,7 @@ class SmartFixAgent(CodingAgentStrategy):
 
         log("\n--- Preparing to run AI Agent to Apply Fix ---")
         debug_log(f"Repo Root for Agent Tools: {context.repo_config.repo_path}")
-        config = get_config()
-        debug_log(f"Skip Writing Security Test: {config.SKIP_WRITING_SECURITY_TEST}")
+        debug_log(f"Skip Writing Security Test: {self.config.SKIP_WRITING_SECURITY_TEST}")
 
         try:
             # Execute the fix agent
