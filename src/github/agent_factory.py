@@ -19,11 +19,11 @@
 
 from src.config import Config
 from src.smartfix.domains.agents.coding_agent import CodingAgentStrategy, CodingAgents
-from src.smartfix.domains.agents.agent_factory import AgentFactory as DomainAgentFactory
+from src.smartfix.domains.agents.agent_factory import AgentFactory
 from .external_coding_agent import ExternalCodingAgent
 
 
-class GitHubAgentFactory:
+class GitHubAgentFactory(AgentFactory):
     """
     GitHub-specific agent factory that extends the domain factory capabilities.
 
@@ -48,9 +48,9 @@ class GitHubAgentFactory:
         Raises:
             ValueError: If agent_type is not supported
         """
-        # Delegate domain agents to the domain factory
+        # Delegate domain agents to the parent factory
         if agent_type == CodingAgents.SMARTFIX:
-            return DomainAgentFactory.create_agent(agent_type, config)
+            return AgentFactory.create_agent(agent_type, config)
 
         # Handle GitHub-specific external agents
         elif agent_type in (CodingAgents.GITHUB_COPILOT, CodingAgents.CLAUDE_CODE):

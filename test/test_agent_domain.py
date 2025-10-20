@@ -19,6 +19,7 @@
 
 import unittest
 from unittest.mock import MagicMock, patch
+from src.config import get_config, reset_config
 from src.smartfix.domains.agents import (
     SmartFixAgent,
     CodingAgentStrategy,
@@ -46,6 +47,10 @@ class TestSmartFixAgent(unittest.TestCase):
 
     def setUp(self):
         """Set up mocks to prevent git operations in all tests"""
+        # Reset and get test config
+        reset_config()
+        self.config = get_config(testing=True)
+
         # Start all git handler patches
         self.git_mocks = []
         for patch_target in GIT_HANDLER_PATCHES:
@@ -67,6 +72,7 @@ class TestSmartFixAgent(unittest.TestCase):
         """Stop all patches"""
         for patcher, mock in self.git_mocks:
             patcher.stop()
+        reset_config()
 
     def test_smartfix_agent_is_a_coding_agent_strategy(self):
         """
@@ -81,7 +87,7 @@ class TestSmartFixAgent(unittest.TestCase):
         """
         Tests that the remediate method is present on the SmartFixAgent and no longer raises NotImplementedError.
         """
-        agent = SmartFixAgent()
+        agent = SmartFixAgent(self.config)
         mock_context = MagicMock(spec=RemediationContext)
 
         # Mock the required attributes and methods
@@ -108,7 +114,7 @@ class TestSmartFixAgent(unittest.TestCase):
         """
         Tests successful initial build validation.
         """
-        agent = SmartFixAgent()
+        agent = SmartFixAgent(self.config)
         session = AgentSession()
         mock_context = MagicMock(spec=RemediationContext)
 
@@ -133,7 +139,7 @@ class TestSmartFixAgent(unittest.TestCase):
         """
         Tests failed initial build validation.
         """
-        agent = SmartFixAgent()
+        agent = SmartFixAgent(self.config)
         session = AgentSession()
         mock_context = MagicMock(spec=RemediationContext)
 
@@ -158,7 +164,7 @@ class TestSmartFixAgent(unittest.TestCase):
         """
         Tests successful fix agent execution.
         """
-        agent = SmartFixAgent()
+        agent = SmartFixAgent(self.config)
         session = AgentSession()
         mock_context = MagicMock(spec=RemediationContext)
 
@@ -182,7 +188,7 @@ class TestSmartFixAgent(unittest.TestCase):
         """
         Tests fix agent execution with error.
         """
-        agent = SmartFixAgent()
+        agent = SmartFixAgent(self.config)
         session = AgentSession()
         mock_context = MagicMock(spec=RemediationContext)
 
@@ -203,7 +209,7 @@ class TestSmartFixAgent(unittest.TestCase):
         """
         Tests successful QA loop execution.
         """
-        agent = SmartFixAgent()
+        agent = SmartFixAgent(self.config)
         session = AgentSession()
         mock_context = MagicMock(spec=RemediationContext)
 
@@ -224,7 +230,7 @@ class TestSmartFixAgent(unittest.TestCase):
         """
         Tests the complete remediation workflow with all steps successful.
         """
-        agent = SmartFixAgent()  # Remove max_qa_attempts parameter
+        agent = SmartFixAgent(self.config)
         mock_context = MagicMock(spec=RemediationContext)
 
         # Setup context
@@ -248,7 +254,7 @@ class TestSmartFixAgent(unittest.TestCase):
         """
         Tests the complete remediation workflow including QA validation.
         """
-        agent = SmartFixAgent()  # Remove max_qa_attempts parameter
+        agent = SmartFixAgent(self.config)
         mock_context = MagicMock(spec=RemediationContext)
 
         # Setup context for QA
