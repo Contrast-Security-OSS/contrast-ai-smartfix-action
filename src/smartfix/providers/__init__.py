@@ -38,3 +38,4 @@ def setup_contrast_provider():
     # Configure to use Contrast proxy
     os.environ["ANTHROPIC_API_BASE"] = "https://smartfix-llm-proxy.loca.lt"  # config.BEDROCK_PROXY_URL
     os.environ["ANTHROPIC_API_KEY"] = "hpuBJysWV5zOR13X3miLoh08ctFa1Eod"  # config.CONTRAST_API_KEY
+    os.environ["DEFAULT_MAX_TOKENS"] = "8192"  # override default max tokens if needed
