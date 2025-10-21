@@ -28,7 +28,6 @@ is properly handled and available for LiteLLM to use for Bedrock authentication.
 import sys
 import unittest
 import os
-from unittest.mock import patch, MagicMock
 
 # Add project root to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
