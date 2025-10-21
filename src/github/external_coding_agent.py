@@ -28,7 +28,7 @@ from src.contrast_api import notify_remediation_pr_opened
 from src.smartfix.shared.failure_categories import FailureCategory
 from src.smartfix.domains.agents import CodingAgents
 from src.smartfix.domains.agents.coding_agent import CodingAgentStrategy
-from src.smartfix.domains.agents.agent_session import AgentSession, AgentSessionStatus
+from src.smartfix.domains.agents.agent_session import AgentSession, AgentSessionStatus, AgentEvent
 from src.smartfix.domains.vulnerability.context import RemediationContext
 
 
@@ -158,11 +158,11 @@ Please review this security vulnerability and implement appropriate fixes to add
         remediation_id = context.remediation_id
         issue_body = getattr(context, 'issue_body', '')
 
-        session = AgentSession.from_config(self.config)
-        session.add_event(
+        session = AgentSession()
+        session.events.append(AgentEvent(
             prompt=f"External coding agent ({self.config.CODING_AGENT}) starting remediation",
             response=f"Processing vulnerability: {vuln_title} (ID: {vuln_uuid})",
-        )
+        ))
 
         try:
             if hasattr(self.config, 'CODING_AGENT') and self.config.CODING_AGENT == CodingAgents.SMARTFIX.name:

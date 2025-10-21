@@ -106,7 +106,7 @@ class TestSmartFixAgent(unittest.TestCase):
         # Should not raise NotImplementedError anymore
         result = agent.remediate(mock_context)
         self.assertIsInstance(result, AgentSession)
-        self.assertEqual(result.session_id, result.session_id)  # Test it's a valid session
+        self.assertIsNotNone(result.start_time)  # Test it's a valid session
 
     @patch('src.smartfix.domains.agents.smartfix_agent.run_build_command')
     @patch('src.smartfix.domains.agents.smartfix_agent.extract_build_errors')
@@ -286,7 +286,6 @@ class TestAgentSession(unittest.TestCase):
         Tests the default state of a new AgentSession.
         """
         session = AgentSession()
-        self.assertIsNotNone(session.session_id)
         self.assertIsNotNone(session.start_time)
         self.assertIsNone(session.end_time)
         self.assertEqual(session.status, AgentSessionStatus.IN_PROGRESS)

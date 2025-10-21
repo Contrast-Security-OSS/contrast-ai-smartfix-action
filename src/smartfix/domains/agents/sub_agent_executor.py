@@ -18,9 +18,10 @@
 #
 
 """
-Agent Executor Module
+Sub-Agent Executor Module
 
-Handles low-level agent creation, execution, and event processing for AI agents.
+Handles low-level sub-agent creation, execution, and event processing for Fix and QA agents.
+These sub-agents operate under the SmartFixAgent orchestrator.
 """
 
 import asyncio
