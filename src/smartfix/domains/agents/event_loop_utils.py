@@ -33,7 +33,7 @@ from src.config import get_config
 from src.utils import debug_log, log, error_exit
 from src.smartfix.shared.failure_categories import FailureCategory
 
-from .sub_agent_executor import create_agent, process_agent_run, ADK_AVAILABLE
+from .sub_agent_executor import SubAgentExecutor, ADK_AVAILABLE
 
 # Conditional imports
 try:
@@ -94,7 +94,11 @@ def _run_agent_in_event_loop(coroutine_func, *args, **kwargs):
     # On Windows, verify we're using the correct event loop type for subprocess support
     if is_windows:
         if 'Proactor' not in loop_type_name:
-            log(f"WARNING: Current event loop {loop_type_name} is not a ProactorEventLoop, subprocesses may not work!", is_error=True)
+            log(
+                f"WARNING: Current event loop {loop_type_name} is not a "
+                f"ProactorEventLoop, subprocesses may not work!",
+                is_error=True
+            )
             log(f"Current event loop policy: {loop_policy_name}", is_error=True)
 
     # More detailed logging for Windows environments
@@ -149,7 +153,13 @@ def _run_agent_in_event_loop(coroutine_func, *args, **kwargs):
     return result
 
 
-async def _run_agent_internal_with_prompts(agent_type: str, repo_root: Path, query: str, system_prompt: str, remediation_id: str) -> str:
+async def _run_agent_internal_with_prompts(
+    agent_type: str,
+    repo_root: Path,
+    query: str,
+    system_prompt: str,
+    remediation_id: str
+) -> str:
     """
     Internal helper to run either fix or QA agent with API-provided prompts. Returns summary.
 
@@ -241,15 +251,28 @@ async def _run_agent_internal_with_prompts(agent_type: str, repo_root: Path, que
         session_service = InMemorySessionService()
         artifacts_service = InMemoryArtifactService()
         app_name = f'contrast_{agent_type}_app'
-        session = await session_service.create_session(state={}, app_name=app_name, user_id=f'github_action_{agent_type}')
+        session = await session_service.create_session(
+            state={},
+            app_name=app_name,
+            user_id=f'github_action_{agent_type}'
+        )
     except Exception as e:
         # Handle any errors in session creation
         log(f"FATAL: Failed to create {agent_type.capitalize()} agent session: {e}", is_error=True)
         error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
 
-    agent = await create_agent(repo_root, remediation_id, agent_type=agent_type, system_prompt=system_prompt)
+    # Use SubAgentExecutor to create and execute the agent
+    executor = SubAgentExecutor()
+
+    agent = await executor.create_agent(
+        repo_root, remediation_id, agent_type=agent_type, system_prompt=system_prompt
+    )
     if not agent:
-        log(f"AI Agent creation failed ({agent_type} agent). Possible reasons: MCP server connection issue, missing prompts, model configuration error, or internal ADK problem.")
+        log(
+            f"AI Agent creation failed ({agent_type} agent). "
+            f"Possible reasons: MCP server connection issue, missing prompts, "
+            f"model configuration error, or internal ADK problem."
+        )
         error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
 
     runner = Runner(
@@ -259,6 +282,6 @@ async def _run_agent_internal_with_prompts(agent_type: str, repo_root: Path, que
         session_service=session_service,
     )
 
-    # Pass the full model ID (though not used for cost calculation anymore, kept for consistency if needed elsewhere)
-    summary = await process_agent_run(runner, agent, session, query, remediation_id, agent_type)
+    # Execute the agent using the executor
+    summary = await executor.execute_agent(runner, agent, session, query, remediation_id, agent_type)
     return summary
