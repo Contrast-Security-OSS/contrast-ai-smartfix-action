@@ -18,7 +18,7 @@
 #
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum, auto
 from typing import List, Optional
 
@@ -36,7 +36,7 @@ class AgentSessionStatus(Enum):
 @dataclass
 class AgentEvent:
     """Represents a single interaction (prompt/response) with the LLM."""
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     prompt: Optional[str] = None
     response: Optional[str] = None
 
@@ -49,7 +49,7 @@ class AgentSession:
     status: AgentSessionStatus = AgentSessionStatus.IN_PROGRESS
     events: List[AgentEvent] = field(default_factory=list)
     qa_attempts: int = 0
-    start_time: datetime = field(default_factory=datetime.utcnow)
+    start_time: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     end_time: Optional[datetime] = None
     final_pr_body: Optional[str] = None
 
@@ -57,7 +57,7 @@ class AgentSession:
         """Marks the session as complete."""
         self.status = status
         self.final_pr_body = pr_body
-        self.end_time = datetime.utcnow()
+        self.end_time = datetime.now(timezone.utc)
 
     @property
     def success(self) -> bool:

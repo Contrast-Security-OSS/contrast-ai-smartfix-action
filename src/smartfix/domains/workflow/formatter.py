@@ -68,7 +68,7 @@ def run_formatting_command(formatting_command: Optional[str], repo_root: Path, r
         # NOTE: Git operations are handled by main.py after all agent work completes
         # We just track which files were changed by the formatter
         # The formatter modifies files in place, so we don't need to commit here
-        log("Formatting command completed. Changes will be committed by caller.")
+        log("Formatting command completed.")
     else:
         log(f"::error::Error executing formatting command: {formatting_command}")
         log(f"::error::Error details: {format_output}", is_error=True)
