@@ -17,7 +17,6 @@
 # #L%
 #
 
-from src.config import Config
 from .coding_agent import CodingAgentStrategy, CodingAgents
 from .smartfix_agent import SmartFixAgent
 
@@ -26,18 +25,17 @@ class AgentFactory:
     """
     Factory class for creating and configuring coding agent instances.
 
-    Provides centralized agent creation with strategy selection logic
-    and configuration management.
+    Provides centralized agent creation with strategy selection logic.
+    Configuration is passed through RemediationContext, not at agent creation.
     """
 
     @staticmethod
-    def create_agent(agent_type: CodingAgents, config: Config) -> CodingAgentStrategy:
+    def create_agent(agent_type: CodingAgents) -> CodingAgentStrategy:
         """
         Create a coding agent instance based on the specified type.
 
         Args:
             agent_type: The type of agent to create
-            config: The application configuration object
 
         Returns:
             CodingAgentStrategy: Configured coding agent instance
@@ -46,6 +44,6 @@ class AgentFactory:
             ValueError: If agent_type is not supported
         """
         if agent_type == CodingAgents.SMARTFIX:
-            return SmartFixAgent(config)
+            return SmartFixAgent()
         else:
             raise ValueError(f"Domain factory only supports SMARTFIX agents. Got: {agent_type}")

@@ -54,7 +54,7 @@ class TestExternalCodingAgent(unittest.TestCase):
         )
 
         # Create remediation context
-        context = RemediationContext.create(remediation_id, vulnerability, self.config)
+        context = RemediationContext.from_config(remediation_id, vulnerability, self.config)
         # Add issue_body for external agent compatibility
         context.issue_body = "Test issue body"
         return context

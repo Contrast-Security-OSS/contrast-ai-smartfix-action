@@ -385,21 +385,9 @@ def main():  # noqa: C901
         log(f"\n\033[0;33m Selected vuln to fix: {vuln_title} \033[0m")
 
         # --- Create Common Remediation Context ---
-        # Process vulnerability data using domain service
-        if config.CODING_AGENT == CodingAgents.SMARTFIX.name:
-            # For SmartFix, create vulnerability and context with all components
-            vulnerability = Vulnerability.from_api_data(vulnerability_data)
-            context = RemediationContext.create_with_components(
-                remediation_id=remediation_id,
-                vulnerability=vulnerability,
-                prompts=prompts,
-                build_config=build_config,
-                repo_config=repo_config
-            )
-        else:
-            # For external agents, create vulnerability and context directly
-            vulnerability = Vulnerability.from_api_data(vulnerability_data)
-            context = RemediationContext.create(remediation_id, vulnerability, config)
+        # Create vulnerability and context from config - single source of truth
+        vulnerability = Vulnerability.from_api_data(vulnerability_data)
+        context = RemediationContext.from_config(remediation_id, vulnerability, config, prompts=prompts)
 
         # --- Check if we need to use the external coding agent ---
         if config.CODING_AGENT != CodingAgents.SMARTFIX.name:
@@ -431,17 +419,8 @@ def main():  # noqa: C901
 
         # --- Run SmartFix Agent ---
         # NOTE: The agent will validate the initial build before attempting fixes
-        # Create SmartFix agent using the GitHub agent factory
-        smartfix_agent = GitHubAgentFactory.create_agent(CodingAgents.SMARTFIX, config)
-
-        # Create remediation context using domain model classmethod with API-provided ID
-        context = RemediationContext.create_with_components(
-            remediation_id=remediation_id,
-            vulnerability=Vulnerability.from_api_data(vulnerability_data),
-            prompts=prompts,
-            build_config=build_config,
-            repo_config=repo_config
-        )
+        # Create SmartFix agent (no config needed - gets everything from context)
+        smartfix_agent = GitHubAgentFactory.create_agent(CodingAgents.SMARTFIX)
 
         # Run the agent remediation process
         # The agent will run the fix agent and QA loop without doing any git operations

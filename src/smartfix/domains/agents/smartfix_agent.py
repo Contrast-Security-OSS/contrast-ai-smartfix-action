@@ -9,7 +9,6 @@ import datetime
 import re
 from typing import List, Optional, Tuple
 
-from src.config import Config
 from src.smartfix.domains.workflow.build_runner import run_build_command
 from src.smartfix.domains.workflow.formatter import run_formatting_command
 from src.smartfix.domains.agents.event_loop_utils import _run_agent_in_event_loop, _run_agent_internal_with_prompts
@@ -29,17 +28,12 @@ class SmartFixAgent(CodingAgentStrategy):
     Internal SmartFix coding agent that orchestrates the Fix Agent + QA Agent workflow.
 
     Encapsulates the vulnerability fixing and build validation logic without git operations.
+    All configuration is provided through RemediationContext - no direct config coupling.
     """
 
-    def __init__(self, config: Config):
-        """
-        Initialize SmartFixAgent with provided configuration.
-
-        Args:
-            config: The application configuration object
-        """
-        self.config = config
-        self.max_qa_attempts = config.MAX_QA_ATTEMPTS
+    def __init__(self):
+        """Initialize SmartFixAgent. Configuration comes from RemediationContext."""
+        pass
 
     def remediate(self, context: RemediationContext) -> AgentSession:
         """
@@ -205,10 +199,10 @@ class SmartFixAgent(CodingAgentStrategy):
             # Run the QA loop directly (no need for nested loops)
             success, changed_files, error_message, qa_logs = self._run_qa_loop_internal(
                 context=context,
-                max_qa_attempts=self.max_qa_attempts,  # Use the actual max attempts
+                max_qa_attempts=context.max_qa_attempts,  # Use the actual max attempts
                 initial_changed_files=getattr(context, 'changed_files', []),
                 current_attempt=1,
-                total_attempts=self.max_qa_attempts
+                total_attempts=context.max_qa_attempts
             )
 
             # Update session with final QA attempts count
@@ -258,7 +252,7 @@ class SmartFixAgent(CodingAgentStrategy):
 
         log("\n--- Preparing to run AI Agent to Apply Fix ---")
         debug_log(f"Repo Root for Agent Tools: {context.repo_config.repo_path}")
-        debug_log(f"Skip Writing Security Test: {self.config.SKIP_WRITING_SECURITY_TEST}")
+        debug_log(f"Skip Writing Security Test: {context.skip_writing_security_test}")
 
         try:
             # Execute the fix agent

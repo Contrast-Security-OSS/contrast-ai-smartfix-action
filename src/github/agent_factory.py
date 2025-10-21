@@ -17,6 +17,7 @@
 # #L%
 #
 
+from typing import Optional
 from src.config import Config
 from src.smartfix.domains.agents.coding_agent import CodingAgentStrategy, CodingAgents
 from src.smartfix.domains.agents.agent_factory import AgentFactory
@@ -32,7 +33,7 @@ class GitHubAgentFactory(AgentFactory):
     """
 
     @staticmethod
-    def create_agent(agent_type: CodingAgents, config: Config) -> CodingAgentStrategy:
+    def create_agent(agent_type: CodingAgents, config: Optional[Config] = None) -> CodingAgentStrategy:
         """
         Create a coding agent instance based on the specified type.
 
@@ -40,20 +41,22 @@ class GitHubAgentFactory(AgentFactory):
 
         Args:
             agent_type: The type of agent to create
-            config: The application configuration object
+            config: The application configuration object (required for external agents, not for SMARTFIX)
 
         Returns:
             CodingAgentStrategy: Configured coding agent instance
 
         Raises:
-            ValueError: If agent_type is not supported
+            ValueError: If agent_type is not supported or config is missing for external agents
         """
-        # Delegate domain agents to the parent factory
+        # Delegate domain agents to the parent factory (no config needed)
         if agent_type == CodingAgents.SMARTFIX:
-            return AgentFactory.create_agent(agent_type, config)
+            return AgentFactory.create_agent(agent_type)
 
-        # Handle GitHub-specific external agents
+        # Handle GitHub-specific external agents (config required)
         elif agent_type in (CodingAgents.GITHUB_COPILOT, CodingAgents.CLAUDE_CODE):
+            if config is None:
+                raise ValueError(f"Config is required for external agent type: {agent_type}")
             return ExternalCodingAgent(config)
 
         else:

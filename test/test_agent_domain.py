@@ -87,7 +87,7 @@ class TestSmartFixAgent(unittest.TestCase):
         """
         Tests that the remediate method is present on the SmartFixAgent and no longer raises NotImplementedError.
         """
-        agent = SmartFixAgent(self.config)
+        agent = SmartFixAgent()
         mock_context = MagicMock(spec=RemediationContext)
 
         # Mock the required attributes and methods
@@ -114,7 +114,7 @@ class TestSmartFixAgent(unittest.TestCase):
         """
         Tests successful initial build validation.
         """
-        agent = SmartFixAgent(self.config)
+        agent = SmartFixAgent()
         session = AgentSession()
         mock_context = MagicMock(spec=RemediationContext)
 
@@ -139,7 +139,7 @@ class TestSmartFixAgent(unittest.TestCase):
         """
         Tests failed initial build validation.
         """
-        agent = SmartFixAgent(self.config)
+        agent = SmartFixAgent()
         session = AgentSession()
         mock_context = MagicMock(spec=RemediationContext)
 
@@ -164,7 +164,7 @@ class TestSmartFixAgent(unittest.TestCase):
         """
         Tests successful fix agent execution.
         """
-        agent = SmartFixAgent(self.config)
+        agent = SmartFixAgent()
         session = AgentSession()
         mock_context = MagicMock(spec=RemediationContext)
 
@@ -188,7 +188,7 @@ class TestSmartFixAgent(unittest.TestCase):
         """
         Tests fix agent execution with error.
         """
-        agent = SmartFixAgent(self.config)
+        agent = SmartFixAgent()
         session = AgentSession()
         mock_context = MagicMock(spec=RemediationContext)
 
@@ -209,7 +209,7 @@ class TestSmartFixAgent(unittest.TestCase):
         """
         Tests successful QA loop execution.
         """
-        agent = SmartFixAgent(self.config)
+        agent = SmartFixAgent()
         session = AgentSession()
         mock_context = MagicMock(spec=RemediationContext)
 
@@ -230,7 +230,7 @@ class TestSmartFixAgent(unittest.TestCase):
         """
         Tests the complete remediation workflow with all steps successful.
         """
-        agent = SmartFixAgent(self.config)
+        agent = SmartFixAgent()
         mock_context = MagicMock(spec=RemediationContext)
 
         # Setup context
@@ -254,7 +254,7 @@ class TestSmartFixAgent(unittest.TestCase):
         """
         Tests the complete remediation workflow including QA validation.
         """
-        agent = SmartFixAgent(self.config)
+        agent = SmartFixAgent()
         mock_context = MagicMock(spec=RemediationContext)
 
         # Setup context for QA
