@@ -228,7 +228,9 @@ async def create_agent(target_folder: Path, remediation_id: str, agent_type: str
             stream_options={"include_usage": True},
             # Pass second API key as custom header
             extra_headers={
-                "X-Contrast-Service-Key": "contrast-service-key"  # config.CONTRAST_SERVICE_KEY
+                "Api-Key":"hpuBJysWV5zOR13X3miLoh08ctFa1Eod",
+                "Authorization":"ZG91Zy5qZXJlbWlhcytjcmF0dXMtc2NhbnRlc3QtZmlucmEtYXBpQGNvbnRyYXN0c2VjdXJpdHkuY29tOk1WQkFPS0RNR1NRODRLVzA="
+                #"X-Contrast-Service-Key": "contrast-service-key"  # config.CONTRAST_SERVICE_KEY
             }
         )
 
