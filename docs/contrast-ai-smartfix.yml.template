@@ -37,6 +37,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     steps:
+      # Option A: Configure AWS Credentials using IAM (Recommended for production)
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
@@ -44,6 +45,10 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
           aws-region: ${{ vars.AWS_REGION }}
+
+      # Option B: Use Bedrock API Keys (Simpler but less secure)
+      # If using API keys, omit the "Configure AWS Credentials" step above
+      # and uncomment the aws_bearer_token_bedrock and aws_region lines below in the action inputs
 
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -75,6 +80,9 @@ jobs:
           gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
           # --- Anthropic API Credentials ---
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # --- AWS Bedrock API Key (Alternative to IAM credentials, less secure) ---
+          # aws_bearer_token_bedrock: ${{ secrets.AWS_BEARER_TOKEN_BEDROCK }}
+          # aws_region: ${{ vars.AWS_REGION }}
           # --- Azure Open API Credentials ---
           # azure_api_key: ${{ secrets.AZURE_API_KEY }}
           # azure_api_base: ${{ secrets.AZURE_API_BASE }}
