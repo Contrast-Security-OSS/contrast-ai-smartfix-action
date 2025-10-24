@@ -22,7 +22,7 @@ When the `@claude` handle is mentioned in the title of a SmartFix-created GitHub
 
 * **Contrast Assess:** You need an active Contrast Assess deployment identifying vulnerabilities in your application.
 * **GitHub:** Your project must be hosted on GitHub and use GitHub Actions.  In the GitHub repository's Settings, enable the Actions > General > Workflow Permissions checkbox for "Allow GitHub Actions to create and approve pull requests".
-* **Claude Code Requirements:** 
+* **Claude Code Requirements:**
     * Follow the Claude setup docs: [Claude Code GitHub Actions](https://docs.claude.com/en/docs/claude-code/github-actions#setup)
     * Install the [Claude Code GitHub App](https://github.com/apps/claude) on your GitHub repository.
     * Copy the [claude.yml](https://github.com/anthropics/claude-code-action/blob/main/examples/claude.yml) workflow file example into your GitHub repository

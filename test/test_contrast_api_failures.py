@@ -24,6 +24,7 @@ import requests
 
 from src.config import reset_config, get_config
 from src import contrast_api
+from src.smartfix.shared.failure_categories import FailureCategory
 
 
 class TestContrastApiFailureCategories(unittest.TestCase):
@@ -53,7 +54,7 @@ class TestContrastApiFailureCategories(unittest.TestCase):
             "INVALID_LLM_CONFIG"
         ]
 
-        actual_categories = [category.value for category in contrast_api.FailureCategory]
+        actual_categories = [category.value for category in FailureCategory]
         self.assertEqual(set(expected_categories), set(actual_categories))
 
     @patch('src.contrast_api.requests.put')

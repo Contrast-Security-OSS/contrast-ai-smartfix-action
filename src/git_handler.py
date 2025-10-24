@@ -23,9 +23,9 @@ import subprocess
 import re
 from typing import List, Optional
 from src.utils import run_command, debug_log, log, error_exit
-from src.contrast_api import FailureCategory
+from src.smartfix.shared.failure_categories import FailureCategory
 from src.config import get_config
-from src.coding_agents import CodingAgents
+from src.smartfix.domains.agents import CodingAgents
 config = get_config()
 
 
@@ -194,6 +194,28 @@ def commit_changes(message: str):
     """Commits staged changes."""
     log(f"Committing changes with message: '{message}'")
     run_command(["git", "commit", "-m", message])  # run_command exits on failure
+
+
+def get_uncommitted_changed_files() -> List[str]:
+    """Gets the list of files that have been modified but not yet committed.
+
+    This is useful for tracking changes made by agents before committing them.
+
+    Returns:
+        List[str]: List of file paths that have been modified, added, or deleted
+    """
+    debug_log("Getting uncommitted changed files...")
+    # Use --no-pager to prevent potential hanging
+    # Use --name-only to get just the file paths
+    # Compare working directory + staged changes against HEAD
+    diff_output = run_command(["git", "--no-pager", "diff", "HEAD", "--name-only"], check=False)
+    if not diff_output:
+        debug_log("No uncommitted changes found")
+        return []
+
+    changed_files = [f for f in diff_output.splitlines() if f.strip()]
+    debug_log(f"Uncommitted changed files: {changed_files}")
+    return changed_files
 
 
 def get_last_commit_changed_files() -> List[str]:

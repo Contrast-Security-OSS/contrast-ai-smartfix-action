@@ -256,7 +256,8 @@ def error_exit(remediation_id: str, failure_code: Optional[str] = None):
     config = get_config()
     # Local imports to avoid circular dependencies
     from src.git_handler import cleanup_branch, get_branch_name
-    from src.contrast_api import FailureCategory, notify_remediation_failed, send_telemetry_data
+    from src.contrast_api import notify_remediation_failed, send_telemetry_data
+    from src.smartfix.shared.failure_categories import FailureCategory
 
     # Set default failure code if none provided
     if not failure_code:

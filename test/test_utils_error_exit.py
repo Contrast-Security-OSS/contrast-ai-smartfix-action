@@ -25,7 +25,7 @@ from contextlib import contextmanager
 # Test setup imports (path is set up by conftest.py)
 from src import utils
 from src.config import get_config, reset_config
-from src.contrast_api import FailureCategory
+from src.smartfix.shared.failure_categories import FailureCategory
 
 
 class TestErrorExit(unittest.TestCase):

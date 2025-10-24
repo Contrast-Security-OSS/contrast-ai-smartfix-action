@@ -26,7 +26,7 @@ import json
 # Test setup imports (path is set up by conftest.py)
 from src.config import get_config, reset_config
 from src import git_handler
-from src.coding_agents import CodingAgents  # noqa: E402
+from src.smartfix.domains.agents import CodingAgents  # noqa: E402
 
 
 class TestGitHandler(unittest.TestCase):
