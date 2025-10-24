@@ -17,28 +17,10 @@
 # #L%
 #
 
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from enum import Enum, auto
-from typing import List, Optional
+from dataclasses import dataclass
+from typing import Optional
 
-
-class AgentSessionStatus(Enum):
-    """The final status of an agent session."""
-    SUCCESS = auto()
-    BUILD_FAILURE = auto()
-    MAX_ATTEMPTS_REACHED = auto()
-    ERROR = auto()
-    IN_PROGRESS = auto()
-    FAILURE = auto()  # Used by external_coding_agent
-
-
-@dataclass
-class AgentEvent:
-    """Represents a single interaction (prompt/response) with the LLM."""
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    prompt: Optional[str] = None
-    response: Optional[str] = None
+from src.smartfix.shared.failure_categories import FailureCategory
 
 
 @dataclass
@@ -46,23 +28,22 @@ class AgentSession:
     """
     Tracks the state and history of a single, complete remediation attempt.
     """
-    status: AgentSessionStatus = AgentSessionStatus.IN_PROGRESS
-    events: List[AgentEvent] = field(default_factory=list)
     qa_attempts: int = 0
-    start_time: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    end_time: Optional[datetime] = None
     final_pr_body: Optional[str] = None
+    failure_category: Optional[FailureCategory] = None
+    is_complete: bool = False
 
-    def complete_session(self, status: AgentSessionStatus, pr_body: Optional[str] = None) -> None:
-        """Marks the session as complete."""
-        self.status = status
+    def complete_session(self, failure_category: Optional[FailureCategory] = None,
+                         pr_body: Optional[str] = None) -> None:
+        """Marks the session as complete with optional failure category."""
+        self.failure_category = failure_category
         self.final_pr_body = pr_body
-        self.end_time = datetime.now(timezone.utc)
+        self.is_complete = True
 
     @property
     def success(self) -> bool:
         """Returns True if the session completed successfully."""
-        return self.status == AgentSessionStatus.SUCCESS
+        return self.is_complete and self.failure_category is None
 
     @property
     def pr_body(self) -> Optional[str]:

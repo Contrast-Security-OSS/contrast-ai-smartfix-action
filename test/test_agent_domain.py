@@ -24,8 +24,8 @@ from src.smartfix.domains.agents import (
     SmartFixAgent,
     CodingAgentStrategy,
     AgentSession,
-    AgentSessionStatus,
 )
+from src.smartfix.shared.failure_categories import FailureCategory
 from src.smartfix.domains.vulnerability import RemediationContext
 
 
@@ -106,7 +106,8 @@ class TestSmartFixAgent(unittest.TestCase):
         # Should not raise NotImplementedError anymore
         result = agent.remediate(mock_context)
         self.assertIsInstance(result, AgentSession)
-        self.assertIsNotNone(result.start_time)  # Test it's a valid session
+        # Just verify that the method returns a valid session object, don't check specific status
+        # since the mock setup might result in different statuses
 
     @patch('src.smartfix.domains.agents.smartfix_agent.run_build_command')
     @patch('src.smartfix.domains.agents.smartfix_agent.extract_build_errors')
@@ -115,7 +116,6 @@ class TestSmartFixAgent(unittest.TestCase):
         Tests successful initial build validation.
         """
         agent = SmartFixAgent()
-        session = AgentSession()
         mock_context = MagicMock(spec=RemediationContext)
 
         # Setup mocks with proper attribute structure
@@ -127,11 +127,10 @@ class TestSmartFixAgent(unittest.TestCase):
         mock_context.remediation_id = "test-123"
         mock_run_build.return_value = (True, "build success output")
 
+        session = AgentSession()
         result = agent._validate_initial_build(session, mock_context)
 
         self.assertTrue(result)
-        self.assertEqual(len(session.events), 1)
-        self.assertIn("Running build command", session.events[0].prompt)
 
     @patch('src.smartfix.domains.agents.smartfix_agent.run_build_command')
     @patch('src.smartfix.domains.agents.smartfix_agent.extract_build_errors')
@@ -140,7 +139,6 @@ class TestSmartFixAgent(unittest.TestCase):
         Tests failed initial build validation.
         """
         agent = SmartFixAgent()
-        session = AgentSession()
         mock_context = MagicMock(spec=RemediationContext)
 
         # Setup mocks with proper attribute structure
@@ -153,11 +151,10 @@ class TestSmartFixAgent(unittest.TestCase):
         mock_run_build.return_value = (False, "build failed output")
         mock_extract_errors.return_value = "Compilation errors found"
 
+        session = AgentSession()
         result = agent._validate_initial_build(session, mock_context)
 
         self.assertFalse(result)
-        self.assertEqual(len(session.events), 1)
-        self.assertIn("Build failed", session.events[0].response)
 
     @patch('src.smartfix.domains.agents.smartfix_agent.SmartFixAgent._run_ai_fix_agent')
     def test_run_fix_agent_success(self, mock_run_ai_fix):
@@ -180,8 +177,7 @@ class TestSmartFixAgent(unittest.TestCase):
 
         self.assertIsNotNone(result)
         self.assertEqual(result, "Fix applied successfully")
-        self.assertEqual(len(session.events), 1)
-        self.assertIn("Fix vulnerability", session.events[0].prompt)
+        self.assertIsNone(session.failure_category)  # No failure category should be set on success
 
     @patch('src.smartfix.domains.agents.smartfix_agent.SmartFixAgent._run_ai_fix_agent')
     def test_run_fix_agent_error(self, mock_run_ai_fix):
@@ -201,8 +197,9 @@ class TestSmartFixAgent(unittest.TestCase):
         result = agent._run_fix_agent(session, mock_context)
 
         self.assertIsNone(result)
-        self.assertEqual(len(session.events), 1)
-        self.assertIn("Error", session.events[0].response)
+        # Verify failure reason is set
+        from src.smartfix.shared.failure_categories import FailureCategory
+        self.assertEqual(session.failure_category, FailureCategory.AGENT_FAILURE)
 
     @patch('src.smartfix.domains.agents.smartfix_agent.SmartFixAgent._run_qa_loop_internal')
     def test_run_qa_loop_success(self, mock_run_qa):
@@ -223,8 +220,7 @@ class TestSmartFixAgent(unittest.TestCase):
 
         self.assertTrue(result)
         self.assertEqual(session.qa_attempts, 1)
-        self.assertEqual(len(session.events), 1)
-        self.assertIn("successfully", session.events[0].response)
+        self.assertIsNone(session.failure_category)  # No failure category should be set on success
 
     def test_complete_remediation_workflow_success(self):
         """
@@ -237,17 +233,15 @@ class TestSmartFixAgent(unittest.TestCase):
         mock_context.build_config = MagicMock()
         mock_context.build_config.has_build_command.return_value = False  # Skip QA
 
-        with patch.object(agent, '_validate_initial_build', return_value=True) as mock_validate, \
-             patch.object(agent, '_run_fix_agent', return_value="success") as mock_fix:
-
+        # Set should_try_building to False so _validate_initial_build is not called
+        with patch.object(agent, '_run_fix_agent', return_value="success") as mock_fix:
             result = agent.remediate(mock_context)
 
             self.assertIsInstance(result, AgentSession)
             self.assertTrue(result.success)
-            self.assertEqual(result.status, AgentSessionStatus.SUCCESS)
-            self.assertIsNotNone(result.end_time)
+            self.assertIsNone(result.failure_category)  # No failure category should be set
 
-            mock_validate.assert_called_once()
+            # Validate that run_fix_agent was called
             mock_fix.assert_called_once()
 
     def test_complete_remediation_workflow_with_qa(self):
@@ -272,7 +266,7 @@ class TestSmartFixAgent(unittest.TestCase):
                 result = agent.remediate(mock_context)
 
                 self.assertTrue(result.success)
-                self.assertEqual(result.status, AgentSessionStatus.SUCCESS)
+                self.assertIsNone(result.failure_category)  # No failure category should be set
 
                 mock_validate.assert_called_once()
                 mock_fix.assert_called_once()
@@ -286,11 +280,36 @@ class TestAgentSession(unittest.TestCase):
         Tests the default state of a new AgentSession.
         """
         session = AgentSession()
-        self.assertIsNotNone(session.start_time)
-        self.assertIsNone(session.end_time)
-        self.assertEqual(session.status, AgentSessionStatus.IN_PROGRESS)
+        self.assertFalse(session.is_complete)
         self.assertEqual(session.qa_attempts, 0)
-        self.assertEqual(len(session.events), 0)
+        self.assertIsNone(session.failure_category)
+        self.assertIsNone(session.final_pr_body)
+
+    def test_complete_session(self):
+        """
+        Tests that the AgentSession status and failure reason can be updated correctly.
+        """
+        session = AgentSession()
+        self.assertFalse(session.is_complete)
+        self.assertIsNone(session.failure_category)
+
+        # Test setting success status with PR body
+        pr_body = "Test PR Body"
+        session.complete_session(pr_body=pr_body)
+        self.assertTrue(session.is_complete)
+        self.assertEqual(session.final_pr_body, pr_body)
+        self.assertIsNone(session.failure_category)
+        self.assertTrue(session.success)
+
+        # Create a new session for failure test
+        session = AgentSession()
+        failure_category = FailureCategory.AGENT_FAILURE
+
+        # Test setting error status with failure category
+        session.complete_session(failure_category=failure_category)
+        self.assertTrue(session.is_complete)
+        self.assertEqual(session.failure_category, failure_category)
+        self.assertFalse(session.success)
 
 
 class TestCodingAgentStrategy(unittest.TestCase):
@@ -315,7 +334,7 @@ class TestCodingAgentStrategy(unittest.TestCase):
         class CompleteAgent(CodingAgentStrategy):
             def remediate(self, context: RemediationContext) -> AgentSession:
                 session = AgentSession()
-                session.complete_session(AgentSessionStatus.SUCCESS)
+                session.complete_session(pr_body="Test PR Body")
                 return session
 
         # This should not raise an error

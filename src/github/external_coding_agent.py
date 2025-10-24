@@ -28,7 +28,7 @@ from src.contrast_api import notify_remediation_pr_opened
 from src.smartfix.shared.failure_categories import FailureCategory
 from src.smartfix.domains.agents import CodingAgents
 from src.smartfix.domains.agents.coding_agent import CodingAgentStrategy
-from src.smartfix.domains.agents.agent_session import AgentSession, AgentSessionStatus, AgentEvent
+from src.smartfix.domains.agents.agent_session import AgentSession
 from src.smartfix.domains.vulnerability.context import RemediationContext
 
 
@@ -159,16 +159,12 @@ Please review this security vulnerability and implement appropriate fixes to add
         issue_body = getattr(context, 'issue_body', '')
 
         session = AgentSession()
-        session.events.append(AgentEvent(
-            prompt=f"External coding agent ({self.config.CODING_AGENT}) starting remediation",
-            response=f"Processing vulnerability: {vuln_title} (ID: {vuln_uuid})",
-        ))
 
         try:
             if hasattr(self.config, 'CODING_AGENT') and self.config.CODING_AGENT == CodingAgents.SMARTFIX.name:
                 debug_log("SMARTFIX agent detected, ExternalCodingAgent should not be used")
                 session.complete_session(
-                    status=AgentSessionStatus.ERROR,
+                    failure_category=FailureCategory.AGENT_FAILURE,
                     pr_body="Wrong agent type - should use SMARTFIX coding agent"
                 )
                 return session
@@ -240,8 +236,7 @@ Please review this security vulnerability and implement appropriate fixes to add
                 telemetry_handler.update_telemetry("additionalAttributes.prUrl", pr_url)
 
                 session.complete_session(
-                    status=AgentSessionStatus.SUCCESS,
-                    pr_body="External agent successfully created PR",
+                    pr_body="External agent successfully created PR"
                 )
             else:
                 log("External agent failed to create a PR within the timeout period", is_error=True)
@@ -250,8 +245,8 @@ Please review this security vulnerability and implement appropriate fixes to add
                 telemetry_handler.update_telemetry("resultInfo.failureCategory", FailureCategory.AGENT_FAILURE.name)
 
                 session.complete_session(
-                    status=AgentSessionStatus.FAILURE,
-                    pr_body="External agent failed to create PR",
+                    failure_category=FailureCategory.AGENT_FAILURE,
+                    pr_body="External agent failed to create PR"
                 )
 
             return session
@@ -260,7 +255,7 @@ Please review this security vulnerability and implement appropriate fixes to add
             telemetry_handler.update_telemetry("resultInfo.failureReason", str(e))
             telemetry_handler.update_telemetry("resultInfo.failureCategory", FailureCategory.AGENT_FAILURE.name)
             session.complete_session(
-                status=AgentSessionStatus.ERROR,
+                failure_category=FailureCategory.AGENT_FAILURE,
                 pr_body=f"Error during external agent remediation: {str(e)}"
             )
             return session

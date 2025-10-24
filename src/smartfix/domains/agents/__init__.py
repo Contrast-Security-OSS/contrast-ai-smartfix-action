@@ -13,7 +13,7 @@ Key Components:
 from .coding_agent import CodingAgentStrategy, CodingAgents
 from .smartfix_agent import SmartFixAgent
 from .agent_factory import AgentFactory
-from .agent_session import AgentSession, AgentSessionStatus, AgentEvent
+from .agent_session import AgentSession
 
 __all__ = [
     'CodingAgentStrategy',
@@ -21,6 +21,4 @@ __all__ = [
     'SmartFixAgent',
     'AgentFactory',
     'AgentSession',
-    'AgentSessionStatus',
-    'AgentEvent',
 ]

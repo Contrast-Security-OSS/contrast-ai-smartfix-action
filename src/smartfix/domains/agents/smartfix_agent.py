@@ -5,7 +5,6 @@ This module contains the SmartFixAgent class which orchestrates the Fix Agent + 
 workflow for vulnerability remediation without git operations.
 """
 
-import datetime
 import re
 from typing import List, Optional, Tuple
 
@@ -19,7 +18,7 @@ from src import telemetry_handler
 from src.git_handler import get_uncommitted_changed_files
 
 from .coding_agent import CodingAgentStrategy
-from .agent_session import AgentSession, AgentSessionStatus, AgentEvent
+from .agent_session import AgentSession
 from src.smartfix.domains.vulnerability import RemediationContext
 
 
@@ -46,39 +45,32 @@ class SmartFixAgent(CodingAgentStrategy):
             AgentSession containing the complete remediation attempt data
         """
         session = AgentSession()
-        session.start_time = datetime.datetime.now()
-        session.status = AgentSessionStatus.IN_PROGRESS
+        should_try_building = hasattr(context, 'build_config') and context.build_config and context.build_config.has_build_command()
 
         try:
             # Step 1: Validate initial build
-            if not self._validate_initial_build(session, context):
-                session.complete_session(AgentSessionStatus.ERROR)
+            if should_try_building and not self._validate_initial_build(session, context):
                 return session
 
             # Step 2: Run fix agent
             fix_result = self._run_fix_agent(session, context)
             if not fix_result:
-                session.complete_session(AgentSessionStatus.ERROR)
                 return session
 
             # Step 3: Run QA loop (only if build command is available)
-            if hasattr(context, 'build_config') and context.build_config and context.build_config.has_build_command():
-                if not self._run_qa_loop(session, context, fix_result):
-                    session.complete_session(AgentSessionStatus.ERROR)
-                    return session
-            else:
-                # Skip QA loop when no build command is configured
-                session.events.append(AgentEvent(
-                    prompt="QA Review",
-                    response="Skipping QA review: No build command configured"
-                ))
+            if should_try_building and not self._run_qa_loop(session, context, fix_result):
+                return session
 
             # Success!
-            session.complete_session(AgentSessionStatus.SUCCESS, fix_result)
+            session.complete_session(pr_body=fix_result)
             return session
 
-        except Exception:
-            session.complete_session(AgentSessionStatus.ERROR)
+        except Exception as ex:
+            debug_log(f"SmartFix agent failed with error: {str(ex)}")
+            session.complete_session(
+                failure_category=FailureCategory.AGENT_FAILURE,
+                pr_body=f"SmartFix agent failed with error: {str(ex)}"
+            )
             return session
 
     def _validate_initial_build(self, session: AgentSession, context: RemediationContext) -> bool:
@@ -86,18 +78,22 @@ class SmartFixAgent(CodingAgentStrategy):
         Validate that the initial build works before attempting fixes.
 
         Args:
-            session: Current agent session for tracking events
             context: Remediation context with build configuration
 
         Returns:
             bool: True if build passes, False if build fails
         """
+
         try:
-            build_success, build_output = run_build_command(
-                getattr(getattr(context, 'build_config', None), 'build_command', 'npm test'),
-                getattr(getattr(context, 'repo_config', None), 'repo_path', '/tmp/test-repo'),
-                getattr(context, 'remediation_id', 'test-123')
-            )
+            build_command = getattr(getattr(context, 'build_config', None), 'build_command', None)
+            repo_path = getattr(getattr(context, 'repo_config', None), 'repo_path', None)
+            remediation_id = getattr(context, 'remediation_id', None)
+
+            if not build_command or not repo_path or not remediation_id:
+                debug_log("Insufficient build configuration to run initial build validation")
+                return True  # Skip build validation if config is incomplete
+
+            build_success, build_output = run_build_command(build_command, repo_path, remediation_id)
         except SystemExit:
             # run_build_command called error_exit() due to build failure
             build_success = False
@@ -106,21 +102,14 @@ class SmartFixAgent(CodingAgentStrategy):
         if not build_success:
             # Build failed - extract and log errors
             build_errors = extract_build_errors(build_output)
-            error_message = f"Build failed before fix attempt. Build output:\n{build_errors}"
-
-            event = AgentEvent(
-                prompt="Running build command",
-                response=error_message
+            debug_log(f"Build failed before fix attempt. Build output:\n{build_errors}")
+            session.complete_session(
+                failure_category=FailureCategory.INITIAL_BUILD_FAILURE,
+                pr_body="Build failed before fix attempt"
             )
-            session.events.append(event)
             return False
 
         # Build passed
-        event = AgentEvent(
-            prompt="Running build command",
-            response="Initial build validation passed successfully"
-        )
-        session.events.append(event)
         return True
 
     def _run_fix_agent(self, session: AgentSession, context: RemediationContext) -> str:
@@ -142,35 +131,25 @@ class SmartFixAgent(CodingAgentStrategy):
             else:
                 # Call the internal fix agent method
                 fix_result = self._run_ai_fix_agent(context)
-        except SystemExit:
-            # run_ai_fix_agent called error_exit() due to failure
-            fix_result = "Error: Fix agent failed with SystemExit"
-        except Exception as e:
+        except Exception as ex:
             # Other exception during fix agent execution
-            event = AgentEvent(
-                prompt="Run AI Fix Agent",
-                response=f"Exception during fix agent execution: {str(e)}"
+            debug_log(f"Exception during fix agent execution: {str(ex)}")
+            session.complete_session(
+                failure_category=FailureCategory.AGENT_FAILURE,
+                pr_body="Exception during fix agent execution"
             )
-            session.events.append(event)
             return None
 
         if fix_result and not fix_result.startswith("Error"):
             # Fix agent succeeded
-            vulnerability_title = getattr(getattr(context, 'vulnerability', None), 'title', 'vulnerability')
-            event = AgentEvent(
-                prompt=f"Fix vulnerability: {vulnerability_title}",
-                response=f"Fix agent completed successfully: {fix_result}"
-            )
-            session.events.append(event)
             return fix_result
         else:
             # Fix agent failed
-            error_message = fix_result or "Fix agent failed with unknown error"
-            event = AgentEvent(
-                prompt="Run AI Fix Agent",
-                response=f"Error: {error_message}"
+            debug_log("Fix agent failed with unknown error")
+            session.complete_session(
+                failure_category=FailureCategory.AGENT_FAILURE,
+                pr_body="Fix agent failed with unknown error"
             )
-            session.events.append(event)
             return None
 
     def _run_qa_loop(self, session: AgentSession, context: RemediationContext, fix_result: str) -> bool:
@@ -185,15 +164,6 @@ class SmartFixAgent(CodingAgentStrategy):
         Returns:
             bool: True if QA loop succeeds, False otherwise
         """
-        # Check if build command is available
-        if not hasattr(context, 'build_config') or not context.build_config or not context.build_config.has_build_command():
-            # No build command configured, skip QA and return success
-            event = AgentEvent(
-                prompt="QA Review",
-                response="QA review skipped: No build command configured"
-            )
-            session.events.append(event)
-            return True
 
         try:
             # Run the QA loop directly (no need for nested loops)
@@ -209,37 +179,24 @@ class SmartFixAgent(CodingAgentStrategy):
             session.qa_attempts = len([log for log in qa_logs if log])  # Count non-empty logs
 
             if success:
-                # QA loop succeeded
-                event = AgentEvent(
-                    prompt="QA Review",
-                    response=f"QA review completed successfully after {session.qa_attempts} attempts"
-                )
-                session.events.append(event)
                 return True
             else:
                 # QA loop failed
-                event = AgentEvent(
-                    prompt="QA Review",
-                    response=f"QA review failed after {session.qa_attempts} attempts: {error_message}"
-                )
-                session.events.append(event)
-                return False
+                failure_category = FailureCategory.QA_AGENT_FAILURE
+                if session.qa_attempts >= context.max_qa_attempts:
+                    failure_category = FailureCategory.EXCEEDED_QA_ATTEMPTS
 
-        except SystemExit:
-            # run_qa_loop called error_exit() due to failure
-            event = AgentEvent(
-                prompt="QA Review",
-                response="QA loop failed with SystemExit"
-            )
-            session.events.append(event)
-            return False
-        except Exception as e:
+                session.complete_session(
+                    failure_category=failure_category,
+                    pr_body="QA loop failed to validate build/test"
+                )
+                return False
+        except Exception:
             # Exception during QA loop
-            event = AgentEvent(
-                prompt="QA Review",
-                response=f"Exception during QA loop: {str(e)}"
+            session.complete_session(
+                failure_category=FailureCategory.QA_AGENT_FAILURE,
+                pr_body="QA loop failed to validate build/test"
             )
-            session.events.append(event)
             return False
 
     def _run_ai_fix_agent(self, context: RemediationContext) -> str:
@@ -264,10 +221,10 @@ class SmartFixAgent(CodingAgentStrategy):
             # Extract and return PR body content
             return self._extract_pr_body(agent_summary_str)
 
-        except Exception as e:
-            log(f"Error running AI fix agent: {e}", is_error=True)
+        except Exception as ex:
+            log(f"Error running AI fix agent: {ex}", is_error=True)
             failure_code = FailureCategory.AGENT_FAILURE.value
-            if "litellm." in str(e).lower():
+            if "litellm." in str(ex).lower():
                 failure_code = FailureCategory.INVALID_LLM_CONFIG.value
             # Cleanup any changes made and revert to base branch (no branch name yet)
             error_exit(context.remediation_id, failure_code)
@@ -489,8 +446,8 @@ class SmartFixAgent(CodingAgentStrategy):
                     log("\n::endgroup::")  # Close the group for the QA attempt
                     continue  # Continue to next QA iteration
 
-            except Exception as e:
-                error_msg = f"Error during QA agent execution: {str(e)}"
+            except Exception as ex:
+                error_msg = f"Error during QA agent execution: {str(ex)}"
                 log(error_msg, is_error=True)
                 qa_summary_log.append(error_msg)
                 log("\n::endgroup::")  # Close the group for the QA attempt
@@ -553,9 +510,9 @@ class SmartFixAgent(CodingAgentStrategy):
 
             return qa_summary
 
-        except Exception as e:
-            log(f"Error running QA agent: {e}", is_error=True)
+        except Exception as ex:
+            log(f"Error running QA agent: {ex}", is_error=True)
             failure_code = FailureCategory.QA_AGENT_FAILURE.value
-            if "litellm." in str(e).lower():
+            if "litellm." in str(ex).lower():
                 failure_code = FailureCategory.INVALID_LLM_CONFIG.value
             error_exit(context.remediation_id, failure_code)

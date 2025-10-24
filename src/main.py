@@ -32,6 +32,7 @@ from src.smartfix.domains.agents import CodingAgents
 from src.utils import debug_log, log, error_exit
 from src import telemetry_handler
 from src.version_check import do_version_check
+from src.smartfix.shared.failure_categories import FailureCategory
 
 # Import domain-specific handlers
 from src import contrast_api
@@ -290,7 +291,7 @@ def main():  # noqa: C901
             log(f"\n--- Maximum runtime of 3 hours exceeded (actual: {elapsed_time}). Stopping processing. ---")
             remediation_notified = contrast_api.notify_remediation_failed(
                 remediation_id=remediation_id,
-                failure_category=contrast_api.FailureCategory.EXCEEDED_TIMEOUT.value,
+                failure_category=FailureCategory.EXCEEDED_TIMEOUT.value,
                 contrast_host=config.CONTRAST_HOST,
                 contrast_org_id=config.CONTRAST_ORG_ID,
                 contrast_app_id=config.CONTRAST_APP_ID,
@@ -432,10 +433,9 @@ def main():  # noqa: C901
             ai_fix_summary_full = session.pr_body if session.pr_body else "Fix completed successfully"
         else:
             # Agent failed - handle the error
-            last_event = session.events[-1] if session.events else None
-            error_message = last_event.response if last_event else "Unknown agent failure"
-            log(f"Error details: {error_message}")
-            error_exit(remediation_id, contrast_api.FailureCategory.AGENT_FAILURE.value)
+            failure_category = session.failure_category.value if session.failure_category else FailureCategory.AGENT_FAILURE.value
+            log(f"Agent failed with reason: {failure_category}")
+            error_exit(remediation_id, failure_category)
 
         # --- Git and GitHub Operations ---
         # All file changes from the agent (fix + QA + formatting) are uncommitted at this point
@@ -471,11 +471,8 @@ def main():  # noqa: C901
                     # Check if we should skip PR creation due to QA failure
                     log("\n--- Skipping PR creation as QA Agent failed to fix build issues ---")
 
-                    # Determine failure category based on session events
-                    failure_category = contrast_api.FailureCategory.EXCEEDED_QA_ATTEMPTS.value
-                    qa_events = [e for e in session.events if "QA" in e.prompt]
-                    if any("Error during QA agent execution:" in e.response for e in qa_events):
-                        failure_category = contrast_api.FailureCategory.QA_AGENT_FAILURE.value
+                    # Get failure category directly from session
+                    failure_category = session.failure_category.value if session.failure_category else FailureCategory.QA_AGENT_FAILURE.value
 
                     # Notify the Remediation service about the failed remediation
                     remediation_notified = contrast_api.notify_remediation_failed(
@@ -591,14 +588,14 @@ def main():  # noqa: C901
 
             if not pr_creation_success:
                 log("\n--- PR creation failed ---")
-                error_exit(remediation_id, contrast_api.FailureCategory.GENERATE_PR_FAILURE.value)
+                error_exit(remediation_id, FailureCategory.GENERATE_PR_FAILURE.value)
 
             processed_one = True  # Mark that we successfully processed one
             log(f"\n--- Successfully processed vulnerability {vuln_uuid}. Continuing to look for next vulnerability... ---")
         except Exception as e:
             log(f"Error creating PR: {e}")
             log("\n--- PR creation failed ---")
-            error_exit(remediation_id, contrast_api.FailureCategory.GENERATE_PR_FAILURE.value)
+            error_exit(remediation_id, FailureCategory.GENERATE_PR_FAILURE.value)
 
         contrast_api.send_telemetry_data()
 
@@ -661,5 +658,3 @@ def main():  # noqa: C901
 
 if __name__ == "__main__":
     main()
-
-# %%
