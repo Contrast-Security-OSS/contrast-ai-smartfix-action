@@ -60,8 +60,8 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     steps:
-      # For Claude via AWS Bedrock, please include an additional setup step for configuring AWS credentials
-      # This step can be omitted if using another LLM provider.
+      # For Claude via AWS Bedrock with IAM credentials (Option A - Recommended)
+      # This step can be omitted if using another LLM provider or using Bedrock API keys (Option B).
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -69,6 +69,12 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
           aws-region: ${{ vars.AWS_REGION }}
+
+      # Alternative: For Claude via AWS Bedrock with API keys (Option B - Simpler but less secure)
+      # If using this method, omit the "Configure AWS Credentials" step above and uncomment the lines below
+      # in the "Run Contrast AI SmartFix - Generate Fixes Action" step:
+      # aws_bearer_token_bedrock: ${{ secrets.AWS_BEARER_TOKEN_BEDROCK }}
+      # aws_region: ${{ vars.AWS_REGION }}
 
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -179,8 +185,10 @@ The SmartFix Coding Agent uses a "Bring Your Own LLM" (BYOLLM) model. You provid
     * Set `agent_model` to the appropriate model string for Anthropic (e.g. `anthropic/claude-sonnet-4-5-20250929`).
     * Provide your `anthropic_api_key`.
   * Option 2 - AWS Bedrock:
-    * Set `agent_model` to the appropriate model string (e.g., `bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0`).
-    * In order for the action to an AWS Bedrock LLM, you need to provide AWS credentials. We recommend using [aws-actions/configure-aws-credentials](https://github.com/aws-actions/configure-aws-credentials) to configure your credentials for a job.
+    * Set `agent_model` to the appropriate model string (e.g., `bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0`).
+    * In order for the action to use an AWS Bedrock LLM, you need to provide AWS credentials using one of two methods:
+      * **Option A - IAM Credentials (Recommended):** Use [aws-actions/configure-aws-credentials](https://github.com/aws-actions/configure-aws-credentials) to configure your credentials with AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN, and AWS_REGION. This is the recommended approach for production use.
+      * **Option B - Bedrock API Keys:** Provide your `aws_bearer_token_bedrock` and `aws_region` directly to the action. This is a simpler setup but is less secure than IAM credentials. Use with caution and review AWS security best practices. See [AWS Bedrock API Keys](https://aws.amazon.com/blogs/machine-learning/accelerate-ai-development-with-amazon-bedrock-api-keys/) for more information.
 
 * **Experimental:** **Google Gemini Pro (e.g., Gemini 2.5 Pro)**. Preliminary testing shows good results.
   * Set `agent_model` to the appropriate model string (e.g., `gemini/gemini-2.5-pro-preview-05-06`).
@@ -262,6 +270,8 @@ The following are key inputs for the SmartFix GitHub Action using SmartFix Codin
 | `contrast_api_key` | Contrast API Key. | Yes |  |
 | `agent_model` | LLM model to use (e.g., `bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0`). | No | `bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0` |
 | `anthropic_api_key` | Anthropic API key (if using direct Anthropic API). | No |  |
+| `aws_bearer_token_bedrock` | AWS Bedrock API Bearer Token (alternative to IAM credentials). Use with caution - less secure than IAM. | No |  |
+| `aws_region` | AWS Region for Bedrock (required when using `aws_bearer_token_bedrock`). | No |  |
 | `gemini_api_key` | Gemini API key (if using Gemini). | No |  |
 | `build_command` | Command to build the application (for QA). | Yes, for generating fixes |  |
 | `formatting_command` | Command to format code. | No |  |
