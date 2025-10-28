@@ -99,6 +99,10 @@ inputs:
     description: 'Specifies the coding agent to use for generating fixes. Allowed values: SMARTFIX, GITHUB_COPILOT, CLAUDE_CODE.'
     required: false
     default: 'SMARTFIX'
+  use_contrast_llm:
+    description: 'Use Contrast LLM as your default LLM provider. Set to false if using your own LLM.'
+    required: false
+    default: 'true'
 
 runs:
   using: 'composite'
@@ -394,3 +398,5 @@ runs:
         ENABLE_FULL_TELEMETRY: ${{ inputs.enable_full_telemetry }}
         # --- Coding Agent ---
         CODING_AGENT: ${{ inputs.coding_agent }}
+        # --- Use Contrast LLM ---
+        USE_CONTRAST_LLM: ${{ inputs.use_contrast_llm }}

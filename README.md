@@ -20,7 +20,7 @@ Welcome to Contrast AI SmartFix\! SmartFix is an AI-powered agent that automatic
 
 SmartFix supports three distinct coding agents for vulnerability remediation on GitHub:
 
-* **SmartFix Agent (Recommended):** Uses Contrast vulnerability data with a team of agentic AIs to analyze, fix, and validate vulnerability remediations. This agent creates a complete fix, ensures your project builds successfully, and verifies that existing tests continue to pass. Requires API keys for your preferred LLM provider.
+* **SmartFix Agent (Recommended):** Uses Contrast vulnerability data with a team of agentic AIs to analyze, fix, and validate vulnerability remediations. This agent creates a complete fix, ensures your project builds successfully, and verifies that existing tests continue to pass. Uses Contrast LLM by default, or you can bring your own LLM provider.
 
 * **GitHub Copilot Agent:** Leverages GitHub Copilot for vulnerability fixes through GitHub Issues. SmartFix creates a detailed GitHub Issue with vulnerability information and assigns it to GitHub Copilot for resolution. Copilot then attempts the fix and creates a Pull Request.  Requires your repository to enable GitHub Issues and Copilot.
 
@@ -34,7 +34,7 @@ Please follow the specific setup instructions link for the coding agent of your 
 ## Key Features
 
 * **Support for Multiple Coding Agents**: Choose to use either the internal SmartFix coding agent or GitHub Copilot to remediate your project's vulnerabilities
-* **Bring Your Own LLM (BYOLLM):** Flexibility to use your preferred LLM provider and model with the SmartFix Coding Agent.
+* **Contrast LLM by Default:** Uses Contrast's LLM service by default for seamless setup, with optional Bring Your Own LLM (BYOLLM) support for advanced users who prefer their own LLM provider.
 * **Configurable PR Throttling:** Control the volume of automated PRs using `max_open_prs`.
 * **Debug Mode:** Enable `debug_mode: 'true'` for verbose logging in the GitHub Action output.
 
