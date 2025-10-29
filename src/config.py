@@ -118,6 +118,7 @@ class Config:
         self.SKIP_WRITING_SECURITY_TEST = self._get_bool_env("SKIP_WRITING_SECURITY_TEST", default=False)
         self.SKIP_QA_REVIEW = self._get_bool_env("SKIP_QA_REVIEW", default=False)
         self.ENABLE_FULL_TELEMETRY = self._get_bool_env("ENABLE_FULL_TELEMETRY", default=True)
+        self.USE_CONTRAST_LLM = self._get_bool_env("USE_CONTRAST_LLM", default=True)
 
         # --- Vulnerability Configuration ---
         self.VULNERABILITY_SEVERITIES = self._parse_and_validate_severities(
@@ -219,6 +220,7 @@ class Config:
         _log_config_message(f"Vulnerability Severities: {self.VULNERABILITY_SEVERITIES}")
         _log_config_message(f"Max Events Per Agent: {self.MAX_EVENTS_PER_AGENT}")
         _log_config_message(f"Enable Full Telemetry: {self.ENABLE_FULL_TELEMETRY}")
+        _log_config_message(f"Use Contrast LLM: {self.USE_CONTRAST_LLM}")
 
 # --- Global Singleton Instance ---
 # This is the single source of truth for configuration in the application.

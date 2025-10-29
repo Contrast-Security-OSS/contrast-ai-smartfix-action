@@ -37,14 +37,15 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     steps:
+      # --- Authenticating if using an LLM from AWS Bedrock ---
       # Option A: Configure AWS Credentials using IAM (Recommended for production)
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
-          aws-region: ${{ vars.AWS_REGION }}
+      # - name: Configure AWS Credentials
+      #  uses: aws-actions/configure-aws-credentials@v1
+      #  with:
+      #    aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      #    aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      #    aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+      #    aws-region: ${{ vars.AWS_REGION }}
 
       # Option B: Use Bedrock API Keys (Simpler but less secure)
       # If using API keys, omit the "Configure AWS Credentials" step above
@@ -76,10 +77,12 @@ jobs:
           contrast_app_id: ${{ vars.CONTRAST_APP_ID }}
           contrast_authorization_key: ${{ secrets.CONTRAST_AUTHORIZATION_KEY }}
           contrast_api_key: ${{ secrets.CONTRAST_API_KEY }}
+          # --- Use Contrast LLM as your default LLM provider
+          use_contrast_llm: 'true' # set to 'false' if using your own LLM
           # --- Google Gemini API Credentials ---
-          gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
+          # gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
           # --- Anthropic API Credentials ---
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           # --- AWS Bedrock API Key (Alternative to IAM credentials, less secure) ---
           # aws_bearer_token_bedrock: ${{ secrets.AWS_BEARER_TOKEN_BEDROCK }}
           # aws_region: ${{ vars.AWS_REGION }}
@@ -87,7 +90,7 @@ jobs:
           # azure_api_key: ${{ secrets.AZURE_API_KEY }}
           # azure_api_base: ${{ secrets.AZURE_API_BASE }}
           # azure_api_version: ${{ secrets.AZURE_API_VERSION }}
-          # --- Agent Configuration ---
+          # --- Agent Configuration (Required if not using Contrast LLM) ---
           agent_model: ${{ vars.AGENT_MODEL || 'bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0' }}
           # Other Optional Inputs (see action.yml for defaults and more options)
           # formatting_command: 'mvn spotless:apply' # Or the command appropriate for your project to correct the formatting of SmartFix\'s changes.  This ensures that SmartFix follows your coding standards.
