@@ -78,7 +78,7 @@ jobs:
           contrast_authorization_key: ${{ secrets.CONTRAST_AUTHORIZATION_KEY }}
           contrast_api_key: ${{ secrets.CONTRAST_API_KEY }}
           # --- Use Contrast LLM as your default LLM provider
-          use_contrast_llm: 'true' # set to 'false' if using your own LLM, and
+          use_contrast_llm: 'true' # set to 'false' if using your own LLM
           # --- Google Gemini API Credentials ---
           # gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
           # --- Anthropic API Credentials ---

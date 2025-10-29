@@ -18,7 +18,7 @@ The SmartFix Coding Agent uses Contrast vulnerability data with a team of agenti
 * **GitHub:** Your project must be hosted on GitHub and use GitHub Actions.  In the GitHub repository's Settings, enable the Actions > General > Workflow Permissions checkbox for "Allow GitHub Actions to create and approve pull requests".
 * **Contrast API Credentials:** You will need your Contrast Host, Organization ID, Application ID, Authorization Key, and API Key values.  To find the app ID, visit the application page in the Contrast web UI, then use the last UUID in the URL (immediately after `/applications/`) as the app ID value.  **Suggestion:** Setup an API-only service user named “Contrast AI SmartFix” in your Organization Settings in your Contrast SaaS instance.  At a minimum, it should have the “View Organization” permission and “Edit Application” permission for this application.  This service user’s `contrast_authorization_key` value and the Organization’s `contrast_api_key` value should be used in the workflow.
 * **GitHub Token Permissions:** The GitHub token must have `contents: write` and `pull-requests: write` permissions. These permissions must be explicitly set in your workflow file, as they are in the example config file, below.  Note, the SmartFix Coding Agent uses the internal GitHub token for Actions; you do not need to create a Personal Access Token (PAT).
-* **LLM Access (Optional):** By default, SmartFix uses Contrast's LLM service for seamless setup. If you prefer to use your own LLM provider (BYOLLM), ensure that you have API access to one of our recommended LLMs. If using an AWS Bedrock model, please see Amazon's User Guide on [model access](https://docs.aws.amazon.com/bedrock/latest/userguide/model-access-modify.html).
+* **LLM Access (Optional):** SmartFix uses Contrast's LLM service for seamless setup. If you prefer to use your own LLM provider (BYOLLM), ensure that you have API access to one of our recommended LLMs. If using an AWS Bedrock model, please see Amazon's User Guide on [model access](https://docs.aws.amazon.com/bedrock/latest/userguide/model-access-modify.html).
 
 Set the gathered values as secrets and variables for the GitHub repository at Settings tab > Secrets and Variables in the sidebar > Actions.
 
@@ -178,7 +178,7 @@ jobs:
 
 ### LLM Configuration for the SmartFix Coding Agent
 
-By default, the SmartFix Coding Agent uses Contrast's LLM service for seamless setup with no additional configuration required. For advanced users who prefer to use their own LLM provider, you can enable "Bring Your Own LLM" (BYOLLM) by setting `use_contrast_llm: 'false'` and providing credentials for your preferred LLM provider.
+The SmartFix Coding Agent uses Contrast's LLM service for seamless setup with no additional configuration required. For advanced users who prefer to use their own LLM provider, you can enable "Bring Your Own LLM" (BYOLLM) by setting `use_contrast_llm: 'false'` and providing credentials for your preferred LLM provider.
 
 #### Default: Contrast LLM Service
 
