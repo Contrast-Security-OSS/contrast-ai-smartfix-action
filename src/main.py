@@ -330,6 +330,7 @@ def main():  # noqa: C901
             vuln_uuid = vulnerability_data['vulnerabilityUuid']
             vuln_title = vulnerability_data['vulnerabilityTitle']
             remediation_id = vulnerability_data['remediationId']
+            session_id = vulnerability_data.get('sessionId')
 
             # Create prompt configuration for SmartFix agent
             prompts = PromptConfiguration.for_smartfix_agent(
@@ -356,6 +357,7 @@ def main():  # noqa: C901
             vuln_uuid = vulnerability_data['vulnerabilityUuid']
             vuln_title = vulnerability_data['vulnerabilityTitle']
             remediation_id = vulnerability_data['remediationId']
+            session_id = None  # External agents don't use Contrast LLM sessions
 
             # Create prompt configuration for external agent (no prompts required)
             prompts = PromptConfiguration.for_external_agent()
@@ -388,7 +390,7 @@ def main():  # noqa: C901
         # --- Create Common Remediation Context ---
         # Create vulnerability and context from config - single source of truth
         vulnerability = Vulnerability.from_api_data(vulnerability_data)
-        context = RemediationContext.from_config(remediation_id, vulnerability, config, prompts=prompts)
+        context = RemediationContext.from_config(remediation_id, vulnerability, config, prompts=prompts, session_id=session_id)
 
         # --- Check if we need to use the external coding agent ---
         if config.CODING_AGENT != CodingAgents.SMARTFIX.name:
