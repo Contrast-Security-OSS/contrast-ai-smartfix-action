@@ -158,14 +158,22 @@ class TestSubAgentExecutor(unittest.TestCase):
 
     def test_initialization_custom_max_events(self):
         """Test SubAgentExecutor initialization with custom max_events."""
-        executor = SubAgentExecutor(max_events=50)
+        with patch('src.smartfix.domains.agents.sub_agent_executor.get_config'):
+            executor = SubAgentExecutor(max_events=50)
 
-        self.assertEqual(executor.max_events, 50)
+            self.assertEqual(executor.max_events, 50)
 
     @patch('src.smartfix.domains.agents.sub_agent_executor.SmartFixLlmAgent')
     @patch('src.smartfix.domains.agents.sub_agent_executor.SmartFixLiteLlm')
-    def test_create_agent_success(self, mock_litellm, mock_agent):
+    @patch('src.smartfix.domains.agents.sub_agent_executor.get_config')
+    def test_create_agent_success(self, mock_get_config, mock_litellm, mock_agent):
         """Test successful agent creation."""
+        # Mock config
+        config_mock = MagicMock()
+        config_mock.AGENT_MODEL = 'test-model'
+        config_mock.USE_CONTRAST_LLM = 'false'
+        mock_get_config.return_value = config_mock
+
         # Mock MCP manager
         mock_mcp_tools = MagicMock()
 
@@ -179,6 +187,7 @@ class TestSubAgentExecutor(unittest.TestCase):
         result = asyncio.run(executor.create_agent(
             target_folder=Path('/test'),
             remediation_id='test-123',
+            session_id='test-session-123',
             agent_type='fix',
             system_prompt='Test prompt'
         ))
@@ -186,15 +195,64 @@ class TestSubAgentExecutor(unittest.TestCase):
         self.assertEqual(result, mock_agent_instance)
         mock_agent.assert_called_once()
 
+    @patch('src.smartfix.domains.agents.sub_agent_executor.SmartFixLlmAgent')
+    @patch('src.smartfix.domains.agents.sub_agent_executor.SmartFixLiteLlm')
+    @patch('src.smartfix.domains.agents.sub_agent_executor.get_config')
+    def test_create_agent_with_contrast_llm(self, mock_get_config, mock_litellm, mock_agent):
+        """Test agent creation with Contrast LLM configuration."""
+        # Mock config with Contrast LLM enabled
+        config_mock = MagicMock()
+        config_mock.AGENT_MODEL = 'test-model'
+        config_mock.USE_CONTRAST_LLM = 'true'
+        config_mock.CONTRAST_API_KEY = 'test-api-key'
+        config_mock.CONTRAST_AUTHORIZATION_KEY = 'test-auth-key'
+        mock_get_config.return_value = config_mock
+
+        # Mock MCP manager
+        mock_mcp_tools = MagicMock()
+
+        executor = SubAgentExecutor()
+        executor.mcp_manager.get_tools = AsyncMock(return_value=mock_mcp_tools)
+
+        # Mock agent creation
+        mock_agent_instance = MagicMock()
+        mock_agent.return_value = mock_agent_instance
+
+        result = asyncio.run(executor.create_agent(
+            target_folder=Path('/test'),
+            remediation_id='test-123',
+            session_id='session-456',
+            agent_type='qa',
+            system_prompt='QA test prompt'
+        ))
+
+        self.assertEqual(result, mock_agent_instance)
+        mock_agent.assert_called_once()
+
+        # Verify LiteLLM was called with extra_headers
+        mock_litellm.assert_called_once()
+        call_kwargs = mock_litellm.call_args[1]
+        self.assertIn('extra_headers', call_kwargs)
+        headers = call_kwargs['extra_headers']
+        self.assertEqual(headers['Api-Key'], 'test-api-key')
+        self.assertEqual(headers['Authorization'], 'test-auth-key')
+        self.assertEqual(headers['x-contrast-llm-session-id'], 'session-456')
+
     @patch('src.smartfix.domains.agents.sub_agent_executor.error_exit')
-    def test_create_agent_no_mcp_tools(self, mock_error_exit):
+    @patch('src.smartfix.domains.agents.sub_agent_executor.get_config')
+    def test_create_agent_no_mcp_tools(self, mock_get_config, mock_error_exit):
         """Test agent creation fails when no MCP tools available."""
+        # Mock config
+        config_mock = MagicMock()
+        mock_get_config.return_value = config_mock
+
         executor = SubAgentExecutor()
         executor.mcp_manager.get_tools = AsyncMock(return_value=None)
 
         asyncio.run(executor.create_agent(
             target_folder=Path('/test'),
             remediation_id='test-123',
+            session_id='test-session-123',
             agent_type='fix',
             system_prompt='Test prompt'
         ))
@@ -202,14 +260,20 @@ class TestSubAgentExecutor(unittest.TestCase):
         mock_error_exit.assert_called()
 
     @patch('src.smartfix.domains.agents.sub_agent_executor.error_exit')
-    def test_create_agent_no_system_prompt(self, mock_error_exit):
+    @patch('src.smartfix.domains.agents.sub_agent_executor.get_config')
+    def test_create_agent_no_system_prompt(self, mock_get_config, mock_error_exit):
         """Test agent creation fails when no system prompt provided."""
+        # Mock config
+        config_mock = MagicMock()
+        mock_get_config.return_value = config_mock
+
         executor = SubAgentExecutor()
         executor.mcp_manager.get_tools = AsyncMock(return_value=MagicMock())
 
         asyncio.run(executor.create_agent(
             target_folder=Path('/test'),
             remediation_id='test-123',
+            session_id='test-session-123',
             agent_type='fix',
             system_prompt=None
         ))

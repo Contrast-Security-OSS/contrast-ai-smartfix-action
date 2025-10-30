@@ -73,6 +73,7 @@ class SubAgentExecutor:
         self,
         target_folder: Path,
         remediation_id: str,
+        session_id: str,
         agent_type: str = "fix",
         system_prompt: Optional[str] = None
     ) -> Optional[Agent]:
@@ -82,6 +83,7 @@ class SubAgentExecutor:
         Args:
             target_folder: Path to the folder for filesystem access
             remediation_id: Remediation ID for error tracking
+            session_id: Session ID for Contrast LLM tracking
             agent_type: Type of agent ("fix" or "qa")
             system_prompt: System prompt for agent instructions
 
@@ -108,13 +110,27 @@ class SubAgentExecutor:
 
         # Create the agent
         try:
-            model_instance = SmartFixLiteLlm(
-                model=self.config.AGENT_MODEL,
-                temperature=0.2,  # Set low temperature for more deterministic output
-                # seed=42, # The random seed for reproducibility
-                # (not supported by bedrock/anthropic atm - call throws error)
-                stream_options={"include_usage": True}
-            )
+            # Check if we should use Contrast LLM with custom headers
+            if hasattr(self.config, 'USE_CONTRAST_LLM') and str(self.config.USE_CONTRAST_LLM).lower() == 'true':
+                model_instance = SmartFixLiteLlm(
+                    model=self.config.AGENT_MODEL,
+                    temperature=0.2,
+                    stream_options={"include_usage": True},
+                    extra_headers={
+                        "Api-Key": f"{self.config.CONTRAST_API_KEY}",
+                        "Authorization": f"{self.config.CONTRAST_AUTHORIZATION_KEY}",
+                        "x-contrast-llm-session-id": f"{session_id}"
+                    }
+                )
+            else:
+                model_instance = SmartFixLiteLlm(
+                    model=self.config.AGENT_MODEL,
+                    temperature=0.2,  # Set low temperature for more deterministic output
+                    # seed=42, # The random seed for reproducibility
+                    # (not supported by bedrock/anthropic atm - call throws error)
+                    stream_options={"include_usage": True}
+                )
+
             root_agent = SmartFixLlmAgent(
                 model=model_instance,
                 name=agent_name,
@@ -453,3 +469,5 @@ class SubAgentExecutor:
             # Fallback values if stats retrieval fails
             debug_log(f"Could not retrieve statistics: {e}")
             return 0, 0.0
+
+# %%

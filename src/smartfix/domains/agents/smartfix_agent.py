@@ -213,7 +213,7 @@ class SmartFixAgent(CodingAgentStrategy):
 
         try:
             # Execute the fix agent
-            agent_summary_str = self._run_fix_agent_execution(context.repo_config, context.prompts, context.remediation_id)
+            agent_summary_str = self._run_fix_agent_execution(context)
 
             # Extract analytics data for telemetry
             self._extract_analytics_data(agent_summary_str)
@@ -229,15 +229,16 @@ class SmartFixAgent(CodingAgentStrategy):
             # Cleanup any changes made and revert to base branch (no branch name yet)
             error_exit(context.remediation_id, failure_code)
 
-    def _run_fix_agent_execution(self, repo_config, prompts, remediation_id: str) -> str:
+    def _run_fix_agent_execution(self, context) -> str:
         """Execute the fix agent and return the summary."""
         agent_summary_str = _run_agent_in_event_loop(
             _run_agent_internal_with_prompts,
             'fix',
-            repo_config.repo_path,
-            prompts.fix_user_prompt,
-            prompts.fix_system_prompt,
-            remediation_id
+            context.repo_config.repo_path,
+            context.prompts.fix_user_prompt,
+            context.prompts.fix_system_prompt,
+            context.remediation_id,
+            context.session_id
         )
 
         log("--- AI Agent Fix Attempt Completed ---")
@@ -248,7 +249,7 @@ class SmartFixAgent(CodingAgentStrategy):
         # Check if the agent was unable to use filesystem tools
         if "No MCP tools available" in agent_summary_str or "Proceeding without filesystem tools" in agent_summary_str:
             log("Error during AI fix agent execution: No filesystem tools were available. The agent cannot make changes to files.")
-            error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
+            error_exit(context.remediation_id, FailureCategory.AGENT_FAILURE.value)
 
         return agent_summary_str
 
@@ -502,7 +503,8 @@ class SmartFixAgent(CodingAgentStrategy):
                 context.repo_config.repo_path,
                 qa_query,
                 context.prompts.qa_system_prompt,
-                context.remediation_id
+                context.remediation_id,
+                context.session_id
             )
 
             log("--- QA Agent Execution Completed ---")
