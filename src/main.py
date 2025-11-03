@@ -65,6 +65,7 @@ warnings.filterwarnings("ignore", category=ResourceWarning,
 # Patch asyncio to handle event loop closed errors during shutdown
 _original_loop_check_closed = asyncio.base_events.BaseEventLoop._check_closed
 
+
 def _patched_loop_check_closed(self):
     try:
         _original_loop_check_closed(self)
