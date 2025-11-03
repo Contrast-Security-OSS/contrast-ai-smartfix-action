@@ -25,6 +25,7 @@ import atexit
 import platform
 from datetime import datetime, timedelta
 from asyncio.proactor_events import _ProactorBasePipeTransport
+import litellm
 
 # Import configurations and utilities
 from src.config import get_config
@@ -45,6 +46,10 @@ from src.smartfix.domains.vulnerability.models import Vulnerability
 # Import GitHub-specific agent factory
 from src.github.agent_factory import GitHubAgentFactory
 
+# Enable LiteLLM debug logging
+litellm._turn_on_debug()
+litellm.set_verbose = True
+
 config = get_config()
 telemetry_handler.initialize_telemetry()
 
@@ -59,7 +64,6 @@ warnings.filterwarnings("ignore", category=ResourceWarning,
 
 # Patch asyncio to handle event loop closed errors during shutdown
 _original_loop_check_closed = asyncio.base_events.BaseEventLoop._check_closed
-
 
 def _patched_loop_check_closed(self):
     try:
@@ -675,3 +679,5 @@ def main():  # noqa: C901
 
 if __name__ == "__main__":
     main()
+
+# %%
