@@ -122,6 +122,7 @@ class SubAgentExecutor:
                         "x-contrast-llm-session-id": f"{session_id}"
                     }
                 )
+                debug_log(f"Creating {agent_type} agent ({agent_name}) with model contrast_llm")
             else:
                 model_instance = SmartFixLiteLlm(
                     model=self.config.AGENT_MODEL,
@@ -130,6 +131,7 @@ class SubAgentExecutor:
                     # (not supported by bedrock/anthropic atm - call throws error)
                     stream_options={"include_usage": True}
                 )
+                debug_log(f"Creating {agent_type} agent ({agent_name}) with model {self.config.AGENT_MODEL}")
 
             root_agent = SmartFixLlmAgent(
                 model=model_instance,
@@ -137,7 +139,7 @@ class SubAgentExecutor:
                 instruction=agent_instruction,
                 tools=[mcp_tools],
             )
-            debug_log(f"Created {agent_type} agent ({agent_name}) with model {self.config.AGENT_MODEL}")
+            debug_log(f"Created {agent_type} agent ({agent_name})")
             return root_agent
         except Exception as e:
             log(f"Error creating ADK {agent_type} Agent: {e}", is_error=True)
