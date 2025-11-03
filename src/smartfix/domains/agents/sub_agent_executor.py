@@ -34,6 +34,7 @@ from src.config import get_config
 from src.utils import debug_log, log, error_exit, tail_string
 from src.smartfix.shared.failure_categories import FailureCategory
 import src.telemetry_handler as telemetry_handler
+from src.smartfix.domains.providers import setup_contrast_provider
 
 from .mcp_manager import MCPToolsetManager
 
@@ -112,6 +113,7 @@ class SubAgentExecutor:
         try:
             # Check if we should use Contrast LLM with custom headers
             if hasattr(self.config, 'USE_CONTRAST_LLM') and str(self.config.USE_CONTRAST_LLM).lower() == 'true':
+                setup_contrast_provider()
                 model_instance = SmartFixLiteLlm(
                     model=self.config.AGENT_MODEL,
                     temperature=0.2,
