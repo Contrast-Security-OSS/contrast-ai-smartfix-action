@@ -115,7 +115,7 @@ class SubAgentExecutor:
             if hasattr(self.config, 'USE_CONTRAST_LLM') and str(self.config.USE_CONTRAST_LLM).lower() == 'true':
                 setup_contrast_provider()
                 model_instance = SmartFixLiteLlm(
-                    model=self.config.AGENT_MODEL,
+                    model="contrast/claude-sonnet-4-5",
                     temperature=0.2,
                     stream_options={"include_usage": True},
                     extra_headers={
