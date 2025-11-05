@@ -46,10 +46,6 @@ from src.smartfix.domains.vulnerability.models import Vulnerability
 # Import GitHub-specific agent factory
 from src.github.agent_factory import GitHubAgentFactory
 
-# Enable LiteLLM debug logging
-litellm._turn_on_debug()
-litellm.set_verbose = True
-
 config = get_config()
 telemetry_handler.initialize_telemetry()
 
