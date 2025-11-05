@@ -223,7 +223,7 @@ class SmartFixLiteLlm(LiteLlm):
             # Add empty developer message to prevent LiteLLM from moving system message
             empty_developer = {
                 'role': 'developer',
-                'content': [{'type': 'text', 'text': 'none'}]
+                'content': [{'type': 'text', 'text': 'see system prompt'}]
             }
 
             # Filter out developer messages that contain the system prompt content to avoid duplicates
