@@ -26,17 +26,13 @@ def setup_contrast_provider():
             "cache_read_input_token_cost": 0.0000003,
 
             # Provider configuration
-            "litellm_provider": "bedrock",  # Use Bedrock provider
+            "litellm_provider": "anthropic",  # Use Anthropic provider
             "mode": "chat",
-
-            # Allow parameters not normally supported by bedrock
-            "allowed_openai_params": ["temperature", "tools", "stream_options"],
 
             # Feature support
             "supports_function_calling": True,
             "supports_vision": True,
             "supports_prompt_caching": True,
-            "supports_temperature": True,
         }
     })
 

@@ -205,7 +205,7 @@ class SmartFixLiteLlm(LiteLlm):
 
         debug_log(f"Message analysis: has_system={has_system}, has_developer={has_developer}")
 
-        # If we have neither system nor developer, add system message
+        # For Contrast models, ensure we have system + empty developer to prevent LiteLLM preprocessing
         if not has_system and not has_developer:
             debug_log("No system or developer message found, adding system message")
             system_message = {
@@ -213,6 +213,19 @@ class SmartFixLiteLlm(LiteLlm):
                 'content': system_prompt
             }
             messages = [system_message] + list(messages)
+        elif not has_system and has_developer:
+            debug_log("Developer message found but no system message, adding system message for Contrast")
+            # Add system message with actual prompt
+            system_message = {
+                'role': 'system',
+                'content': system_prompt
+            }
+            # Add empty developer message to prevent LiteLLM from moving system message
+            empty_developer = {
+                'role': 'developer',
+                'content': ''
+            }
+            messages = [system_message, empty_developer] + list(messages)
 
         return messages
 
@@ -246,9 +259,9 @@ class SmartFixLiteLlm(LiteLlm):
 
         cache_control_calls = 0  # Counter to limit cache control calls to 4
 
-        if ("bedrock/" in model_lower and "claude" in model_lower) or ("contrast/" in model_lower and "claude" in model_lower):
-            # Bedrock Claude or Contrast Claude (proxies to Bedrock): Convert developer->system and add cache_control
-            debug_log(f"Processing as Bedrock/Contrast model: {self.model}")
+        if ("bedrock/" in model_lower and "claude" in model_lower):
+            # Bedrock Claude: Convert developer->system and add cache_control
+            debug_log(f"Processing as Bedrock model: {self.model}")
             for i, message in enumerate(messages):
                 if cache_control_calls >= 4:
                     break
@@ -283,6 +296,41 @@ class SmartFixLiteLlm(LiteLlm):
                         # Add cache_control to content instead of message
                         self._add_cache_control_to_message(message)
                         cache_control_calls += 1
+
+        elif ("contrast/" in model_lower and "claude" in model_lower):
+            # Contrast Claude: Apply caching but NO developer->system conversion
+            debug_log(f"Processing as Contrast model: {self.model}")
+            for i, message in enumerate(messages):
+                if cache_control_calls >= 4:
+                    break
+
+                if isinstance(message, dict):
+                    role = message.get('role')
+                elif hasattr(message, 'role'):
+                    role = getattr(message, 'role', None)
+                    # Convert to dict for easier manipulation
+                    if hasattr(message, '__dict__'):
+                        message_dict = message.__dict__.copy()
+                        messages[i] = message_dict
+                        message = message_dict
+                        role = message.get('role')
+                else:
+                    continue
+
+                # Apply caching to system and user messages, skip empty developer messages
+                if role in ['system', 'user']:
+                    if isinstance(message, dict):
+                        debug_log(f"Adding cache control to {role} message {i}")
+                        self._add_cache_control_to_message(message)
+                        cache_control_calls += 1
+                elif role == 'developer':
+                    # Skip caching for empty developer messages (waste of cache points)
+                    if isinstance(message, dict) and message.get('content', '').strip():
+                        debug_log(f"Adding cache control to non-empty developer message {i}")
+                        self._add_cache_control_to_message(message)
+                        cache_control_calls += 1
+                    else:
+                        debug_log(f"Skipping cache for empty developer message {i}")
 
         elif ("anthropic/" in model_lower and "bedrock/" not in model_lower):
             # Direct Anthropic API: Just add cache_control (developer role is fine)
