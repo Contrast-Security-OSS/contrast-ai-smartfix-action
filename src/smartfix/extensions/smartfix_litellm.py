@@ -205,7 +205,7 @@ class SmartFixLiteLlm(LiteLlm):
 
         debug_log(f"Message analysis: has_system={has_system}, has_developer={has_developer}")
 
-        # For Contrast models, ensure we have system + empty developer to prevent LiteLLM preprocessing
+        # For Contrast models, ensure we have system message and remove any developer messages
         if not has_system and not has_developer:
             debug_log("No system or developer message found, adding system message")
             system_message = {
@@ -225,7 +225,22 @@ class SmartFixLiteLlm(LiteLlm):
                 'role': 'developer',
                 'content': ''
             }
-            messages = [system_message, empty_developer] + list(messages)
+
+            # Filter out developer messages that contain the system prompt content to avoid duplicates
+            filtered_messages = []
+            for msg in messages:
+                if isinstance(msg, dict):
+                    role = msg.get('role')
+                elif hasattr(msg, 'role'):
+                    role = getattr(msg, 'role')
+                else:
+                    role = None
+
+                # Skip developer messages - we'll use our empty decoy instead
+                if role != 'developer':
+                    filtered_messages.append(msg)
+
+            messages = [system_message, empty_developer] + filtered_messages
 
         return messages
 
@@ -259,7 +274,42 @@ class SmartFixLiteLlm(LiteLlm):
 
         cache_control_calls = 0  # Counter to limit cache control calls to 4
 
-        if ("bedrock/" in model_lower and "claude" in model_lower):
+        if ("contrast/" in model_lower and "claude" in model_lower):
+            # Contrast Claude: Apply caching but NO developer->system conversion
+            debug_log(f"Processing as Contrast model: {self.model}")
+            for i, message in enumerate(messages):
+                if cache_control_calls >= 4:
+                    break
+
+                if isinstance(message, dict):
+                    role = message.get('role')
+                elif hasattr(message, 'role'):
+                    role = getattr(message, 'role', None)
+                    # Convert to dict for easier manipulation
+                    if hasattr(message, '__dict__'):
+                        message_dict = message.__dict__.copy()
+                        messages[i] = message_dict
+                        message = message_dict
+                        role = message.get('role')
+                else:
+                    continue
+
+                # Apply caching to system and user messages, skip empty developer messages
+                if role in ['system', 'user']:
+                    if isinstance(message, dict):
+                        debug_log(f"Adding cache control to {role} message {i}")
+                        self._add_cache_control_to_message(message)
+                        cache_control_calls += 1
+                elif role == 'developer':
+                    # Skip caching for empty developer messages (waste of cache points)
+                    if isinstance(message, dict) and message.get('content', '').strip():
+                        debug_log(f"Adding cache control to non-empty developer message {i}")
+                        self._add_cache_control_to_message(message)
+                        cache_control_calls += 1
+                    else:
+                        debug_log(f"Skipping cache for empty developer message {i}")
+
+        elif ("bedrock/" in model_lower and "claude" in model_lower):
             # Bedrock Claude: Convert developer->system and add cache_control
             debug_log(f"Processing as Bedrock model: {self.model}")
             for i, message in enumerate(messages):
