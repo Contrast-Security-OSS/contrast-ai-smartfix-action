@@ -183,8 +183,8 @@ class SmartFixLiteLlm(LiteLlm):
 
         # Check if system message already exists
         has_system = any(
-            (isinstance(msg, dict) and msg.get('role') == 'system') or
-            (hasattr(msg, 'role') and getattr(msg, 'role') == 'system')
+            (isinstance(msg, dict) and msg.get('role') == 'system') or (
+                hasattr(msg, 'role') and getattr(msg, 'role') == 'system')
             for msg in messages
         )
 
