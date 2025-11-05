@@ -330,7 +330,7 @@ class SmartFixLiteLlm(LiteLlm):
         if generation_params:
             completion_args.update(generation_params)
 
-        debug_log(f"Final completion_args being passed to LiteLLM:")
+        debug_log("Final completion_args being passed to LiteLLM:")
         debug_log(f"  Model: {completion_args.get('model')}")
         debug_log(f"  Messages count: {len(completion_args.get('messages', []))}")
         for i, msg in enumerate(completion_args.get('messages', [])):
