@@ -149,6 +149,9 @@ class SmartFixLiteLlm(LiteLlm):
 
     def __init__(self, model: str, **kwargs):
         super().__init__(model=model, **kwargs)
+        debug_log(f"SmartFixLiteLlm initialized with model: {model}, system: {kwargs.get('system', 'None')}")
+        # Store system prompt for manual injection if needed
+        self._system_prompt = kwargs.get('system')
 
     def _add_cache_control_to_message(self, message: dict) -> None:
         """Add cache_control to message content for Anthropic API compatibility.
@@ -172,6 +175,31 @@ class SmartFixLiteLlm(LiteLlm):
                 for item in content:
                     if isinstance(item, dict):
                         item['cache_control'] = {"type": "ephemeral"}
+
+    def _ensure_system_message_included(self, messages: List[Message]) -> List[Message]:
+        """Ensure system message is included in messages array if we have a system prompt."""
+        if not self._system_prompt:
+            return messages
+
+        # Check if system message already exists
+        has_system = any(
+            (isinstance(msg, dict) and msg.get('role') == 'system') or
+            (hasattr(msg, 'role') and getattr(msg, 'role') == 'system')
+            for msg in messages
+        )
+
+        if not has_system:
+            debug_log(f"No system message found, adding system prompt: {self._system_prompt[:100]}...")
+            # Add system message at the beginning
+            system_message = {
+                'role': 'system',
+                'content': self._system_prompt
+            }
+            messages = [system_message] + list(messages)
+        else:
+            debug_log("System message already present in messages array")
+
+        return messages
 
     def _apply_role_conversion_and_caching(self, messages: List[Message]) -> None:  # noqa: C901
         """Convert developer->system for non-OpenAI models and apply caching.
@@ -259,6 +287,7 @@ class SmartFixLiteLlm(LiteLlm):
         Yields:
             LlmResponse: The model response.
         """
+        debug_log(f"SmartFixLiteLlm.generate_content_async called with stream={stream}")
         self._maybe_append_user_content(llm_request)
 
         # Get completion inputs
@@ -266,8 +295,23 @@ class SmartFixLiteLlm(LiteLlm):
             _get_completion_inputs(llm_request)
         )
 
+        # Ensure system message is included
+        messages = self._ensure_system_message_included(messages)
+
         # Apply role conversion and caching
         self._apply_role_conversion_and_caching(messages)
+
+        # Debug log the messages array with roles and content
+        debug_log("Messages array being sent to LLM:")
+        for i, message in enumerate(messages):
+            if isinstance(message, dict):
+                role = message.get('role', 'unknown')
+                content = message.get('content', '')
+                # Truncate content if it's very long for readability
+                content_preview = str(content)[:200] + ('...' if len(str(content)) > 200 else '')
+                debug_log(f"  Message {i}: Role='{role}', Content='{content_preview}'")
+            else:
+                debug_log(f"  Message {i}: {type(message)} - {str(message)[:200]}")
 
         if "functions" in self._additional_args:
             # LiteLLM does not support both tools and functions together.
