@@ -147,11 +147,13 @@ class SmartFixLiteLlm(LiteLlm):
     cost_accumulator: TokenCostAccumulator = Field(default_factory=TokenCostAccumulator)
     """Accumulator for tracking token usage and costs across multiple LLM calls."""
 
-    def __init__(self, model: str, **kwargs):
+    def __init__(self, model: str, contrast_system_prompt: str = None, **kwargs):
         super().__init__(model=model, **kwargs)
-        debug_log(f"SmartFixLiteLlm initialized with model: {model}, system: {kwargs.get('system', 'None')}")
-        # Store system prompt for fallback
+        debug_log(f"SmartFixLiteLlm initialized with model: {model}, system: {kwargs.get('system', 'None')}, contrast_system_prompt: {'Set' if contrast_system_prompt else 'None'}")
+        # Store system prompt for fallback (regular models)
         self._system_prompt = kwargs.get('system')
+        # Store Contrast-specific system prompt separately
+        self._contrast_system_prompt = contrast_system_prompt
 
     def _add_cache_control_to_message(self, message: dict) -> None:
         """Add cache_control to message content for Anthropic API compatibility.
@@ -178,8 +180,10 @@ class SmartFixLiteLlm(LiteLlm):
 
     def _ensure_system_message_for_contrast(self, messages: List[Message]) -> List[Message]:
         """Ensure we have a system message for Contrast/Bedrock models."""
-        if not self._system_prompt:
-            debug_log("No stored system prompt, returning messages unchanged")
+        # Use Contrast-specific prompt if available, otherwise fall back to regular system prompt
+        system_prompt = self._contrast_system_prompt or self._system_prompt
+        if not system_prompt:
+            debug_log("No stored system prompt (contrast or regular), returning messages unchanged")
             return messages
 
         # Check if we have any system message
@@ -206,7 +210,7 @@ class SmartFixLiteLlm(LiteLlm):
             debug_log("No system or developer message found, adding system message")
             system_message = {
                 'role': 'system',
-                'content': self._system_prompt
+                'content': system_prompt
             }
             messages = [system_message] + list(messages)
 
