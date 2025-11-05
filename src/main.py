@@ -25,7 +25,6 @@ import atexit
 import platform
 from datetime import datetime, timedelta
 from asyncio.proactor_events import _ProactorBasePipeTransport
-import litellm
 
 # Import configurations and utilities
 from src.config import get_config
