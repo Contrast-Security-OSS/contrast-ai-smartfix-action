@@ -302,7 +302,20 @@ class SmartFixLiteLlm(LiteLlm):
                         cache_control_calls += 1
                 elif role == 'developer':
                     # Skip caching for empty developer messages (waste of cache points)
-                    if isinstance(message, dict) and message.get('content', '').strip():
+                    content = message.get('content', '') if isinstance(message, dict) else ''
+                    is_empty = True
+
+                    if isinstance(content, str):
+                        is_empty = not content.strip()
+                    elif isinstance(content, list):
+                        # Check if list contains empty text content
+                        is_empty = all(
+                            not item.get('text', '').strip()
+                            for item in content
+                            if isinstance(item, dict) and item.get('type') == 'text'
+                        )
+
+                    if not is_empty:
                         debug_log(f"Adding cache control to non-empty developer message {i}")
                         self._add_cache_control_to_message(message)
                         cache_control_calls += 1
