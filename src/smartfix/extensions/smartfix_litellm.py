@@ -201,9 +201,9 @@ class SmartFixLiteLlm(LiteLlm):
 
         debug_log(f"Message analysis: has_system={has_system}, has_developer={has_developer}")
 
-        # If we have neither system nor developer, add system message
-        if not has_system and not has_developer:
-            debug_log("No system or developer message found, adding system message")
+        # Always add system message if we don't have one (regardless of developer message)
+        if not has_system:
+            debug_log("No system message found, adding system message")
             system_message = {
                 'role': 'system',
                 'content': self._system_prompt
