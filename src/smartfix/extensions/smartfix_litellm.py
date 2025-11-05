@@ -201,9 +201,9 @@ class SmartFixLiteLlm(LiteLlm):
 
         debug_log(f"Message analysis: has_system={has_system}, has_developer={has_developer}")
 
-        # Always add system message if we don't have one (regardless of developer message)
-        if not has_system:
-            debug_log("No system message found, adding system message")
+        # If we have neither system nor developer, add system message
+        if not has_system and not has_developer:
+            debug_log("No system or developer message found, adding system message")
             system_message = {
                 'role': 'system',
                 'content': self._system_prompt
@@ -242,7 +242,7 @@ class SmartFixLiteLlm(LiteLlm):
 
         cache_control_calls = 0  # Counter to limit cache control calls to 4
 
-        if ("bedrock/" in model_lower and "claude" in model_lower):  # or ("contrast/" in model_lower and "claude" in model_lower):
+        if ("bedrock/" in model_lower and "claude" in model_lower) or ("contrast/" in model_lower and "claude" in model_lower):
             # Bedrock Claude or Contrast Claude (proxies to Bedrock): Convert developer->system and add cache_control
             debug_log(f"Processing as Bedrock/Contrast model: {self.model}")
             for i, message in enumerate(messages):
