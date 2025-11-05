@@ -180,17 +180,33 @@ class SmartFixLiteLlm(LiteLlm):
         This prevents LiteLLM's internal role conversion that strips cache_control fields.
         """
         model_lower = self.model.lower()
+        debug_log(f"_apply_role_conversion_and_caching called with model: {self.model}")
+        debug_log(f"Input messages count: {len(messages)}")
+
+        # Log initial message roles
+        for i, msg in enumerate(messages):
+            if isinstance(msg, dict):
+                role = msg.get('role', 'unknown')
+            elif hasattr(msg, 'role'):
+                role = getattr(msg, 'role', 'unknown')
+            else:
+                role = 'unknown'
+            debug_log(f"  Initial message {i}: role='{role}'")
 
         # Early return if model doesn't support caching
         if not (("bedrock/" in model_lower and "claude" in model_lower)
                 or ("anthropic/" in model_lower and "bedrock/" not in model_lower)
                 or ("contrast/" in model_lower and "claude" in model_lower)):
+            debug_log(f"Model {self.model} does not support caching, returning early")
             return
+
+        debug_log(f"Model {self.model} supports caching, proceeding with role conversion")
 
         cache_control_calls = 0  # Counter to limit cache control calls to 4
 
         if ("bedrock/" in model_lower and "claude" in model_lower) or ("contrast/" in model_lower and "claude" in model_lower):
             # Bedrock Claude or Contrast Claude (proxies to Bedrock): Convert developer->system and add cache_control
+            debug_log(f"Processing as Bedrock/Contrast model: {self.model}")
             for i, message in enumerate(messages):
                 if cache_control_calls >= 4:
                     break
@@ -210,14 +226,17 @@ class SmartFixLiteLlm(LiteLlm):
 
                 # Convert developer->system and add cache_control in one step
                 if role == 'developer':
+                    debug_log(f"Converting message {i} from 'developer' to 'system'")
                     if isinstance(message, dict):
                         message['role'] = 'system'  # Prevent LiteLLM conversion
                         # Add cache_control to content instead of message
                         self._add_cache_control_to_message(message)
                         cache_control_calls += 1
+                        debug_log(f"Message {i} converted to system role with cache control")
 
                 # Add cache_control to user and assistant messages as well
                 elif role in ['user', 'assistant']:
+                    debug_log(f"Adding cache control to {role} message {i}")
                     if isinstance(message, dict):
                         # Add cache_control to content instead of message
                         self._add_cache_control_to_message(message)
@@ -225,6 +244,7 @@ class SmartFixLiteLlm(LiteLlm):
 
         elif ("anthropic/" in model_lower and "bedrock/" not in model_lower):
             # Direct Anthropic API: Just add cache_control (developer role is fine)
+            debug_log(f"Processing as direct Anthropic model: {self.model}")
             for i, message in enumerate(messages):
                 if cache_control_calls >= 4:
                     break
@@ -248,6 +268,17 @@ class SmartFixLiteLlm(LiteLlm):
                         # Add cache_control to content instead of message
                         self._add_cache_control_to_message(message)
                         cache_control_calls += 1
+
+        # Log final message roles after processing
+        debug_log("Final messages after role conversion and caching:")
+        for i, msg in enumerate(messages):
+            if isinstance(msg, dict):
+                role = msg.get('role', 'unknown')
+            elif hasattr(msg, 'role'):
+                role = getattr(msg, 'role', 'unknown')
+            else:
+                role = 'unknown'
+            debug_log(f"  Final message {i}: role='{role}'")
 
     async def generate_content_async(  # noqa: C901
         self, llm_request: LlmRequest, stream: bool = False
@@ -298,6 +329,18 @@ class SmartFixLiteLlm(LiteLlm):
 
         if generation_params:
             completion_args.update(generation_params)
+
+        debug_log(f"Final completion_args being passed to LiteLLM:")
+        debug_log(f"  Model: {completion_args.get('model')}")
+        debug_log(f"  Messages count: {len(completion_args.get('messages', []))}")
+        for i, msg in enumerate(completion_args.get('messages', [])):
+            if isinstance(msg, dict):
+                role = msg.get('role', 'unknown')
+                content_preview = str(msg.get('content', ''))[:100]
+            else:
+                role = 'unknown'
+                content_preview = str(msg)[:100]
+            debug_log(f"    completion_args message {i}: role='{role}', content='{content_preview}...'")
 
         response = await self.llm_client.acompletion(**completion_args)
 
