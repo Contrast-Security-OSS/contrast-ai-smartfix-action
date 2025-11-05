@@ -174,7 +174,6 @@ class SmartFixLiteLlm(LiteLlm):
                     if isinstance(item, dict):
                         item['cache_control'] = {"type": "ephemeral"}
 
-
     def _apply_role_conversion_and_caching(self, messages: List[Message]) -> None:  # noqa: C901
         """Convert developer->system for non-OpenAI models and apply caching.
 
