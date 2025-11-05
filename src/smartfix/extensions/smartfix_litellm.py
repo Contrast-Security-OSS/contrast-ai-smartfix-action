@@ -242,7 +242,7 @@ class SmartFixLiteLlm(LiteLlm):
 
         cache_control_calls = 0  # Counter to limit cache control calls to 4
 
-        if ("bedrock/" in model_lower and "claude" in model_lower) or ("contrast/" in model_lower and "claude" in model_lower):
+        if ("bedrock/" in model_lower and "claude" in model_lower):  # or ("contrast/" in model_lower and "claude" in model_lower):
             # Bedrock Claude or Contrast Claude (proxies to Bedrock): Convert developer->system and add cache_control
             debug_log(f"Processing as Bedrock/Contrast model: {self.model}")
             for i, message in enumerate(messages):
