@@ -118,7 +118,7 @@ class SubAgentExecutor:
                     model="contrast/claude-sonnet-4-5",
                     temperature=0.2,
                     stream_options={"include_usage": True},
-
+                    system=system_prompt,
                     extra_headers={
                         "Api-Key": f"{self.config.CONTRAST_API_KEY}",
                         "Authorization": f"{self.config.CONTRAST_AUTHORIZATION_KEY}",

@@ -150,6 +150,8 @@ class SmartFixLiteLlm(LiteLlm):
     def __init__(self, model: str, **kwargs):
         super().__init__(model=model, **kwargs)
         debug_log(f"SmartFixLiteLlm initialized with model: {model}, system: {kwargs.get('system', 'None')}")
+        # Store system prompt for fallback
+        self._system_prompt = kwargs.get('system')
 
     def _add_cache_control_to_message(self, message: dict) -> None:
         """Add cache_control to message content for Anthropic API compatibility.
@@ -173,6 +175,42 @@ class SmartFixLiteLlm(LiteLlm):
                 for item in content:
                     if isinstance(item, dict):
                         item['cache_control'] = {"type": "ephemeral"}
+
+    def _ensure_system_message_for_contrast(self, messages: List[Message]) -> List[Message]:
+        """Ensure we have a system message for Contrast/Bedrock models."""
+        if not self._system_prompt:
+            debug_log("No stored system prompt, returning messages unchanged")
+            return messages
+
+        # Check if we have any system message
+        has_system = False
+        has_developer = False
+
+        for msg in messages:
+            if isinstance(msg, dict):
+                role = msg.get('role')
+            elif hasattr(msg, 'role'):
+                role = getattr(msg, 'role')
+            else:
+                continue
+
+            if role == 'system':
+                has_system = True
+            elif role == 'developer':
+                has_developer = True
+
+        debug_log(f"Message analysis: has_system={has_system}, has_developer={has_developer}")
+
+        # If we have neither system nor developer, add system message
+        if not has_system and not has_developer:
+            debug_log("No system or developer message found, adding system message")
+            system_message = {
+                'role': 'system',
+                'content': self._system_prompt
+            }
+            messages = [system_message] + list(messages)
+
+        return messages
 
     def _apply_role_conversion_and_caching(self, messages: List[Message]) -> None:  # noqa: C901
         """Convert developer->system for non-OpenAI models and apply caching.
@@ -299,6 +337,12 @@ class SmartFixLiteLlm(LiteLlm):
         messages, tools, response_format, generation_params = (
             _get_completion_inputs(llm_request)
         )
+
+        # For Contrast models, ensure we have a system message before role conversion
+        model_lower = self.model.lower()
+        if "contrast/" in model_lower and "claude" in model_lower:
+            debug_log("Pre-processing messages for Contrast model")
+            messages = self._ensure_system_message_for_contrast(messages)
 
         # Apply role conversion and caching
         self._apply_role_conversion_and_caching(messages)
