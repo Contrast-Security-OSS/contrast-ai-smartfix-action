@@ -1,7 +1,7 @@
 import litellm
 import os
 from src.config import get_config
-from src.contrast_api import normalize_host
+from src.utils import normalize_host
 
 config = get_config()
 

@@ -26,6 +26,11 @@ from typing import Optional
 from src.config import get_config
 
 
+def normalize_host(host: str) -> str:
+    """Remove any protocol prefix from host to prevent double prefixing when constructing URLs."""
+    return host.replace('https://', '').replace('http://', '')
+
+
 def tail_string(text: str, max_length: int, prefix: str = "...[Content truncated]...\n") -> str:
     """Tail a string to a maximum length, keeping the end portion.
 
@@ -213,12 +218,19 @@ def run_command(command, env=None, check=True):
             # Use new log function for stderr
             if process.returncode != 0:
                 if len(stderr_text) > 1000:
-                    log(f"  Command stderr (truncated):\n---\n{stderr_text[:500]}...\n...{stderr_text[-500:]}\n---", is_error=True)
+                    log(
+                        f"  Command stderr (truncated):\n---\n{stderr_text[:500]}..."
+                        f"\n...{stderr_text[-500:]}\n---",
+                        is_error=True
+                    )
                 else:
                     log(f"  Command stderr:\n---\n{stderr_text}\n---", is_error=True)
             elif stderr_text:  # Log as debug if there's stderr but command was successful
                 if len(stderr_text) > 1000:
-                    debug_log(f"  Command stderr (truncated):\n---\n{stderr_text[:500]}...\n...{stderr_text[-500:]}\n---")
+                    debug_log(
+                        f"  Command stderr (truncated):\n---\n{stderr_text[:500]}..."
+                        f"\n...{stderr_text[-500:]}\n---"
+                    )
                 else:
                     debug_log(f"  Command stderr:\n---\n{stderr_text}\n---")
 
@@ -277,7 +289,11 @@ def error_exit(remediation_id: str, failure_code: Optional[str] = None):
     if remediation_notified:
         log(f"Successfully notified Remediation service about {failure_code} for remediation {remediation_id}.")
     else:
-        log(f"Failed to notify Remediation service about {failure_code} for remediation {remediation_id}.", is_warning=True)
+        log(
+            f"Failed to notify Remediation service about {failure_code} "
+            f"for remediation {remediation_id}.",
+            is_warning=True
+        )
 
     # Attempt to clean up any branches - continue even if this fails
     if config.CODING_AGENT == 'SMARTFIX':

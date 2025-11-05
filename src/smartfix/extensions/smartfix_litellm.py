@@ -99,7 +99,9 @@ class TokenCostAccumulator:
         # Estimate regular input cost per token from new input cost
         if self.total_new_input_tokens > 0:
             regular_cost_per_token = self.total_new_input_cost / self.total_new_input_tokens
-            return self.total_cache_read_tokens * (regular_cost_per_token - (self.total_cache_read_cost / self.total_cache_read_tokens))
+            return self.total_cache_read_tokens * (
+                regular_cost_per_token - (self.total_cache_read_cost / self.total_cache_read_tokens)
+            )
         return 0.0
 
     @property
@@ -147,13 +149,11 @@ class SmartFixLiteLlm(LiteLlm):
     cost_accumulator: TokenCostAccumulator = Field(default_factory=TokenCostAccumulator)
     """Accumulator for tracking token usage and costs across multiple LLM calls."""
 
-    def __init__(self, model: str, contrast_system_prompt: str = None, **kwargs):
+    def __init__(self, model: str, **kwargs):
         super().__init__(model=model, **kwargs)
-        debug_log(f"SmartFixLiteLlm initialized with model: {model}, system: {kwargs.get('system', 'None')}, contrast_system_prompt: {'Set' if contrast_system_prompt else 'None'}")
-        # Store system prompt for fallback (regular models)
+        debug_log(f"SmartFixLiteLlm initialized with model: {model}, system: {kwargs.get('system', 'None')}")
+        # Store system prompt for use with Contrast models
         self._system_prompt = kwargs.get('system')
-        # Store Contrast-specific system prompt separately
-        self._contrast_system_prompt = contrast_system_prompt
 
     def _add_cache_control_to_message(self, message: dict) -> None:
         """Add cache_control to message content for Anthropic API compatibility.
@@ -180,10 +180,9 @@ class SmartFixLiteLlm(LiteLlm):
 
     def _ensure_system_message_for_contrast(self, messages: List[Message]) -> List[Message]:
         """Ensure we have a system message for Contrast/Bedrock models."""
-        # Use Contrast-specific prompt if available, otherwise fall back to regular system prompt
-        system_prompt = self._contrast_system_prompt or self._system_prompt
+        system_prompt = self._system_prompt
         if not system_prompt:
-            debug_log("No stored system prompt (contrast or regular), returning messages unchanged")
+            debug_log("No stored system prompt, returning messages unchanged")
             return messages
 
         # Check if we have any system message
@@ -220,13 +219,13 @@ class SmartFixLiteLlm(LiteLlm):
                 'role': 'system',
                 'content': system_prompt
             }
-            # Add empty developer message to prevent LiteLLM from moving system message
-            empty_developer = {
+            # Add decoy developer message to prevent LiteLLM from moving system message
+            decoy_developer = {
                 'role': 'developer',
-                'content': [{'type': 'text', 'text': 'see system prompt'}]
+                'content': [{'type': 'text', 'text': ''}]
             }
 
-            # Filter out developer messages that contain the system prompt content to avoid duplicates
+            # Filter out original developer messages to avoid duplicates
             filtered_messages = []
             for msg in messages:
                 if isinstance(msg, dict):
@@ -240,7 +239,7 @@ class SmartFixLiteLlm(LiteLlm):
                 if role != 'developer':
                     filtered_messages.append(msg)
 
-            messages = [system_message, empty_developer] + filtered_messages
+            messages = [system_message, decoy_developer] + filtered_messages
 
         return messages
 
@@ -294,33 +293,12 @@ class SmartFixLiteLlm(LiteLlm):
                 else:
                     continue
 
-                # Apply caching to system and user messages, skip empty developer messages
+                # Apply caching to system and user messages only (skip developer decoy)
                 if role in ['system', 'user']:
                     if isinstance(message, dict):
                         debug_log(f"Adding cache control to {role} message {i}")
                         self._add_cache_control_to_message(message)
                         cache_control_calls += 1
-                elif role == 'developer':
-                    # Skip caching for empty developer messages (waste of cache points)
-                    content = message.get('content', '') if isinstance(message, dict) else ''
-                    is_empty = True
-
-                    if isinstance(content, str):
-                        is_empty = not content.strip()
-                    elif isinstance(content, list):
-                        # Check if list contains empty text content
-                        is_empty = all(
-                            not item.get('text', '').strip()
-                            for item in content
-                            if isinstance(item, dict) and item.get('type') == 'text'
-                        )
-
-                    if not is_empty:
-                        debug_log(f"Adding cache control to non-empty developer message {i}")
-                        self._add_cache_control_to_message(message)
-                        cache_control_calls += 1
-                    else:
-                        debug_log(f"Skipping cache for empty developer message {i}")
 
         elif ("bedrock/" in model_lower and "claude" in model_lower):
             # Bedrock Claude: Convert developer->system and add cache_control
@@ -559,7 +537,10 @@ class SmartFixLiteLlm(LiteLlm):
             total_cost = total_input_cost + output_cost
 
             debug_log("Cost Analysis:")
-            debug_log(f"  Input: ${total_input_cost:.6f} (New: ${new_input_cost:.6f}, Cache Read: ${cache_read_cost:.6f}, Cache Write: ${cache_write_cost:.6f})")
+            debug_log(
+                f"  Input: ${total_input_cost:.6f} (New: ${new_input_cost:.6f}, "
+                f"Cache Read: ${cache_read_cost:.6f}, Cache Write: ${cache_write_cost:.6f})"
+            )
             debug_log(f"  Output: ${output_cost:.6f}, Total: ${total_cost:.6f}")
 
             # Add to accumulator
@@ -576,7 +557,10 @@ class SmartFixLiteLlm(LiteLlm):
                 # Calculate what total input cost would have been without caching
                 total_input_without_cache = total_input_cost + cache_savings
                 savings_pct = (cache_savings / total_input_without_cache) * 100
-                debug_log(f"  Cache Savings: ${cache_savings:.6f} ({savings_pct:.1f}%) from {cache_read_tokens} cached tokens")
+                debug_log(
+                    f"  Cache Savings: ${cache_savings:.6f} ({savings_pct:.1f}%) "
+                    f"from {cache_read_tokens} cached tokens"
+                )
         except Exception as e:
             debug_log(f"Could not calculate costs: {e}")
 
