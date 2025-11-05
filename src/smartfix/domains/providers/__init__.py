@@ -26,7 +26,7 @@ def setup_contrast_provider():
             "cache_read_input_token_cost": 0.0000003,
 
             # Provider configuration
-            "litellm_provider": "anthropic",  # Use Anthropic provider
+            "litellm_provider": "bedrock",  # Use Bedrock provider
             "mode": "chat",
 
             # Feature support
