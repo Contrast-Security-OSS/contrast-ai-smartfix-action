@@ -34,7 +34,7 @@ from src.config import get_config
 from src.utils import debug_log, log, error_exit, tail_string
 from src.smartfix.shared.failure_categories import FailureCategory
 import src.telemetry_handler as telemetry_handler
-from src.smartfix.domains.providers import setup_contrast_provider
+from src.smartfix.domains.providers import setup_contrast_provider, CONTRAST_CLAUDE_SONNET_4_5
 
 from .mcp_manager import MCPToolsetManager
 
@@ -115,7 +115,7 @@ class SubAgentExecutor:
             if hasattr(self.config, 'USE_CONTRAST_LLM') and str(self.config.USE_CONTRAST_LLM).lower() == 'true':
                 setup_contrast_provider()
                 model_instance = SmartFixLiteLlm(
-                    model="contrast/claude-sonnet-4-5",
+                    model=CONTRAST_CLAUDE_SONNET_4_5,
                     temperature=0.2,
                     stream_options={"include_usage": True},
                     system=system_prompt,  # Use standard system parameter
@@ -474,5 +474,3 @@ class SubAgentExecutor:
             # Fallback values if stats retrieval fails
             debug_log(f"Could not retrieve statistics: {e}")
             return 0, 0.0
-
-# %%

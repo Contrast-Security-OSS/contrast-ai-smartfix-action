@@ -5,13 +5,16 @@ from src.utils import normalize_host
 
 config = get_config()
 
+# Contrast LLM model constants
+CONTRAST_CLAUDE_SONNET_4_5 = "contrast/claude-sonnet-4-5"
+
 
 def setup_contrast_provider():
     """Setup Contrast Bedrock proxy as a custom provider."""
 
     # Register the model with litellm
     litellm.register_model({
-        "contrast/claude-sonnet-4-5": {
+        CONTRAST_CLAUDE_SONNET_4_5: {
             # Model capabilities
             "max_tokens": 8192,
             "max_input_tokens": 200000,

@@ -24,6 +24,7 @@ from unittest.mock import patch, MagicMock
 # Test setup imports (path is set up by conftest.py)
 from src.config import get_config, reset_config
 from src.smartfix.extensions.smartfix_litellm import SmartFixLiteLlm
+from src.smartfix.domains.providers import CONTRAST_CLAUDE_SONNET_4_5
 
 
 class TestSmartFixLiteLlmContrast(unittest.TestCase):
@@ -37,7 +38,7 @@ class TestSmartFixLiteLlmContrast(unittest.TestCase):
 
         with patch('src.smartfix.extensions.smartfix_litellm.debug_log'):
             self.model = SmartFixLiteLlm(
-                model="contrast/claude-sonnet-4-5",
+                model=CONTRAST_CLAUDE_SONNET_4_5,
                 system=self.system_prompt
             )
 
@@ -48,12 +49,12 @@ class TestSmartFixLiteLlmContrast(unittest.TestCase):
     def test_init_with_system_prompt(self):
         """Test that SmartFixLiteLlm initializes correctly with system prompt"""
         self.assertEqual(self.model._system_prompt, self.system_prompt)
-        self.assertEqual(self.model.model, "contrast/claude-sonnet-4-5")
+        self.assertEqual(self.model.model, CONTRAST_CLAUDE_SONNET_4_5)
 
     def test_init_without_system_prompt(self):
         """Test that SmartFixLiteLlm initializes correctly without system prompt"""
         with patch('src.smartfix.extensions.smartfix_litellm.debug_log'):
-            model = SmartFixLiteLlm(model="contrast/claude-sonnet-4-5")
+            model = SmartFixLiteLlm(model=CONTRAST_CLAUDE_SONNET_4_5)
         self.assertIsNone(model._system_prompt)
 
     def test_ensure_system_message_no_system_no_developer(self):
@@ -127,7 +128,7 @@ class TestSmartFixLiteLlmContrast(unittest.TestCase):
     def test_ensure_system_message_no_system_prompt(self):
         """Test behavior when no system prompt is available"""
         with patch('src.smartfix.extensions.smartfix_litellm.debug_log'):
-            model = SmartFixLiteLlm(model="contrast/claude-sonnet-4-5")  # No system prompt
+            model = SmartFixLiteLlm(model=CONTRAST_CLAUDE_SONNET_4_5)  # No system prompt
         messages = [{'role': 'user', 'content': 'Hello'}]
 
         result = model._ensure_system_message_for_contrast(messages)
@@ -149,11 +150,6 @@ class TestSmartFixLiteLlmContrast(unittest.TestCase):
         # Verify debug logging calls
         mock_debug_log.assert_any_call("Message analysis: has_system=False, has_developer=True")
         mock_debug_log.assert_any_call("Developer message found but no system message, adding system message for Contrast")
-
-    @unittest.skip("Integration test fails due to circular import issues - use mock tests instead")
-    def test_apply_role_conversion_and_caching_contrast_model(self):
-        """Test that Contrast models get proper caching without role conversion"""
-        pass
 
     def test_message_object_handling(self):
         """Test handling of message objects (not just dicts)"""

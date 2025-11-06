@@ -151,7 +151,7 @@ class SmartFixLiteLlm(LiteLlm):
 
     def __init__(self, model: str, **kwargs):
         super().__init__(model=model, **kwargs)
-        debug_log(f"SmartFixLiteLlm initialized with model: {model}, system: {kwargs.get('system', 'None')}")
+        debug_log(f"SmartFixLiteLlm initialized with model: {model}")
         # Store system prompt for use with Contrast models
         self._system_prompt = kwargs.get('system')
 
@@ -250,17 +250,6 @@ class SmartFixLiteLlm(LiteLlm):
         """
         model_lower = self.model.lower()
         debug_log(f"_apply_role_conversion_and_caching called with model: {self.model}")
-        debug_log(f"Input messages count: {len(messages)}")
-
-        # Log initial message roles
-        for i, msg in enumerate(messages):
-            if isinstance(msg, dict):
-                role = msg.get('role', 'unknown')
-            elif hasattr(msg, 'role'):
-                role = getattr(msg, 'role', 'unknown')
-            else:
-                role = 'unknown'
-            debug_log(f"  Initial message {i}: role='{role}'")
 
         # Early return if model doesn't support caching
         if not (("bedrock/" in model_lower and "claude" in model_lower)
@@ -440,18 +429,6 @@ class SmartFixLiteLlm(LiteLlm):
         # Apply role conversion and caching
         self._apply_role_conversion_and_caching(messages)
 
-        # Debug log the messages array with roles and content
-        debug_log("Messages array being sent to LLM:")
-        for i, message in enumerate(messages):
-            if isinstance(message, dict):
-                role = message.get('role', 'unknown')
-                content = message.get('content', '')
-                # Truncate content if it's very long for readability
-                content_preview = str(content)[:200] + ('...' if len(str(content)) > 200 else '')
-                debug_log(f"  Message {i}: Role='{role}', Content='{content_preview}'")
-            else:
-                debug_log(f"  Message {i}: {type(message)} - {str(message)[:200]}")
-
         if "functions" in self._additional_args:
             # LiteLLM does not support both tools and functions together.
             tools = None
@@ -466,18 +443,6 @@ class SmartFixLiteLlm(LiteLlm):
 
         if generation_params:
             completion_args.update(generation_params)
-
-        debug_log("Final completion_args being passed to LiteLLM:")
-        debug_log(f"  Model: {completion_args.get('model')}")
-        debug_log(f"  Messages count: {len(completion_args.get('messages', []))}")
-        for i, msg in enumerate(completion_args.get('messages', [])):
-            if isinstance(msg, dict):
-                role = msg.get('role', 'unknown')
-                content_preview = str(msg.get('content', ''))[:100]
-            else:
-                role = 'unknown'
-                content_preview = str(msg)[:100]
-            debug_log(f"    completion_args message {i}: role='{role}', content='{content_preview}...'")
 
         response = await self.llm_client.acompletion(**completion_args)
 
