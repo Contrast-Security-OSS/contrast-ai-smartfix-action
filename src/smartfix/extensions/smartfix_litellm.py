@@ -282,13 +282,6 @@ class SmartFixLiteLlm(LiteLlm):
                 else:
                     continue
 
-                # Apply caching to system and user messages only (skip developer decoy)
-                if role in ['system', 'user']:
-                    if isinstance(message, dict):
-                        debug_log(f"Adding cache control to {role} message {i}")
-                        self._add_cache_control_to_message(message)
-                        cache_control_calls += 1
-
         elif ("bedrock/" in model_lower and "claude" in model_lower):
             # Bedrock Claude: Convert developer->system and add cache_control
             debug_log(f"Processing as Bedrock model: {self.model}")
