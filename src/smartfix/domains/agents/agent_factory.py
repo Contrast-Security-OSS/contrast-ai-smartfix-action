@@ -17,7 +17,8 @@
 # #L%
 #
 
-from .coding_agent import CodingAgentStrategy, CodingAgents
+from .coding_agent import CodingAgentStrategy
+from src.smartfix.shared.coding_agents import CodingAgents
 from .smartfix_agent import SmartFixAgent
 
 

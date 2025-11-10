@@ -26,7 +26,7 @@ from src import git_handler
 from src import telemetry_handler
 from src.contrast_api import notify_remediation_pr_opened
 from src.smartfix.shared.failure_categories import FailureCategory
-from src.smartfix.domains.agents import CodingAgents
+from src.smartfix.shared.coding_agents import CodingAgents
 from src.smartfix.domains.agents.coding_agent import CodingAgentStrategy
 from src.smartfix.domains.agents.agent_session import AgentSession
 from src.smartfix.domains.vulnerability.context import RemediationContext

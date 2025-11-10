@@ -65,7 +65,7 @@ class Config:
 
         # --- AI Agent Configuration ---
         self.CODING_AGENT = self._get_coding_agent()
-        from src.smartfix.domains.agents import CodingAgents
+        from src.smartfix.shared.coding_agents import CodingAgents
         is_smartfix_coding_agent = self.CODING_AGENT == CodingAgents.SMARTFIX.name
 
         default_agent_model = ""
@@ -166,7 +166,7 @@ class Config:
             raise ConfigurationError("Error: Missing one or more Contrast API configuration variables (HOST, ORG_ID, APP_ID, AUTH_KEY, API_KEY).")
 
     def _get_coding_agent(self) -> str:
-        from src.smartfix.domains.agents import CodingAgents
+        from src.smartfix.shared.coding_agents import CodingAgents
         coding_agent = self._get_env_var("CODING_AGENT", required=False, default="SMARTFIX")
         try:
             # Try to convert string to Enum

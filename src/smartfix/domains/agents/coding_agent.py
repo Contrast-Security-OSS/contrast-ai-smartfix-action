@@ -18,17 +18,9 @@
 #
 
 from abc import ABC, abstractmethod
-from enum import Enum
 
 from src.smartfix.domains.vulnerability import RemediationContext
 from .agent_session import AgentSession
-
-
-class CodingAgents(Enum):
-    """Enumeration of available coding agent types."""
-    SMARTFIX = "SMARTFIX"
-    GITHUB_COPILOT = "GITHUB_COPILOT"
-    CLAUDE_CODE = "CLAUDE_CODE"
 
 
 class CodingAgentStrategy(ABC):
