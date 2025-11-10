@@ -170,19 +170,15 @@ def notify_remediation_pr_opened(remediation_id: str, pr_number: int, pr_url: st
 
         debug_log(f"Remediation notification API response status code: {response.status_code}")
 
-        if response.status_code == 204:
+        # Log all response information for debugging
+        debug_log(f"Response headers: {dict(response.headers)}")
+        debug_log(f"Raw response text: {response.text}")
+
+        if response.status_code in [200, 204]:
             debug_log(f"Successfully notified Remediation service API about PR for remediation {remediation_id}")
             return True
         else:
-            error_message = "Unknown error"
-            try:
-                response_json = response.json()
-                if "messages" in response_json and response_json["messages"]:
-                    error_message = response_json["messages"][0]
-            except (ValueError, KeyError):
-                error_message = response.text
-
-            log(f"Failed to notify Remediation service about PR for remediation {remediation_id}. Error: {error_message}", is_error=True)
+            log(f"Failed to notify Remediation service about PR for remediation {remediation_id}. Response: {response.text}", is_error=True)
             return False
 
     except requests.exceptions.HTTPError as e:
