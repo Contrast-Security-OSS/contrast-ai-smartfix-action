@@ -34,6 +34,7 @@ from src.config import get_config
 from src.utils import debug_log, log, error_exit, tail_string
 from src.smartfix.shared.failure_categories import FailureCategory
 import src.telemetry_handler as telemetry_handler
+from src.smartfix.domains.providers import setup_contrast_provider, CONTRAST_CLAUDE_SONNET_4_5
 
 from .mcp_manager import MCPToolsetManager
 
@@ -73,6 +74,7 @@ class SubAgentExecutor:
         self,
         target_folder: Path,
         remediation_id: str,
+        session_id: str,
         agent_type: str = "fix",
         system_prompt: Optional[str] = None
     ) -> Optional[Agent]:
@@ -82,6 +84,7 @@ class SubAgentExecutor:
         Args:
             target_folder: Path to the folder for filesystem access
             remediation_id: Remediation ID for error tracking
+            session_id: Session ID for Contrast LLM tracking
             agent_type: Type of agent ("fix" or "qa")
             system_prompt: System prompt for agent instructions
 
@@ -108,20 +111,38 @@ class SubAgentExecutor:
 
         # Create the agent
         try:
-            model_instance = SmartFixLiteLlm(
-                model=self.config.AGENT_MODEL,
-                temperature=0.2,  # Set low temperature for more deterministic output
-                # seed=42, # The random seed for reproducibility
-                # (not supported by bedrock/anthropic atm - call throws error)
-                stream_options={"include_usage": True}
-            )
+            # Check if we should use Contrast LLM with custom headers
+            if hasattr(self.config, 'USE_CONTRAST_LLM') and str(self.config.USE_CONTRAST_LLM).lower() == 'true':
+                setup_contrast_provider()
+                model_instance = SmartFixLiteLlm(
+                    model=CONTRAST_CLAUDE_SONNET_4_5,
+                    temperature=0.2,
+                    stream_options={"include_usage": True},
+                    system=system_prompt,  # Use standard system parameter
+                    extra_headers={
+                        "Api-Key": f"{self.config.CONTRAST_API_KEY}",
+                        "Authorization": f"{self.config.CONTRAST_AUTHORIZATION_KEY}",
+                        "x-contrast-llm-session-id": f"{session_id}"
+                    }
+                )
+                debug_log(f"Creating {agent_type} agent ({agent_name}) with model contrast_llm")
+            else:
+                model_instance = SmartFixLiteLlm(
+                    model=self.config.AGENT_MODEL,
+                    temperature=0.2,  # Set low temperature for more deterministic output
+                    # seed=42, # The random seed for reproducibility
+                    # (not supported by bedrock/anthropic atm - call throws error)
+                    stream_options={"include_usage": True}
+                )
+                debug_log(f"Creating {agent_type} agent ({agent_name}) with model {self.config.AGENT_MODEL}")
+
             root_agent = SmartFixLlmAgent(
                 model=model_instance,
                 name=agent_name,
                 instruction=agent_instruction,
                 tools=[mcp_tools],
             )
-            debug_log(f"Created {agent_type} agent ({agent_name}) with model {self.config.AGENT_MODEL}")
+            debug_log(f"Created {agent_type} agent ({agent_name})")
             return root_agent
         except Exception as e:
             log(f"Error creating ADK {agent_type} Agent: {e}", is_error=True)

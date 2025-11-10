@@ -281,6 +281,7 @@ def main():  # noqa: C901
     debug_log(f"GitHub repository URL: {github_repo_url}")
     skipped_vulns = set()  # TS-39904
     remediation_id = "unknown"
+    previous_vuln_uuid = None  # Track previous vulnerability UUID to detect duplicates
 
     while True:
         telemetry_handler.reset_vuln_specific_telemetry()
@@ -328,8 +329,16 @@ def main():  # noqa: C901
 
             # Extract vulnerability details and prompts from the response
             vuln_uuid = vulnerability_data['vulnerabilityUuid']
+
+            # Check if this is the same vulnerability UUID as the previous iteration
+            if vuln_uuid == previous_vuln_uuid:
+                log(f"Error: Backend provided the same vulnerability UUID ({vuln_uuid}) as the previous iteration. This indicates a backend error.", is_warning=True)
+                error_exit(remediation_id, FailureCategory.GENERAL_FAILURE.value)
+
             vuln_title = vulnerability_data['vulnerabilityTitle']
             remediation_id = vulnerability_data['remediationId']
+            session_id = vulnerability_data.get('sessionId')
+            previous_vuln_uuid = vuln_uuid  # Update tracking variable
 
             # Create prompt configuration for SmartFix agent
             prompts = PromptConfiguration.for_smartfix_agent(
@@ -354,8 +363,16 @@ def main():  # noqa: C901
 
             # Extract vulnerability details from the response (no prompts for external agents)
             vuln_uuid = vulnerability_data['vulnerabilityUuid']
+
+            # Check if this is the same vulnerability UUID as the previous iteration
+            if vuln_uuid == previous_vuln_uuid:
+                log(f"Error: Backend provided the same vulnerability UUID ({vuln_uuid}) as the previous iteration. This indicates a backend error.", is_warning=True)
+                error_exit(remediation_id, "DUPLICATE_VULNERABILITY_UUID")
+
             vuln_title = vulnerability_data['vulnerabilityTitle']
             remediation_id = vulnerability_data['remediationId']
+            session_id = None  # External agents don't use Contrast LLM sessions
+            previous_vuln_uuid = vuln_uuid  # Update tracking variable
 
             # Create prompt configuration for external agent (no prompts required)
             prompts = PromptConfiguration.for_external_agent()
@@ -388,7 +405,7 @@ def main():  # noqa: C901
         # --- Create Common Remediation Context ---
         # Create vulnerability and context from config - single source of truth
         vulnerability = Vulnerability.from_api_data(vulnerability_data)
-        context = RemediationContext.from_config(remediation_id, vulnerability, config, prompts=prompts)
+        context = RemediationContext.from_config(remediation_id, vulnerability, config, prompts=prompts, session_id=session_id)
 
         # --- Check if we need to use the external coding agent ---
         if config.CODING_AGENT != CodingAgents.SMARTFIX.name:

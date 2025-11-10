@@ -102,7 +102,7 @@ inputs:
   use_contrast_llm:
     description: 'Use Contrast LLM as your default LLM provider. Set to false if using your own LLM.'
     required: false
-    default: 'true'
+    default: 'false'
 
 runs:
   using: 'composite'

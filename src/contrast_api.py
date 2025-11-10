@@ -21,15 +21,10 @@ import requests
 import json
 import sys
 from src.config import get_config
-from src.utils import debug_log, log
+from src.utils import debug_log, log, normalize_host
 from src import telemetry_handler
 
 config = get_config()
-
-
-def normalize_host(host: str) -> str:
-    """Remove any protocol prefix from host to prevent double prefixing when constructing URLs."""
-    return host.replace('https://', '').replace('http://', '')
 
 
 def get_vulnerability_with_prompts(contrast_host, contrast_org_id, contrast_app_id, contrast_auth_key, contrast_api_key, max_open_prs, github_repo_url, vulnerability_severities):
@@ -74,7 +69,8 @@ def get_vulnerability_with_prompts(contrast_host, contrast_org_id, contrast_app_
         "repoRootDir": str(config.REPO_ROOT),
         "repoUrl": github_repo_url,
         "maxPullRequests": max_open_prs,
-        "severities": vulnerability_severities
+        "severities": vulnerability_severities,
+        "contrastProvidedLlm": config.USE_CONTRAST_LLM
     }
 
     debug_log(f"Request payload: {json.dumps(payload, indent=2)}")

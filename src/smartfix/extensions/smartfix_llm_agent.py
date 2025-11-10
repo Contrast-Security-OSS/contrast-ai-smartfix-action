@@ -90,7 +90,7 @@ class SmartFixLlmAgent(LlmAgent):
             if isinstance(self.model, SmartFixLiteLlm):
                 # Store reference to the original instance
                 self.original_extended_model = self.model
-                debug_log(f"[SMARTFIX_AGENT] Preserved reference to SmartFixLiteLlm instance for agent: {self.name}")
+                debug_log(f"Preserved reference to SmartFixLiteLlm instance for agent: {self.name}")
 
         except ImportError:
             # SmartFixLiteLlm not available, ignore

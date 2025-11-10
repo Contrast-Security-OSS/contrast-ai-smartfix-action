@@ -158,7 +158,8 @@ async def _run_agent_internal_with_prompts(
     repo_root: Path,
     query: str,
     system_prompt: str,
-    remediation_id: str
+    remediation_id: str,
+    session_id: str = None
 ) -> str:
     """
     Internal helper to run either fix or QA agent with API-provided prompts. Returns summary.
@@ -169,6 +170,7 @@ async def _run_agent_internal_with_prompts(
         query: User query/prompt for the agent
         system_prompt: System prompt for agent instructions
         remediation_id: Remediation ID for error tracking
+        session_id: Session ID for Contrast LLM tracking
 
     Returns:
         str: Summary from the agent execution
@@ -265,7 +267,7 @@ async def _run_agent_internal_with_prompts(
     executor = SubAgentExecutor()
 
     agent = await executor.create_agent(
-        repo_root, remediation_id, agent_type=agent_type, system_prompt=system_prompt
+        repo_root, remediation_id, session_id, agent_type=agent_type, system_prompt=system_prompt
     )
     if not agent:
         log(
