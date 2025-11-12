@@ -537,18 +537,19 @@ def get_vulnerability_details(contrast_host: str, contrast_org_id: str, contrast
         return None
 
 
-def get_credit_tracking(contrast_host: str, contrast_org_id: str, contrast_auth_key: str) -> Optional[CreditTrackingResponse]:
+def get_credit_tracking(contrast_host: str, contrast_org_id: str, contrast_app_id: str, contrast_auth_key: str) -> Optional[CreditTrackingResponse]:
     """Get credit tracking information from the Contrast API.
 
     Args:
         contrast_host: The Contrast Security host URL.
         contrast_org_id: The organization ID.
+        contrast_app_id: The application ID.
         contrast_auth_key: The Contrast authorization key.
 
     Returns:
         CreditTrackingResponse object if successful, None if failed.
     """
-    api_url = f"https://{normalize_host(contrast_host)}/api/v4/aiml-remediation/organizations/{contrast_org_id}/credit-tracking"
+    api_url = f"https://{normalize_host(contrast_host)}/api/v4/aiml-remediation/organizations/{contrast_org_id}/applications/{contrast_app_id}/credit-tracking"
 
     config = get_config()
     headers = {

@@ -59,6 +59,7 @@ class TestContrastApiCreditTracking(unittest.TestCase):
         result = contrast_api.get_credit_tracking(
             contrast_host="test.contrastsecurity.com",
             contrast_org_id="test-org-id",
+            contrast_app_id="test-app-id",
             contrast_auth_key="test-auth-key"
         )
 
@@ -88,6 +89,7 @@ class TestContrastApiCreditTracking(unittest.TestCase):
         result = contrast_api.get_credit_tracking(
             contrast_host="test.contrastsecurity.com",
             contrast_org_id="test-org-id",
+            contrast_app_id="test-app-id",
             contrast_auth_key="test-auth-key"
         )
 
@@ -103,6 +105,7 @@ class TestContrastApiCreditTracking(unittest.TestCase):
         result = contrast_api.get_credit_tracking(
             contrast_host="test.contrastsecurity.com",
             contrast_org_id="test-org-id",
+            contrast_app_id="test-app-id",
             contrast_auth_key="test-auth-key"
         )
 
@@ -122,6 +125,7 @@ class TestContrastApiCreditTracking(unittest.TestCase):
         result = contrast_api.get_credit_tracking(
             contrast_host="test.contrastsecurity.com",
             contrast_org_id="test-org-id",
+            contrast_app_id="test-app-id",
             contrast_auth_key="test-auth-key"
         )
 
@@ -137,6 +141,7 @@ class TestContrastApiCreditTracking(unittest.TestCase):
         result = contrast_api.get_credit_tracking(
             contrast_host="test.contrastsecurity.com",
             contrast_org_id="test-org-id",
+            contrast_app_id="test-app-id",
             contrast_auth_key="test-auth-key"
         )
 
@@ -164,6 +169,7 @@ class TestContrastApiCreditTracking(unittest.TestCase):
         result = contrast_api.get_credit_tracking(
             contrast_host="test.contrastsecurity.com",
             contrast_org_id="test-org-id",
+            contrast_app_id="test-app-id",
             contrast_auth_key="test-auth-key"
         )
 
@@ -187,6 +193,7 @@ class TestContrastApiCreditTracking(unittest.TestCase):
         result = contrast_api.get_credit_tracking(
             contrast_host="https://app.contrastsecurity.com/",  # Note trailing slash
             contrast_org_id="test-org-id",
+            contrast_app_id="test-app-id",
             contrast_auth_key="test-auth-key"
         )
 
@@ -210,6 +217,7 @@ class TestContrastApiCreditTracking(unittest.TestCase):
         result = contrast_api.get_credit_tracking(
             contrast_host="app.contrastsecurity.com",  # No https:// prefix
             contrast_org_id="test-org-id",
+            contrast_app_id="test-app-id",
             contrast_auth_key="test-auth-key"
         )
 
@@ -233,6 +241,7 @@ class TestContrastApiCreditTracking(unittest.TestCase):
         contrast_api.get_credit_tracking(
             contrast_host="test.contrastsecurity.com",
             contrast_org_id="test-org-id",
+            contrast_app_id="test-app-id",
             contrast_auth_key="test-auth-key"
         )
 

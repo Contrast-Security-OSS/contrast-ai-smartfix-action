@@ -288,6 +288,7 @@ def main():  # noqa: C901
         initial_credit_info = contrast_api.get_credit_tracking(
             contrast_host=config.CONTRAST_HOST,
             contrast_org_id=config.CONTRAST_ORG_ID,
+            contrast_app_id=config.CONTRAST_APP_ID,
             contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY
         )
         if initial_credit_info:
@@ -559,6 +560,7 @@ def main():  # noqa: C901
             current_credit_info = contrast_api.get_credit_tracking(
                 contrast_host=config.CONTRAST_HOST,
                 contrast_org_id=config.CONTRAST_ORG_ID,
+                contrast_app_id=config.CONTRAST_APP_ID,
                 contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY
             )
             if current_credit_info:
@@ -623,6 +625,7 @@ def main():  # noqa: C901
                         updated_credit_info = contrast_api.get_credit_tracking(
                             contrast_host=config.CONTRAST_HOST,
                             contrast_org_id=config.CONTRAST_ORG_ID,
+                            contrast_app_id=config.CONTRAST_APP_ID,
                             contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY
                         )
                         if updated_credit_info:
