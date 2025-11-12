@@ -352,6 +352,7 @@ class TestExternalCodingAgent(unittest.TestCase):
             remediation_id="REM-789",
             pr_number=123,
             pr_url="https://github.com/owner/repo/pull/123",
+            contrastProvidedLlm=True,
             contrast_host=self.config.CONTRAST_HOST,
             contrast_org_id=self.config.CONTRAST_ORG_ID,
             contrast_app_id=self.config.CONTRAST_APP_ID,

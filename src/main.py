@@ -613,6 +613,7 @@ def main():  # noqa: C901
                     remediation_id=remediation_id,
                     pr_number=pr_number,
                     pr_url=pr_url,
+                    contrastProvidedLlm=config.USE_CONTRAST_LLM,
                     contrast_host=config.CONTRAST_HOST,
                     contrast_org_id=config.CONTRAST_ORG_ID,
                     contrast_app_id=config.CONTRAST_APP_ID,

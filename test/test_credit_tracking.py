@@ -93,7 +93,7 @@ class TestCreditTrackingResponse(unittest.TestCase):
         self.assertIn("### Contrast LLM Free Trial Credits", pr_section)
         self.assertIn("**Used:** 7/50", pr_section)
         self.assertIn("**Remaining:** 43", pr_section)
-        self.assertIn("**Trial Period:** 2024-10-01T14:30:00Z to 2024-11-12T14:30:00Z", pr_section)
+        self.assertIn("**Trial Period:** Oct 01, 2024 to Nov 12, 2024", pr_section)
         self.assertTrue(pr_section.startswith("\n---\n"))
 
     def test_to_pr_body_section_disabled(self):
@@ -149,13 +149,21 @@ class TestCreditTrackingResponse(unittest.TestCase):
         log_msg = response.to_log_message()
         self.assertIn("0/50 used (50 remaining)", log_msg)
 
-        # Test empty dates
+        # Test nicely formatted dates
+        data["startDate"] = "2025-01-15T09:00:00Z"
+        data["endDate"] = "2025-03-31T23:59:59Z"
+
+        response = CreditTrackingResponse.from_api_response(data)
+        pr_section = response.to_pr_body_section()
+        self.assertIn("**Trial Period:** Jan 15, 2025 to Mar 31, 2025", pr_section)
+
+        # Test empty dates edge case
         data["startDate"] = ""
         data["endDate"] = ""
 
         response = CreditTrackingResponse.from_api_response(data)
         pr_section = response.to_pr_body_section()
-        self.assertIn("**Trial Period:**  to ", pr_section)
+        self.assertIn("**Trial Period:** Unknown to Unknown", pr_section)
 
 
 if __name__ == '__main__':
