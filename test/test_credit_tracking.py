@@ -74,7 +74,7 @@ class TestCreditTrackingResponse(unittest.TestCase):
         response = CreditTrackingResponse.from_api_response(self.sample_api_data)
         message = response.to_log_message()
 
-        expected = "Free trial credits: 7/50 used (43 remaining). Trial expires 2024-11-12T14:30:00Z"
+        expected = "Credits: 7/50 used (43 remaining). Trial expires 2024-11-12T14:30:00Z"
         self.assertEqual(message, expected)
 
     def test_to_log_message_disabled(self):
@@ -90,7 +90,7 @@ class TestCreditTrackingResponse(unittest.TestCase):
         response = CreditTrackingResponse.from_api_response(self.sample_api_data)
         pr_section = response.to_pr_body_section()
 
-        self.assertIn("### Contrast LLM Free Trial Credits", pr_section)
+        self.assertIn("### Contrast LLM Credits", pr_section)
         self.assertIn("**Used:** 7/50", pr_section)
         self.assertIn("**Remaining:** 43", pr_section)
         self.assertIn("**Trial Period:** Oct 01, 2024 to Nov 12, 2024", pr_section)

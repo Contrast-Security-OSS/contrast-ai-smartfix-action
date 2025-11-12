@@ -57,7 +57,7 @@ class CreditTrackingResponse:
         if not self.enabled:
             return "Credit tracking is disabled for this organization"
 
-        return (f"Free trial credits: {self.credits_used}/{self.max_credits} used "
+        return (f"Credits: {self.credits_used}/{self.max_credits} used "
                 f"({self.credits_remaining} remaining). Trial expires {self.end_date}")
 
     def to_pr_body_section(self) -> str:
@@ -70,7 +70,7 @@ class CreditTrackingResponse:
 
         return f"""
 ---
-### Contrast LLM Free Trial Credits
+### Contrast LLM Credits
 - **Used:** {self.credits_used}/{self.max_credits}
 - **Remaining:** {self.credits_remaining}
 - **Trial Period:** {start_formatted} to {end_formatted}

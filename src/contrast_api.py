@@ -26,6 +26,8 @@ from src.utils import debug_log, log, normalize_host
 from src import telemetry_handler
 from src.smartfix.domains.workflow.credit_tracking import CreditTrackingResponse
 
+config = get_config()
+
 
 def get_vulnerability_with_prompts(contrast_host, contrast_org_id, contrast_app_id, contrast_auth_key, contrast_api_key, max_open_prs, github_repo_url, vulnerability_severities):
     """Fetches a vulnerability to process along with pre-populated prompt templates from the new prompt-details endpoint.
@@ -52,7 +54,6 @@ def get_vulnerability_with_prompts(contrast_host, contrast_org_id, contrast_app_
     """
     debug_log("\n--- Fetching vulnerability and prompts from prompt-details API ---")
 
-    config = get_config()
     api_url = f"https://{normalize_host(contrast_host)}/api/v4/aiml-remediation/organizations/{contrast_org_id}/applications/{contrast_app_id}/prompt-details"
     debug_log(f"API URL: {api_url}")
 
@@ -150,7 +151,6 @@ def notify_remediation_pr_opened(remediation_id: str, pr_number: int, pr_url: st
     debug_log(f"--- Notifying Remediation service about PR for remediation {remediation_id} ---")
     api_url = f"https://{normalize_host(contrast_host)}/api/v4/aiml-remediation/organizations/{contrast_org_id}/applications/{contrast_app_id}/remediations/{remediation_id}/open"
 
-    config = get_config()
     headers = {
         "Authorization": contrast_auth_key,
         "API-Key": contrast_api_key,
@@ -212,7 +212,6 @@ def notify_remediation_pr_merged(remediation_id: str, contrast_host: str, contra
     debug_log(f"--- Notifying Remediation service about merged PR for remediation {remediation_id} ---")
     api_url = f"https://{normalize_host(contrast_host)}/api/v4/aiml-remediation/organizations/{contrast_org_id}/applications/{contrast_app_id}/remediations/{remediation_id}/merged"
 
-    config = get_config()
     headers = {
         "Authorization": contrast_auth_key,
         "API-Key": contrast_api_key,
@@ -271,7 +270,6 @@ def notify_remediation_pr_closed(remediation_id: str, contrast_host: str, contra
     debug_log(f"--- Notifying Remediation service about closed PR for remediation {remediation_id} ---")
     api_url = f"https://{normalize_host(contrast_host)}/api/v4/aiml-remediation/organizations/{contrast_org_id}/applications/{contrast_app_id}/remediations/{remediation_id}/closed"
 
-    config = get_config()
     headers = {
         "Authorization": contrast_auth_key,
         "API-Key": contrast_api_key,
@@ -322,7 +320,6 @@ def send_telemetry_data() -> bool:
     Returns:
         bool: True if sending was successful, False otherwise.
     """
-    config = get_config()
     telemetry_data = telemetry_handler.get_telemetry_data()
 
     if not all([config.CONTRAST_HOST, config.CONTRAST_ORG_ID, config.CONTRAST_APP_ID, config.CONTRAST_AUTHORIZATION_KEY, config.CONTRAST_API_KEY]):
@@ -388,7 +385,6 @@ def notify_remediation_failed(remediation_id: str, failure_category: str, contra
     debug_log(f"--- Notifying Remediation service about failed remediation {remediation_id} with category {failure_category} ---")
     api_url = f"https://{normalize_host(contrast_host)}/api/v4/aiml-remediation/organizations/{contrast_org_id}/applications/{contrast_app_id}/remediations/{remediation_id}/failed"
 
-    config = get_config()
     headers = {
         "Authorization": contrast_auth_key,
         "API-Key": contrast_api_key,
@@ -472,7 +468,6 @@ def get_vulnerability_details(contrast_host: str, contrast_org_id: str, contrast
     api_url = f"https://{normalize_host(contrast_host)}/api/v4/aiml-remediation/organizations/{contrast_org_id}/applications/{contrast_app_id}/remediation-details"
     debug_log(f"API URL: {api_url}")
 
-    config = get_config()
     headers = {
         "Authorization": contrast_auth_key,
         "API-Key": contrast_api_key,
@@ -552,7 +547,6 @@ def get_credit_tracking(contrast_host: str, contrast_org_id: str, contrast_app_i
     """
     api_url = f"https://{normalize_host(contrast_host)}/api/v4/aiml-remediation/organizations/{contrast_org_id}/applications/{contrast_app_id}/credit-tracking"
 
-    config = get_config()
     headers = {
         "Authorization": contrast_auth_key,
         "API-Key": contrast_api_key,
@@ -584,3 +578,5 @@ def get_credit_tracking(contrast_host: str, contrast_org_id: str, contrast_app_i
     except Exception as e:
         debug_log(f"Unexpected error calling credit-tracking API: {e}")
         return None
+
+# %%
