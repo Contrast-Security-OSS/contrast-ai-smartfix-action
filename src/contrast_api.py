@@ -537,7 +537,7 @@ def get_vulnerability_details(contrast_host: str, contrast_org_id: str, contrast
         return None
 
 
-def get_credit_tracking(contrast_host: str, contrast_org_id: str, contrast_app_id: str, contrast_auth_key: str) -> Optional[CreditTrackingResponse]:
+def get_credit_tracking(contrast_host: str, contrast_org_id: str, contrast_app_id: str, contrast_auth_key: str, contrast_api_key: str) -> Optional[CreditTrackingResponse]:
     """Get credit tracking information from the Contrast API.
 
     Args:
@@ -553,7 +553,8 @@ def get_credit_tracking(contrast_host: str, contrast_org_id: str, contrast_app_i
 
     config = get_config()
     headers = {
-        "Authorization": f"Bearer {contrast_auth_key}",
+        "Authorization": contrast_auth_key,
+        "API-Key": contrast_api_key,
         "Content-Type": "application/json",
         "Accept": "application/json",
         "User-Agent": config.USER_AGENT

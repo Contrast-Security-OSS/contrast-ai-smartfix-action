@@ -289,7 +289,8 @@ def main():  # noqa: C901
             contrast_host=config.CONTRAST_HOST,
             contrast_org_id=config.CONTRAST_ORG_ID,
             contrast_app_id=config.CONTRAST_APP_ID,
-            contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY
+            contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
+            contrast_api_key=config.CONTRAST_API_KEY
         )
         if initial_credit_info:
             log(initial_credit_info.to_log_message())
@@ -561,7 +562,8 @@ def main():  # noqa: C901
                 contrast_host=config.CONTRAST_HOST,
                 contrast_org_id=config.CONTRAST_ORG_ID,
                 contrast_app_id=config.CONTRAST_APP_ID,
-                contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY
+                contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
+                contrast_api_key=config.CONTRAST_API_KEY
             )
             if current_credit_info:
                 # Increment credits used to account for this PR about to be created
@@ -626,7 +628,8 @@ def main():  # noqa: C901
                             contrast_host=config.CONTRAST_HOST,
                             contrast_org_id=config.CONTRAST_ORG_ID,
                             contrast_app_id=config.CONTRAST_APP_ID,
-                            contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY
+                            contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
+                            contrast_api_key=config.CONTRAST_API_KEY
                         )
                         if updated_credit_info:
                             log(updated_credit_info.to_log_message())

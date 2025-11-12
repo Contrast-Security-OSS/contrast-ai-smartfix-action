@@ -60,7 +60,8 @@ class TestContrastApiCreditTracking(unittest.TestCase):
             contrast_host="test.contrastsecurity.com",
             contrast_org_id="test-org-id",
             contrast_app_id="test-app-id",
-            contrast_auth_key="test-auth-key"
+            contrast_auth_key="test-auth-key",
+            contrast_api_key="test-api-key"
         )
 
         # Focus on behavior: what does the user get back?
@@ -90,7 +91,8 @@ class TestContrastApiCreditTracking(unittest.TestCase):
             contrast_host="test.contrastsecurity.com",
             contrast_org_id="test-org-id",
             contrast_app_id="test-app-id",
-            contrast_auth_key="test-auth-key"
+            contrast_auth_key="test-auth-key",
+            contrast_api_key="test-api-key"
         )
 
         # Focus on user experience: what happens when API is down?
@@ -106,7 +108,8 @@ class TestContrastApiCreditTracking(unittest.TestCase):
             contrast_host="test.contrastsecurity.com",
             contrast_org_id="test-org-id",
             contrast_app_id="test-app-id",
-            contrast_auth_key="test-auth-key"
+            contrast_auth_key="test-auth-key",
+            contrast_api_key="test-api-key"
         )
 
         # Focus on user experience: what happens when network is down?
@@ -126,7 +129,8 @@ class TestContrastApiCreditTracking(unittest.TestCase):
             contrast_host="test.contrastsecurity.com",
             contrast_org_id="test-org-id",
             contrast_app_id="test-app-id",
-            contrast_auth_key="test-auth-key"
+            contrast_auth_key="test-auth-key",
+            contrast_api_key="test-api-key"
         )
 
         # Focus on robustness: what happens when API returns garbage?
@@ -142,7 +146,8 @@ class TestContrastApiCreditTracking(unittest.TestCase):
             contrast_host="test.contrastsecurity.com",
             contrast_org_id="test-org-id",
             contrast_app_id="test-app-id",
-            contrast_auth_key="test-auth-key"
+            contrast_auth_key="test-auth-key",
+            contrast_api_key="test-api-key"
         )
 
         # Focus on resilience: function should not crash on unexpected errors
@@ -170,7 +175,8 @@ class TestContrastApiCreditTracking(unittest.TestCase):
             contrast_host="test.contrastsecurity.com",
             contrast_org_id="test-org-id",
             contrast_app_id="test-app-id",
-            contrast_auth_key="test-auth-key"
+            contrast_auth_key="test-auth-key",
+            contrast_api_key="test-api-key"
         )
 
         # Focus on the business logic: what should a disabled org look like?
@@ -194,7 +200,8 @@ class TestContrastApiCreditTracking(unittest.TestCase):
             contrast_host="https://app.contrastsecurity.com/",  # Note trailing slash
             contrast_org_id="test-org-id",
             contrast_app_id="test-app-id",
-            contrast_auth_key="test-auth-key"
+            contrast_auth_key="test-auth-key",
+            contrast_api_key="test-api-key"
         )
 
         # Should still work and return valid response
@@ -218,7 +225,8 @@ class TestContrastApiCreditTracking(unittest.TestCase):
             contrast_host="app.contrastsecurity.com",  # No https:// prefix
             contrast_org_id="test-org-id",
             contrast_app_id="test-app-id",
-            contrast_auth_key="test-auth-key"
+            contrast_auth_key="test-auth-key",
+            contrast_api_key="test-api-key"
         )
 
         # Should still work and return valid response
@@ -242,13 +250,14 @@ class TestContrastApiCreditTracking(unittest.TestCase):
             contrast_host="test.contrastsecurity.com",
             contrast_org_id="test-org-id",
             contrast_app_id="test-app-id",
-            contrast_auth_key="test-auth-key"
+            contrast_auth_key="test-auth-key",
+            contrast_api_key="test-api-key"
         )
 
         # Verify proper authorization header was used
         call_args = mock_get.call_args
         headers = call_args[1]['headers']
-        self.assertEqual(headers['Authorization'], 'Bearer test-auth-key')
+        self.assertEqual(headers['Authorization'], 'test-auth-key')
 
 
 if __name__ == '__main__':
