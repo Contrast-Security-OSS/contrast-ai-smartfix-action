@@ -283,8 +283,8 @@ def main():  # noqa: C901
     remediation_id = "unknown"
     previous_vuln_uuid = None  # Track previous vulnerability UUID to detect duplicates
 
-    # Log initial credit tracking status if using Contrast LLM
-    if config.USE_CONTRAST_LLM:
+    # Log initial credit tracking status if using Contrast LLM (only for SMARTFIX agent)
+    if config.CODING_AGENT == CodingAgents.SMARTFIX.name and config.USE_CONTRAST_LLM:
         initial_credit_info = contrast_api.get_credit_tracking(
             contrast_host=config.CONTRAST_HOST,
             contrast_org_id=config.CONTRAST_ORG_ID,
@@ -557,7 +557,7 @@ def main():  # noqa: C901
         updated_pr_body = pr_body_base + qa_section
 
         # Append credit tracking information to PR body if using Contrast LLM
-        if config.USE_CONTRAST_LLM:
+        if config.CODING_AGENT == CodingAgents.SMARTFIX.name and config.USE_CONTRAST_LLM:
             current_credit_info = contrast_api.get_credit_tracking(
                 contrast_host=config.CONTRAST_HOST,
                 contrast_org_id=config.CONTRAST_ORG_ID,
@@ -613,7 +613,7 @@ def main():  # noqa: C901
                     remediation_id=remediation_id,
                     pr_number=pr_number,
                     pr_url=pr_url,
-                    contrastProvidedLlm=config.USE_CONTRAST_LLM,
+                    contrastProvidedLlm=config.CODING_AGENT == CodingAgents.SMARTFIX.name and config.USE_CONTRAST_LLM,
                     contrast_host=config.CONTRAST_HOST,
                     contrast_org_id=config.CONTRAST_ORG_ID,
                     contrast_app_id=config.CONTRAST_APP_ID,
@@ -623,8 +623,8 @@ def main():  # noqa: C901
                 if remediation_notified:
                     log(f"Successfully notified Remediation service about PR for remediation {remediation_id}.")
 
-                    # Log updated credit tracking status after PR notification
-                    if config.USE_CONTRAST_LLM:
+                    # Log updated credit tracking status after PR notification (only for SMARTFIX agent)
+                    if config.CODING_AGENT == CodingAgents.SMARTFIX.name and config.USE_CONTRAST_LLM:
                         updated_credit_info = contrast_api.get_credit_tracking(
                             contrast_host=config.CONTRAST_HOST,
                             contrast_org_id=config.CONTRAST_ORG_ID,
