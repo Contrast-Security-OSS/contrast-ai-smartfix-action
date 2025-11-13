@@ -20,9 +20,11 @@
 import requests
 import json
 import sys
+from typing import Optional
 from src.config import get_config
 from src.utils import debug_log, log, normalize_host
 from src import telemetry_handler
+from src.smartfix.domains.workflow.credit_tracking import CreditTrackingResponse
 
 config = get_config()
 
@@ -128,7 +130,7 @@ def get_vulnerability_with_prompts(contrast_host, contrast_org_id, contrast_app_
         sys.exit(1)
 
 
-def notify_remediation_pr_opened(remediation_id: str, pr_number: int, pr_url: str, contrast_host: str,
+def notify_remediation_pr_opened(remediation_id: str, pr_number: int, pr_url: str, contrastProvidedLlm: bool, contrast_host: str,
                                  contrast_org_id: str, contrast_app_id: str, contrast_auth_key: str,
                                  contrast_api_key: str) -> bool:
     """Notifies the Remediation backend service that a PR has been opened for a remediation.
@@ -159,7 +161,8 @@ def notify_remediation_pr_opened(remediation_id: str, pr_number: int, pr_url: st
 
     payload = {
         "pullRequestNumber": pr_number,
-        "pullRequestUrl": pr_url
+        "pullRequestUrl": pr_url,
+        "contrastProvidedLlm": contrastProvidedLlm
     }
 
     try:
@@ -170,19 +173,15 @@ def notify_remediation_pr_opened(remediation_id: str, pr_number: int, pr_url: st
 
         debug_log(f"Remediation notification API response status code: {response.status_code}")
 
-        if response.status_code == 204:
+        # Log all response information for debugging
+        debug_log(f"Response headers: {dict(response.headers)}")
+        debug_log(f"Raw response text: {response.text}")
+
+        if response.status_code in [200, 204]:
             debug_log(f"Successfully notified Remediation service API about PR for remediation {remediation_id}")
             return True
         else:
-            error_message = "Unknown error"
-            try:
-                response_json = response.json()
-                if "messages" in response_json and response_json["messages"]:
-                    error_message = response_json["messages"][0]
-            except (ValueError, KeyError):
-                error_message = response.text
-
-            log(f"Failed to notify Remediation service about PR for remediation {remediation_id}. Error: {error_message}", is_error=True)
+            log(f"Failed to notify Remediation service about PR for remediation {remediation_id}. Response: {response.text}", is_error=True)
             return False
 
     except requests.exceptions.HTTPError as e:
@@ -532,3 +531,52 @@ def get_vulnerability_details(contrast_host: str, contrast_org_id: str, contrast
     except Exception as e:
         log(f"Unexpected error calling remediation-details API: {e}", is_error=True)
         return None
+
+
+def get_credit_tracking(contrast_host: str, contrast_org_id: str, contrast_app_id: str, contrast_auth_key: str, contrast_api_key: str) -> Optional[CreditTrackingResponse]:
+    """Get credit tracking information from the Contrast API.
+
+    Args:
+        contrast_host: The Contrast Security host URL.
+        contrast_org_id: The organization ID.
+        contrast_app_id: The application ID.
+        contrast_auth_key: The Contrast authorization key.
+
+    Returns:
+        CreditTrackingResponse object if successful, None if failed.
+    """
+    api_url = f"https://{normalize_host(contrast_host)}/api/v4/aiml-remediation/organizations/{contrast_org_id}/applications/{contrast_app_id}/credit-tracking"
+
+    headers = {
+        "Authorization": contrast_auth_key,
+        "API-Key": contrast_api_key,
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": config.USER_AGENT
+    }
+
+    try:
+        debug_log(f"Fetching credit tracking from: {api_url}")
+        response = requests.get(api_url, headers=headers)
+        response.raise_for_status()
+
+        debug_log(f"Credit tracking API response status code: {response.status_code}")
+        debug_log(f"Raw credit tracking response: {response.text}")
+
+        data = response.json()
+        return CreditTrackingResponse.from_api_response(data)
+
+    except requests.exceptions.HTTPError as e:
+        debug_log(f"HTTP error fetching credit tracking: {e.response.status_code} - {e.response.text}")
+        return None
+    except requests.exceptions.RequestException as e:
+        debug_log(f"Request error fetching credit tracking: {e}")
+        return None
+    except json.JSONDecodeError:
+        debug_log("Error decoding JSON response from credit-tracking API.")
+        return None
+    except Exception as e:
+        debug_log(f"Unexpected error calling credit-tracking API: {e}")
+        return None
+
+# %%

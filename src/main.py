@@ -28,7 +28,7 @@ from asyncio.proactor_events import _ProactorBasePipeTransport
 
 # Import configurations and utilities
 from src.config import get_config
-from src.smartfix.domains.agents import CodingAgents
+from src.smartfix.shared.coding_agents import CodingAgents
 from src.utils import debug_log, log, error_exit
 from src import telemetry_handler
 from src.version_check import do_version_check
@@ -282,6 +282,20 @@ def main():  # noqa: C901
     skipped_vulns = set()  # TS-39904
     remediation_id = "unknown"
     previous_vuln_uuid = None  # Track previous vulnerability UUID to detect duplicates
+
+    # Log initial credit tracking status if using Contrast LLM (only for SMARTFIX agent)
+    if config.CODING_AGENT == CodingAgents.SMARTFIX.name and config.USE_CONTRAST_LLM:
+        initial_credit_info = contrast_api.get_credit_tracking(
+            contrast_host=config.CONTRAST_HOST,
+            contrast_org_id=config.CONTRAST_ORG_ID,
+            contrast_app_id=config.CONTRAST_APP_ID,
+            contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
+            contrast_api_key=config.CONTRAST_API_KEY
+        )
+        if initial_credit_info:
+            log(initial_credit_info.to_log_message())
+        else:
+            debug_log("Could not retrieve initial credit tracking information")
 
     while True:
         telemetry_handler.reset_vuln_specific_telemetry()
@@ -542,6 +556,20 @@ def main():  # noqa: C901
 
         updated_pr_body = pr_body_base + qa_section
 
+        # Append credit tracking information to PR body if using Contrast LLM
+        if config.CODING_AGENT == CodingAgents.SMARTFIX.name and config.USE_CONTRAST_LLM:
+            current_credit_info = contrast_api.get_credit_tracking(
+                contrast_host=config.CONTRAST_HOST,
+                contrast_org_id=config.CONTRAST_ORG_ID,
+                contrast_app_id=config.CONTRAST_APP_ID,
+                contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
+                contrast_api_key=config.CONTRAST_API_KEY
+            )
+            if current_credit_info:
+                # Increment credits used to account for this PR about to be created
+                projected_credit_info = current_credit_info.with_incremented_usage()
+                updated_pr_body += projected_credit_info.to_pr_body_section()
+
         # Create a brief summary for the telemetry aiSummaryReport (limited to 255 chars in DB)
         # Generate an optimized summary using the dedicated function in telemetry_handler
         brief_summary = telemetry_handler.create_ai_summary_report(updated_pr_body)
@@ -585,6 +613,7 @@ def main():  # noqa: C901
                     remediation_id=remediation_id,
                     pr_number=pr_number,
                     pr_url=pr_url,
+                    contrastProvidedLlm=config.CODING_AGENT == CodingAgents.SMARTFIX.name and config.USE_CONTRAST_LLM,
                     contrast_host=config.CONTRAST_HOST,
                     contrast_org_id=config.CONTRAST_ORG_ID,
                     contrast_app_id=config.CONTRAST_APP_ID,
@@ -593,6 +622,20 @@ def main():  # noqa: C901
                 )
                 if remediation_notified:
                     log(f"Successfully notified Remediation service about PR for remediation {remediation_id}.")
+
+                    # Log updated credit tracking status after PR notification (only for SMARTFIX agent)
+                    if config.CODING_AGENT == CodingAgents.SMARTFIX.name and config.USE_CONTRAST_LLM:
+                        updated_credit_info = contrast_api.get_credit_tracking(
+                            contrast_host=config.CONTRAST_HOST,
+                            contrast_org_id=config.CONTRAST_ORG_ID,
+                            contrast_app_id=config.CONTRAST_APP_ID,
+                            contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
+                            contrast_api_key=config.CONTRAST_API_KEY
+                        )
+                        if updated_credit_info:
+                            log(updated_credit_info.to_log_message())
+                        else:
+                            debug_log("Could not retrieve updated credit tracking information")
                 else:
                     log(f"Failed to notify Remediation service about PR for remediation {remediation_id}.", is_warning=True)
             else:

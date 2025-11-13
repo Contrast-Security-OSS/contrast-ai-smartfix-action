@@ -19,7 +19,8 @@
 
 from typing import Optional
 from src.config import Config
-from src.smartfix.domains.agents.coding_agent import CodingAgentStrategy, CodingAgents
+from src.smartfix.domains.agents.coding_agent import CodingAgentStrategy
+from src.smartfix.shared.coding_agents import CodingAgents
 from src.smartfix.domains.agents.agent_factory import AgentFactory
 from .external_coding_agent import ExternalCodingAgent
 

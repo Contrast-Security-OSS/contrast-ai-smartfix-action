@@ -49,8 +49,18 @@ if [[ $SKIP_INSTALL -eq 0 ]]; then
         exit 1
     fi
 
-    # Install dependencies (with --system flag to install outside of venv)
-    if ! uv pip install --system -r "$REQUIREMENTS_LOCK"; then
+    # Create virtual environment if it doesn't exist
+    VENV_DIR="$PROJECT_ROOT/.venv"
+    if [[ ! -d "$VENV_DIR" ]]; then
+        echo "Creating virtual environment..."
+        if ! uv venv "$VENV_DIR"; then
+            echo "Error creating virtual environment" >&2
+            exit 1
+        fi
+    fi
+
+    # Install dependencies in virtual environment
+    if ! uv pip install -r "$REQUIREMENTS_LOCK"; then
         echo "Error installing dependencies" >&2
         exit 1
     fi
@@ -74,10 +84,16 @@ export DEBUG_MODE="true"
 export TESTING="true"
 
 # Run tests
+VENV_DIR="$PROJECT_ROOT/.venv"
+PYTHON_CMD="python"
+if [[ -d "$VENV_DIR" ]]; then
+    PYTHON_CMD="$VENV_DIR/bin/python"
+fi
+
 if [[ ${#TEST_FILES[@]} -eq 0 ]]; then
     echo "Running all tests..."
-    python -m unittest discover -s test
+    "$PYTHON_CMD" -m unittest discover -s test
 else
     echo "Running specific tests: ${TEST_FILES[*]}"
-    python -m unittest "${TEST_FILES[@]}"
+    "$PYTHON_CMD" -m unittest "${TEST_FILES[@]}"
 fi

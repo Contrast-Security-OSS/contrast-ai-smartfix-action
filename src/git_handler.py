@@ -25,7 +25,7 @@ from typing import List, Optional
 from src.utils import run_command, debug_log, log, error_exit
 from src.smartfix.shared.failure_categories import FailureCategory
 from src.config import get_config
-from src.smartfix.domains.agents import CodingAgents
+from src.smartfix.shared.coding_agents import CodingAgents
 config = get_config()
 
 

@@ -27,8 +27,9 @@ from src.config import get_config
 
 
 def normalize_host(host: str) -> str:
-    """Remove any protocol prefix from host to prevent double prefixing when constructing URLs."""
-    return host.replace('https://', '').replace('http://', '')
+    """Remove any protocol prefix and trailing slash from host to prevent double prefixing when constructing URLs."""
+    normalized = host.replace('https://', '').replace('http://', '')
+    return normalized.rstrip('/')
 
 
 def tail_string(text: str, max_length: int, prefix: str = "...[Content truncated]...\n") -> str:
