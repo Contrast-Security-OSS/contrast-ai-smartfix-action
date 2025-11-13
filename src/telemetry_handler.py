@@ -18,6 +18,7 @@
 #
 
 from src.config import get_config
+from src.smartfix.shared.llm_providers import LlmProvider
 
 # Initialize the global telemetry data object
 # This will be populated throughout the script's execution.
@@ -72,7 +73,10 @@ def initialize_telemetry():
             "buildCommandRunTestsIncluded": False,
             "sanitizedFormatCommand": config.FORMATTING_COMMAND,
             "aiProvider": None,
-            "aiModel": None
+            "aiModel": None,
+            "llmProvider": LlmProvider.CONTRAST.value if config.USE_CONTRAST_LLM else LlmProvider.BYOLLM.value,
+            "agentType": config.CODING_AGENT,
+            "fullTelemetryEnabled": config.ENABLE_FULL_TELEMETRY
         },
         "resultInfo": {
             "prCreated": False,
