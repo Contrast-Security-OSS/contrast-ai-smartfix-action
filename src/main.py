@@ -353,7 +353,6 @@ def main():  # noqa: C901
             vuln_title = vulnerability_data['vulnerabilityTitle']
             remediation_id = vulnerability_data['remediationId']
             session_id = vulnerability_data.get('sessionId')
-            previous_vuln_uuid = vuln_uuid  # Update tracking variable
 
             # Validate and create prompt configuration for SmartFix agent
             try:
@@ -392,7 +391,6 @@ def main():  # noqa: C901
             vuln_title = vulnerability_data['vulnerabilityTitle']
             remediation_id = vulnerability_data['remediationId']
             session_id = None  # External agents don't use Contrast LLM sessions
-            previous_vuln_uuid = vuln_uuid  # Update tracking variable
 
             # Create prompt configuration for external agent (no prompts required)
             prompts = PromptConfiguration.for_external_agent()
@@ -420,6 +418,10 @@ def main():  # noqa: C901
         else:
             log(f"No existing OPEN or MERGED PR found for vulnerability {vuln_uuid}. Proceeding with fix attempt.")
         log("\n::endgroup::")
+
+        # Update tracking variable now that we know we're actually processing this vuln
+        previous_vuln_uuid = vuln_uuid
+
         log(f"\n\033[0;33m Selected vuln to fix: {vuln_title} \033[0m")
 
         # --- Create Common Remediation Context ---
