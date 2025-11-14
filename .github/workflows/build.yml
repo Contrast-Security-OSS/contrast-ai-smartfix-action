@@ -40,16 +40,20 @@ jobs:
           uv pip sync --system ${{ github.workspace }}/src/requirements.lock > /tmp/uv-output.log || (cat /tmp/uv-output.log && exit 1)
           echo "✅ Python dependencies installed successfully"
 
+      - name: Run Python linting
+        shell: bash
+        run: |
+          echo ""
+          echo "🔍 Running Python linting using pre-push hook..."
+          # Use the pre-push hook as single source of truth for linting
+          ./hooks/pre-push
+
       - name: Run tests
-        run: PYTHONPATH=${{ github.workspace }}/src python -m unittest discover -s test -p "test*.py"
+        shell: bash
+        run: |
+          echo ""
+          echo "🧪 Running tests using test runner script..."
+          # Use the test script as single source of truth for testing
+          ./test/run_tests.sh --skip-install
         env:
-          BASE_BRANCH: "${{ github.event.repository.default_branch }}"
-          BUILD_COMMAND: "echo 'Mock build command for testing'"
-          FORMATTING_COMMAND: "echo 'Mock formatting command for testing'"
           GITHUB_TOKEN: ${{ github.token }}
-          CONTRAST_HOST: "https://mock.contrastsecurity.com"
-          CONTRAST_ORG_ID: "mock-org-id"
-          CONTRAST_APP_ID: "mock-app-id"
-          CONTRAST_AUTHORIZATION_KEY: "mock-auth-key"
-          CONTRAST_API_KEY: "mock-api-key"
-          DEBUG_MODE: "true"
