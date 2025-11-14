@@ -167,6 +167,29 @@ class TestSessionHandler(unittest.TestCase):
 
         self.assertIn("Success (passed on first attempt)", qa_section)
 
+    def test_session_failure_with_qa_attempts(self):
+        """
+        Test that session failure returns should_continue=False even when qa_attempts > 0.
+
+        This specifically tests the scenario where session success is false
+        but qa_attempts is greater than 0, ensuring proper failure handling.
+        """
+        # Failure scenario: session failed but QA attempts were made
+        mock_failure_category = MagicMock()
+        mock_failure_category.value = "QA_BUILD_FAILURE"
+        failed_session_with_qa = self.create_mock_session(
+            success=False,
+            qa_attempts=3,  # QA was attempted multiple times
+            failure_category=mock_failure_category
+        )
+
+        result = self.session_handler.handle_session_result(failed_session_with_qa)
+
+        # Should NOT continue regardless of qa_attempts when session failed
+        self.assertFalse(result.should_continue)
+        self.assertEqual(result.failure_category, "QA_BUILD_FAILURE")
+        self.assertIsNone(result.ai_fix_summary)
+
 
 if __name__ == '__main__':
     unittest.main()

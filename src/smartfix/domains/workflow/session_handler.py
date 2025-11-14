@@ -106,6 +106,9 @@ class SessionHandler:
         Returns:
             str: QA section for PR body
         """
+
+        # Note: At this point session.success must be True
+        # (failures are handled by handle_session_result earlier)
         # Start with standard QA section header
         qa_section = "\n\n---\n\n## Review \n\n"
         if not config.skip_qa_review and config.has_build_command:

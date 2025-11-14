@@ -387,7 +387,7 @@ def main():  # noqa: C901
             # Check if this is the same vulnerability UUID as the previous iteration
             if vuln_uuid == previous_vuln_uuid:
                 log(f"Error: Backend provided the same vulnerability UUID ({vuln_uuid}) as the previous iteration. This indicates a backend error.", is_warning=True)
-                error_exit(remediation_id, "DUPLICATE_VULNERABILITY_UUID")
+                error_exit(remediation_id, FailureCategory.GENERAL_FAILURE.value)
 
             vuln_title = vulnerability_data['vulnerabilityTitle']
             remediation_id = vulnerability_data['remediationId']
@@ -470,9 +470,19 @@ def main():  # noqa: C901
         session_result = session_handler.handle_session_result(session)
 
         if not session_result.should_continue:
-            # Agent failed - handle the error
+            # QA Agent failed to fix the build
             log(f"Agent failed with reason: {session_result.failure_category}")
-            error_exit(remediation_id, session_result.failure_category)
+            git_handler.cleanup_branch(new_branch_name)
+            contrast_api.notify_remediation_failed(
+                remediation_id=remediation_id,
+                failure_category=session_result.failure_category,
+                contrast_host=config.CONTRAST_HOST,
+                contrast_org_id=config.CONTRAST_ORG_ID,
+                contrast_app_id=config.CONTRAST_APP_ID,
+                contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
+                contrast_api_key=config.CONTRAST_API_KEY
+            )
+            continue  # Move to next vulnerability
 
         ai_fix_summary_full = session_result.ai_fix_summary
         # Generate QA section based on session results
