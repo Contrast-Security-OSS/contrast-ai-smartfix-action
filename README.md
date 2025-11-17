@@ -34,7 +34,7 @@ Please follow the specific setup instructions link for the coding agent of your 
 ## Key Features
 
 * **Support for Multiple Coding Agents**: Choose to use either the internal SmartFix coding agent or GitHub Copilot to remediate your project's vulnerabilities
-* **Contrast LLM or Bring Your Own LLM (BYOLLM):** Use Contrast's LLM service for seamless setup, or for advanced users who prefer their own LLM provider use the optional Bring Your Own LLM (BYOLLM) configuration.
+* **Contrast LLM or Bring Your Own LLM (BYOLLM):** For the SmartFix Coding Agent, use Contrast's managed LLM service for seamless setup with enterprise-grade security, or for advanced users who prefer their own LLM provider use the optional Bring Your Own LLM (BYOLLM) configuration. [Learn more about Contrast LLM](docs/contrast_llm_early_access.md). Note: Contrast LLM is only available with the SmartFix Coding Agent.
 * **Configurable PR Throttling:** Control the volume of automated PRs using `max_open_prs`.
 * **Debug Mode:** Enable `debug_mode: 'true'` for verbose logging in the GitHub Action output.
 

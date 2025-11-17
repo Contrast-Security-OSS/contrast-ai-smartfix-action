@@ -180,9 +180,17 @@ jobs:
 
 The SmartFix Coding Agent uses Contrast's LLM service for seamless setup with no additional configuration required. For advanced users who prefer to use their own LLM provider, you can enable "Bring Your Own LLM" (BYOLLM) by setting `use_contrast_llm: 'false'` and providing credentials for your preferred LLM provider.
 
-#### Seamless: Contrast LLM Service
+#### Seamless: Contrast LLM Service (Recommended)
 
-No additional configuration is needed when using Contrast's LLM service (default behavior with `use_contrast_llm: 'true'`).
+**Contrast LLM** is our managed AI service that eliminates the complexity of LLM configuration and management. When using Contrast LLM (default behavior with `use_contrast_llm: 'true'`), no additional configuration is needed.
+
+**Benefits:**
+- **Zero Configuration**: No API keys or model management required
+- **Enterprise Security**: Your code never leaves Contrast infrastructure
+- **Built-in Monitoring**: Credit tracking and usage analytics included
+- **Managed Service**: Automatic scaling, retries, and optimization
+
+For complete Contrast LLM setup instructions, see the [Contrast LLM Early Access Guide](contrast_llm_early_access.md).
 
 #### Advanced: Bring Your Own LLM (BYOLLM)
 
