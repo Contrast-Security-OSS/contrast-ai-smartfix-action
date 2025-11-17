@@ -70,7 +70,7 @@ class Config:
 
         default_agent_model = ""
         if is_smartfix_coding_agent:
-            default_agent_model = "bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0"
+            default_agent_model = "bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0"
         self.AGENT_MODEL = self._get_env_var("AGENT_MODEL", required=False, default=default_agent_model)
 
         # --- Build and Formatting Configuration ---
@@ -119,6 +119,12 @@ class Config:
         self.SKIP_QA_REVIEW = self._get_bool_env("SKIP_QA_REVIEW", default=False)
         self.ENABLE_FULL_TELEMETRY = self._get_bool_env("ENABLE_FULL_TELEMETRY", default=True)
         self.USE_CONTRAST_LLM = self._get_bool_env("USE_CONTRAST_LLM", default=True)
+
+        # Update agent model for Contrast LLM if no explicit model was set
+        if (is_smartfix_coding_agent
+                and self.USE_CONTRAST_LLM
+                and self._get_env_var("AGENT_MODEL", required=False) is None):
+            self.AGENT_MODEL = "contrast/claude-sonnet-4-5"
 
         # --- Vulnerability Configuration ---
         self.VULNERABILITY_SEVERITIES = self._parse_and_validate_severities(
@@ -213,7 +219,8 @@ class Config:
         _log_config_message(f"Debug Mode: {self.DEBUG_MODE}")
         _log_config_message(f"Base Branch: {self.BASE_BRANCH}")
         _log_config_message(f"Run Task: {self.RUN_TASK}")
-        _log_config_message(f"Agent Model: {self.AGENT_MODEL}")
+        if not self.USE_CONTRAST_LLM:
+            _log_config_message(f"Agent Model: {self.AGENT_MODEL}")
         _log_config_message(f"Coding Agent: {self.CODING_AGENT}")
         _log_config_message(f"Skip Writing Security Test: {self.SKIP_WRITING_SECURITY_TEST}")
         _log_config_message(f"Skip QA Review: {self.SKIP_QA_REVIEW}")
