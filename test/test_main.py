@@ -130,6 +130,56 @@ class TestMain(unittest.TestCase):
         # Verify warning about missing environment variables is present (updated for new message format)
         self.assertIn("Warning: Neither GITHUB_ACTION_REF nor GITHUB_REF environment variables are set", output)
 
+    def test_duplicate_vuln_with_open_pr_skips_cleanly(self):
+        """Test that duplicate vulnerability UUID with open PR skips cleanly without error_exit.
+
+        Regression test for AIML-241: When the API returns the same vulnerability twice
+        (common when a PR is already open), the code should skip it cleanly using the
+        skipped_vulns logic rather than triggering the duplicate guard error.
+        """
+        # Setup: Mock API to return same vulnerability twice, then None
+        vuln_data = {
+            'vulnerabilityUuid': 'TEST-VULN-UUID-123',
+            'vulnerabilityTitle': 'Test SQL Injection',
+            'vulnerabilityRuleName': 'sql-injection',
+            'remediationId': 'REM-TEST-123',
+            'sessionId': 'session-123',
+            'fixSystemPrompt': 'Fix the vulnerability',
+            'fixUserPrompt': 'Please fix',
+            'qaSystemPrompt': 'Review the fix',
+            'qaUserPrompt': 'Is it good?'
+        }
+
+        # Return same vuln twice, then None to stop loop
+        self.mock_api.side_effect = [vuln_data, vuln_data, None]
+
+        # Mock PR status check to return OPEN (simulating existing PR)
+        with patch('src.git_handler.check_pr_status_for_label') as mock_pr_check:
+            mock_pr_check.return_value = "OPEN"
+
+            # Mock generate_label_details
+            with patch('src.git_handler.generate_label_details') as mock_label:
+                mock_label.return_value = ('contrast-vuln-id:TEST-VULN-UUID-123', 'color', 'desc')
+
+                # Mock error_exit to track if it's called (it shouldn't be)
+                with patch('src.main.error_exit') as mock_error_exit:
+                    with patch.dict('os.environ', self.env_vars, clear=True):
+                        # Run main and capture output
+                        with io.StringIO() as buf, contextlib.redirect_stdout(buf):
+                            main()
+                            output = buf.getvalue()
+
+                        # Verify the vulnerability was skipped both times
+                        self.assertIn("Skipping vulnerability TEST-VULN-UUID-123", output)
+                        self.assertIn("Already skipped TEST-VULN-UUID-123 before, breaking loop", output)
+
+                        # CRITICAL: Verify error_exit was NOT called
+                        # The bug would have triggered error_exit on the second iteration
+                        mock_error_exit.assert_not_called()
+
+                        # Verify the loop broke cleanly
+                        self.assertIn("No vulnerabilities were processed in this run", output)
+
 
 if __name__ == '__main__':
     unittest.main()

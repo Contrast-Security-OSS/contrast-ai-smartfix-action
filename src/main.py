@@ -32,6 +32,7 @@ from src.smartfix.shared.coding_agents import CodingAgents
 from src.utils import debug_log, log, error_exit
 from src import telemetry_handler
 from src.version_check import do_version_check
+from src.smartfix.domains.workflow.session_handler import create_session_handler, QASectionConfig
 from src.smartfix.shared.failure_categories import FailureCategory
 
 # Import domain-specific handlers
@@ -352,15 +353,19 @@ def main():  # noqa: C901
             vuln_title = vulnerability_data['vulnerabilityTitle']
             remediation_id = vulnerability_data['remediationId']
             session_id = vulnerability_data.get('sessionId')
-            previous_vuln_uuid = vuln_uuid  # Update tracking variable
 
-            # Create prompt configuration for SmartFix agent
-            prompts = PromptConfiguration.for_smartfix_agent(
-                fix_system_prompt=vulnerability_data['fixSystemPrompt'],
-                fix_user_prompt=vulnerability_data['fixUserPrompt'],
-                qa_system_prompt=vulnerability_data['qaSystemPrompt'],
-                qa_user_prompt=vulnerability_data['qaUserPrompt']
-            )
+            # Validate and create prompt configuration for SmartFix agent
+            try:
+                PromptConfiguration.validate_raw_prompts_data(vulnerability_data)
+                prompts = PromptConfiguration.for_smartfix_agent(
+                    fix_system_prompt=vulnerability_data['fixSystemPrompt'],
+                    fix_user_prompt=vulnerability_data['fixUserPrompt'],
+                    qa_system_prompt=vulnerability_data['qaSystemPrompt'],
+                    qa_user_prompt=vulnerability_data['qaUserPrompt']
+                )
+            except ValueError as e:
+                log(f"Error: Invalid prompts from backend: {e}", is_error=True)
+                error_exit(remediation_id, FailureCategory.GENERAL_FAILURE.value)
         else:
             # For external coding agents (GITHUB_COPILOT/CLAUDE_CODE), get vulnerability details
             log("\n::group::--- Fetching next vulnerability details from Contrast API ---")
@@ -381,12 +386,11 @@ def main():  # noqa: C901
             # Check if this is the same vulnerability UUID as the previous iteration
             if vuln_uuid == previous_vuln_uuid:
                 log(f"Error: Backend provided the same vulnerability UUID ({vuln_uuid}) as the previous iteration. This indicates a backend error.", is_warning=True)
-                error_exit(remediation_id, "DUPLICATE_VULNERABILITY_UUID")
+                error_exit(remediation_id, FailureCategory.GENERAL_FAILURE.value)
 
             vuln_title = vulnerability_data['vulnerabilityTitle']
             remediation_id = vulnerability_data['remediationId']
             session_id = None  # External agents don't use Contrast LLM sessions
-            previous_vuln_uuid = vuln_uuid  # Update tracking variable
 
             # Create prompt configuration for external agent (no prompts required)
             prompts = PromptConfiguration.for_external_agent()
@@ -414,6 +418,10 @@ def main():  # noqa: C901
         else:
             log(f"No existing OPEN or MERGED PR found for vulnerability {vuln_uuid}. Proceeding with fix attempt.")
         log("\n::endgroup::")
+
+        # Update tracking variable now that we know we're actually processing this vuln
+        previous_vuln_uuid = vuln_uuid
+
         log(f"\n\033[0;33m Selected vuln to fix: {vuln_title} \033[0m")
 
         # --- Create Common Remediation Context ---
@@ -460,13 +468,33 @@ def main():  # noqa: C901
         session = smartfix_agent.remediate(context)
 
         # Extract results from the session
-        if session.success:
-            ai_fix_summary_full = session.pr_body if session.pr_body else "Fix completed successfully"
-        else:
-            # Agent failed - handle the error
-            failure_category = session.failure_category.value if session.failure_category else FailureCategory.AGENT_FAILURE.value
-            log(f"Agent failed with reason: {failure_category}")
-            error_exit(remediation_id, failure_category)
+        session_handler = create_session_handler()
+        session_result = session_handler.handle_session_result(session)
+
+        if not session_result.should_continue:
+            # QA Agent failed to fix the build
+            log(f"Agent failed with reason: {session_result.failure_category}")
+            git_handler.cleanup_branch(new_branch_name)
+            contrast_api.notify_remediation_failed(
+                remediation_id=remediation_id,
+                failure_category=session_result.failure_category,
+                contrast_host=config.CONTRAST_HOST,
+                contrast_org_id=config.CONTRAST_ORG_ID,
+                contrast_app_id=config.CONTRAST_APP_ID,
+                contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
+                contrast_api_key=config.CONTRAST_API_KEY
+            )
+            continue  # Move to next vulnerability
+
+        ai_fix_summary_full = session_result.ai_fix_summary
+        # Generate QA section based on session results
+        # The SmartFix agent already handled the QA loop internally
+        qa_config = QASectionConfig(
+            skip_qa_review=config.SKIP_QA_REVIEW,
+            has_build_command=build_config.has_build_command(),
+            build_command=build_config.build_command
+        )
+        qa_section = session_handler.generate_qa_section(session, qa_config)
 
         # --- Git and GitHub Operations ---
         # All file changes from the agent (fix + QA + formatting) are uncommitted at this point
@@ -485,54 +513,6 @@ def main():  # noqa: C901
         commit_message = git_handler.generate_commit_message(vuln_title, vuln_uuid)
         git_handler.commit_changes(commit_message)
         log("Committed all agent changes.")
-
-        # Generate QA section based on session results
-        # The SmartFix agent already handled the QA loop internally
-        qa_section = "\n\n---\n\n## Review \n\n"
-
-        if not config.SKIP_QA_REVIEW and build_config.has_build_command():
-            # QA was expected to run - check session results
-            if session.qa_attempts > 0:  # QA was attempted
-                qa_section += f"*   **Build Run:** Yes (`{build_config.build_command}`)\n"
-                if session.success:
-                    qa_section += "*   **Final Build Status:** Success \n"
-                else:
-                    qa_section += "*   **Final Build Status:** Failure \n"
-
-                    # Check if we should skip PR creation due to QA failure
-                    log("\n--- Skipping PR creation as QA Agent failed to fix build issues ---")
-
-                    # Get failure category directly from session
-                    failure_category = session.failure_category.value if session.failure_category else FailureCategory.QA_AGENT_FAILURE.value
-
-                    # Notify the Remediation service about the failed remediation
-                    remediation_notified = contrast_api.notify_remediation_failed(
-                        remediation_id=remediation_id,
-                        failure_category=failure_category,
-                        contrast_host=config.CONTRAST_HOST,
-                        contrast_org_id=config.CONTRAST_ORG_ID,
-                        contrast_app_id=config.CONTRAST_APP_ID,
-                        contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
-                        contrast_api_key=config.CONTRAST_API_KEY
-                    )
-
-                    if remediation_notified:
-                        log(f"Successfully notified Remediation service about {failure_category} for remediation {remediation_id}.")
-                    else:
-                        log(f"Failed to notify Remediation service about {failure_category} for remediation {remediation_id}.", is_warning=True)
-
-                    git_handler.cleanup_branch(new_branch_name)
-                    contrast_api.send_telemetry_data()
-                    continue  # Move to the next vulnerability
-            else:
-                qa_section += "*   **Build Run:** No (BUILD_COMMAND not provided)\n"
-                qa_section += "*   **Final Build Status:** Skipped\n"
-        else:  # QA was skipped
-            qa_section = ""  # Ensure qa_section is empty if QA is skipped
-            if config.SKIP_QA_REVIEW:
-                log("QA Review was skipped based on SKIP_QA_REVIEW setting.")
-            elif not build_config.has_build_command():
-                log("QA Review was skipped as no BUILD_COMMAND was provided.")
 
         # --- Create Pull Request ---
         pr_title = git_handler.generate_pr_title(vuln_title)
