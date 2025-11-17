@@ -74,8 +74,8 @@ class TestConfigIntegration(unittest.TestCase):
         # Should have SMARTFIX agent with Contrast LLM enabled
         self.assertEqual(config.CODING_AGENT, 'SMARTFIX')
         self.assertTrue(config.USE_CONTRAST_LLM)
-        # Default agent model should still be set for fallback
-        self.assertEqual(config.AGENT_MODEL, 'bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0')
+        # Default agent model should use Contrast LLM constant
+        self.assertEqual(config.AGENT_MODEL, 'contrast/claude-sonnet-4-5')
 
     def test_coding_agent_smartfix_with_byollm(self):
         """Test that SMARTFIX coding agent works with USE_CONTRAST_LLM=False (BYOLLM)."""
