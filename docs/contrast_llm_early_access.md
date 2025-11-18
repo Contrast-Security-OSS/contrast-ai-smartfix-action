@@ -13,10 +13,33 @@ When you use Contrast AI SmartFix with Contrast LLM, you agree that your code an
 ### Key Benefits
 
 - **Zero LLM Configuration**: No need to manage API keys, model endpoints, or provider credentials
+- **Free During Beta**: Contrast absorbs all LLM costs during early access program
 - **Enterprise-Grade Security**: All AI processing occurs within Contrast's secure infrastructure
 - **Managed Scaling**: Automatic handling of rate limits, retries, and load balancing
 - **Cost Transparency**: Built-in credit tracking and usage monitoring
 - **Seamless Integration**: Works out-of-the-box with existing SmartFix workflows
+
+## Early Access Program
+
+Contrast LLM is available as a **free early access beta** to help customers evaluate SmartFix without LLM setup complexity.
+
+### Program Details
+- **Cost**: **Free to customers** during beta period
+- **Duration**: 6-week evaluation period
+- **Credits**: 50 credits per organization to start
+- **Support**: Dedicated support throughout the evaluation period
+
+### How to Join
+Contact your Contrast representative or Customer Success Manager to:
+- Confirm eligibility for the early access program
+- Schedule onboarding and setup assistance
+- Plan feedback sessions to optimize your experience
+
+### What We Ask
+To ensure a successful evaluation, participants are expected to:
+- Actively test SmartFix with Contrast LLM during the 6-week period
+- Provide feedback on the experience and credit usage patterns
+- Participate in brief check-in meetings to address any issues
 
 ## Quick Start
 
@@ -56,6 +79,15 @@ If you're currently using the SmartFix Coding Agent with BYOLLM configuration, m
 
 **Add this single parameter:**
 - `use_contrast_llm: true`
+
+### Mixed Configuration Support
+
+**Key Point**: The same customer can use both Contrast LLM and BYOLLM simultaneously across different repositories:
+
+- **Repo 1**: Configured with Contrast LLM → consumes credits
+- **Repo 2**: Configured with BYOLLM → does NOT consume credits
+
+This flexibility allows customers to gradually migrate or use different configurations based on repository requirements.
 
 ## Configuration Reference
 
@@ -180,25 +212,55 @@ jobs:
           GITHUB_EVENT_PATH: ${{ github.event_path }}
 ```
 
-## Credit Tracking and Usage Monitoring
+## Credit System Design
 
-Contrast LLM includes built-in usage tracking and credit management:
+### What is a Credit?
+- **1 Credit = 1 Successfully Generated Pull Request**
+- Credits are **completely free during the early access beta**
+- Credits are consumed only when using Contrast-provided LLM
+- No billing or payment required during beta period
 
-### Automatic Credit Tracking
-- Each SmartFix remediation attempt consumes AI credits based on complexity
-- Credit usage is automatically tracked per organization and application
-- No separate billing or API key management required
+### Credit Consumption Rules
 
-### Usage Visibility
-- Credit consumption appears in SmartFix telemetry and logs
-- Integration with Contrast's existing usage reporting systems
-- Per-vulnerability credit costs logged for transparency
+**Credits ARE Consumed When:**
+- SmartFix successfully generates code and creates a PR in customer's repository
+- This applies regardless of whether customer merges, closes, or edits the PR
 
-### Credit Management
-Your Contrast account manager can help configure:
-- Credit allocation per organization
-- Usage alerts and limits
-- Monthly credit replenishment schedules
+**Credits ARE NOT Consumed When:**
+- PR generation fails due to LLM errors (timeout, rate limit, etc.)
+- PR creation fails due to GitHub API issues or permissions problems
+- Any other system failure that prevents PR creation
+- Customer is using BYOLLM configuration for that repository
+
+**Note**: You are never charged credits when SmartFix encounters technical issues or failures.
+
+### Credit Pool Details
+- **Scope**: Per customer organization (shared across all repositories/applications)
+- **Initial Allocation**: 50 credits per customer
+- **Adjustable**: Can be increased for customers providing valuable feedback
+- **Multi-App Impact**: Credits consumed faster if customer runs SmartFix on multiple repos
+
+### Credit Exhaustion Behavior
+When you reach 0 credits:
+- SmartFix stops generating new PRs
+- Contact your Customer Success Manager to request additional credits
+
+### Credit Display in Pull Requests
+Location: Bottom of PR description
+
+Format:
+```
+Contrast LLM Credits
+Used: 14/50
+Remaining: 36
+Trial Period: Oct 30, 2025 to Dec 31, 2025
+```
+
+Details:
+- Shows credits consumed by this specific PR
+- Shows total remaining credits for customer
+- Includes date of PR generation
+- Only displayed when using Contrast-provided LLM
 
 ## Technical Architecture
 
@@ -237,9 +299,9 @@ The service currently provides access to:
 
 **1. Credit Exhaustion**
 ```
-Error: LLM credit limit exceeded for organization
+Credits have been exhausted. Contact your CSM to request additional credits.
 ```
-**Solution**: Contact your Contrast account manager to increase credit allocation.
+**Solution**: Contact your Customer Success Manager to request additional credits during the beta program.
 
 **2. Service Unavailable**
 ```
@@ -261,16 +323,29 @@ debug_mode: true
 ```
 
 This provides:
-- Credit consumption details
+- Credit consumption details per PR generation
+- Credit remaining after each operation
+- Warning logs when credits are low (5 or fewer remaining)
+- Error logs when credits exhausted
+- Cost tracking per PR generation
 - LLM proxy communication logs
 - Model selection information
 - Performance metrics
+
+### Usage Tracking
+
+Credit usage and SmartFix activity is automatically logged for your visibility:
+- Credit consumption per PR generation
+- Credit remaining after each operation
+- Logs when credits are low
+- Error logs when credits exhausted
+- All activity visible in SmartFix debug logs
 
 ### Support
 
 For Contrast LLM Early Access support:
 1. **Technical Issues**: Include debug logs and workflow configuration
-2. **Credit/Usage Questions**: Contact your Contrast account manager
+2. **Credit/Usage Questions**: Contact your Customer Success Manager
 3. **Feature Requests**: Submit via normal Contrast support channels
 
 ## Migration Guide
@@ -308,22 +383,54 @@ To revert to BYOLLM, simply:
 2. Restore your original LLM provider configuration
 3. Re-add any removed credential configuration steps
 
+## Important Notes
+
+### Closed PR Behavior
+When you close a SmartFix-generated PR, the system may attempt to regenerate a fix for that vulnerability on the next scheduled run. This will consume additional credits.
+
+To avoid unintended credit usage:
+- Only close PRs you don't want SmartFix to retry
+- Contact support if you need to permanently exclude specific vulnerabilities
+- Monitor your credit usage if you frequently close PRs
+
+We're actively working on enhanced controls for this behavior based on beta feedback.
+
 ## Early Access Limitations
 
-- **Model Selection**: Limited to Contrast-managed models
+- **Model Selection**: Limited to Contrast-managed models (currently Anthropic Claude Sonnet 4.5)
 - **Custom Prompting**: Standard SmartFix prompts only
 - **Regional Availability**: Initially available in US regions
-- **Credit Limits**: Subject to early access allocation limits
+- **Credit Limits**: Subject to early access allocation limits (50 credits initially)
+- **Customer Limit**: Maximum 10 customers in beta program
+- **Duration**: 6-week evaluation period per customer
+
+## Data Usage and Privacy
+
+During the early access beta, Contrast collects usage analytics to improve the service:
+- Credit usage patterns to optimize allocation
+- PR success rates to improve fix quality
+- Vulnerability types and languages to enhance model performance
+- General usage patterns to refine the user experience
+
+All data collection follows your existing Contrast Security data processing agreement. No code content is used for training external models.
 
 ## Feedback and Support
 
-This is an early access feature. Please provide feedback on:
-- Configuration simplicity
-- Performance compared to BYOLLM
-- Credit usage patterns
-- Integration experience
+This is an early access feature with specific feedback requirements:
 
-Contact your Contrast representative or submit feedback through normal support channels.
+**Required Feedback Sessions**:
+1. **Kickoff meeting**: Initial setup and expectations
+2. **Mid-point review** (3 weeks): Usage patterns and issues
+3. **Conclusion meeting** (6 weeks): Final evaluation and recommendations
+
+**Feedback Areas**:
+- Configuration simplicity compared to BYOLLM setup
+- Credit system clarity and usage visibility
+- Performance and fix quality
+- Credit allocation for your typical usage patterns
+- Overall integration experience
+
+Contact your Customer Success Manager or Contrast representative for beta program participation and feedback scheduling.
 
 ---
 
