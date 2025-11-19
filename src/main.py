@@ -300,12 +300,12 @@ def main():  # noqa: C901
                 warning_msg = initial_credit_info.get_credit_warning_message()
                 if initial_credit_info.is_exhausted:
                     log(warning_msg, is_error=True)
-                    error_exit(FailureCategory.GENERAL_FAILURE.value)
+                    error_exit(remediation_id, FailureCategory.GENERAL_FAILURE.value)
                 else:
                     log(warning_msg, is_warning=True)
         else:
             log("Could not retrieve initial credit tracking information", is_error=True)
-            error_exit(FailureCategory.GENERAL_FAILURE.value)
+            error_exit(remediation_id, FailureCategory.GENERAL_FAILURE.value)
 
     while True:
         telemetry_handler.reset_vuln_specific_telemetry()
