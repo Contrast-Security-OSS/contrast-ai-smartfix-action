@@ -6,7 +6,7 @@ When you use Contrast AI SmartFix with Contrast LLM, you agree that your code an
 
 ## Overview
 
-**Contrast LLM** s a secure, sandboxed Contrast-hosted LLM that the SmartFix coding agent can use.  It uses your existing Contrast API keys so there is no additional LLM configuration required.
+**Contrast LLM** is a secure, sandboxed, Contrast-hosted LLM that the SmartFix coding agent can use.  It uses your existing Contrast API keys so there is no additional LLM configuration required.
 
 **Important**: Contrast LLM is only available with the SmartFix Coding Agent. It does not work with GitHub Copilot or Claude Code agent integrations, which use their respective external services.
 
@@ -26,7 +26,7 @@ Contrast LLM is available as a **free early access beta** to help customers eval
 ### Program Details
 - **Cost**: **Free to customers** during beta period
 - **Duration**: 6-week evaluation period
-- **Credits**: 50 credits per organization to start
+- **Credits**: 50 credits per organization to start.  A credit represents an opened PR, i.e. a complete remediation attempt.
 - **Support**: Dedicated support throughout the evaluation period
 
 ### How to Join
