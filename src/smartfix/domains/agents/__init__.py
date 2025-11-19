@@ -3,13 +3,23 @@
 This domain handles AI agent management, coding strategies, and
 agent coordination for vulnerability remediation.
 
-Key Components (to be implemented):
+Key Components:
 - SmartFixAgent: Main agent interface and implementation
 - AgentSession: Stateful agent interaction management
 - CodingAgentStrategy: Strategy pattern for different coding agents
 - AgentFactory: Factory for creating and configuring agents
 """
 
+from .coding_agent import CodingAgentStrategy
+from src.smartfix.shared.coding_agents import CodingAgents
+from .smartfix_agent import SmartFixAgent
+from .agent_factory import AgentFactory
+from .agent_session import AgentSession
+
 __all__ = [
-    # Components will be exported as they are implemented
+    'CodingAgentStrategy',
+    'CodingAgents',
+    'SmartFixAgent',
+    'AgentFactory',
+    'AgentSession',
 ]

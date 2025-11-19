@@ -99,7 +99,9 @@ class TokenCostAccumulator:
         # Estimate regular input cost per token from new input cost
         if self.total_new_input_tokens > 0:
             regular_cost_per_token = self.total_new_input_cost / self.total_new_input_tokens
-            return self.total_cache_read_tokens * (regular_cost_per_token - (self.total_cache_read_cost / self.total_cache_read_tokens))
+            return self.total_cache_read_tokens * (
+                regular_cost_per_token - (self.total_cache_read_cost / self.total_cache_read_tokens)
+            )
         return 0.0
 
     @property
@@ -149,6 +151,9 @@ class SmartFixLiteLlm(LiteLlm):
 
     def __init__(self, model: str, **kwargs):
         super().__init__(model=model, **kwargs)
+        debug_log(f"SmartFixLiteLlm initialized with model: {model}")
+        # Store system prompt for use with Contrast models
+        self._system_prompt = kwargs.get('system')
 
     def _add_cache_control_to_message(self, message: dict) -> None:
         """Add cache_control to message content for Anthropic API compatibility.
@@ -173,21 +178,117 @@ class SmartFixLiteLlm(LiteLlm):
                     if isinstance(item, dict):
                         item['cache_control'] = {"type": "ephemeral"}
 
+    def _ensure_system_message_for_contrast(self, messages: List[Message]) -> List[Message]:
+        """Ensure we have a system message for Contrast/Bedrock models."""
+        system_prompt = self._system_prompt
+        if not system_prompt:
+            debug_log("No stored system prompt, returning messages unchanged")
+            return messages
+
+        # Check if we have any system message
+        has_system = False
+        has_developer = False
+
+        for msg in messages:
+            if isinstance(msg, dict):
+                role = msg.get('role')
+            elif hasattr(msg, 'role'):
+                role = getattr(msg, 'role')
+            else:
+                continue
+
+            if role == 'system':
+                has_system = True
+            elif role == 'developer':
+                has_developer = True
+
+        debug_log(f"Message analysis: has_system={has_system}, has_developer={has_developer}")
+
+        # For Contrast models, ensure we have system message and remove any developer messages
+        if not has_system and not has_developer:
+            debug_log("No system or developer message found, adding system message")
+            system_message = {
+                'role': 'system',
+                'content': system_prompt
+            }
+            messages = [system_message] + list(messages)
+        elif not has_system and has_developer:
+            debug_log("Developer message found but no system message, adding system message for Contrast")
+            # Add system message with actual prompt
+            system_message = {
+                'role': 'system',
+                'content': system_prompt
+            }
+            # Add decoy developer message to prevent LiteLLM from moving system message
+            decoy_developer = {
+                'role': 'developer',
+                'content': [{'type': 'text', 'text': ''}]
+            }
+
+            # Filter out original developer messages to avoid duplicates
+            filtered_messages = []
+            for msg in messages:
+                if isinstance(msg, dict):
+                    role = msg.get('role')
+                elif hasattr(msg, 'role'):
+                    role = getattr(msg, 'role')
+                else:
+                    role = None
+
+                # Skip developer messages - we'll use our empty decoy instead
+                if role != 'developer':
+                    filtered_messages.append(msg)
+
+            messages = [system_message, decoy_developer] + filtered_messages
+
+        return messages
+
     def _apply_role_conversion_and_caching(self, messages: List[Message]) -> None:  # noqa: C901
         """Convert developer->system for non-OpenAI models and apply caching.
 
         This prevents LiteLLM's internal role conversion that strips cache_control fields.
         """
         model_lower = self.model.lower()
+        debug_log(f"_apply_role_conversion_and_caching called with model: {self.model}")
 
         # Early return if model doesn't support caching
         if not (("bedrock/" in model_lower and "claude" in model_lower)
-                or ("anthropic/" in model_lower and "bedrock/" not in model_lower)):
+                or ("anthropic/" in model_lower and "bedrock/" not in model_lower)
+                or ("contrast/" in model_lower and "claude" in model_lower)):
+            debug_log(f"Model {self.model} does not support caching, returning early")
             return
 
-        if "bedrock/" in model_lower and "claude" in model_lower:
-            # Bedrock Claude: Convert developer->system and add cache_control
+        debug_log(f"Model {self.model} supports caching, proceeding with role conversion")
+
+        cache_control_calls = 0  # Counter to limit cache control calls to 4
+
+        if ("contrast/" in model_lower and "claude" in model_lower):
+            # Contrast Claude: Apply caching but NO developer->system conversion
+            debug_log(f"Processing as Contrast model: {self.model}")
             for i, message in enumerate(messages):
+                if cache_control_calls >= 4:
+                    break
+
+                if isinstance(message, dict):
+                    role = message.get('role')
+                elif hasattr(message, 'role'):
+                    role = getattr(message, 'role', None)
+                    # Convert to dict for easier manipulation
+                    if hasattr(message, '__dict__'):
+                        message_dict = message.__dict__.copy()
+                        messages[i] = message_dict
+                        message = message_dict
+                        role = message.get('role')
+                else:
+                    continue
+
+        elif ("bedrock/" in model_lower and "claude" in model_lower):
+            # Bedrock Claude: Convert developer->system and add cache_control
+            debug_log(f"Processing as Bedrock model: {self.model}")
+            for i, message in enumerate(messages):
+                if cache_control_calls >= 4:
+                    break
+
                 if isinstance(message, dict):
                     role = message.get('role')
                 elif hasattr(message, 'role'):
@@ -203,20 +304,64 @@ class SmartFixLiteLlm(LiteLlm):
 
                 # Convert developer->system and add cache_control in one step
                 if role == 'developer':
+                    debug_log(f"Converting message {i} from 'developer' to 'system'")
                     if isinstance(message, dict):
                         message['role'] = 'system'  # Prevent LiteLLM conversion
                         # Add cache_control to content instead of message
                         self._add_cache_control_to_message(message)
+                        cache_control_calls += 1
+                        debug_log(f"Message {i} converted to system role with cache control")
 
                 # Add cache_control to user and assistant messages as well
                 elif role in ['user', 'assistant']:
+                    debug_log(f"Adding cache control to {role} message {i}")
                     if isinstance(message, dict):
                         # Add cache_control to content instead of message
                         self._add_cache_control_to_message(message)
+                        cache_control_calls += 1
 
-        elif "anthropic/" in model_lower and "bedrock/" not in model_lower:
-            # Direct Anthropic API: Just add cache_control (developer role is fine)
+        elif ("contrast/" in model_lower and "claude" in model_lower):
+            # Contrast Claude: Apply caching but NO developer->system conversion
+            debug_log(f"Processing as Contrast model: {self.model}")
             for i, message in enumerate(messages):
+                if cache_control_calls >= 4:
+                    break
+
+                if isinstance(message, dict):
+                    role = message.get('role')
+                elif hasattr(message, 'role'):
+                    role = getattr(message, 'role', None)
+                    # Convert to dict for easier manipulation
+                    if hasattr(message, '__dict__'):
+                        message_dict = message.__dict__.copy()
+                        messages[i] = message_dict
+                        message = message_dict
+                        role = message.get('role')
+                else:
+                    continue
+
+                # Apply caching to system and user messages, skip empty developer messages
+                if role in ['system', 'user']:
+                    if isinstance(message, dict):
+                        debug_log(f"Adding cache control to {role} message {i}")
+                        self._add_cache_control_to_message(message)
+                        cache_control_calls += 1
+                elif role == 'developer':
+                    # Skip caching for empty developer messages (waste of cache points)
+                    if isinstance(message, dict) and message.get('content', '').strip():
+                        debug_log(f"Adding cache control to non-empty developer message {i}")
+                        self._add_cache_control_to_message(message)
+                        cache_control_calls += 1
+                    else:
+                        debug_log(f"Skipping cache for empty developer message {i}")
+
+        elif ("anthropic/" in model_lower and "bedrock/" not in model_lower):
+            # Direct Anthropic API: Just add cache_control (developer role is fine)
+            debug_log(f"Processing as direct Anthropic model: {self.model}")
+            for i, message in enumerate(messages):
+                if cache_control_calls >= 4:
+                    break
+
                 if isinstance(message, dict):
                     role = message.get('role')
                 elif hasattr(message, 'role'):
@@ -235,6 +380,18 @@ class SmartFixLiteLlm(LiteLlm):
                     if isinstance(message, dict):
                         # Add cache_control to content instead of message
                         self._add_cache_control_to_message(message)
+                        cache_control_calls += 1
+
+        # Log final message roles after processing
+        debug_log("Final messages after role conversion and caching:")
+        for i, msg in enumerate(messages):
+            if isinstance(msg, dict):
+                role = msg.get('role', 'unknown')
+            elif hasattr(msg, 'role'):
+                role = getattr(msg, 'role', 'unknown')
+            else:
+                role = 'unknown'
+            debug_log(f"  Final message {i}: role='{role}'")
 
     async def generate_content_async(  # noqa: C901
         self, llm_request: LlmRequest, stream: bool = False
@@ -248,12 +405,19 @@ class SmartFixLiteLlm(LiteLlm):
         Yields:
             LlmResponse: The model response.
         """
+        debug_log(f"SmartFixLiteLlm.generate_content_async called with stream={stream}")
         self._maybe_append_user_content(llm_request)
 
         # Get completion inputs
         messages, tools, response_format, generation_params = (
             _get_completion_inputs(llm_request)
         )
+
+        # For Contrast models, ensure we have a system message before role conversion
+        model_lower = self.model.lower()
+        if "contrast/" in model_lower and "claude" in model_lower:
+            debug_log("Pre-processing messages for Contrast model")
+            messages = self._ensure_system_message_for_contrast(messages)
 
         # Apply role conversion and caching
         self._apply_role_conversion_and_caching(messages)
@@ -331,7 +495,10 @@ class SmartFixLiteLlm(LiteLlm):
             total_cost = total_input_cost + output_cost
 
             debug_log("Cost Analysis:")
-            debug_log(f"  Input: ${total_input_cost:.6f} (New: ${new_input_cost:.6f}, Cache Read: ${cache_read_cost:.6f}, Cache Write: ${cache_write_cost:.6f})")
+            debug_log(
+                f"  Input: ${total_input_cost:.6f} (New: ${new_input_cost:.6f}, "
+                f"Cache Read: ${cache_read_cost:.6f}, Cache Write: ${cache_write_cost:.6f})"
+            )
             debug_log(f"  Output: ${output_cost:.6f}, Total: ${total_cost:.6f}")
 
             # Add to accumulator
@@ -348,7 +515,10 @@ class SmartFixLiteLlm(LiteLlm):
                 # Calculate what total input cost would have been without caching
                 total_input_without_cache = total_input_cost + cache_savings
                 savings_pct = (cache_savings / total_input_without_cache) * 100
-                debug_log(f"  Cache Savings: ${cache_savings:.6f} ({savings_pct:.1f}%) from {cache_read_tokens} cached tokens")
+                debug_log(
+                    f"  Cache Savings: ${cache_savings:.6f} ({savings_pct:.1f}%) "
+                    f"from {cache_read_tokens} cached tokens"
+                )
         except Exception as e:
             debug_log(f"Could not calculate costs: {e}")
 

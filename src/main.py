@@ -28,19 +28,23 @@ from asyncio.proactor_events import _ProactorBasePipeTransport
 
 # Import configurations and utilities
 from src.config import get_config
-from src.coding_agents import CodingAgents
+from src.smartfix.shared.coding_agents import CodingAgents
 from src.utils import debug_log, log, error_exit
 from src import telemetry_handler
-from src.qa_handler import run_build_command
 from src.version_check import do_version_check
-from src.build_output_analyzer import extract_build_errors
+from src.smartfix.domains.workflow.session_handler import create_session_handler, QASectionConfig
+from src.smartfix.shared.failure_categories import FailureCategory
 
 # Import domain-specific handlers
 from src import contrast_api
-from src import agent_handler
 from src import git_handler
-from src import qa_handler
-from src.github.external_coding_agent import ExternalCodingAgent
+
+# Import domain models
+from src.smartfix.domains.vulnerability.context import RemediationContext, PromptConfiguration, BuildConfiguration, RepositoryConfiguration
+from src.smartfix.domains.vulnerability.models import Vulnerability
+
+# Import GitHub-specific agent factory
+from src.github.agent_factory import GitHubAgentFactory
 
 config = get_config()
 telemetry_handler.initialize_telemetry()
@@ -239,19 +243,17 @@ def main():  # noqa: C901
     # --- Version Check ---
     do_version_check()
 
-    # --- Use Build Command and Max Attempts/PRs from Config ---
-    build_command = config.BUILD_COMMAND
-    debug_log(f"Build command specified: {build_command}")
+    # --- Create Configuration Objects ---
+    build_config = BuildConfiguration.from_config(config)
+    repo_config = RepositoryConfiguration.from_config(config)
 
-    formatting_command = config.FORMATTING_COMMAND
-    if formatting_command:
-        debug_log(f"Formatting command specified: {formatting_command}")
-    else:
-        debug_log("FORMATTING_COMMAND not set or empty, formatting will be skipped.")
+    debug_log(f"Build command: {build_config.build_command}")
+    debug_log(f"Formatting command: {build_config.formatting_command}")
+    debug_log(f"Max QA attempts: {config.MAX_QA_ATTEMPTS}")
+    debug_log(f"Repository path: {repo_config.repo_path}")
 
     # Use the validated and normalized settings from config module
     # These values are already processed in config.py with appropriate validation and defaults
-    max_qa_attempts_setting = config.MAX_QA_ATTEMPTS
     max_open_prs_setting = config.MAX_OPEN_PRS
 
     # --- Initial Setup ---
@@ -280,6 +282,30 @@ def main():  # noqa: C901
     debug_log(f"GitHub repository URL: {github_repo_url}")
     skipped_vulns = set()  # TS-39904
     remediation_id = "unknown"
+    previous_vuln_uuid = None  # Track previous vulnerability UUID to detect duplicates
+
+    # Log initial credit tracking status if using Contrast LLM (only for SMARTFIX agent)
+    if config.CODING_AGENT == CodingAgents.SMARTFIX.name and config.USE_CONTRAST_LLM:
+        initial_credit_info = contrast_api.get_credit_tracking(
+            contrast_host=config.CONTRAST_HOST,
+            contrast_org_id=config.CONTRAST_ORG_ID,
+            contrast_app_id=config.CONTRAST_APP_ID,
+            contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
+            contrast_api_key=config.CONTRAST_API_KEY
+        )
+        if initial_credit_info:
+            log(initial_credit_info.to_log_message())
+            # Log any initial warnings
+            if initial_credit_info.should_log_warning():
+                warning_msg = initial_credit_info.get_credit_warning_message()
+                if initial_credit_info.is_exhausted:
+                    log(warning_msg, is_error=True)
+                    error_exit(FailureCategory.GENERAL_FAILURE.value)
+                else:
+                    log(warning_msg, is_warning=True)
+        else:
+            log("Could not retrieve initial credit tracking information", is_error=True)
+            error_exit(FailureCategory.GENERAL_FAILURE.value)
 
     while True:
         telemetry_handler.reset_vuln_specific_telemetry()
@@ -290,7 +316,7 @@ def main():  # noqa: C901
             log(f"\n--- Maximum runtime of 3 hours exceeded (actual: {elapsed_time}). Stopping processing. ---")
             remediation_notified = contrast_api.notify_remediation_failed(
                 remediation_id=remediation_id,
-                failure_category=contrast_api.FailureCategory.EXCEEDED_TIMEOUT.value,
+                failure_category=FailureCategory.EXCEEDED_TIMEOUT.value,
                 contrast_host=config.CONTRAST_HOST,
                 contrast_org_id=config.CONTRAST_ORG_ID,
                 contrast_app_id=config.CONTRAST_APP_ID,
@@ -310,6 +336,20 @@ def main():  # noqa: C901
             log(f"\n--- Reached max PR limit ({max_open_prs_setting}). Current open PRs: {current_open_pr_count}. Stopping processing. ---")
             break
 
+        # Check credit exhaustion for Contrast LLM usage
+        if config.USE_CONTRAST_LLM:
+            current_credit_info = contrast_api.get_credit_tracking(
+                contrast_host=config.CONTRAST_HOST,
+                contrast_org_id=config.CONTRAST_ORG_ID,
+                contrast_app_id=config.CONTRAST_APP_ID,
+                contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
+                contrast_api_key=config.CONTRAST_API_KEY
+            )
+            if current_credit_info and current_credit_info.is_exhausted:
+                log("\n--- Credits exhausted. Stopping processing. ---")
+                log("Credits have been exhausted. Contact your CSM to request additional credits.", is_error=True)
+                break
+
         # --- Fetch Next Vulnerability Data from API ---
         if config.CODING_AGENT == CodingAgents.SMARTFIX.name:
             # For SMARTFIX, get vulnerability with prompts
@@ -327,12 +367,28 @@ def main():  # noqa: C901
 
             # Extract vulnerability details and prompts from the response
             vuln_uuid = vulnerability_data['vulnerabilityUuid']
+
+            # Check if this is the same vulnerability UUID as the previous iteration
+            if vuln_uuid == previous_vuln_uuid:
+                log(f"Error: Backend provided the same vulnerability UUID ({vuln_uuid}) as the previous iteration. This indicates a backend error.", is_warning=True)
+                error_exit(remediation_id, FailureCategory.GENERAL_FAILURE.value)
+
             vuln_title = vulnerability_data['vulnerabilityTitle']
             remediation_id = vulnerability_data['remediationId']
-            fix_system_prompt = vulnerability_data['fixSystemPrompt']
-            fix_user_prompt = vulnerability_data['fixUserPrompt']
-            qa_system_prompt = vulnerability_data['qaSystemPrompt']
-            qa_user_prompt = vulnerability_data['qaUserPrompt']
+            session_id = vulnerability_data.get('sessionId')
+
+            # Validate and create prompt configuration for SmartFix agent
+            try:
+                PromptConfiguration.validate_raw_prompts_data(vulnerability_data)
+                prompts = PromptConfiguration.for_smartfix_agent(
+                    fix_system_prompt=vulnerability_data['fixSystemPrompt'],
+                    fix_user_prompt=vulnerability_data['fixUserPrompt'],
+                    qa_system_prompt=vulnerability_data['qaSystemPrompt'],
+                    qa_user_prompt=vulnerability_data['qaUserPrompt']
+                )
+            except ValueError as e:
+                log(f"Error: Invalid prompts from backend: {e}", is_error=True)
+                error_exit(remediation_id, FailureCategory.GENERAL_FAILURE.value)
         else:
             # For external coding agents (GITHUB_COPILOT/CLAUDE_CODE), get vulnerability details
             log("\n::group::--- Fetching next vulnerability details from Contrast API ---")
@@ -349,13 +405,18 @@ def main():  # noqa: C901
 
             # Extract vulnerability details from the response (no prompts for external agents)
             vuln_uuid = vulnerability_data['vulnerabilityUuid']
+
+            # Check if this is the same vulnerability UUID as the previous iteration
+            if vuln_uuid == previous_vuln_uuid:
+                log(f"Error: Backend provided the same vulnerability UUID ({vuln_uuid}) as the previous iteration. This indicates a backend error.", is_warning=True)
+                error_exit(remediation_id, FailureCategory.GENERAL_FAILURE.value)
+
             vuln_title = vulnerability_data['vulnerabilityTitle']
             remediation_id = vulnerability_data['remediationId']
-            # No prompts available for external coding agents
-            fix_system_prompt = None
-            fix_user_prompt = None
-            qa_system_prompt = None
-            qa_user_prompt = None
+            session_id = None  # External agents don't use Contrast LLM sessions
+
+            # Create prompt configuration for external agent (no prompts required)
+            prompts = PromptConfiguration.for_external_agent()
 
         # Populate vulnInfo in telemetry
         telemetry_handler.update_telemetry("vulnInfo.vulnId", vuln_uuid)
@@ -380,15 +441,30 @@ def main():  # noqa: C901
         else:
             log(f"No existing OPEN or MERGED PR found for vulnerability {vuln_uuid}. Proceeding with fix attempt.")
         log("\n::endgroup::")
+
+        # Update tracking variable now that we know we're actually processing this vuln
+        previous_vuln_uuid = vuln_uuid
+
         log(f"\n\033[0;33m Selected vuln to fix: {vuln_title} \033[0m")
+
+        # --- Create Common Remediation Context ---
+        # Create vulnerability and context from config - single source of truth
+        vulnerability = Vulnerability.from_api_data(vulnerability_data)
+        context = RemediationContext.from_config(remediation_id, vulnerability, config, prompts=prompts, session_id=session_id)
 
         # --- Check if we need to use the external coding agent ---
         if config.CODING_AGENT != CodingAgents.SMARTFIX.name:
-            external_agent = ExternalCodingAgent(config)
+            # Create agent using GitHubAgentFactory
+            agent_type = CodingAgents[config.CODING_AGENT]
+            external_agent = GitHubAgentFactory.create_agent(agent_type, config)
             # Assemble the issue body from vulnerability details
             issue_body = external_agent.assemble_issue_body(vulnerability_data)
-            # Pass the assembled issue body to generate_fixes()
-            if external_agent.generate_fixes(vuln_uuid, remediation_id, vuln_title, issue_body):
+            # Add issue_body for external agent compatibility
+            context.issue_body = issue_body
+
+            result = external_agent.remediate(context)
+
+            if result.success:
                 log("\n\n--- External Coding Agent successfully generated fixes ---")
                 processed_one = True
                 contrast_api.send_telemetry_data()
@@ -404,205 +480,195 @@ def main():  # noqa: C901
             log(f"Error preparing feature branch {new_branch_name}. Skipping to next vulnerability.")
             continue
 
-        # Ensure the build is not broken before running the fix agent
-        log("\n--- Running Build Before Fix ---")
-        prefix_build_success, prefix_build_output = run_build_command(build_command, config.REPO_ROOT, remediation_id)
-        if not prefix_build_success:
-            # Analyze build failure and show error summary
-            error_analysis = extract_build_errors(prefix_build_output)
-            log("\n❌ Build is broken ❌ -- No fix attempted.")
-            log(f"Build output:\n{error_analysis}")
-            error_exit(remediation_id, contrast_api.FailureCategory.INITIAL_BUILD_FAILURE.value)  # Exit if the build is broken, no point in proceeding
+        # --- Run SmartFix Agent ---
+        # NOTE: The agent will validate the initial build before attempting fixes
+        # Create SmartFix agent (no config needed - gets everything from context)
+        smartfix_agent = GitHubAgentFactory.create_agent(CodingAgents.SMARTFIX)
 
-        # --- Run AI Fix Agent (SmartFix) ---
-        ai_fix_summary_full = agent_handler.run_ai_fix_agent(
-            config.REPO_ROOT, fix_system_prompt, fix_user_prompt, remediation_id
+        # Run the agent remediation process
+        # The agent will run the fix agent and QA loop without doing any git operations
+        # All git operations (staging, committing) happen in main.py after remediate() completes
+        session = smartfix_agent.remediate(context)
+
+        # Extract results from the session
+        session_handler = create_session_handler()
+        session_result = session_handler.handle_session_result(session)
+
+        if not session_result.should_continue:
+            # QA Agent failed to fix the build
+            log(f"Agent failed with reason: {session_result.failure_category}")
+            git_handler.cleanup_branch(new_branch_name)
+            contrast_api.notify_remediation_failed(
+                remediation_id=remediation_id,
+                failure_category=session_result.failure_category,
+                contrast_host=config.CONTRAST_HOST,
+                contrast_org_id=config.CONTRAST_ORG_ID,
+                contrast_app_id=config.CONTRAST_APP_ID,
+                contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
+                contrast_api_key=config.CONTRAST_API_KEY
+            )
+            continue  # Move to next vulnerability
+
+        ai_fix_summary_full = session_result.ai_fix_summary
+        # Generate QA section based on session results
+        # The SmartFix agent already handled the QA loop internally
+        qa_config = QASectionConfig(
+            skip_qa_review=config.SKIP_QA_REVIEW,
+            has_build_command=build_config.has_build_command(),
+            build_command=build_config.build_command
         )
-
-        # Check if the fix agent encountered an error
-        if ai_fix_summary_full.startswith("Error during AI fix agent execution:"):
-            log("Fix agent encountered an unrecoverable error. Skipping this vulnerability.")
-            error_message = ai_fix_summary_full[len("Error during AI fix agent execution:"):].strip()
-            log(f"Error details: {error_message}")
-            error_exit(remediation_id, contrast_api.FailureCategory.AGENT_FAILURE.value)
+        qa_section = session_handler.generate_qa_section(session, qa_config)
 
         # --- Git and GitHub Operations ---
+        # All file changes from the agent (fix + QA + formatting) are uncommitted at this point
+        # Stage and commit everything together
         log("\n--- Proceeding with Git & GitHub Operations ---")
         git_handler.stage_changes()
 
-        if git_handler.check_status():
-            commit_message = git_handler.generate_commit_message(vuln_title, vuln_uuid)
-            git_handler.commit_changes(commit_message)
-            initial_changed_files = git_handler.get_last_commit_changed_files()
+        # Check if there are changes to commit
+        if not git_handler.check_status():
+            # No changes detected - agent didn't make any modifications
+            log("No changes detected from agent execution. Skipping PR creation.")
+            git_handler.cleanup_branch(new_branch_name)
+            continue
 
-            if not config.SKIP_QA_REVIEW and build_command:
-                debug_log("Proceeding with QA Review as SKIP_QA_REVIEW is false and BUILD_COMMAND is provided.")
-                build_success, final_changed_files, used_build_command, qa_summary_log = qa_handler.run_qa_loop(
-                    build_command=build_command,
-                    repo_root=config.REPO_ROOT,
-                    max_qa_attempts=max_qa_attempts_setting,
-                    initial_changed_files=initial_changed_files,
-                    formatting_command=formatting_command,
+        # Commit all changes together (fix + QA fixes + formatting)
+        commit_message = git_handler.generate_commit_message(vuln_title, vuln_uuid)
+        git_handler.commit_changes(commit_message)
+        log("Committed all agent changes.")
+
+        # --- Create Pull Request ---
+        pr_title = git_handler.generate_pr_title(vuln_title)
+        # Use the result from SmartFix agent remediation as the base PR body.
+        # The agent returns the PR body content (extracted from <pr_body> tags)
+        # or the full agent summary if extraction fails.
+        pr_body_base = ai_fix_summary_full
+        debug_log("Using SmartFix agent's output as PR body base.")
+
+        # --- Push and Create PR ---
+        git_handler.push_branch(new_branch_name)  # Push the final commit (original or amended)
+
+        label_name, label_desc, label_color = git_handler.generate_label_details(vuln_uuid)
+        label_created = git_handler.ensure_label(label_name, label_desc, label_color)
+
+        if not label_created:
+            log(f"Could not create GitHub label '{label_name}'. PR will be created without a label.", is_warning=True)
+            label_name = ""  # Clear label_name to avoid using it in PR creation
+
+        pr_title = git_handler.generate_pr_title(vuln_title)
+
+        updated_pr_body = pr_body_base + qa_section
+
+        # Append credit tracking information to PR body if using Contrast LLM
+        if config.CODING_AGENT == CodingAgents.SMARTFIX.name and config.USE_CONTRAST_LLM:
+            current_credit_info = contrast_api.get_credit_tracking(
+                contrast_host=config.CONTRAST_HOST,
+                contrast_org_id=config.CONTRAST_ORG_ID,
+                contrast_app_id=config.CONTRAST_APP_ID,
+                contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
+                contrast_api_key=config.CONTRAST_API_KEY
+            )
+            if current_credit_info:
+                # Increment credits used to account for this PR about to be created
+                projected_credit_info = current_credit_info.with_incremented_usage()
+                updated_pr_body += projected_credit_info.to_pr_body_section()
+
+                # Show countdown message and warnings
+                credits_after = projected_credit_info.credits_remaining
+                log(f"Credit consumed. {credits_after} credits remaining")
+                if projected_credit_info.should_log_warning():
+                    warning_msg = projected_credit_info.get_credit_warning_message()
+                    if projected_credit_info.is_exhausted:
+                        log(warning_msg, is_error=True)
+                    else:
+                        log(warning_msg, is_warning=True)
+
+        # Create a brief summary for the telemetry aiSummaryReport (limited to 255 chars in DB)
+        # Generate an optimized summary using the dedicated function in telemetry_handler
+        brief_summary = telemetry_handler.create_ai_summary_report(updated_pr_body)
+
+        # Update telemetry with our optimized summary
+        telemetry_handler.update_telemetry("resultInfo.aiSummaryReport", brief_summary)
+
+        try:
+            # Set a flag to track if we should try the fallback approach
+            pr_creation_success = False
+            pr_url = ""  # Initialize pr_url
+
+            # Try to create the PR using the GitHub CLI
+            log("Attempting to create a pull request...")
+            pr_url = git_handler.create_pr(pr_title, updated_pr_body, remediation_id, config.BASE_BRANCH, label_name)
+
+            if pr_url:
+                pr_creation_success = True
+
+                # Extract PR number from PR URL
+                # PR URL format is like: https://github.com/org/repo/pull/123
+                pr_number = None
+                try:
+                    # Use a more robust method to extract the PR number
+
+                    pr_match = re.search(r'/pull/(\d+)', pr_url)
+                    debug_log(f"Extracting PR number from URL '{pr_url}', match object: {pr_match}")
+                    if pr_match:
+                        pr_number = int(pr_match.group(1))
+                        debug_log(f"Successfully extracted PR number: {pr_number}")
+                    else:
+                        log(f"Could not find PR number pattern in URL: {pr_url}", is_warning=True)
+                except (ValueError, IndexError, AttributeError) as e:
+                    log(f"Could not extract PR number from URL: {pr_url} - Error: {str(e)}")
+
+                # Notify the Remediation backend service about the PR
+                if pr_number is None:
+                    pr_number = 1
+
+                remediation_notified = contrast_api.notify_remediation_pr_opened(
                     remediation_id=remediation_id,
-                    qa_system_prompt=qa_system_prompt,
-                    qa_user_prompt=qa_user_prompt
+                    pr_number=pr_number,
+                    pr_url=pr_url,
+                    contrastProvidedLlm=config.CODING_AGENT == CodingAgents.SMARTFIX.name and config.USE_CONTRAST_LLM,
+                    contrast_host=config.CONTRAST_HOST,
+                    contrast_org_id=config.CONTRAST_ORG_ID,
+                    contrast_app_id=config.CONTRAST_APP_ID,
+                    contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
+                    contrast_api_key=config.CONTRAST_API_KEY
                 )
+                if remediation_notified:
+                    log(f"Successfully notified Remediation service about PR for remediation {remediation_id}.")
 
-                qa_section = "\n\n---\n\n## Review \n\n"
-
-                if used_build_command:
-                    qa_section += f"*   **Build Run:** Yes (`{used_build_command}`)\n"
-
-                    if build_success:
-                        qa_section += "*   **Final Build Status:** Success \n"
-                    else:
-                        qa_section += "*   **Final Build Status:** Failure \n"
-                else:
-                    qa_section += "*   **Build Run:** No"
-                    if not used_build_command:
-                        qa_section += " (BUILD_COMMAND not provided)\n"
-                    qa_section += "\n*   **Final Build Status:** Skipped\n"
-
-                # Skip PR creation if QA was run and the build is failing
-                # or if the QA agent encountered an error (detected by checking qa_summary_log entries)
-                if (used_build_command and not build_success) or any(s.startswith("Error during QA agent execution:") for s in qa_summary_log):
-                    failure_category = ""
-
-                    if any(s.startswith("Error during QA agent.execution:") for s in qa_summary_log):
-                        log("\n--- Skipping PR creation as QA Agent encountered an error ---")
-                        failure_category = contrast_api.FailureCategory.QA_AGENT_FAILURE.value
-                    else:
-                        log("\n--- Skipping PR creation as QA Agent failed to fix build issues ---")
-                        # Check if we've exhausted all retry attempts
-                        if len(qa_summary_log) >= max_qa_attempts_setting:
-                            failure_category = contrast_api.FailureCategory.EXCEEDED_QA_ATTEMPTS.value
-
-                    # Notify the Remediation service about the failed remediation if we have a failure category
-                    if failure_category:
-                        remediation_notified = contrast_api.notify_remediation_failed(
-                            remediation_id=remediation_id,
-                            failure_category=failure_category,
+                    # Log updated credit tracking status after PR notification (only for SMARTFIX agent)
+                    if config.CODING_AGENT == CodingAgents.SMARTFIX.name and config.USE_CONTRAST_LLM:
+                        updated_credit_info = contrast_api.get_credit_tracking(
                             contrast_host=config.CONTRAST_HOST,
                             contrast_org_id=config.CONTRAST_ORG_ID,
                             contrast_app_id=config.CONTRAST_APP_ID,
                             contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
                             contrast_api_key=config.CONTRAST_API_KEY
                         )
-
-                        if remediation_notified:
-                            log(f"Successfully notified Remediation service about {failure_category} for remediation {remediation_id}.")
+                        if updated_credit_info:
+                            log(updated_credit_info.to_log_message())
                         else:
-                            log(f"Failed to notify Remediation service about {failure_category} for remediation {remediation_id}.", is_warning=True)
-
-                    git_handler.cleanup_branch(new_branch_name)
-                    contrast_api.send_telemetry_data()
-                    continue  # Move to the next vulnerability
-
-            else:  # QA is skipped
-                qa_section = ""  # Ensure qa_section is empty if QA is skipped
-                if config.SKIP_QA_REVIEW:
-                    log("Skipping QA Review based on SKIP_QA_REVIEW setting.")
-                elif not build_command:
-                    log("Skipping QA Review as no BUILD_COMMAND was provided.")
-
-            # --- Create Pull Request ---
-            pr_title = git_handler.generate_pr_title(vuln_title)
-            # Use the result from agent_handler.run_ai_fix_agent directly as the base PR body.
-            # agent_handler.run_ai_fix_agent is expected to return the PR body content
-            # (extracted from <pr_body> tags) or the full agent summary if extraction fails.
-            pr_body_base = ai_fix_summary_full
-            debug_log("Using agent's output (processed by agent_handler) as PR body base.")
-
-            # --- Push and Create PR ---
-            git_handler.push_branch(new_branch_name)  # Push the final commit (original or amended)
-
-            label_name, label_desc, label_color = git_handler.generate_label_details(vuln_uuid)
-            label_created = git_handler.ensure_label(label_name, label_desc, label_color)
-
-            if not label_created:
-                log(f"Could not create GitHub label '{label_name}'. PR will be created without a label.", is_warning=True)
-                label_name = ""  # Clear label_name to avoid using it in PR creation
-
-            pr_title = git_handler.generate_pr_title(vuln_title)
-
-            updated_pr_body = pr_body_base + qa_section
-
-            # Create a brief summary for the telemetry aiSummaryReport (limited to 255 chars in DB)
-            # Generate an optimized summary using the dedicated function in telemetry_handler
-            brief_summary = telemetry_handler.create_ai_summary_report(updated_pr_body)
-
-            # Update telemetry with our optimized summary
-            telemetry_handler.update_telemetry("resultInfo.aiSummaryReport", brief_summary)
-
-            try:
-                # Set a flag to track if we should try the fallback approach
-                pr_creation_success = False
-                pr_url = ""  # Initialize pr_url
-
-                # Try to create the PR using the GitHub CLI
-                log("Attempting to create a pull request...")
-                pr_url = git_handler.create_pr(pr_title, updated_pr_body, remediation_id, config.BASE_BRANCH, label_name)
-
-                if pr_url:
-                    pr_creation_success = True
-
-                    # Extract PR number from PR URL
-                    # PR URL format is like: https://github.com/org/repo/pull/123
-                    pr_number = None
-                    try:
-                        # Use a more robust method to extract the PR number
-
-                        pr_match = re.search(r'/pull/(\d+)', pr_url)
-                        debug_log(f"Extracting PR number from URL '{pr_url}', match object: {pr_match}")
-                        if pr_match:
-                            pr_number = int(pr_match.group(1))
-                            debug_log(f"Successfully extracted PR number: {pr_number}")
-                        else:
-                            log(f"Could not find PR number pattern in URL: {pr_url}", is_warning=True)
-                    except (ValueError, IndexError, AttributeError) as e:
-                        log(f"Could not extract PR number from URL: {pr_url} - Error: {str(e)}")
-
-                    # Notify the Remediation backend service about the PR
-                    if pr_number is None:
-                        pr_number = 1
-
-                    remediation_notified = contrast_api.notify_remediation_pr_opened(
-                        remediation_id=remediation_id,
-                        pr_number=pr_number,
-                        pr_url=pr_url,
-                        contrast_host=config.CONTRAST_HOST,
-                        contrast_org_id=config.CONTRAST_ORG_ID,
-                        contrast_app_id=config.CONTRAST_APP_ID,
-                        contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
-                        contrast_api_key=config.CONTRAST_API_KEY
-                    )
-                    if remediation_notified:
-                        log(f"Successfully notified Remediation service about PR for remediation {remediation_id}.")
-                    else:
-                        log(f"Failed to notify Remediation service about PR for remediation {remediation_id}.", is_warning=True)
+                            debug_log("Could not retrieve updated credit tracking information")
                 else:
-                    # This case should ideally be handled by create_pr exiting or returning empty
-                    # and then the logic below for SKIP_PR_ON_FAILURE would trigger.
-                    # However, if create_pr somehow returns without a URL but doesn't cause an exit:
-                    log("PR creation did not return a URL. Assuming failure.")
+                    log(f"Failed to notify Remediation service about PR for remediation {remediation_id}.", is_warning=True)
+            else:
+                # This case should ideally be handled by create_pr exiting or returning empty
+                # and then the logic below for SKIP_PR_ON_FAILURE would trigger.
+                # However, if create_pr somehow returns without a URL but doesn't cause an exit:
+                log("PR creation did not return a URL. Assuming failure.")
 
-                telemetry_handler.update_telemetry("resultInfo.prCreated", pr_creation_success)
+            telemetry_handler.update_telemetry("resultInfo.prCreated", pr_creation_success)
 
-                if not pr_creation_success:
-                    log("\n--- PR creation failed ---")
-                    error_exit(remediation_id, contrast_api.FailureCategory.GENERATE_PR_FAILURE.value)
-
-                processed_one = True  # Mark that we successfully processed one
-                log(f"\n--- Successfully processed vulnerability {vuln_uuid}. Continuing to look for next vulnerability... ---")
-            except Exception as e:
-                log(f"Error creating PR: {e}")
+            if not pr_creation_success:
                 log("\n--- PR creation failed ---")
-                error_exit(remediation_id, contrast_api.FailureCategory.GENERATE_PR_FAILURE.value)
-        else:
-            log("Skipping commit, push, and PR creation as no changes were detected by the agent.")
-            # Clean up the branch if no changes were made
-            git_handler.cleanup_branch(new_branch_name)
-            continue  # Try the next vulnerability
+                error_exit(remediation_id, FailureCategory.GENERATE_PR_FAILURE.value)
+
+            processed_one = True  # Mark that we successfully processed one
+            log(f"\n--- Successfully processed vulnerability {vuln_uuid}. Continuing to look for next vulnerability... ---")
+        except Exception as e:
+            log(f"Error creating PR: {e}")
+            log("\n--- PR creation failed ---")
+            error_exit(remediation_id, FailureCategory.GENERATE_PR_FAILURE.value)
 
         contrast_api.send_telemetry_data()
 

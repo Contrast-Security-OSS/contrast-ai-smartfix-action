@@ -18,20 +18,20 @@ The SmartFix Coding Agent uses Contrast vulnerability data with a team of agenti
 * **GitHub:** Your project must be hosted on GitHub and use GitHub Actions.  In the GitHub repository's Settings, enable the Actions > General > Workflow Permissions checkbox for "Allow GitHub Actions to create and approve pull requests".
 * **Contrast API Credentials:** You will need your Contrast Host, Organization ID, Application ID, Authorization Key, and API Key values.  To find the app ID, visit the application page in the Contrast web UI, then use the last UUID in the URL (immediately after `/applications/`) as the app ID value.  **Suggestion:** Setup an API-only service user named “Contrast AI SmartFix” in your Organization Settings in your Contrast SaaS instance.  At a minimum, it should have the “View Organization” permission and “Edit Application” permission for this application.  This service user’s `contrast_authorization_key` value and the Organization’s `contrast_api_key` value should be used in the workflow.
 * **GitHub Token Permissions:** The GitHub token must have `contents: write` and `pull-requests: write` permissions. These permissions must be explicitly set in your workflow file, as they are in the example config file, below.  Note, the SmartFix Coding Agent uses the internal GitHub token for Actions; you do not need to create a Personal Access Token (PAT).
-* **LLM Access:** Ensure that you have API access to one of our recommended LLMs for use with the SmartFix Coding Agent.  If using an AWS Bedrock model, please see Amazon's User Guide on [model access](https://docs.aws.amazon.com/bedrock/latest/userguide/model-access-modify.html).
+* **LLM Access (Optional):** SmartFix uses Contrast's LLM service for seamless setup. If you prefer to use your own LLM provider (BYOLLM), ensure that you have API access to one of our recommended LLMs. If using an AWS Bedrock model, please see Amazon's User Guide on [model access](https://docs.aws.amazon.com/bedrock/latest/userguide/model-access-modify.html).
 
 Set the gathered values as secrets and variables for the GitHub repository at Settings tab > Secrets and Variables in the sidebar > Actions.
 
 Secrets:
 * CONTRAST_AUTHORIZATION_KEY
 * CONTRAST_API_KEY
-* Any other LLM-specific API keys or other connection values (such as for AWS)
+* Any other LLM-specific API keys or other connection values (such as for AWS) - only needed if using BYOLLM
 
 Variables:
 * CONTRAST_HOST (The host name of your Contrast SaaS instance, e.g. 'app.contrastsecurity.com')
 * CONTRAST_ORG_ID (The UUID of your Contrast organization)
 * CONTRAST_APP_ID (The UUID that is specific to the application in this repository.)
-* Any other non-secret values, such as the AWS region for a Bedrock-provided LLM
+* Any other non-secret values, such as the AWS region for a Bedrock-provided LLM - only needed if using BYOLLM
 
 ### Installation and Configuration
 
@@ -103,12 +103,12 @@ jobs:
           # Recommended: Anthropic Claude Sonnet
 
           # Claude Via Direct Anthropic API
-          # agent_model: 'anthropic/claude-3-7-sonnet-20250219' # Check LiteLLM docs for exact model string
+          # agent_model: 'anthropic/claude-sonnet-4-5-20250929' # Check LiteLLM docs for exact model string
           # anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
           # Claude Via AWS Bedrock
           # Setup AWS credentials in the earlier "Configure AWS Credentials" step.
-          agent_model: 'bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0' # Example for Claude Sonnet on Bedrock
+          agent_model: 'bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0' # Example for Claude Sonnet on Bedrock
 
           # Experimental: Google Gemini Pro
           # agent_model: 'gemini/gemini-2.5-pro-preview-05-06' # Check LiteLLM docs for exact model string
@@ -176,13 +176,23 @@ jobs:
 * The `build_command` configured for the `generate_fixes` job must be an appropriate build command for your project and is required for the proper functioning of SmartFix.  A `build_command` that runs your project's unit tests would be doubly useful as it would enable SmartFix to attempt to correct any changes that break your project's tests.  Please remember to do any additional setup for your `build_command` (such as library installation) in the `generate_fixes` job as a new step preceeding the `Run Contrast AI SmartFix - Generate Fixes Action` step.  For details about the libraries that come pre-installed with Github's Ubuntu runner, please visit https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2404-Readme.md.  For details about GitHub's Windows runner, please visit https://github.com/actions/runner-images/blob/main/images/windows/Windows2025-Readme.md.
 * The optional `formatting_command` will be run after SmartFix makes code changes to resolve the vulnerability and prior to any subsequent `build_command` invocations.  We recommend supplying a `formatting_command` to fix code style issues in your project as it is an easy way to correct a common class of build-breaking problems.
 
-### Supported LLMs (Bring Your Own LLM \- BYOLLM) for the SmartFix Coding Agent
+### LLM Configuration for the SmartFix Coding Agent
 
-The SmartFix Coding Agent uses a "Bring Your Own LLM" (BYOLLM) model. You provide the credentials for your preferred LLM provider.
+The SmartFix Coding Agent requires an LLM to function.  There are 2 options for supplying it with an LLM. The first option is to use Contrast's LLM service (available to Early Access program participants) for seamless setup with no additional configuration required. For advanced users who prefer to use their own LLM provider, you can enable "Bring Your Own LLM" (BYOLLM) by setting `use_contrast_llm: 'false'` and providing credentials for your preferred LLM provider.
 
-* **Recommended:** **Anthropic Claude Sonnet (e.g., Claude 3.7 Sonnet via AWS Bedrock or direct Anthropic API)**. This model has been extensively tested.
+#### Seamless: Contrast LLM Service
+
+**Contrast LLM** is a secure, sandboxed Contrast-hosted LLM that the SmartFix coding agent can use.  It uses your existing Contrast API keys so there is no additional LLM configuration required.
+
+To use this option, you can request to be a part of our Early Access program.  For complete Contrast LLM setup instructions, see the [Contrast LLM Early Access Guide](contrast_llm_early_access.md).
+
+#### Advanced: Bring Your Own LLM (BYOLLM)
+
+If you set `use_contrast_llm: 'false'`, you can provide your own LLM credentials:
+
+* **Recommended:** **Anthropic Claude Sonnet (e.g., Claude 4.5 Sonnet via AWS Bedrock or direct Anthropic API)**. This model has been extensively tested.
   * Option 1 - Direct Anthropic API:
-    * Set `agent_model` to the appropriate model string for Anthropic (e.g. `anthropic/claude-3-7-sonnet-20250219`).
+    * Set `agent_model` to the appropriate model string for Anthropic (e.g. `anthropic/claude-sonnet-4-5-20250929`).
     * Provide your `anthropic_api_key`.
   * Option 2 - AWS Bedrock:
     * Set `agent_model` to the appropriate model string (e.g., `bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0`).
@@ -201,8 +211,8 @@ Refer to the `action.yml` file within the SmartFix GitHub Action repository and 
 
 Here are several recommended `agent_model` values:
 
-* `bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0`
-* `anthropic/claude-3-7-sonnet-20250219`
+* `bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0`
+* `anthropic/claude-sonnet-4-5-20250929`
 * `gemini/gemini-2.5-pro-preview-05-06`
 
 ### Supported Languages
@@ -268,7 +278,8 @@ The following are key inputs for the SmartFix GitHub Action using SmartFix Codin
 | `contrast_app_id` | Contrast Application ID for the repository. | Yes |  |
 | `contrast_authorization_key` | Contrast Authorization Key. | Yes |  |
 | `contrast_api_key` | Contrast API Key. | Yes |  |
-| `agent_model` | LLM model to use (e.g., `bedrock/anthropic.claude-3-sonnet-20240229-v1:0`). | No | `bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0` |
+| `use_contrast_llm` | Use Contrast LLM service. Set to 'false' to use your own LLM provider. | No | `true` |
+| `agent_model` | LLM model to use when using BYOLLM (e.g., `bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0`). | No | `bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0` |
 | `anthropic_api_key` | Anthropic API key (if using direct Anthropic API). | No |  |
 | `aws_bearer_token_bedrock` | AWS Bedrock API Bearer Token (alternative to IAM credentials). Use with caution - less secure than IAM. | No |  |
 | `aws_region` | AWS Region for Bedrock (required when using `aws_bearer_token_bedrock`). | No |  |
@@ -323,7 +334,7 @@ SmartFix collects telemetry data to help improve the service and diagnose issues
 * **Ensure the `build_command` Runs the Tests:** This allows SmartFix to catch and fix any tests that may fail due to its changes. It also allows it to run the security tests it creates, if that option is enabled.
 * **Review PRs Thoroughly:** Always carefully review the code changes proposed by SmartFix before merging.
 * **Monitor Action Runs:** Regularly check the GitHub Action logs for successful runs and any reported issues.
-* **Use Recommended LLMs:** For the best experience, Contrast recommends using the Anthropic Claude Sonnet 3.7 model.
+* **Use Recommended LLMs:** For the best experience, Contrast recommends using the Anthropic Claude Sonnet 4.5 model.
 
 ## FAQ
 

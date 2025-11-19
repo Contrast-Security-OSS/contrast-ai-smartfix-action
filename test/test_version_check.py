@@ -1,18 +1,11 @@
 import unittest
 import os
-import sys
 from unittest.mock import patch, MagicMock
 from packaging.version import Version
 
-# Add src directory to path for imports
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-# Import with testing=True to avoid requiring environment variables
-from src.config import reset_config, get_config  # noqa: E402
-from src.version_check import get_latest_repo_version, check_for_newer_version, do_version_check, normalize_version, safe_parse_version  # noqa: E402
-
-# Initialize config with testing=True for tests
-_ = get_config(testing=True)
+# Test setup imports (path is set up by conftest.py)
+from src.config import reset_config
+from src.version_check import get_latest_repo_version, check_for_newer_version, do_version_check, normalize_version, safe_parse_version
 
 
 class TestVersionCheck(unittest.TestCase):
@@ -20,19 +13,6 @@ class TestVersionCheck(unittest.TestCase):
 
     def setUp(self):
         # Common setup for all tests
-        self.env_vars = {
-            'BASE_BRANCH': 'main',
-            'GITHUB_WORKSPACE': '/tmp',
-            'GITHUB_TOKEN': 'mock-token',
-            'GITHUB_REPOSITORY': 'mock/repo',
-            'CONTRAST_HOST': 'test-host',
-            'CONTRAST_ORG_ID': 'test-org',
-            'CONTRAST_APP_ID': 'test-app',
-            'CONTRAST_AUTHORIZATION_KEY': 'test-auth',
-            'CONTRAST_API_KEY': 'test-api',
-        }
-        self.env_patcher = patch.dict('os.environ', self.env_vars)
-        self.env_patcher.start()
         reset_config()  # Reset config before each test
 
         self.requests_patcher = patch('src.version_check.requests')
@@ -61,7 +41,6 @@ class TestVersionCheck(unittest.TestCase):
 
     def tearDown(self):
         # Clean up all patches
-        self.env_patcher.stop()
         self.requests_patcher.stop()
         self.log_patcher.stop()
         self.debug_log_patcher.stop()
@@ -156,11 +135,11 @@ class TestVersionCheck(unittest.TestCase):
         # Check that the appropriate debug_log message was called
         self.mock_debug_log.assert_any_call("Running from SHA: abcdef1234567890abcdef1234567890abcdef12. No ref found for version check, using SHA.")
 
+    @patch.dict('os.environ', {'GITHUB_REF': 'refs/tags/v1.0.0'}, clear=True)
     @patch('src.version_check.get_latest_repo_version')
     def test_do_version_check_with_github_ref(self, mock_get_latest):
         """Test when GITHUB_REF is set but not GITHUB_ACTION_REF."""
         # Setup environment and mocks
-        os.environ["GITHUB_REF"] = "refs/tags/v1.0.0"
         mock_get_latest.return_value = "v2.0.0"
 
         # Reset mocks before test
@@ -199,11 +178,10 @@ class TestVersionCheck(unittest.TestCase):
         self.mock_debug_log.assert_any_call("Running action from SHA: abcdef1234567890abcdef1234567890abcdef12. Skipping version comparison against tags.")
         mock_get_latest.assert_not_called()
 
+    @patch.dict('os.environ', {'GITHUB_REF': 'refs/heads/main'}, clear=True)
     @patch('src.version_check.get_latest_repo_version')
     def test_do_version_check_unparseable_version(self, mock_get_latest):
         """Test with a reference that can't be parsed as a version."""
-        os.environ["GITHUB_REF"] = "refs/heads/main"
-
         do_version_check()
 
         # Check debug_log calls

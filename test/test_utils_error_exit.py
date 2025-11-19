@@ -18,18 +18,14 @@
 # #L%
 #
 
-import sys
 import unittest
 from unittest.mock import patch
 from contextlib import contextmanager
-import os
 
-# Add project root to path for imports
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-from src import utils  # noqa: E402
-from src.config import get_config, reset_config  # noqa: E402
-from src.contrast_api import FailureCategory  # noqa: E402
+# Test setup imports (path is set up by conftest.py)
+from src import utils
+from src.config import get_config, reset_config
+from src.smartfix.shared.failure_categories import FailureCategory
 
 
 class TestErrorExit(unittest.TestCase):
@@ -37,26 +33,10 @@ class TestErrorExit(unittest.TestCase):
 
     def setUp(self):
         """Set up test environment before each test"""
-        self.env_vars = {
-            'CONTRAST_HOST': 'test-host',
-            'CONTRAST_ORG_ID': 'test-org',
-            'CONTRAST_APP_ID': 'test-app',
-            'CONTRAST_AUTHORIZATION_KEY': 'test-auth',
-            'CONTRAST_API_KEY': 'test-api',
-            'GITHUB_WORKSPACE': '/tmp',
-            'BASE_BRANCH': 'main',
-            'GITHUB_TOKEN': 'mock-token',
-            'GITHUB_REPOSITORY': 'mock/repo',
-            'BUILD_COMMAND': 'echo "Mock build command"',
-            'RUN_TASK': 'generate_fix',
-        }
-        self.env_patcher = patch.dict('os.environ', self.env_vars)
-        self.env_patcher.start()
         reset_config()  # Reset the config singleton
 
     def tearDown(self):
         """Clean up after each test"""
-        self.env_patcher.stop()
         reset_config()
 
     @contextmanager

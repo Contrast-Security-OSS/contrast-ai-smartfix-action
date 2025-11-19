@@ -1,13 +1,8 @@
 import unittest
 import textwrap
-import sys
-import os
 
-# Add the src directory to the Python path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-# Import the function from the utility file
-from src.build_output_analyzer import extract_build_errors  # noqa: E402
+# Test setup imports (path is set up by conftest.py)
+from src.build_output_analyzer import extract_build_errors
 
 
 class TestBuildErrorAnalyzer(unittest.TestCase):

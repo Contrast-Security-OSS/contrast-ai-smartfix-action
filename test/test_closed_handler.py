@@ -18,38 +18,13 @@
 # #L%
 #
 
-import sys
 import unittest
 from unittest.mock import patch, mock_open
 import os
 import json
 
-# Add project root to path for imports
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-# Define test environment variables used throughout the test file
-TEST_ENV_VARS = {
-    'GITHUB_REPOSITORY': 'mock/repo',
-    'GITHUB_TOKEN': 'mock-token',
-    'BASE_BRANCH': 'main',
-    'CONTRAST_HOST': 'test.contrastsecurity.com',
-    'CONTRAST_ORG_ID': 'test-org-id',
-    'CONTRAST_APP_ID': 'test-app-id',
-    'CONTRAST_AUTHORIZATION_KEY': 'test-auth-key',
-    'CONTRAST_API_KEY': 'test-api-key',
-    'GITHUB_WORKSPACE': '/tmp',
-    'RUN_TASK': 'closed',
-    'BUILD_COMMAND': 'echo "Test build command"',
-    'GITHUB_EVENT_PATH': '/tmp/github_event.json',
-    'REPO_ROOT': '/tmp/test_repo',
-}
-
-# Set environment variables before importing modules to prevent initialization errors
-os.environ.update(TEST_ENV_VARS)
-
-# Now import project modules (after path modification)
-from src.config import reset_config, get_config  # noqa: E402
-from src import closed_handler  # noqa: E402
+from src.config import reset_config, get_config
+from src import closed_handler
 
 
 class TestClosedHandler(unittest.TestCase):
@@ -62,16 +37,10 @@ class TestClosedHandler(unittest.TestCase):
         self.mock_exit = self.exit_patcher.start()
 
         reset_config()
-
-        # Mock environment variables with complete required vars
-        self.env_patcher = patch.dict(os.environ, TEST_ENV_VARS)
-        self.env_patcher.start()
-
         self.config = get_config()
 
     def tearDown(self):
         """Clean up after each test"""
-        self.env_patcher.stop()
         self.exit_patcher.stop()
         reset_config()
 

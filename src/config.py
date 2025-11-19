@@ -22,7 +22,6 @@ import sys
 import json
 from pathlib import Path
 from typing import Optional, Any, Dict, List
-from src.coding_agents import CodingAgents
 
 
 def _log_config_message(message: str, is_error: bool = False, is_warning: bool = False):
@@ -50,7 +49,7 @@ class Config:
         self.testing = testing
 
         # --- Preset ---
-        self.VERSION = "v1.0.9"
+        self.VERSION = "v1.0.10"
         self.USER_AGENT = f"contrast-smart-fix {self.VERSION}"
 
         # --- Core Settings ---
@@ -66,11 +65,12 @@ class Config:
 
         # --- AI Agent Configuration ---
         self.CODING_AGENT = self._get_coding_agent()
+        from src.smartfix.shared.coding_agents import CodingAgents
         is_smartfix_coding_agent = self.CODING_AGENT == CodingAgents.SMARTFIX.name
 
         default_agent_model = ""
         if is_smartfix_coding_agent:
-            default_agent_model = "bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0"
+            default_agent_model = "bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0"
         self.AGENT_MODEL = self._get_env_var("AGENT_MODEL", required=False, default=default_agent_model)
 
         # --- Build and Formatting Configuration ---
@@ -118,6 +118,13 @@ class Config:
         self.SKIP_WRITING_SECURITY_TEST = self._get_bool_env("SKIP_WRITING_SECURITY_TEST", default=False)
         self.SKIP_QA_REVIEW = self._get_bool_env("SKIP_QA_REVIEW", default=False)
         self.ENABLE_FULL_TELEMETRY = self._get_bool_env("ENABLE_FULL_TELEMETRY", default=True)
+        self.USE_CONTRAST_LLM = self._get_bool_env("USE_CONTRAST_LLM", default=True)
+
+        # Update agent model for Contrast LLM if no explicit model was set
+        if (is_smartfix_coding_agent
+                and self.USE_CONTRAST_LLM
+                and self._get_env_var("AGENT_MODEL", required=False) is None):
+            self.AGENT_MODEL = "contrast/claude-sonnet-4-5"
 
         # --- Vulnerability Configuration ---
         self.VULNERABILITY_SEVERITIES = self._parse_and_validate_severities(
@@ -165,17 +172,17 @@ class Config:
             raise ConfigurationError("Error: Missing one or more Contrast API configuration variables (HOST, ORG_ID, APP_ID, AUTH_KEY, API_KEY).")
 
     def _get_coding_agent(self) -> str:
+        from src.smartfix.shared.coding_agents import CodingAgents
         coding_agent = self._get_env_var("CODING_AGENT", required=False, default="SMARTFIX")
         try:
             # Try to convert string to Enum
             CodingAgents[coding_agent.upper()]
             return coding_agent.upper()
         except (KeyError, ValueError):
-            agent_names = [agent.name for agent in CodingAgents]
-            default_name = CodingAgents.SMARTFIX.name
             _log_config_message(
-                f"Warning: Invalid CODING_AGENT '{coding_agent}'. Must be one of {agent_names}. "
-                f"Defaulting to '{default_name}'.",
+                f"Warning: Invalid CODING_AGENT '{coding_agent}'. "
+                f"Must be one of {[agent.name for agent in CodingAgents]}. "
+                f"Defaulting to '{CodingAgents.SMARTFIX.name}'.",
                 is_warning=True
             )
             return CodingAgents.SMARTFIX.name
@@ -212,13 +219,15 @@ class Config:
         _log_config_message(f"Debug Mode: {self.DEBUG_MODE}")
         _log_config_message(f"Base Branch: {self.BASE_BRANCH}")
         _log_config_message(f"Run Task: {self.RUN_TASK}")
-        _log_config_message(f"Agent Model: {self.AGENT_MODEL}")
+        if not self.USE_CONTRAST_LLM:
+            _log_config_message(f"Agent Model: {self.AGENT_MODEL}")
         _log_config_message(f"Coding Agent: {self.CODING_AGENT}")
         _log_config_message(f"Skip Writing Security Test: {self.SKIP_WRITING_SECURITY_TEST}")
         _log_config_message(f"Skip QA Review: {self.SKIP_QA_REVIEW}")
         _log_config_message(f"Vulnerability Severities: {self.VULNERABILITY_SEVERITIES}")
         _log_config_message(f"Max Events Per Agent: {self.MAX_EVENTS_PER_AGENT}")
         _log_config_message(f"Enable Full Telemetry: {self.ENABLE_FULL_TELEMETRY}")
+        _log_config_message(f"Use Contrast LLM: {self.USE_CONTRAST_LLM}")
 
 # --- Global Singleton Instance ---
 # This is the single source of truth for configuration in the application.

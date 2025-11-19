@@ -1,19 +1,13 @@
 import unittest
-import sys
 import os
 import io
-import tempfile
 import contextlib
 from unittest.mock import patch, MagicMock
 
-# Add src directory to path for imports
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-# Initialize config with testing flag first
-from src.config import reset_config, get_config  # noqa: E402
-_ = get_config(testing=True)
-# Import modules to be tested AFTER config initialization
-from src.main import main  # noqa: E402
+# Test setup imports (path is set up by conftest.py)
+from setup_test_env import create_temp_repo_dir
+from src.config import reset_config
+from src.main import main
 
 
 class TestMain(unittest.TestCase):
@@ -21,10 +15,12 @@ class TestMain(unittest.TestCase):
 
     def setUp(self):
         """Set up test environment before each test."""
-        # Create a temporary directory
-        self.temp_dir = tempfile.mkdtemp()
+        # Use helper for temp directory creation
+        self.temp_dir = str(create_temp_repo_dir())
 
-        # Setup standard env vars needed for testing
+        # Setup standard env vars, then override paths for this test
+        # Override paths specific to this test
+        import os
         self.env_vars = {
             'HOME': self.temp_dir,
             'GITHUB_WORKSPACE': self.temp_dir,
@@ -42,9 +38,11 @@ class TestMain(unittest.TestCase):
             'RUN_TASK': 'generate_fix'
         }
 
-        # Apply environment variables
-        self.env_patcher = patch.dict('os.environ', self.env_vars, clear=True)
-        self.env_patcher.start()
+        # Apply additional environment variables to what the mixin already set up
+        os.environ.update(self.env_vars)
+
+        # Reset config for clean test state
+        reset_config()
 
         # Mock subprocess calls
         self.subproc_patcher = patch('subprocess.run')
@@ -79,7 +77,6 @@ class TestMain(unittest.TestCase):
     def tearDown(self):
         """Clean up after each test."""
         # Stop all patches
-        self.env_patcher.stop()
         self.subproc_patcher.stop()
         self.git_patcher.stop()
         self.api_patcher.stop()
@@ -132,6 +129,50 @@ class TestMain(unittest.TestCase):
 
         # Verify warning about missing environment variables is present (updated for new message format)
         self.assertIn("Warning: Neither GITHUB_ACTION_REF nor GITHUB_REF environment variables are set", output)
+
+    def test_duplicate_vuln_with_open_pr_skips_cleanly(self):
+        """Test that duplicate vulnerability UUID with open PR skips cleanly without error_exit.
+
+        Regression test for AIML-241: When the API returns the same vulnerability twice
+        (common when a PR is already open), the code should skip it cleanly using the
+        skipped_vulns logic rather than triggering the duplicate guard error.
+        """
+        # Setup: Mock API to return same vulnerability twice, then None
+        vuln_data = {
+            'vulnerabilityUuid': 'TEST-VULN-UUID-123',
+            'vulnerabilityTitle': 'Test SQL Injection',
+            'vulnerabilityRuleName': 'sql-injection',
+            'remediationId': 'REM-TEST-123',
+            'sessionId': 'session-123',
+            'fixSystemPrompt': 'Fix the vulnerability',
+            'fixUserPrompt': 'Please fix',
+            'qaSystemPrompt': 'Review the fix',
+            'qaUserPrompt': 'Is it good?'
+        }
+
+        # Return same vuln twice, then None to stop loop
+        self.mock_api.side_effect = [vuln_data, vuln_data, None]
+
+        # Mock PR status check to return OPEN (simulating existing PR)
+        with patch('src.git_handler.check_pr_status_for_label') as mock_pr_check:
+            mock_pr_check.return_value = "OPEN"
+
+            # Mock generate_label_details
+            with patch('src.git_handler.generate_label_details') as mock_label:
+                mock_label.return_value = ('contrast-vuln-id:TEST-VULN-UUID-123', 'color', 'desc')
+
+                with patch.dict('os.environ', self.env_vars, clear=True):
+                    # Run main and capture output
+                    with io.StringIO() as buf, contextlib.redirect_stdout(buf):
+                        main()
+                        output = buf.getvalue()
+
+                    # Verify the vulnerability was skipped both times
+                    self.assertIn("Skipping vulnerability TEST-VULN-UUID-123", output)
+                    self.assertIn("Already skipped TEST-VULN-UUID-123 before, breaking loop", output)
+
+                    # Verify the loop broke cleanly
+                    self.assertIn("No vulnerabilities were processed in this run", output)
 
 
 if __name__ == '__main__':

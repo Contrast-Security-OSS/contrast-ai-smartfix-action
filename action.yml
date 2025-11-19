@@ -99,6 +99,10 @@ inputs:
     description: 'Specifies the coding agent to use for generating fixes. Allowed values: SMARTFIX, GITHUB_COPILOT, CLAUDE_CODE.'
     required: false
     default: 'SMARTFIX'
+  use_contrast_llm:
+    description: 'Use Contrast LLM as your default LLM provider. Set to false if using your own LLM.'
+    required: false
+    default: 'false'
 
 runs:
   using: 'composite'
@@ -113,7 +117,7 @@ runs:
         echo "🛡️  CONTRAST AI SMARTFIX PROCESS STARTED"
         echo "================================================================"
         echo ""
-    
+
     # Main header to clearly mark the beginning of the action (Windows)
     - name: Begin SmartFix Process (Windows)
       if: runner.os == 'Windows'
@@ -134,35 +138,35 @@ runs:
         echo "Verifying Git availability..."
         which git || { echo "ERROR: Git not found. Git is required for this action."; exit 1; }
         echo "Git version: $(git --version)"
-    
+
     # Verify Git is available and ensure Git Bash is in PATH (Windows)
     - name: Verify Git availability (Windows)
       if: runner.os == 'Windows'
       shell: cmd
       run: |
         @echo off
-        
+
         echo Verifying Git availability...
         where git >nul 2>nul
         if %ERRORLEVEL% NEQ 0 (
           echo ERROR: Git not found. Git is required for this action.
           exit /b 1
         )
-        
-        echo Git version: 
+
+        echo Git version:
         git --version
-        
+
         rem Add standard Git paths to PATH if they exist
         if exist "C:\Program Files\Git\bin" (
           echo Adding Git Bash bin directory to PATH...
           set "PATH=%PATH%;C:\Program Files\Git\bin"
         )
-        
+
         if exist "C:\Program Files\Git\cmd" (
           echo Adding Git cmd directory to PATH...
           set "PATH=%PATH%;C:\Program Files\Git\cmd"
         )
-        
+
         rem Verify bash.exe is available
         where bash.exe >nul 2>nul
         if %ERRORLEVEL% NEQ 0 (
@@ -172,7 +176,7 @@ runs:
         ) else (
           echo Git Bash is available in PATH
         )
-        
+
         echo Git verification completed successfully
 
     # Checkout with reduced verbosity
@@ -196,7 +200,7 @@ runs:
       uses: actions/setup-python@v5
       with:
         python-version: '3.11'
-        
+
     # Install uv tool for dependency management
     - name: Install uv
       shell: bash
@@ -220,7 +224,7 @@ runs:
         echo "📎 Using lockfile for deterministic installation"
         uv pip sync --system ${{ github.action_path }}/src/requirements.lock > /tmp/uv-output.log || (cat /tmp/uv-output.log && exit 1)
         echo "✅ Python dependencies installed successfully"
-        
+
     # Install dependencies using uv (Windows)
     - name: Install dependencies with uv (Windows)
       if: runner.os == 'Windows'
@@ -229,14 +233,14 @@ runs:
         echo.
         echo 📦 Installing Python packages using uv...
         echo 📎 Using lockfile for deterministic installation
-        
+
         rem Convert forward slashes to backslashes for Windows path
         set "REQUIREMENTS_PATH=%GITHUB_ACTION_PATH%\src\requirements.lock"
-        
+
         uv pip sync --system "%REQUIREMENTS_PATH%" > uv-output.log || (type uv-output.log && exit /b 1)
         echo ✅ Python dependencies installed successfully
 
-    # Reduce Node.js setup verbosity 
+    # Reduce Node.js setup verbosity
     - name: Set up Node.js
       shell: bash
       run: |
@@ -264,7 +268,7 @@ runs:
         echo "✅ GitHub CLI installation attempt complete"
         # Verify GitHub CLI installation - required for this action
         gh --version || { echo "ERROR: GitHub CLI verification failed. GitHub CLI is required for this action."; exit 1; }
-        
+
     # Install GitHub CLI (Windows)
     - name: Install GitHub CLI (Windows)
       if: runner.os == 'Windows'
@@ -272,14 +276,14 @@ runs:
       run: |
         echo.
         echo 📦 Installing GitHub CLI...
-        
+
         rem Check if GitHub CLI is already installed
         where gh >nul 2>nul
         if %ERRORLEVEL% EQU 0 (
           echo GitHub CLI is already installed
         ) else (
           echo Installing GitHub CLI via direct download...
-          
+
           rem Download and install GitHub CLI
           curl -sSL https://github.com/cli/cli/releases/download/v2.74.2/gh_2.74.2_windows_amd64.msi -o gh.msi
           echo Installing GitHub CLI from MSI package...
@@ -287,16 +291,16 @@ runs:
           echo Waiting for installation to complete...
           timeout /t 5 /nobreak >nul
           del gh.msi
-          
+
           rem Refresh PATH to include GitHub CLI installation directory
           echo Refreshing PATH to include GitHub CLI...
-          
+
           rem Common installation paths for GitHub CLI
           set "GH_PATHS=C:\Program Files\GitHub CLI;C:\Program Files (x86)\GitHub CLI"
-          
+
           rem Add GitHub CLI paths to current PATH
           set "PATH=%PATH%;%GH_PATHS%"
-          
+
           rem Try to find gh.exe and add its directory to PATH if found
           for %%I in (gh.exe) do (
             if exist "%%~$PATH:I" (
@@ -307,9 +311,9 @@ runs:
             )
           )
         )
-        
+
         echo ✅ GitHub CLI installation attempt complete
-        
+
         rem Verify GitHub CLI installation - required for this action
         where gh >nul 2>nul || (echo ERROR: GitHub CLI not found in PATH after installation. && exit /b 1)
         gh --version || (echo ERROR: GitHub CLI verification failed. GitHub CLI is required for this action. && exit /b 1)
@@ -342,7 +346,7 @@ runs:
           PYTHONPATH="${{ github.action_path }}" python "${{ github.action_path }}/src/main.py"
         fi
         echo ""
-        
+
         echo ""
         echo "================================================================"
         echo "✨ CONTRAST AI SMARTFIX PROCESS COMPLETE"
@@ -394,3 +398,5 @@ runs:
         ENABLE_FULL_TELEMETRY: ${{ inputs.enable_full_telemetry }}
         # --- Coding Agent ---
         CODING_AGENT: ${{ inputs.coding_agent }}
+        # --- Use Contrast LLM ---
+        USE_CONTRAST_LLM: ${{ inputs.use_contrast_llm }}

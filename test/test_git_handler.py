@@ -18,39 +18,15 @@
 # #L%
 #
 
-import sys
 import unittest
 import unittest.mock
 from unittest.mock import patch, MagicMock
-import os
 import json
 
-# Add project root to path for imports
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-# IDEA: Update Config to take a dict of config values for testing
-# Define test environment variables used throughout the test file
-TEST_ENV_VARS = {
-    'GITHUB_REPOSITORY': 'mock/repo',
-    'GITHUB_TOKEN': 'mock-token',
-    'BASE_BRANCH': 'main',
-    'CONTRAST_HOST': 'test-host',
-    'CONTRAST_ORG_ID': 'test-org',
-    'CONTRAST_APP_ID': 'test-app',
-    'CONTRAST_AUTHORIZATION_KEY': 'test-auth',
-    'CONTRAST_API_KEY': 'test-api',
-    'GITHUB_WORKSPACE': '/tmp',
-    'RUN_TASK': 'generate_fix',  # This triggers the requirement for BUILD_COMMAND
-    'BUILD_COMMAND': 'echo "Test build command"'  # Required when RUN_TASK=generate_fix with SMARTFIX coding agent
-}
-
-# Set environment variables before importing modules to prevent initialization errors
-os.environ.update(TEST_ENV_VARS)
-
-# Import with testing=True
-from src.config import get_config, reset_config  # noqa: E402
-from src import git_handler  # noqa: E402
-from src.coding_agents import CodingAgents  # noqa: E402
+# Test setup imports (path is set up by conftest.py)
+from src.config import get_config, reset_config
+from src import git_handler
+from src.smartfix.domains.agents import CodingAgents  # noqa: E402
 
 
 class TestGitHandler(unittest.TestCase):
@@ -58,14 +34,10 @@ class TestGitHandler(unittest.TestCase):
 
     def setUp(self):
         """Set up test environment before each test"""
-        # Use the shared TEST_ENV_VARS for consistent environment setup
-        self.env_patcher = patch.dict('os.environ', TEST_ENV_VARS)
-        self.env_patcher.start()
         reset_config()  # Reset the config singleton
 
     def tearDown(self):
         """Clean up after each test"""
-        self.env_patcher.stop()
         reset_config()
 
         # Reset any mock patchers that might be active
@@ -367,6 +339,8 @@ class TestGitHandler(unittest.TestCase):
         self.assertEqual(comment_command[1], "issue")
         self.assertEqual(comment_command[2], "comment")
         self.assertEqual(comment_command[3], str(issue_number))
+        self.assertEqual(comment_command[4], "--repo")
+        self.assertEqual(comment_command[5], "mock/repo")
 
         # Verify comment body contains '@claude' and the remediation label
         comment_body = comment_command[-1]
