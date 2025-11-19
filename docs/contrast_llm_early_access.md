@@ -65,7 +65,7 @@ To use Contrast LLM with the SmartFix Coding Agent, simply set one configuration
     # ... other standard settings
 ```
 
-### Migration from BYOLLM
+### Migration from BYOLLM ("Bring Your Own LLM")
 
 If you're currently using the SmartFix Coding Agent with BYOLLM configuration, migrating to Contrast LLM requires only these changes to the SmartFix action's YAML file (likely `.github/workflows/smartfix.yml`):
 
