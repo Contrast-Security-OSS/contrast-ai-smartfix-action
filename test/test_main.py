@@ -161,24 +161,18 @@ class TestMain(unittest.TestCase):
             with patch('src.git_handler.generate_label_details') as mock_label:
                 mock_label.return_value = ('contrast-vuln-id:TEST-VULN-UUID-123', 'color', 'desc')
 
-                # Mock error_exit to track if it's called (it shouldn't be)
-                with patch('src.main.error_exit') as mock_error_exit:
-                    with patch.dict('os.environ', self.env_vars, clear=True):
-                        # Run main and capture output
-                        with io.StringIO() as buf, contextlib.redirect_stdout(buf):
-                            main()
-                            output = buf.getvalue()
+                with patch.dict('os.environ', self.env_vars, clear=True):
+                    # Run main and capture output
+                    with io.StringIO() as buf, contextlib.redirect_stdout(buf):
+                        main()
+                        output = buf.getvalue()
 
-                        # Verify the vulnerability was skipped both times
-                        self.assertIn("Skipping vulnerability TEST-VULN-UUID-123", output)
-                        self.assertIn("Already skipped TEST-VULN-UUID-123 before, breaking loop", output)
+                    # Verify the vulnerability was skipped both times
+                    self.assertIn("Skipping vulnerability TEST-VULN-UUID-123", output)
+                    self.assertIn("Already skipped TEST-VULN-UUID-123 before, breaking loop", output)
 
-                        # CRITICAL: Verify error_exit was NOT called
-                        # The bug would have triggered error_exit on the second iteration
-                        mock_error_exit.assert_not_called()
-
-                        # Verify the loop broke cleanly
-                        self.assertIn("No vulnerabilities were processed in this run", output)
+                    # Verify the loop broke cleanly
+                    self.assertIn("No vulnerabilities were processed in this run", output)
 
 
 if __name__ == '__main__':

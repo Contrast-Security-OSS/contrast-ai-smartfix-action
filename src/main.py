@@ -295,8 +295,17 @@ def main():  # noqa: C901
         )
         if initial_credit_info:
             log(initial_credit_info.to_log_message())
+            # Log any initial warnings
+            if initial_credit_info.should_log_warning():
+                warning_msg = initial_credit_info.get_credit_warning_message()
+                if initial_credit_info.is_exhausted:
+                    log(warning_msg, is_error=True)
+                    error_exit(FailureCategory.GENERAL_FAILURE.value)
+                else:
+                    log(warning_msg, is_warning=True)
         else:
-            debug_log("Could not retrieve initial credit tracking information")
+            log("Could not retrieve initial credit tracking information", is_error=True)
+            error_exit(FailureCategory.GENERAL_FAILURE.value)
 
     while True:
         telemetry_handler.reset_vuln_specific_telemetry()
@@ -326,6 +335,20 @@ def main():  # noqa: C901
         if current_open_pr_count >= max_open_prs_setting:
             log(f"\n--- Reached max PR limit ({max_open_prs_setting}). Current open PRs: {current_open_pr_count}. Stopping processing. ---")
             break
+
+        # Check credit exhaustion for Contrast LLM usage
+        if config.USE_CONTRAST_LLM:
+            current_credit_info = contrast_api.get_credit_tracking(
+                contrast_host=config.CONTRAST_HOST,
+                contrast_org_id=config.CONTRAST_ORG_ID,
+                contrast_app_id=config.CONTRAST_APP_ID,
+                contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
+                contrast_api_key=config.CONTRAST_API_KEY
+            )
+            if current_credit_info and current_credit_info.is_exhausted:
+                log("\n--- Credits exhausted. Stopping processing. ---")
+                log("Credits have been exhausted. Contact your CSM to request additional credits.", is_error=True)
+                break
 
         # --- Fetch Next Vulnerability Data from API ---
         if config.CODING_AGENT == CodingAgents.SMARTFIX.name:
@@ -549,6 +572,16 @@ def main():  # noqa: C901
                 # Increment credits used to account for this PR about to be created
                 projected_credit_info = current_credit_info.with_incremented_usage()
                 updated_pr_body += projected_credit_info.to_pr_body_section()
+
+                # Show countdown message and warnings
+                credits_after = projected_credit_info.credits_remaining
+                log(f"Credit consumed. {credits_after} credits remaining")
+                if projected_credit_info.should_log_warning():
+                    warning_msg = projected_credit_info.get_credit_warning_message()
+                    if projected_credit_info.is_exhausted:
+                        log(warning_msg, is_error=True)
+                    else:
+                        log(warning_msg, is_warning=True)
 
         # Create a brief summary for the telemetry aiSummaryReport (limited to 255 chars in DB)
         # Generate an optimized summary using the dedicated function in telemetry_handler

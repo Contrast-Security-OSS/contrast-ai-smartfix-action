@@ -38,6 +38,16 @@ class CreditTrackingResponse:
         """Calculate remaining credits."""
         return self.max_credits - self.credits_used
 
+    @property
+    def is_exhausted(self) -> bool:
+        """Check if credits are exhausted."""
+        return self.credits_remaining <= 0
+
+    @property
+    def is_low(self) -> bool:
+        """Check if credits are running low (5 or fewer remaining)."""
+        return self.credits_remaining <= 5 and self.credits_remaining > 0
+
     def _format_timestamp(self, iso_timestamp: str) -> str:
         """Format ISO timestamp to human-readable format."""
         if not iso_timestamp:
@@ -59,6 +69,19 @@ class CreditTrackingResponse:
 
         return (f"Credits: {self.credits_used}/{self.max_credits} used "
                 f"({self.credits_remaining} remaining). Trial expires {self.end_date}")
+
+    def get_credit_warning_message(self) -> str:
+        """Get warning message for credit status, with color formatting."""
+        if self.is_exhausted:
+            return "Credits have been exhausted. Contact your CSM to request additional credits."
+        elif self.is_low:
+            # Yellow text formatting for low credits warning
+            return f"\033[0;33m{self.credits_remaining} credits remaining \033[0m"
+        return ""
+
+    def should_log_warning(self) -> bool:
+        """Check if a warning should be logged."""
+        return self.is_exhausted or self.is_low
 
     def to_pr_body_section(self) -> str:
         """Format credit information for PR body append."""
