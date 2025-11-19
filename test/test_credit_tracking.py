@@ -69,6 +69,44 @@ class TestCreditTrackingResponse(unittest.TestCase):
         response.credits_used = 50
         self.assertEqual(response.credits_remaining, 0)  # 50 - 50
 
+    def test_is_exhausted_property(self):
+        """Test credit exhaustion detection."""
+        response = CreditTrackingResponse.from_api_response(self.sample_api_data)
+
+        # Not exhausted with 43 remaining
+        self.assertFalse(response.is_exhausted)
+
+        # Exhausted at exactly 0 remaining
+        response.credits_used = 50
+        self.assertTrue(response.is_exhausted)
+
+        # Exhausted when over limit
+        response.credits_used = 55
+        self.assertTrue(response.is_exhausted)
+
+    def test_is_low_property(self):
+        """Test low credit detection."""
+        response = CreditTrackingResponse.from_api_response(self.sample_api_data)
+
+        # Not low with 43 remaining
+        self.assertFalse(response.is_low)
+
+        # Low with exactly 5 remaining
+        response.credits_used = 45
+        self.assertTrue(response.is_low)
+
+        # Low with 1 remaining
+        response.credits_used = 49
+        self.assertTrue(response.is_low)
+
+        # Not low when exhausted (0 remaining)
+        response.credits_used = 50
+        self.assertFalse(response.is_low)
+
+        # Not low with 6 remaining
+        response.credits_used = 44
+        self.assertFalse(response.is_low)
+
     def test_to_log_message_enabled(self):
         """Test log message formatting when enabled."""
         response = CreditTrackingResponse.from_api_response(self.sample_api_data)
@@ -76,6 +114,64 @@ class TestCreditTrackingResponse(unittest.TestCase):
 
         expected = "Credits: 7/50 used (43 remaining). Trial expires 2024-11-12T14:30:00Z"
         self.assertEqual(message, expected)
+
+    def test_get_credit_warning_message(self):
+        """Test credit warning message generation."""
+        response = CreditTrackingResponse.from_api_response(self.sample_api_data)
+
+        # Test exhausted credits
+        response.credits_used = 50
+        warning_msg = response.get_credit_warning_message()
+
+        self.assertEqual(warning_msg, "Credits have been exhausted. Contact your CSM to request additional credits.")
+
+        # Test low credits (with color formatting)
+        response.credits_used = 45  # 5 remaining
+        warning_msg = response.get_credit_warning_message()
+
+        self.assertIn("5 credits remaining", warning_msg)
+        self.assertIn("\033[0;33m", warning_msg)  # Yellow color code
+        self.assertIn("\033[0m", warning_msg)   # Reset color code
+
+        # Test normal credits (no warning)
+        response.credits_used = 44  # 6 remaining
+        warning_msg = response.get_credit_warning_message()
+
+        self.assertEqual(warning_msg, "")
+
+    def test_should_log_warning(self):
+        """Test warning condition detection."""
+        response = CreditTrackingResponse.from_api_response(self.sample_api_data)
+
+        # Normal state - no warning
+        self.assertFalse(response.should_log_warning())
+
+        # Low credits - should warn
+        response.credits_used = 45
+        self.assertTrue(response.should_log_warning())
+
+        # Exhausted - should warn
+        response.credits_used = 50
+        self.assertTrue(response.should_log_warning())
+
+    def test_basic_functionality_only(self):
+        """Test that we only have basic client-side functionality."""
+        response = CreditTrackingResponse.from_api_response(self.sample_api_data)
+
+        # Verify the basic properties work
+        self.assertEqual(response.credits_remaining, 43)
+        self.assertFalse(response.is_exhausted)
+        self.assertFalse(response.is_low)
+
+        # Verify exhaustion detection
+        response.credits_used = 50
+        self.assertTrue(response.is_exhausted)
+        self.assertFalse(response.is_low)
+
+        # Verify low credit detection
+        response.credits_used = 46  # 4 remaining
+        self.assertFalse(response.is_exhausted)
+        self.assertTrue(response.is_low)
 
     def test_to_log_message_disabled(self):
         """Test log message formatting when disabled."""
@@ -90,11 +186,12 @@ class TestCreditTrackingResponse(unittest.TestCase):
         response = CreditTrackingResponse.from_api_response(self.sample_api_data)
         pr_section = response.to_pr_body_section()
 
+        # Test new format matches documentation spec
         self.assertIn("### Contrast LLM Credits", pr_section)
-        self.assertIn("**Used:** 7/50", pr_section)
-        self.assertIn("**Remaining:** 43", pr_section)
-        self.assertIn("**Trial Period:** Oct 01, 2024 to Nov 12, 2024", pr_section)
-        self.assertTrue(pr_section.startswith("\n---\n"))
+        self.assertIn("- **Used:** 7/50", pr_section)
+        self.assertIn("- **Remaining:** 43", pr_section)
+        # Should include trial period dates
+        self.assertIn("- **Trial Period:** Oct 01, 2024 to Nov 12, 2024", pr_section)
 
     def test_to_pr_body_section_disabled(self):
         """Test PR body section formatting when disabled."""
@@ -155,7 +252,9 @@ class TestCreditTrackingResponse(unittest.TestCase):
 
         response = CreditTrackingResponse.from_api_response(data)
         pr_section = response.to_pr_body_section()
-        self.assertIn("**Trial Period:** Jan 15, 2025 to Mar 31, 2025", pr_section)
+        self.assertIn("- **Used:** 0/50", pr_section)
+        self.assertIn("- **Remaining:** 50", pr_section)
+        self.assertIn("- **Trial Period:** Jan 15, 2025 to Mar 31, 2025", pr_section)
 
         # Test empty dates edge case
         data["startDate"] = ""
@@ -163,7 +262,9 @@ class TestCreditTrackingResponse(unittest.TestCase):
 
         response = CreditTrackingResponse.from_api_response(data)
         pr_section = response.to_pr_body_section()
-        self.assertIn("**Trial Period:** Unknown to Unknown", pr_section)
+        self.assertIn("- **Used:** 0/50", pr_section)
+        self.assertIn("- **Remaining:** 50", pr_section)
+        self.assertIn("- **Trial Period:** Unknown to Unknown", pr_section)
 
 
 if __name__ == '__main__':
