@@ -442,7 +442,7 @@ class SubAgentExecutor:
 
                 # Output cleaner error message in red text for Contrast LLM access issues
                 red_text = ("\n\033[31mContrast LLM access denied. Please ensure that the "
-                            "Contrast LLM Early Access feature flag is enabled for your "
+                            "Contrast LLM Early Access feature is enabled for your "
                             "organization. Contact your Contrast representative or Customer "
                             "Success Manager to enable Early Access.\033[0m\n")
                 log(red_text, is_error=True)
