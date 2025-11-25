@@ -253,8 +253,18 @@ runs:
         check-latest: false
 
     # Install GitHub CLI (Linux/macOS)
+    - name: Check for GitHub CLI presence
+      id: check-gh
+      shell: bash
+      run: |
+        if command -v gh >/dev/null 2>&1; then
+          echo "found=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "found=false" >> "$GITHUB_OUTPUT"
+        fi
+
     - name: Install GitHub CLI
-      if: runner.os == 'Linux' || runner.os == 'macOS'
+      if: (runner.os == 'Linux' || runner.os == 'macOS') && steps.check-gh.outputs.found == 'false'
       shell: bash
       run: |
         echo ""
