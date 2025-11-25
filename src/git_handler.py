@@ -39,6 +39,7 @@ def get_gh_env():
     """
     gh_env = os.environ.copy()
     gh_env["GITHUB_TOKEN"] = config.GITHUB_TOKEN
+    gh_env["GITHUB_ENTERPRISE_TOKEN"] = config.GITHUB_TOKEN
 
     return gh_env
 
