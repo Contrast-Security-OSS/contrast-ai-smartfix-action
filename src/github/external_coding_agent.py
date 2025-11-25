@@ -22,7 +22,8 @@ import time
 from typing import Optional
 from src.utils import log, debug_log, error_exit, tail_string
 from src.config import Config
-from src import git_handler
+from src.smartfix.domains.scm.git_operations import GitOperations
+from src.github.github_operations import GitHubOperations
 from src import telemetry_handler
 from src.contrast_api import notify_remediation_pr_opened
 from src.smartfix.shared.failure_categories import FailureCategory
@@ -190,24 +191,25 @@ Please review this security vulnerability and implement appropriate fixes to add
                 log(f"Failed to generate issue body for vulnerability id {vuln_uuid}", is_error=True)
                 error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
 
-            # Use git_handler to find if there's an existing issue with this label
-            issue_number = git_handler.find_issue_with_label(vulnerability_label)
+            # Use GitHubOperations to find if there's an existing issue with this label
+            github_ops = GitHubOperations()
+            issue_number = github_ops.find_issue_with_label(vulnerability_label)
 
             is_existing_issue = False
             if issue_number is None:
                 # Check if this is because Issues are disabled
-                if not git_handler.check_issues_enabled():
+                if not github_ops.check_issues_enabled():
                     log("GitHub Issues are disabled for this repository. External coding agent requires Issues to be enabled.", is_error=True)
                     error_exit(remediation_id, FailureCategory.GIT_COMMAND_FAILURE.value)
 
                 debug_log(f"No GitHub issue found with label {vulnerability_label}")
-                issue_number = git_handler.create_issue(issue_title, issue_body, vulnerability_label, remediation_label)
+                issue_number = github_ops.create_issue(issue_title, issue_body, vulnerability_label, remediation_label)
                 if not issue_number:
                     log(f"Failed to create issue with labels {vulnerability_label}, {remediation_label}", is_error=True)
                     error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
             else:
                 debug_log(f"Found existing GitHub issue #{issue_number} with label {vulnerability_label}")
-                if not git_handler.reset_issue(issue_number, issue_title, remediation_label):
+                if not github_ops.reset_issue(issue_number, issue_title, remediation_label):
                     log(f"Failed to reset issue #{issue_number} with labels {vulnerability_label}, {remediation_label}", is_error=True)
                     error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
                 is_existing_issue = True
@@ -291,7 +293,8 @@ Please review this security vulnerability and implement appropriate fixes to add
                 pr_info = self._process_claude_workflow_run(issue_number, remediation_id)
             else:
                 # GitHub Copilot agent
-                pr_info = git_handler.find_open_pr_for_issue(issue_number, issue_title)
+                github_ops = GitHubOperations()
+                pr_info = github_ops.find_open_pr_for_issue(issue_number, issue_title)
 
             if pr_info:
                 pr_number = pr_info.get("number")
@@ -299,7 +302,10 @@ Please review this security vulnerability and implement appropriate fixes to add
 
                 # Add vulnerability and remediation labels to the PR
                 labels_to_add = [vulnerability_label, remediation_label]
-                if git_handler.add_labels_to_pr(pr_number, labels_to_add):
+                # Ensure github_ops is initialized
+                if 'github_ops' not in locals():
+                    github_ops = GitHubOperations()
+                if github_ops.add_labels_to_pr(pr_number, labels_to_add):
                     debug_log(f"Successfully added labels to PR #{pr_number}: {labels_to_add}")
                 else:
                     log(f"Failed to add labels to PR #{pr_number}", is_error=True)
@@ -347,8 +353,11 @@ Please review this security vulnerability and implement appropriate fixes to add
             Optional[dict]: PR information if successfully created, None otherwise
         """
         try:
+            # Initialize GitHub operations
+            github_ops = GitHubOperations()
+
             # Check for Claude workflow run ID
-            workflow_run_id = git_handler.get_claude_workflow_run_id()
+            workflow_run_id = github_ops.get_claude_workflow_run_id()
 
             if not workflow_run_id:
                 # If no workflow run ID found yet, continue polling
@@ -356,7 +365,7 @@ Please review this security vulnerability and implement appropriate fixes to add
                 return None
 
             # Get all issue comments to find the latest comment author.login
-            issue_comments = git_handler.get_issue_comments(issue_number)
+            issue_comments = github_ops.get_issue_comments(issue_number)
             if not issue_comments or len(issue_comments) == 0:
                 debug_log("No comments added to issue, checking again...")
                 return None
@@ -366,7 +375,7 @@ Please review this security vulnerability and implement appropriate fixes to add
 
             # Watch the claude GitHub action run
             debug_log(f"OK, found claude workflow_run_id value: {workflow_run_id}")
-            workflow_success = git_handler.watch_github_action_run(workflow_run_id)
+            workflow_success = github_ops.watch_github_action_run(workflow_run_id)
 
             if not workflow_success:
                 log(f"Claude workflow run #{workflow_run_id} failed for issue #{issue_number} terminating SmartFix run.", is_error=True)
@@ -375,7 +384,7 @@ Please review this security vulnerability and implement appropriate fixes to add
 
             # Get the issue comments to find the comment author's response to create the PR [default claude]
             author_login = author_login if author_login else "claude"
-            claude_comments = git_handler.get_issue_comments(issue_number, author_login)
+            claude_comments = github_ops.get_issue_comments(issue_number, author_login)
 
             if not claude_comments or len(claude_comments) == 0:
                 msg = f"No Claude comments found for issue #{issue_number}."
@@ -400,7 +409,7 @@ Please review this security vulnerability and implement appropriate fixes to add
 
             # Create PR using extracted information
             base_branch = self.config.BASE_BRANCH
-            pr_url = git_handler.create_claude_pr(
+            pr_url = github_ops.create_claude_pr(
                 title=pr_title,
                 body=pr_body,
                 base_branch=base_branch,
@@ -583,7 +592,8 @@ Please review this security vulnerability and implement appropriate fixes to add
             # Pattern to match claude/issue-NUMBER-YYYYMMDD-HHMM format
             pattern = fr'^claude/issue-{issue_number}-\d{{8}}-\d{{4}}$'
             debug_log(f"Falling back to GraphQL API call method with pattern: {pattern}")
-            head_branch = git_handler.get_latest_branch_by_pattern(pattern)
+            git_ops = GitOperations()
+            head_branch = git_ops.get_latest_branch_by_pattern(pattern)
 
             if head_branch:
                 debug_log(f"Using head branch from GitHub GraphQl API call: {head_branch}")

@@ -25,7 +25,7 @@ import sys
 from src import contrast_api
 from src.config import get_config  # Using get_config function instead of direct import
 from src.utils import debug_log, extract_remediation_id_from_branch, extract_remediation_id_from_labels, log
-from src.git_handler import extract_issue_number_from_branch
+from src.smartfix.domains.scm.git_operations import GitOperations
 import src.telemetry_handler as telemetry_handler
 
 
@@ -77,7 +77,8 @@ def _extract_remediation_info(pull_request: dict) -> tuple:
         debug_log("Branch appears to be created by external agent. Extracting remediation ID from PR labels.")
         remediation_id = extract_remediation_id_from_labels(labels)
         # Extract GitHub issue number from branch name
-        issue_number = extract_issue_number_from_branch(branch_name)
+        git_ops = GitOperations()
+        issue_number = git_ops.extract_issue_number_from_branch(branch_name)
         if issue_number:
             telemetry_handler.update_telemetry("additionalAttributes.externalIssueNumber", issue_number)
             debug_log(f"Extracted external issue number from branch name: {issue_number}")

@@ -268,7 +268,7 @@ def error_exit(remediation_id: str, failure_code: Optional[str] = None):
     """
     config = get_config()
     # Local imports to avoid circular dependencies
-    from src.git_handler import cleanup_branch, get_branch_name
+    from src.smartfix.domains.scm.git_operations import GitOperations
     from src.contrast_api import notify_remediation_failed, send_telemetry_data
     from src.smartfix.shared.failure_categories import FailureCategory
 
@@ -298,8 +298,9 @@ def error_exit(remediation_id: str, failure_code: Optional[str] = None):
 
     # Attempt to clean up any branches - continue even if this fails
     if config.CODING_AGENT == 'SMARTFIX':
-        branch_name = get_branch_name(remediation_id)
-        cleanup_branch(branch_name)
+        git_ops = GitOperations()
+        branch_name = git_ops.get_branch_name(remediation_id)
+        git_ops.cleanup_branch(branch_name)
 
     # Always attempt to send final telemetry
     send_telemetry_data()

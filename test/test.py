@@ -45,8 +45,8 @@ class TestSmartFixAction(unittest.TestCase):
         mock_process.communicate.return_value = (b"Mock stdout", b"Mock stderr")
         self.mock_subprocess_run.return_value = mock_process
 
-        # Mock git_handler's configure_git_user to prevent git config errors
-        self.git_config_patcher = patch('src.git_handler.configure_git_user')
+        # Mock GitOperations.configure_git_user to prevent git config errors
+        self.git_config_patcher = patch('src.smartfix.domains.scm.git_operations.GitOperations.configure_git_user')
         self.mock_git_config = self.git_config_patcher.start()
 
         # Mock API calls to prevent network issues

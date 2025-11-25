@@ -30,16 +30,16 @@ from src.smartfix.domains.vulnerability import RemediationContext
 
 
 # Global patches to prevent git operations during tests
-GIT_HANDLER_PATCHES = [
-    'src.git_handler.prepare_feature_branch',
-    'src.git_handler.stage_changes',
-    'src.git_handler.check_status',
-    'src.git_handler.commit_changes',
-    'src.git_handler.amend_commit',
-    'src.git_handler.get_last_commit_changed_files',
-    'src.git_handler.get_uncommitted_changed_files',
-    'src.git_handler.push_branch',
-    'src.git_handler.cleanup_branch'
+GIT_OPERATIONS_PATCHES = [
+    'src.smartfix.domains.scm.git_operations.GitOperations.prepare_feature_branch',
+    'src.smartfix.domains.scm.git_operations.GitOperations.stage_changes',
+    'src.smartfix.domains.scm.git_operations.GitOperations.check_status',
+    'src.smartfix.domains.scm.git_operations.GitOperations.commit_changes',
+    'src.smartfix.domains.scm.git_operations.GitOperations.amend_commit',
+    'src.smartfix.domains.scm.git_operations.GitOperations.get_last_commit_changed_files',
+    'src.smartfix.domains.scm.git_operations.GitOperations.get_uncommitted_changed_files',
+    'src.smartfix.domains.scm.git_operations.GitOperations.push_branch',
+    'src.smartfix.domains.scm.git_operations.GitOperations.cleanup_branch'
 ]
 
 
@@ -51,9 +51,9 @@ class TestSmartFixAgent(unittest.TestCase):
         reset_config()
         self.config = get_config(testing=True)
 
-        # Start all git handler patches
+        # Start all git operations patches
         self.git_mocks = []
-        for patch_target in GIT_HANDLER_PATCHES:
+        for patch_target in GIT_OPERATIONS_PATCHES:
             patcher = patch(patch_target)
             mock = patcher.start()
             self.git_mocks.append((patcher, mock))
