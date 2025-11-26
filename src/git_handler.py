@@ -22,6 +22,7 @@ import json
 import subprocess
 import re
 from typing import List, Optional
+from urllib.parse import urlparse
 from src.utils import run_command, debug_log, log, error_exit
 from src.smartfix.shared.failure_categories import FailureCategory
 from src.config import get_config
@@ -242,7 +243,8 @@ def push_branch(branch_name: str):
     """Pushes the current branch to the remote repository."""
     log(f"Pushing branch {branch_name} to remote...")
     # Extract hostname from GITHUB_SERVER_URL (e.g., "https://github.com" -> "github.com")
-    github_host = config.GITHUB_SERVER_URL.replace("https://", "").replace("http://", "").rstrip("/")
+    parsed = urlparse(config.GITHUB_SERVER_URL)
+    github_host = parsed.netloc
     remote_url = f"https://x-access-token:{config.GITHUB_TOKEN}@{github_host}/{config.GITHUB_REPOSITORY}.git"
     run_command(["git", "push", "--set-upstream", remote_url, branch_name])  # run_command exits on failure
 
