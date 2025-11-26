@@ -278,7 +278,7 @@ def main():  # noqa: C901
     max_runtime = timedelta(hours=3)  # Set maximum runtime to 3 hours
 
     # Construct GitHub repository URL (used for each API call)
-    github_repo_url = f"https://github.com/{config.GITHUB_REPOSITORY}"
+    github_repo_url = f"{config.GITHUB_SERVER_URL}/{config.GITHUB_REPOSITORY}"
     debug_log(f"GitHub repository URL: {github_repo_url}")
     skipped_vulns = set()  # TS-39904
     remediation_id = "unknown"

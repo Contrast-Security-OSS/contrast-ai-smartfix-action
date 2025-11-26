@@ -241,7 +241,9 @@ def amend_commit():
 def push_branch(branch_name: str):
     """Pushes the current branch to the remote repository."""
     log(f"Pushing branch {branch_name} to remote...")
-    remote_url = f"https://x-access-token:{config.GITHUB_TOKEN}@github.com/{config.GITHUB_REPOSITORY}.git"
+    # Extract hostname from GITHUB_SERVER_URL (e.g., "https://github.com" -> "github.com")
+    github_host = config.GITHUB_SERVER_URL.replace("https://", "").replace("http://", "").rstrip("/")
+    remote_url = f"https://x-access-token:{config.GITHUB_TOKEN}@{github_host}/{config.GITHUB_REPOSITORY}.git"
     run_command(["git", "push", "--set-upstream", remote_url, branch_name])  # run_command exits on failure
 
 
