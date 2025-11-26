@@ -25,6 +25,7 @@ import atexit
 import platform
 from datetime import datetime, timedelta
 from asyncio.proactor_events import _ProactorBasePipeTransport
+from urllib.parse import urlparse
 
 # Import configurations and utilities
 from src.config import get_config
@@ -278,7 +279,9 @@ def main():  # noqa: C901
     max_runtime = timedelta(hours=3)  # Set maximum runtime to 3 hours
 
     # Construct GitHub repository URL (used for each API call)
-    github_repo_url = f"https://github.com/{config.GITHUB_REPOSITORY}"
+    parsed = urlparse(config.GITHUB_SERVER_URL)
+    github_host = parsed.netloc
+    github_repo_url = f"{github_host}/{config.GITHUB_REPOSITORY}"
     debug_log(f"GitHub repository URL: {github_repo_url}")
     skipped_vulns = set()  # TS-39904
     remediation_id = "unknown"

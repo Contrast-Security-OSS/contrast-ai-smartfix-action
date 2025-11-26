@@ -2,6 +2,12 @@
 
 Thank you for your interest in contributing to SmartFix! This guide will help you get set up for development.
 
+## ⚖️ Contributor License Agreement
+
+**External contributors must have a signed Contributor License Agreement (CLA) on file with Contrast Security before we can accept code contributions.**
+
+If you or your company do not have a CLA on file with Contrast Security, please contact us before submitting pull requests. This requirement does not apply to Contrast Security employees.
+
 ## 🚀 Quick Start
 
 ### 1. Clone and Setup

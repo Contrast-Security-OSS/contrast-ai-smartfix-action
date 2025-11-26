@@ -92,9 +92,12 @@ class Config:
         if testing:
             self.GITHUB_TOKEN = self._get_env_var("GITHUB_TOKEN", required=False, default="mock-token-for-testing")
             self.GITHUB_REPOSITORY = self._get_env_var("GITHUB_REPOSITORY", required=False, default="mock/repo-for-testing")
+            self.GITHUB_SERVER_URL = self._get_env_var("GITHUB_SERVER_URL", required=False, default="https://github.com")
         else:
             self.GITHUB_TOKEN = self._get_env_var("GITHUB_TOKEN", required=True)
             self.GITHUB_REPOSITORY = self._get_env_var("GITHUB_REPOSITORY", required=True)
+            # GITHUB_SERVER_URL is automatically set by GitHub Actions (e.g., https://github.com or https://mycompany.ghe.com)
+            self.GITHUB_SERVER_URL = self._get_env_var("GITHUB_SERVER_URL", required=True, default="https://github.com")
 
         # --- Contrast API Configuration ---
         if testing:
