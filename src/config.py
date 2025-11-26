@@ -119,6 +119,7 @@ class Config:
         self.SKIP_QA_REVIEW = self._get_bool_env("SKIP_QA_REVIEW", default=False)
         self.ENABLE_FULL_TELEMETRY = self._get_bool_env("ENABLE_FULL_TELEMETRY", default=True)
         self.USE_CONTRAST_LLM = self._get_bool_env("USE_CONTRAST_LLM", default=True)
+        self.ENABLE_ANTHROPIC_PROMPT_CACHING = self._get_bool_env("ENABLE_ANTHROPIC_PROMPT_CACHING", default=True)
 
         # Update agent model for Contrast LLM if no explicit model was set
         if (is_smartfix_coding_agent
