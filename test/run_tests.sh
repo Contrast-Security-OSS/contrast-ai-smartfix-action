@@ -83,6 +83,7 @@ export BUILD_COMMAND="echo 'test build command'"
 export FORMATTING_COMMAND="echo 'test format command'"
 export DEBUG_MODE="true"
 export TESTING="true"
+export ENABLE_ANTHROPIC_PROMPT_CACHING="true"
 
 # Run tests
 VENV_DIR="$PROJECT_ROOT/.venv"

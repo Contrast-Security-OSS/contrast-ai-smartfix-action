@@ -103,6 +103,10 @@ inputs:
     description: 'Use Contrast LLM as your default LLM provider. Set to false if using your own LLM.'
     required: false
     default: 'false'
+  enable_anthropic_prompt_caching:
+    description: 'Enable Anthropic prompt caching for supported models (bedrock/claude and anthropic/claude). Defaults to true.'
+    required: false
+    default: 'true'
 
 runs:
   using: 'composite'
@@ -400,3 +404,5 @@ runs:
         CODING_AGENT: ${{ inputs.coding_agent }}
         # --- Use Contrast LLM ---
         USE_CONTRAST_LLM: ${{ inputs.use_contrast_llm }}
+        # --- Anthropic Prompt Caching ---
+        ENABLE_ANTHROPIC_PROMPT_CACHING: ${{ inputs.enable_anthropic_prompt_caching }}
