@@ -544,5 +544,3 @@ class SmartFixLiteLlm(LiteLlm):
         """Reset accumulated statistics to start fresh."""
         self.cost_accumulator.reset()
         debug_log("Accumulated statistics have been reset.")
-
-# %%
