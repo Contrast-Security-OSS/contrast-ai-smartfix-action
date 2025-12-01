@@ -308,7 +308,7 @@ class SmartFixLiteLlm(LiteLlm):
 
                 # Add cache_control to user and assistant messages as well
                 elif role in ['user', 'assistant']:
-                    debug_log(f"Adding cache control to {role} message {i}")
+                    debug_log(f"Configure cache control for {role} message {i}")
                     if isinstance(message, dict):
                         # Add cache_control to content instead of message
                         self._add_cache_control_to_message(message)
@@ -336,6 +336,7 @@ class SmartFixLiteLlm(LiteLlm):
 
                 # Add cache_control to developer, user, and assistant messages
                 if role in ['developer', 'user', 'assistant']:
+                    debug_log(f"Configure cache control for {role} message {i}")
                     if isinstance(message, dict):
                         # Add cache_control to content instead of message
                         self._add_cache_control_to_message(message)
