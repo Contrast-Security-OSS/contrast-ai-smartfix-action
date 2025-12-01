@@ -166,11 +166,13 @@ class SmartFixLiteLlm(LiteLlm):
 
         # Skip if prompt caching is disabled or using Contrast LLM
         if not config.ENABLE_ANTHROPIC_PROMPT_CACHING or config.USE_CONTRAST_LLM:
+            debug_log("Prompt caching disabled or using Contrast LLM, skipping cache_control addition")
             return
 
         if isinstance(message, dict) and 'content' in message:
             content = message['content']
             if isinstance(content, str):
+                debug_log("Adding cach_control flag to message content str")
                 # Convert string content to array format with cache_control
                 message['content'] = [
                     {
@@ -183,6 +185,7 @@ class SmartFixLiteLlm(LiteLlm):
                 # Add cache_control to existing content array
                 for item in content:
                     if isinstance(item, dict):
+                        debug_log("Adding cach_control flag to message content list")
                         item['cache_control'] = {"type": "ephemeral"}
 
     def _ensure_system_message_for_contrast(self, messages: List[Message]) -> List[Message]:
@@ -540,3 +543,5 @@ class SmartFixLiteLlm(LiteLlm):
         """Reset accumulated statistics to start fresh."""
         self.cost_accumulator.reset()
         debug_log("Accumulated statistics have been reset.")
+
+# %%
