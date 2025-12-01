@@ -172,7 +172,7 @@ class SmartFixLiteLlm(LiteLlm):
         if isinstance(message, dict) and 'content' in message:
             content = message['content']
             if isinstance(content, str):
-                debug_log("Adding cach_control flag to message content str")
+                debug_log("Adding cache_control flag to message content str")
                 # Convert string content to array format with cache_control
                 message['content'] = [
                     {
@@ -185,7 +185,7 @@ class SmartFixLiteLlm(LiteLlm):
                 # Add cache_control to existing content array
                 for item in content:
                     if isinstance(item, dict):
-                        debug_log("Adding cach_control flag to message content list")
+                        debug_log("Adding cache_control flag to message content list")
                         item['cache_control'] = {"type": "ephemeral"}
 
     def _ensure_system_message_for_contrast(self, messages: List[Message]) -> List[Message]:
