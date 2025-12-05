@@ -40,9 +40,9 @@ def get_gh_env():
         dict: Environment variables dictionary with GitHub token
     """
     gh_env = os.environ.copy()
-    t = config.GITHUB_TOKEN
-    gh_env["GITHUB_TOKEN"] = t
-    gh_env["GITHUB_ENTERPRISE_TOKEN"] = t
+    gh_token = config.GITHUB_TOKEN
+    gh_env["GITHUB_TOKEN"] = gh_token
+    gh_env["GITHUB_ENTERPRISE_TOKEN"] = gh_token
 
     return gh_env
 
