@@ -316,5 +316,3 @@ def error_exit(remediation_id: str, failure_code: Optional[str] = None):
 
     # Exit with error code
     sys.exit(1)
-
-# %%
