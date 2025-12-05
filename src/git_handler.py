@@ -34,12 +34,15 @@ def get_gh_env():
     """
     Returns an environment dictionary with the GitHub token set.
     Used for GitHub CLI commands that require authentication.
+    Sets both GITHUB_TOKEN and GITHUB_ENTERPRISE_TOKEN for GitHub Enterprise Server compatibility.
 
     Returns:
         dict: Environment variables dictionary with GitHub token
     """
     gh_env = os.environ.copy()
-    gh_env["GITHUB_TOKEN"] = config.GITHUB_TOKEN
+    gh_token = config.GITHUB_TOKEN
+    gh_env["GITHUB_TOKEN"] = gh_token
+    gh_env["GITHUB_ENTERPRISE_TOKEN"] = gh_token
 
     return gh_env
 

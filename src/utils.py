@@ -184,7 +184,17 @@ def run_command(command, env=None, check=True):
             # Don't print the actual token
             options_text += ", GITHUB_TOKEN=***"
 
-        debug_log(f"::group::Running command: {' '.join(command)}")
+        # Mask GITHUB_TOKEN value in command parts
+        config = get_config()
+        masked_command = []
+        for part in command:
+            # Note: the gh envvars "GITHUB_ENTERPRISE_TOKEN" and "GITHUB_TOKEN" have the same value as config.GITHUB_TOKEN
+            if config.GITHUB_TOKEN and config.GITHUB_TOKEN in part:
+                masked_command.append(part.replace(config.GITHUB_TOKEN, "***"))
+            else:
+                masked_command.append(part)
+
+        debug_log(f"::group::Running command: {' '.join(masked_command)}")
         debug_log(f"  {options_text}")
 
         # Merge with current environment to preserve essential variables like PATH
