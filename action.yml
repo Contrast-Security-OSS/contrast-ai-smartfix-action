@@ -338,6 +338,9 @@ runs:
         else
           echo "run_task=generate_fix" >> $GITHUB_OUTPUT
         fi
+        echo ""
+        echo "✅ Determine task to run complete"
+        echo ""
 
     - name: Setup complete
       shell: bash
