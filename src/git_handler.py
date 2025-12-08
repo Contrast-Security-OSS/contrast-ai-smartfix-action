@@ -467,6 +467,11 @@ def create_pr(title: str, body: str, remediation_id: str, base_branch: str, labe
         except Exception as e:
             log(f"Could not determine GitHub CLI version: {e}", is_error=True)
 
+        # Note: We intentionally do NOT use --label with gh pr create because
+        # as of Dec 8, 2025, GitHub's GITHUB_TOKEN permissions changes cause
+        # the internal UPDATE mutation (used to add labels) to fail with
+        # "does not have permission to update the pull request".
+        # Instead, we create the PR first, then add labels separately.
         pr_command = [
             "gh", "pr", "create",
             "--title", title,
@@ -474,13 +479,21 @@ def create_pr(title: str, body: str, remediation_id: str, base_branch: str, labe
             "--base", base_branch,
             "--head", head_branch,
         ]
-        if label:
-            pr_command.extend(["--label", label])
 
         # Run the command and capture the output (PR URL)
         pr_url = run_command(pr_command, env=gh_env, check=True)
         if pr_url:
             log(f"Successfully created PR: {pr_url}")
+
+            # Add labels separately using gh pr edit (works with GITHUB_TOKEN)
+            if label:
+                try:
+                    # Extract PR number from URL (format: https://github.com/owner/repo/pull/123)
+                    pr_number = int(pr_url.strip().split('/')[-1])
+                    debug_log(f"Extracted PR number {pr_number} from URL, adding label: {label}")
+                    add_labels_to_pr(pr_number, [label])
+                except (ValueError, IndexError) as e:
+                    log(f"Could not extract PR number from URL to add label: {e}", is_warning=True)
         return pr_url
 
     except FileNotFoundError:
