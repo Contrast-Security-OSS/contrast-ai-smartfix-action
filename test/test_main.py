@@ -28,6 +28,7 @@ class TestMain(unittest.TestCase):
             'FORMATTING_COMMAND': 'echo "Mock format"',
             'GITHUB_TOKEN': 'mock-token',
             'GITHUB_REPOSITORY': 'mock/repo',
+            'GITHUB_SERVER_URL': 'https://mockhub.com',
             'CONTRAST_HOST': 'mock.contrastsecurity.com',  # No https:// prefix
             'CONTRAST_ORG_ID': 'mock-org',
             'CONTRAST_APP_ID': 'mock-app',

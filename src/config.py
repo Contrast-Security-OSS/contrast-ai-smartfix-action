@@ -49,7 +49,7 @@ class Config:
         self.testing = testing
 
         # --- Preset ---
-        self.VERSION = "v1.0.10"
+        self.VERSION = "v1.0.11"
         self.USER_AGENT = f"contrast-smart-fix {self.VERSION}"
 
         # --- Core Settings ---
@@ -92,9 +92,12 @@ class Config:
         if testing:
             self.GITHUB_TOKEN = self._get_env_var("GITHUB_TOKEN", required=False, default="mock-token-for-testing")
             self.GITHUB_REPOSITORY = self._get_env_var("GITHUB_REPOSITORY", required=False, default="mock/repo-for-testing")
+            self.GITHUB_SERVER_URL = self._get_env_var("GITHUB_SERVER_URL", required=False, default="https://github.com")
         else:
             self.GITHUB_TOKEN = self._get_env_var("GITHUB_TOKEN", required=True)
             self.GITHUB_REPOSITORY = self._get_env_var("GITHUB_REPOSITORY", required=True)
+            # GITHUB_SERVER_URL is automatically set by GitHub Actions (e.g., https://github.com or https://mycompany.ghe.com)
+            self.GITHUB_SERVER_URL = self._get_env_var("GITHUB_SERVER_URL", required=True, default="https://github.com")
 
         # --- Contrast API Configuration ---
         if testing:
@@ -119,6 +122,7 @@ class Config:
         self.SKIP_QA_REVIEW = self._get_bool_env("SKIP_QA_REVIEW", default=False)
         self.ENABLE_FULL_TELEMETRY = self._get_bool_env("ENABLE_FULL_TELEMETRY", default=True)
         self.USE_CONTRAST_LLM = self._get_bool_env("USE_CONTRAST_LLM", default=True)
+        self.ENABLE_ANTHROPIC_PROMPT_CACHING = self._get_bool_env("ENABLE_ANTHROPIC_PROMPT_CACHING", default=True)
 
         # Update agent model for Contrast LLM if no explicit model was set
         if (is_smartfix_coding_agent

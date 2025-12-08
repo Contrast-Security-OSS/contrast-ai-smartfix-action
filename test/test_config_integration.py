@@ -50,6 +50,26 @@ class TestConfigIntegration(unittest.TestCase):
         self.assertTrue(config.USE_CONTRAST_LLM)
         self.assertEqual(config.AGENT_MODEL, 'bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0')
 
+    def test_enable_anthropic_prompt_caching_default(self):
+        """Test that ENABLE_ANTHROPIC_PROMPT_CACHING defaults to True."""
+        reset_config()
+        config = get_config(testing=True)
+        self.assertTrue(config.ENABLE_ANTHROPIC_PROMPT_CACHING)
+
+    def test_enable_anthropic_prompt_caching_false(self):
+        """Test that ENABLE_ANTHROPIC_PROMPT_CACHING can be set to False."""
+        os.environ['ENABLE_ANTHROPIC_PROMPT_CACHING'] = 'false'
+        reset_config()
+        config = get_config(testing=True)
+        self.assertFalse(config.ENABLE_ANTHROPIC_PROMPT_CACHING)
+
+    def test_enable_anthropic_prompt_caching_true(self):
+        """Test that ENABLE_ANTHROPIC_PROMPT_CACHING can be explicitly set to True."""
+        os.environ['ENABLE_ANTHROPIC_PROMPT_CACHING'] = 'true'
+        reset_config()
+        config = get_config(testing=True)
+        self.assertTrue(config.ENABLE_ANTHROPIC_PROMPT_CACHING)
+
     def test_contrast_llm_false_requires_agent_model(self):
         """Test that USE_CONTRAST_LLM=False works when AGENT_MODEL is configured."""
         os.environ['USE_CONTRAST_LLM'] = 'false'

@@ -112,7 +112,7 @@ class SubAgentExecutor:
         # Create the agent
         try:
             # Check if we should use Contrast LLM with custom headers
-            if hasattr(self.config, 'USE_CONTRAST_LLM') and str(self.config.USE_CONTRAST_LLM).lower() == 'true':
+            if hasattr(self.config, 'USE_CONTRAST_LLM') and self.config.USE_CONTRAST_LLM:
                 setup_contrast_provider()
                 model_instance = SmartFixLiteLlm(
                     model=CONTRAST_CLAUDE_SONNET_4_5,
@@ -434,8 +434,21 @@ class SubAgentExecutor:
             # For asyncio-related errors, log at debug level and don't consider it a failure
             debug_log(f"Ignoring expected asyncio error during agent execution: {tail_string(error_message, 100)}...")
         else:
-            # For other errors, log normally
-            log(f"Error during agent execution: {error_message}", is_error=True)
+            # Check for Contrast LLM Access Denied error
+            if (hasattr(self.config, 'USE_CONTRAST_LLM')
+                    and self.config.USE_CONTRAST_LLM
+                    and ("AnthropicError" in error_message or "anthropic" in error_message.lower())
+                    and "Access Denied" in error_message):
+
+                # Output cleaner error message in red text for Contrast LLM access issues
+                red_text = ("\n\033[31mContrast LLM access denied. Please ensure that the "
+                            "Contrast LLM Early Access feature is enabled for your "
+                            "organization. Contact your Contrast representative or Customer "
+                            "Success Manager to enable Early Access.\033[0m\n")
+                log(red_text, is_error=True)
+            else:
+                # For other errors, log normally
+                log(f"Error during agent execution: {error_message}", is_error=True)
 
         # Always attempt cleanup
         await self._cleanup_event_stream(events_async, timeout=3.0)

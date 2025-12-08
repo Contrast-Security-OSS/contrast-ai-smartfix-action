@@ -85,10 +85,10 @@ def get_vulnerability_with_prompts(contrast_host, contrast_org_id, contrast_app_
 
         # Handle different status codes
         if response.status_code == 204:
-            log("No vulnerabilities found that need remediation (204 No Content).")
+            log("No vulnerabilities found that need remediation")
             return None
         elif response.status_code == 409:
-            log("At or over the maximum PR limit (409 Conflict).")
+            log("At or over the maximum PR limit")
             return None
         elif response.status_code == 200:
             response_json = response.json()
@@ -494,10 +494,10 @@ def get_vulnerability_details(contrast_host: str, contrast_org_id: str, contrast
 
         # Handle different status codes
         if response.status_code == 204:
-            log("No vulnerabilities found that need remediation (204 No Content).")
+            log("No vulnerabilities found that need remediation")
             return None
         elif response.status_code == 409:
-            log("At or over the maximum PR limit (409 Conflict).")
+            log("At or over the maximum PR limit")
             return None
         elif response.status_code == 200:
             response_json = response.json()

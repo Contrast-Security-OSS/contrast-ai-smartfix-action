@@ -22,6 +22,7 @@ import json
 import subprocess
 import re
 from typing import List, Optional
+from urllib.parse import urlparse
 from src.utils import run_command, debug_log, log, error_exit
 from src.smartfix.shared.failure_categories import FailureCategory
 from src.config import get_config
@@ -33,12 +34,15 @@ def get_gh_env():
     """
     Returns an environment dictionary with the GitHub token set.
     Used for GitHub CLI commands that require authentication.
+    Sets both GITHUB_TOKEN and GITHUB_ENTERPRISE_TOKEN for GitHub Enterprise Server compatibility.
 
     Returns:
         dict: Environment variables dictionary with GitHub token
     """
     gh_env = os.environ.copy()
-    gh_env["GITHUB_TOKEN"] = config.GITHUB_TOKEN
+    gh_token = config.GITHUB_TOKEN
+    gh_env["GITHUB_TOKEN"] = gh_token
+    gh_env["GITHUB_ENTERPRISE_TOKEN"] = gh_token
 
     return gh_env
 
@@ -241,7 +245,10 @@ def amend_commit():
 def push_branch(branch_name: str):
     """Pushes the current branch to the remote repository."""
     log(f"Pushing branch {branch_name} to remote...")
-    remote_url = f"https://x-access-token:{config.GITHUB_TOKEN}@github.com/{config.GITHUB_REPOSITORY}.git"
+    # Extract hostname from GITHUB_SERVER_URL (e.g., "https://github.com" -> "github.com")
+    parsed = urlparse(config.GITHUB_SERVER_URL)
+    github_host = parsed.netloc
+    remote_url = f"https://x-access-token:{config.GITHUB_TOKEN}@{github_host}/{config.GITHUB_REPOSITORY}.git"
     run_command(["git", "push", "--set-upstream", remote_url, branch_name])  # run_command exits on failure
 
 
@@ -467,6 +474,11 @@ def create_pr(title: str, body: str, remediation_id: str, base_branch: str, labe
         except Exception as e:
             log(f"Could not determine GitHub CLI version: {e}", is_error=True)
 
+        # Note: We intentionally do NOT use --label with gh pr create because
+        # as of Dec 8, 2025, GitHub's GITHUB_TOKEN permissions changes cause
+        # the internal UPDATE mutation (used to add labels) to fail with
+        # "does not have permission to update the pull request".
+        # Instead, we create the PR first, then add labels separately.
         pr_command = [
             "gh", "pr", "create",
             "--title", title,
@@ -474,13 +486,21 @@ def create_pr(title: str, body: str, remediation_id: str, base_branch: str, labe
             "--base", base_branch,
             "--head", head_branch,
         ]
-        if label:
-            pr_command.extend(["--label", label])
 
         # Run the command and capture the output (PR URL)
         pr_url = run_command(pr_command, env=gh_env, check=True)
         if pr_url:
             log(f"Successfully created PR: {pr_url}")
+
+            # Add labels separately using gh pr edit (works with GITHUB_TOKEN)
+            if label:
+                try:
+                    # Extract PR number from URL (format: https://github.com/owner/repo/pull/123)
+                    pr_number = int(pr_url.strip().split('/')[-1])
+                    debug_log(f"Extracted PR number {pr_number} from URL, adding label: {label}")
+                    add_labels_to_pr(pr_number, [label])
+                except (ValueError, IndexError) as e:
+                    log(f"Could not extract PR number from URL to add label: {e}", is_warning=True)
         return pr_url
 
     except FileNotFoundError:

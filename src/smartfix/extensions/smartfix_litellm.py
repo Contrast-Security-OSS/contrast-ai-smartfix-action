@@ -161,9 +161,18 @@ class SmartFixLiteLlm(LiteLlm):
         Applies cache_control to the content array within each message, which is
         the documented format for Anthropic's prompt caching feature.
         """
+        from src.config import get_config
+        config = get_config()
+
+        # Skip if prompt caching is disabled or using Contrast LLM
+        if not config.ENABLE_ANTHROPIC_PROMPT_CACHING or config.USE_CONTRAST_LLM:
+            debug_log("Prompt caching disabled or using Contrast LLM, skipping cache_control addition")
+            return
+
         if isinstance(message, dict) and 'content' in message:
             content = message['content']
             if isinstance(content, str):
+                debug_log("Adding cache_control flag to message content str")
                 # Convert string content to array format with cache_control
                 message['content'] = [
                     {
@@ -176,6 +185,7 @@ class SmartFixLiteLlm(LiteLlm):
                 # Add cache_control to existing content array
                 for item in content:
                     if isinstance(item, dict):
+                        debug_log("Adding cache_control flag to message content list")
                         item['cache_control'] = {"type": "ephemeral"}
 
     def _ensure_system_message_for_contrast(self, messages: List[Message]) -> List[Message]:
@@ -251,10 +261,14 @@ class SmartFixLiteLlm(LiteLlm):
         model_lower = self.model.lower()
         debug_log(f"_apply_role_conversion_and_caching called with model: {self.model}")
 
+        # Early return for Contrast models - no caching or role conversion needed
+        if ("contrast/" in model_lower and "claude" in model_lower):
+            debug_log(f"Contrast model detected: {self.model} - skipping caching and role conversion")
+            return
+
         # Early return if model doesn't support caching
         if not (("bedrock/" in model_lower and "claude" in model_lower)
-                or ("anthropic/" in model_lower and "bedrock/" not in model_lower)
-                or ("contrast/" in model_lower and "claude" in model_lower)):
+                or ("anthropic/" in model_lower and "bedrock/" not in model_lower)):
             debug_log(f"Model {self.model} does not support caching, returning early")
             return
 
@@ -262,27 +276,7 @@ class SmartFixLiteLlm(LiteLlm):
 
         cache_control_calls = 0  # Counter to limit cache control calls to 4
 
-        if ("contrast/" in model_lower and "claude" in model_lower):
-            # Contrast Claude: Apply caching but NO developer->system conversion
-            debug_log(f"Processing as Contrast model: {self.model}")
-            for i, message in enumerate(messages):
-                if cache_control_calls >= 4:
-                    break
-
-                if isinstance(message, dict):
-                    role = message.get('role')
-                elif hasattr(message, 'role'):
-                    role = getattr(message, 'role', None)
-                    # Convert to dict for easier manipulation
-                    if hasattr(message, '__dict__'):
-                        message_dict = message.__dict__.copy()
-                        messages[i] = message_dict
-                        message = message_dict
-                        role = message.get('role')
-                else:
-                    continue
-
-        elif ("bedrock/" in model_lower and "claude" in model_lower):
+        if ("bedrock/" in model_lower and "claude" in model_lower):
             # Bedrock Claude: Convert developer->system and add cache_control
             debug_log(f"Processing as Bedrock model: {self.model}")
             for i, message in enumerate(messages):
@@ -314,46 +308,11 @@ class SmartFixLiteLlm(LiteLlm):
 
                 # Add cache_control to user and assistant messages as well
                 elif role in ['user', 'assistant']:
-                    debug_log(f"Adding cache control to {role} message {i}")
+                    debug_log(f"Configure cache control for {role} message {i}")
                     if isinstance(message, dict):
                         # Add cache_control to content instead of message
                         self._add_cache_control_to_message(message)
                         cache_control_calls += 1
-
-        elif ("contrast/" in model_lower and "claude" in model_lower):
-            # Contrast Claude: Apply caching but NO developer->system conversion
-            debug_log(f"Processing as Contrast model: {self.model}")
-            for i, message in enumerate(messages):
-                if cache_control_calls >= 4:
-                    break
-
-                if isinstance(message, dict):
-                    role = message.get('role')
-                elif hasattr(message, 'role'):
-                    role = getattr(message, 'role', None)
-                    # Convert to dict for easier manipulation
-                    if hasattr(message, '__dict__'):
-                        message_dict = message.__dict__.copy()
-                        messages[i] = message_dict
-                        message = message_dict
-                        role = message.get('role')
-                else:
-                    continue
-
-                # Apply caching to system and user messages, skip empty developer messages
-                if role in ['system', 'user']:
-                    if isinstance(message, dict):
-                        debug_log(f"Adding cache control to {role} message {i}")
-                        self._add_cache_control_to_message(message)
-                        cache_control_calls += 1
-                elif role == 'developer':
-                    # Skip caching for empty developer messages (waste of cache points)
-                    if isinstance(message, dict) and message.get('content', '').strip():
-                        debug_log(f"Adding cache control to non-empty developer message {i}")
-                        self._add_cache_control_to_message(message)
-                        cache_control_calls += 1
-                    else:
-                        debug_log(f"Skipping cache for empty developer message {i}")
 
         elif ("anthropic/" in model_lower and "bedrock/" not in model_lower):
             # Direct Anthropic API: Just add cache_control (developer role is fine)
@@ -377,6 +336,7 @@ class SmartFixLiteLlm(LiteLlm):
 
                 # Add cache_control to developer, user, and assistant messages
                 if role in ['developer', 'user', 'assistant']:
+                    debug_log(f"Configure cache control for {role} message {i}")
                     if isinstance(message, dict):
                         # Add cache_control to content instead of message
                         self._add_cache_control_to_message(message)

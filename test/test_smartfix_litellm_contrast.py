@@ -168,6 +168,62 @@ class TestSmartFixLiteLlmContrast(unittest.TestCase):
         # Original object should be preserved
         self.assertEqual(result[1], user_message)
 
+    def test_add_cache_control_skipped_when_contrast_llm_enabled(self):
+        """Test that _add_cache_control_to_message skips when USE_CONTRAST_LLM is True"""
+        # Default test config has USE_CONTRAST_LLM=True
+        message = {
+            'role': 'user',
+            'content': 'Test message'
+        }
+        original_content = message['content']
+
+        self.model._add_cache_control_to_message(message)
+
+        # Content should remain unchanged (string, not converted to array with cache_control)
+        self.assertEqual(message['content'], original_content)
+        self.assertIsInstance(message['content'], str)
+
+    @patch.dict('os.environ', {'USE_CONTRAST_LLM': 'false', 'ENABLE_ANTHROPIC_PROMPT_CACHING': 'true'})
+    def test_add_cache_control_applied_when_contrast_llm_disabled(self):
+        """Test that _add_cache_control_to_message applies caching when USE_CONTRAST_LLM is False"""
+        reset_config()
+        with patch('src.smartfix.extensions.smartfix_litellm.debug_log'):
+            model = SmartFixLiteLlm(model="anthropic/claude-sonnet-4-5")
+
+        message = {
+            'role': 'user',
+            'content': 'Test message'
+        }
+
+        model._add_cache_control_to_message(message)
+
+        # Content should be converted to array format with cache_control
+        self.assertIsInstance(message['content'], list)
+        self.assertEqual(len(message['content']), 1)
+        self.assertEqual(message['content'][0]['type'], 'text')
+        self.assertEqual(message['content'][0]['text'], 'Test message')
+        self.assertIn('cache_control', message['content'][0])
+        self.assertEqual(message['content'][0]['cache_control']['type'], 'ephemeral')
+
+    @patch.dict('os.environ', {'USE_CONTRAST_LLM': 'false', 'ENABLE_ANTHROPIC_PROMPT_CACHING': 'false'})
+    def test_add_cache_control_skipped_when_caching_disabled(self):
+        """Test that _add_cache_control_to_message skips when ENABLE_ANTHROPIC_PROMPT_CACHING is False"""
+        reset_config()
+        with patch('src.smartfix.extensions.smartfix_litellm.debug_log'):
+            model = SmartFixLiteLlm(model="anthropic/claude-sonnet-4-5")
+
+        message = {
+            'role': 'user',
+            'content': 'Test message'
+        }
+        original_content = message['content']
+
+        model._add_cache_control_to_message(message)
+
+        # Content should remain unchanged (caching disabled)
+        self.assertEqual(message['content'], original_content)
+        self.assertIsInstance(message['content'], str)
+
 
 if __name__ == '__main__':
     unittest.main()

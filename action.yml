@@ -103,6 +103,10 @@ inputs:
     description: 'Use Contrast LLM as your default LLM provider. Set to false if using your own LLM.'
     required: false
     default: 'false'
+  enable_anthropic_prompt_caching:
+    description: 'Enable Anthropic prompt caching for supported models (bedrock/claude and anthropic/claude). Defaults to true.'
+    required: false
+    default: 'true'
 
 runs:
   using: 'composite'
@@ -259,15 +263,21 @@ runs:
       run: |
         echo ""
         echo "📦 Installing GitHub CLI..."
-        if [ "$RUNNER_OS" = "Linux" ]; then
-          sudo apt-get update -qq > /dev/null
-          sudo apt-get install -y -qq gh > /dev/null
-        elif [ "$RUNNER_OS" = "macOS" ]; then
-          brew install gh || echo "GitHub CLI already installed"
+        # Check if GitHub CLI is already installed
+        if command -v gh &> /dev/null; then
+          echo "✅ GitHub CLI is already installed"
+          gh --version
+        else
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            sudo apt-get update -qq > /dev/null
+            sudo apt-get install -y -qq gh > /dev/null
+          elif [ "$RUNNER_OS" = "macOS" ]; then
+            brew install gh || echo "GitHub CLI already installed"
+          fi
+          echo "✅ GitHub CLI installation attempt complete"
+          # Verify GitHub CLI installation - required for this action
+          gh --version || { echo "ERROR: GitHub CLI verification failed. GitHub CLI is required for this action."; exit 1; }
         fi
-        echo "✅ GitHub CLI installation attempt complete"
-        # Verify GitHub CLI installation - required for this action
-        gh --version || { echo "ERROR: GitHub CLI verification failed. GitHub CLI is required for this action."; exit 1; }
 
     # Install GitHub CLI (Windows)
     - name: Install GitHub CLI (Windows)
@@ -280,7 +290,9 @@ runs:
         rem Check if GitHub CLI is already installed
         where gh >nul 2>nul
         if %ERRORLEVEL% EQU 0 (
-          echo GitHub CLI is already installed
+          echo ✅ GitHub CLI is already installed
+          gh --version
+          goto :verify
         ) else (
           echo Installing GitHub CLI via direct download...
 
@@ -314,6 +326,7 @@ runs:
 
         echo ✅ GitHub CLI installation attempt complete
 
+        :verify
         rem Verify GitHub CLI installation - required for this action
         where gh >nul 2>nul || (echo ERROR: GitHub CLI not found in PATH after installation. && exit /b 1)
         gh --version || (echo ERROR: GitHub CLI verification failed. GitHub CLI is required for this action. && exit /b 1)
@@ -400,3 +413,5 @@ runs:
         CODING_AGENT: ${{ inputs.coding_agent }}
         # --- Use Contrast LLM ---
         USE_CONTRAST_LLM: ${{ inputs.use_contrast_llm }}
+        # --- Anthropic Prompt Caching ---
+        ENABLE_ANTHROPIC_PROMPT_CACHING: ${{ inputs.enable_anthropic_prompt_caching }}
