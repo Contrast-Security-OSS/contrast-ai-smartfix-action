@@ -87,10 +87,6 @@ inputs:
     description: 'Array of vulnerability severity levels to process (allowed: CRITICAL, HIGH, MEDIUM, LOW, NOTE)'
     required: false
     default: '["CRITICAL", "HIGH"]'
-  run_task:
-    description: 'Specifies the task for the action to perform. "generate_fix" (default) runs main.py, "merge" runs merge_handler.py.'
-    required: false
-    default: 'generate_fix'
   enable_full_telemetry:
     description: 'Enable full telemetry, including potentially sensitive data. Defaults to true.'
     required: false
@@ -331,6 +327,18 @@ runs:
         where gh >nul 2>nul || (echo ERROR: GitHub CLI not found in PATH after installation. && exit /b 1)
         gh --version || (echo ERROR: GitHub CLI verification failed. GitHub CLI is required for this action. && exit /b 1)
 
+    - name: Determine Task To Run
+      id: determine-run-task
+      shell: bash
+      run: |
+        if [[ "${{ github.event.pull_request.merged }}" == "true" && ( "${{ contains(github.event.pull_request.head.ref, 'smartfix/remediation-') }}" == "true" || "${{ contains(github.event.pull_request.head.ref, 'copilot/fix-') }}" == "true" || "${{ contains(github.event.pull_request.head.ref, 'claude/issue-') }}" == "true" ) ]]; then
+          echo "run_task=merge" >> $GITHUB_OUTPUT
+        elif [[ "${{ github.event.pull_request.merged }}" == "false" && ( "${{ contains(github.event.pull_request.head.ref, 'smartfix/remediation-') }}" == "true" || "${{ contains(github.event.pull_request.head.ref, 'copilot/fix-') }}" == "true" || "${{ contains(github.event.pull_request.head.ref, 'claude/issue-') }}" == "true" ) ]]; then
+          echo "run_task=closed" >> $GITHUB_OUTPUT
+        else
+          echo "run_task=generate_fix" >> $GITHUB_OUTPUT
+        fi
+
     - name: Setup complete
       shell: bash
       run: |
@@ -345,11 +353,11 @@ runs:
         echo ""
         echo "================================================================"
         # Cross-platform compatible script execution
-        if [ "${{ inputs.run_task }}" = "merge" ]; then
+        if [ "${{ steps.determine-run-task.outputs.run_task }}" = "merge" ]; then
           echo "🚀 STARTING CONTRAST AI SMARTFIX (Task: merge)"
           echo "================================================================"
           PYTHONPATH="${{ github.action_path }}" python "${{ github.action_path }}/src/merge_handler.py"
-        elif [ "${{ inputs.run_task }}" = "closed" ]; then
+        elif [ "${{ steps.determine-run-task.outputs.run_task }}" = "closed" ]; then
           echo "🚀 STARTING CONTRAST AI SMARTFIX (Task: closed)"
           echo "================================================================"
           PYTHONPATH="${{ github.action_path }}" python "${{ github.action_path }}/src/closed_handler.py"
@@ -406,7 +414,7 @@ runs:
         # --- Vulnerability Configuration ---
         VULNERABILITY_SEVERITIES: ${{ inputs.vulnerability_severities }}
         # --- Run Task ---
-        RUN_TASK: ${{ inputs.run_task }}
+        RUN_TASK: ${{ steps.determine-run-task.outputs.run_task }}
         # --- Telemetry Configuration ---
         ENABLE_FULL_TELEMETRY: ${{ inputs.enable_full_telemetry }}
         # --- Coding Agent ---
