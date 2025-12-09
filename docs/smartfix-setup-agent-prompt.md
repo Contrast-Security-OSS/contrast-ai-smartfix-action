@@ -677,10 +677,11 @@ jobs:
   handle_pr_merge:
     name: Handle PR Merge
     runs-on: ubuntu-latest
-    if: github.event.pull_request.merged == true && contains(github.event.pull_request.head.ref, 'smartfix/remediation-')
+    if: github.event_name == 'pull_request' && github.event.pull_request.merged == true && contains(github.event.pull_request.head.ref, 'smartfix/remediation-')
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
           fetch-depth: 0
       - uses: Contrast-Security-OSS/contrast-ai-smartfix-action@v1
         with:
@@ -698,10 +699,11 @@ jobs:
   handle_pr_closed:
     name: Handle PR Close
     runs-on: ubuntu-latest
-    if: github.event.pull_request.merged == false && contains(github.event.pull_request.head.ref, 'smartfix/remediation-')
+    if: github.event_name == 'pull_request' && github.event.pull_request.merged == false && contains(github.event.pull_request.head.ref, 'smartfix/remediation-')
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
       - uses: Contrast-Security-OSS/contrast-ai-smartfix-action@v1
         with:
