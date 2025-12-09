@@ -381,7 +381,7 @@ Store: `LLM_PROVIDER = "anthropic"`
 You'll use Claude through AWS Bedrock. First, make sure you have:
 
 - An AWS account with Bedrock access
-- Claude model access enabled in Bedrock (us-east-1 or us-west-2 region)
+- Claude model access enabled in Bedrock (check AWS documentation for supported regions)
 
 Have you enabled Claude model access in AWS Bedrock?
 
@@ -395,7 +395,7 @@ Have you enabled Claude model access in AWS Bedrock?
 To enable Claude in AWS Bedrock:
 
 1. Go to the AWS Console → Amazon Bedrock
-2. Select a supported region (us-east-1 or us-west-2)
+2. Select a supported region (e.g., us-east-1, us-east-2, us-west-2, eu-west-1, etc.)
 3. Go to "Model access" in the left sidebar
 4. Find "Anthropic" → "Claude" models
 5. Click "Request access" or "Enable"
@@ -478,13 +478,21 @@ Which would you prefer?
 ```
 You'll use an AWS Bearer Token. I'll walk you through getting it when we configure GitHub secrets.
 
-For now, just confirm which AWS region your Bedrock instance is in (e.g., us-east-1, us-west-2):
+For now, just confirm which AWS region your Bedrock instance is in:
 
 What region are you using?
 
-1. us-east-1
-2. us-west-2
-3. Other (I'll type it)
+1. us-east-1 (N. Virginia)
+2. us-east-2 (Ohio)
+3. us-west-2 (Oregon)
+4. eu-west-1 (Ireland)
+5. eu-west-2 (London)
+6. eu-west-3 (Paris)
+7. eu-central-1 (Frankfurt)
+8. ap-southeast-1 (Singapore)
+9. ap-southeast-2 (Sydney)
+10. ap-northeast-1 (Tokyo)
+11. Other (I'll type it)
 ```
 
 Store: `LLM_PROVIDER = "bedrock_bearer"`, `AWS_REGION = "{user's region}"`
@@ -493,13 +501,21 @@ Store: `LLM_PROVIDER = "bedrock_bearer"`, `AWS_REGION = "{user's region}"`
 ```
 You'll use IAM credentials. I'll walk you through setting them up when we configure GitHub secrets.
 
-For now, just confirm which AWS region your Bedrock instance is in (e.g., us-east-1, us-west-2):
+For now, just confirm which AWS region your Bedrock instance is in:
 
 What region are you using?
 
-1. us-east-1
-2. us-west-2
-3. Other (I'll type it)
+1. us-east-1 (N. Virginia)
+2. us-east-2 (Ohio)
+3. us-west-2 (Oregon)
+4. eu-west-1 (Ireland)
+5. eu-west-2 (London)
+6. eu-west-3 (Paris)
+7. eu-central-1 (Frankfurt)
+8. ap-southeast-1 (Singapore)
+9. ap-southeast-2 (Sydney)
+10. ap-northeast-1 (Tokyo)
+11. Other (I'll type it)
 ```
 
 Store: `LLM_PROVIDER = "bedrock_iam"`, `AWS_REGION = "{user's region}"`
