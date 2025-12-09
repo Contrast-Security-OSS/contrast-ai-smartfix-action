@@ -421,7 +421,13 @@ AWS Bedrock supports multiple authentication methods. Which would you like to us
    - Good for: Production, existing AWS workflows
    - Get it from: AWS IAM Console
 
-3. **I need to check with my team**
+3. **Temporary Credentials** (Testing only)
+   - Access Key ID + Secret Access Key + Session Token
+   - ⚠️ Expires after a short period (typically 1-12 hours)
+   - Good for: Initial testing and validation only
+   - Get it from: AWS STS or `aws sts get-session-token`
+
+4. **I need to check with my team**
    - Not sure what your organization requires
 
 ⚠️ **Important:** Your organization may have specific security policies about AWS credential management. If you're unsure, check with your security team or AWS administrator before proceeding.
@@ -430,10 +436,41 @@ Which authentication method?
 
 1. AWS Bearer Token
 2. IAM Credentials (Access Key + Secret Key)
-3. I need to check with my team first
+3. Temporary Credentials (for testing only)
+4. I need to check with my team first
 ```
 
-**If they select option 3 (need to check with team):**
+**If they select option 3 (Temporary Credentials):**
+```
+You've selected temporary credentials. These are useful for testing SmartFix before committing to a long-term setup.
+
+⚠️ **Important:** Temporary credentials expire after a short period (typically 1-12 hours). Once they expire, SmartFix will stop working until you update them. This is suitable for:
+- Initial testing and validation
+- Quick demos or proof-of-concept evaluations
+- Verifying your setup before configuring long-lived credentials
+
+For ongoing use, we recommend transitioning to IAM Credentials or a Bearer Token once you've confirmed SmartFix works correctly.
+
+For now, just confirm which AWS region your Bedrock instance is in:
+
+What region are you using?
+
+1. us-east-1 (N. Virginia)
+2. us-east-2 (Ohio)
+3. us-west-2 (Oregon)
+4. eu-west-1 (Ireland)
+5. eu-west-2 (London)
+6. eu-west-3 (Paris)
+7. eu-central-1 (Frankfurt)
+8. ap-southeast-1 (Singapore)
+9. ap-southeast-2 (Sydney)
+10. ap-northeast-1 (Tokyo)
+11. Other (I'll type it)
+```
+
+Store: `LLM_PROVIDER = "bedrock_iam"`, `AWS_REGION = "{user's region}"`, `USES_TEMPORARY_CREDENTIALS = true`
+
+**If they select option 4 (need to check with team):**
 ```
 Good thinking! Here are some questions to ask your security team or AWS administrator:
 
@@ -446,7 +483,8 @@ Once you have guidance from your team, let me know which method to use:
 
 1. AWS Bearer Token
 2. IAM Credentials
-3. I'll pause setup and come back later
+3. Temporary Credentials (for testing only)
+4. I'll pause setup and come back later
 ```
 
 **If they're not sure (but want to proceed):**
@@ -463,15 +501,21 @@ Here's a quick guide:
 - Your organization requires IAM-based access
 - You're setting up for production use
 
+**Use Temporary Credentials if:**
+- You want to test SmartFix before setting up long-lived credentials
+- You're doing a quick evaluation or demo
+- ⚠️ Note: These expire after 1-12 hours and are not suitable for ongoing use
+
 ⚠️ **Note:** If this is for production use, we recommend checking with your security team first. Many organizations have specific requirements for AWS credential management.
 
-Both methods work equally well with SmartFix. Bearer Token is slightly easier to set up.
+Both Bearer Token and IAM Credentials work equally well with SmartFix for ongoing use. Bearer Token is slightly easier to set up.
 
 Which would you prefer?
 
 1. AWS Bearer Token
 2. IAM Credentials
-3. I should check with my security team first
+3. Temporary Credentials (for testing only)
+4. I should check with my security team first
 ```
 
 **For Bearer Token:**
@@ -760,7 +804,19 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: ${{ vars.AWS_REGION }}
-          # AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}  # Uncomment if using temporary credentials
+```
+
+**AWS Bedrock (Temporary Credentials - Testing Only):**
+```yaml
+          # Use AWS Bedrock with temporary credentials
+          # ⚠️ These credentials expire after 1-12 hours - for testing only
+          use_contrast_llm: false
+          agent_model: 'bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
 ```
 
 ### After Creating File
@@ -1045,34 +1101,50 @@ Let me know when you have both secrets added:
 2. I need more help
 ```
 
-**If user has temporary credentials (optional):**
+**If user selected Temporary Credentials:**
 
-After they confirm secrets are added, ask:
 ```
-Are you using temporary AWS credentials (with a session token)?
+**Add AWS Temporary Credentials**
 
-1. No, I'm using permanent IAM credentials - continue
-2. Yes, I need to add a session token
+⚠️ **Important Reminder:** Temporary credentials expire after a short period (typically 1-12 hours). SmartFix will stop working when they expire, and you'll need to generate and update them again. This approach is suitable for:
+- Initial testing to verify SmartFix works correctly
+- Quick demos or proof-of-concept evaluations
+
+For ongoing use, we recommend transitioning to permanent IAM credentials or a Bearer Token once you've validated the setup.
+
+**Get your temporary credentials:**
+You can get temporary credentials using the AWS CLI:
+\`\`\`
+aws sts get-session-token --duration-seconds 43200
+\`\`\`
+
+This will output:
+- AccessKeyId
+- SecretAccessKey
+- SessionToken
+
+**Add all three to GitHub:**
+1. Go back to your GitHub tab (Secrets page)
+2. Add these secrets (click "New repository secret" for each):
+
+| Name | Value |
+|------|-------|
+| AWS_ACCESS_KEY_ID | [Your temporary Access Key ID] |
+| AWS_SECRET_ACCESS_KEY | [Your temporary Secret Access Key] |
+| AWS_SESSION_TOKEN | [Your Session Token] |
+
+Let me know when all three secrets are added:
+
+1. Done - all three secrets added
+2. I need help getting temporary credentials
+3. I'd rather use permanent credentials instead
 ```
 
-If they need a session token:
+**If they want to switch to permanent credentials:**
 ```
-**Add AWS Session Token**
-
-1. Click the "Secrets" tab
-2. Click "New repository secret"
-3. Fill in:
-   - **Name:** AWS_SESSION_TOKEN
-   - **Value:** [paste your AWS Session Token]
-4. Click "Add secret"
-
-Note: Session tokens expire, so you'll need to update this secret periodically.
-
-Let me know when it's added:
-
-1. Done - continue
-2. Something went wrong
+Good choice for ongoing use! Let me walk you through setting up permanent IAM credentials instead.
 ```
+Then follow the standard IAM Credentials flow above.
 
 ### Final Step: Enable PR Permission
 
