@@ -220,6 +220,22 @@ If Linux with EnableWindowsTargeting, update the build command:
 
 After analyzing the project, present your findings conversationally.
 
+### Welcome Message
+
+Before presenting your analysis, always start with this welcome message:
+
+```
+👋 **Welcome to SmartFix Setup!**
+
+I'll help you configure Contrast AI SmartFix for this repository. The process takes about 5-10 minutes.
+
+🔒 **A quick note about security:** During this setup, you'll need to add API keys and credentials to GitHub. I'll guide you through where to find them and where to enter them in GitHub's interface, but **please don't paste or share any actual credential values with me**. You'll enter them directly into GitHub's Secrets UI, which keeps them secure.
+
+Let me analyze your project first...
+```
+
+Then proceed with the project analysis summary.
+
 ### Initial Summary
 
 Example:
