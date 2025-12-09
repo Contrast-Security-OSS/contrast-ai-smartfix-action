@@ -93,6 +93,7 @@ Which is the main application you want SmartFix to work with?
 **.NET:** Look in *.csproj for:
 - `<TargetFramework>netX.0</TargetFramework>` - extract version
 - Default to "8.0.x" if not found
+- **Check for Windows targeting:** If `<TargetFramework>` contains `-windows` (e.g., `net8.0-windows`), flag this as a Windows-targeting project
 
 ### Detect Build Command
 
@@ -155,6 +156,63 @@ Which is the main application you want SmartFix to work with?
 - isort + black → `isort . && black .`
 
 **.NET:** Always available → `dotnet format`
+
+### Handle Windows-Targeting .NET Projects
+
+If you detected a Windows-targeting project (TargetFramework contains `-windows`), ask the user:
+
+```
+I noticed your project targets Windows (e.g., net8.0-windows). This typically indicates a WPF, WinForms, or Windows-specific application.
+
+SmartFix runs on Linux by default, which may cause build issues for Windows-targeted projects. You have two options:
+
+1. **Switch to Windows runner** (recommended for Windows apps)
+   - Uses `runs-on: windows-latest`
+   - Native Windows environment, no special flags needed
+   - Best for WPF, WinForms, or projects using Windows APIs
+
+2. **Keep Linux runner with Windows targeting enabled**
+   - Uses `runs-on: ubuntu-latest` with `-p:EnableWindowsTargeting=true`
+   - Lighter weight, but may not work for all Windows-specific features
+   - Best if you only have minor Windows dependencies
+
+Which would you prefer?
+
+1. Switch to Windows runner (recommended)
+2. Keep Linux runner with Windows targeting enabled
+3. I'm not sure - explain more
+```
+
+**If they select option 3 (explain more):**
+```
+Here's more detail:
+
+**Windows Runner:**
+- Runs on an actual Windows machine in GitHub Actions
+- Full Windows API support, all Windows features work
+- Slightly longer startup time
+- Required for: WPF apps, WinForms apps, Windows Services, anything using Windows-specific DLLs
+
+**Linux Runner with EnableWindowsTargeting:**
+- Runs on Linux but tells .NET to allow Windows-targeted builds
+- Faster startup, works for many projects
+- May fail if your code actually calls Windows-specific APIs at build time
+- Works for: Libraries that target Windows but don't use Windows APIs during build
+
+If your project is a full Windows desktop app (WPF/WinForms), choose the Windows runner.
+If it's a library or service that just happens to target Windows, Linux with EnableWindowsTargeting might work.
+
+Which would you like?
+
+1. Windows runner
+2. Linux runner with EnableWindowsTargeting
+```
+
+Store the choice: `USE_WINDOWS_RUNNER = true/false`
+
+If Linux with EnableWindowsTargeting, update the build command:
+- Change `dotnet build` to `dotnet build -p:EnableWindowsTargeting=true`
+- Change `dotnet test` to `dotnet test -p:EnableWindowsTargeting=true`
 
 ---
 
@@ -641,7 +699,7 @@ env:
 jobs:
   generate_fixes:
     name: Generate Security Fixes
-    runs-on: ubuntu-latest
+    runs-on: {RUNNER}  # ubuntu-latest or windows-latest for Windows-targeting .NET projects
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
 
     steps:
@@ -771,6 +829,14 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore
 ```
+
+**Note for Windows-targeting projects** (TargetFramework contains `-windows`):
+- If user chose **Windows runner**: Set `runs-on: windows-latest` in the job definition. The setup step above stays the same.
+- If user chose **Linux with EnableWindowsTargeting**: Keep `runs-on: ubuntu-latest` but modify the build command:
+  ```yaml
+  env:
+    BUILD_COMMAND: 'dotnet build -p:EnableWindowsTargeting=true && dotnet test -p:EnableWindowsTargeting=true'
+  ```
 
 ### LLM Configuration (insert based on user's choice)
 
