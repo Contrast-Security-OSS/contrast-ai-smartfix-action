@@ -46,12 +46,15 @@ class GitHubOperations(ScmOperations):
         """
         Returns an environment dictionary with the GitHub token set.
         Used for GitHub CLI commands that require authentication.
+        Sets both GITHUB_TOKEN and GITHUB_ENTERPRISE_TOKEN for GitHub Enterprise Server compatibility.
 
         Returns:
             dict: Environment variables dictionary with GitHub token
         """
         gh_env = os.environ.copy()
-        gh_env["GITHUB_TOKEN"] = self.config.GITHUB_TOKEN
+        gh_token = self.config.GITHUB_TOKEN
+        gh_env["GITHUB_TOKEN"] = gh_token
+        gh_env["GITHUB_ENTERPRISE_TOKEN"] = gh_token
         return gh_env
 
     def log_copilot_assignment_error(self, issue_number: int, error: Exception, remediation_label: str) -> None:

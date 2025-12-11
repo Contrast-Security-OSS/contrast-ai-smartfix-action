@@ -24,6 +24,7 @@ class TestSmartFixAction(unittest.TestCase):
             'FORMATTING_COMMAND': 'echo "Mock formatting command"',
             'GITHUB_TOKEN': 'mock-github-token',
             'GITHUB_REPOSITORY': 'mock/repository',
+            'GITHUB_SERVER_URL': 'https://mockhub.com',
             'CONTRAST_HOST': 'mock.contrastsecurity.com',
             'CONTRAST_ORG_ID': 'mock-org-id',
             'CONTRAST_APP_ID': 'mock-app-id',

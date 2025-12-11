@@ -207,6 +207,28 @@ If you set `use_contrast_llm: 'false'`, you can provide your own LLM credentials
 
 Refer to the `action.yml` file within the SmartFix GitHub Action repository and LiteLLM documentation for specific `agent_model` strings and required credentials for other models/providers.  The LiteLLM documentation can be found at https://docs.litellm.ai/docs/providers/.
 
+#### Prompt Caching
+
+When using Anthropic Claude models (either via direct Anthropic API or AWS Bedrock), SmartFix automatically enables prompt caching by default. Prompt caching can significantly reduce costs and latency by reusing previously processed context across multiple LLM calls.
+
+**Supported Models for Prompt Caching:**
+* Direct Anthropic API models (e.g., `anthropic/claude-sonnet-4-5-20250929`)
+* AWS Bedrock Claude models (e.g., `bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0`)
+
+**Disabling Prompt Caching:**
+
+If your deployment platform doesn't support Anthropic's prompt caching feature, or if you want to disable it for other reasons, you can set `enable_anthropic_prompt_caching: 'false'` in your workflow configuration:
+
+```yaml
+- name: Run Contrast AI SmartFix - Generate Fixes Action
+  uses: Contrast-Security-OSS/contrast-ai-smartfix-action@v1
+  with:
+    # ... other configuration ...
+    enable_anthropic_prompt_caching: 'false'
+```
+
+**Note:** This setting only affects Anthropic Claude models. It has no effect when using Contrast LLM or other model providers like Gemini.
+
 ### Agent Model Config Values
 
 Here are several recommended `agent_model` values:
@@ -280,6 +302,7 @@ The following are key inputs for the SmartFix GitHub Action using SmartFix Codin
 | `contrast_api_key` | Contrast API Key. | Yes |  |
 | `use_contrast_llm` | Use Contrast LLM service. Set to 'false' to use your own LLM provider. | No | `true` |
 | `agent_model` | LLM model to use when using BYOLLM (e.g., `bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0`). | No | `bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0` |
+| `enable_anthropic_prompt_caching` | Enable Anthropic prompt caching for supported models (bedrock/claude and anthropic/claude). Set to 'false' if your platform doesn't support prompt caching. | No | `true` |
 | `anthropic_api_key` | Anthropic API key (if using direct Anthropic API). | No |  |
 | `aws_bearer_token_bedrock` | AWS Bedrock API Bearer Token (alternative to IAM credentials). Use with caution - less secure than IAM. | No |  |
 | `aws_region` | AWS Region for Bedrock (required when using `aws_bearer_token_bedrock`). | No |  |

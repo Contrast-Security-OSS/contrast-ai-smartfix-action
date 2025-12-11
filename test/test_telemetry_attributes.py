@@ -41,6 +41,7 @@ class TestTelemetryAttributes(unittest.TestCase):
             'BASE_BRANCH': 'main',
             'GITHUB_TOKEN': 'test-token',
             'GITHUB_REPOSITORY': 'test/repo',
+            'GITHUB_SERVER_URL': 'https://mockhub.com',
             'CONTRAST_HOST': 'test.contrastsecurity.com',
             'CONTRAST_ORG_ID': 'test-org-id',
             'CONTRAST_APP_ID': 'test-app-id',
