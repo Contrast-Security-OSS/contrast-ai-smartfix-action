@@ -331,9 +331,15 @@ runs:
       id: determine-run-task
       shell: bash
       run: |
-        if [[ "${{ github.event.pull_request.merged }}" == "true" && ( "${{ contains(github.event.pull_request.head.ref, 'smartfix/remediation-') }}" == "true" || "${{ contains(github.event.pull_request.head.ref, 'copilot/fix-') }}" == "true" || "${{ contains(github.event.pull_request.head.ref, 'claude/issue-') }}" == "true" ) ]]; then
+        # Check if this is a SmartFix-generated branch
+        is_smartfix_branch="false"
+        if [[ ( "${{ contains(github.event.pull_request.head.ref, 'smartfix/remediation-') }}" == "true" || "${{ contains(github.event.pull_request.head.ref, 'copilot/fix-') }}" == "true" || "${{ contains(github.event.pull_request.head.ref, 'claude/issue-') }}" == "true" ) ]]; then
+          is_smartfix_branch="true"
+        fi
+
+        if [[ ("${{ github.event_name == 'pull_request' && github.event.action ==  'closed' && github.event.pull_request.merged }}" == "true") && "$is_smartfix_branch" == "true" ]]; then
           echo "run_task=merge" >> $GITHUB_OUTPUT
-        elif [[ "${{ github.event.pull_request.merged }}" == "false" && ( "${{ contains(github.event.pull_request.head.ref, 'smartfix/remediation-') }}" == "true" || "${{ contains(github.event.pull_request.head.ref, 'copilot/fix-') }}" == "true" || "${{ contains(github.event.pull_request.head.ref, 'claude/issue-') }}" == "true" ) ]]; then
+        elif [[ ("${{ github.event_name == 'pull_request' && github.event.action ==  'closed' && github.event.pull_request.merged }}" == "false") && "$is_smartfix_branch" == "true" ]]; then
           echo "run_task=closed" >> $GITHUB_OUTPUT
         else
           echo "run_task=generate_fix" >> $GITHUB_OUTPUT
