@@ -23,12 +23,12 @@ class TestGitOperations(unittest.TestCase):
     def test_get_branch_name(self):
         """Test branch name generation."""
         result = self.git_ops.get_branch_name("test-123")
-        self.assertEqual(result, "smartfix-test-123")
+        self.assertEqual(result, "smartfix/remediation-test-123")
 
     def test_generate_commit_message(self):
         """Test commit message generation."""
         result = self.git_ops.generate_commit_message("SQL Injection", "uuid-123")
-        expected = "SmartFix: SQL Injection\n\nRemediation UUID: uuid-123"
+        expected = "Automated fix attempt for: SQL Injection (VULN-uuid-123)"
         self.assertEqual(result, expected)
 
     @patch('src.smartfix.domains.scm.git_operations.run_command')
@@ -38,8 +38,8 @@ class TestGitOperations(unittest.TestCase):
 
         # Verify git config commands were called
         expected_calls = [
-            unittest.mock.call(['git', 'config', '--global', 'user.name', 'SmartFix-AI']),
-            unittest.mock.call(['git', 'config', '--global', 'user.email', 'support+ai@contrastsecurity.com'])
+            unittest.mock.call(['git', 'config', '--global', 'user.email', 'action@github.com']),
+            unittest.mock.call(['git', 'config', '--global', 'user.name', 'GitHub Action'])
         ]
         mock_run_command.assert_has_calls(expected_calls)
 
@@ -47,7 +47,7 @@ class TestGitOperations(unittest.TestCase):
     def test_stage_changes(self, mock_run_command):
         """Test staging changes."""
         self.git_ops.stage_changes()
-        mock_run_command.assert_called_once_with(['git', 'add', '.'])
+        mock_run_command.assert_called_once_with(['git', 'add', '.'], check=False)
 
     @patch('src.smartfix.domains.scm.git_operations.run_command')
     def test_check_status_with_changes(self, mock_run_command):
@@ -55,7 +55,7 @@ class TestGitOperations(unittest.TestCase):
         mock_run_command.return_value = "M  file.txt\nA  newfile.py"
         result = self.git_ops.check_status()
         self.assertTrue(result)
-        mock_run_command.assert_called_once_with(['git', 'status', '--porcelain'], check=False)
+        mock_run_command.assert_called_once_with(['git', 'status', '--porcelain'])
 
     @patch('src.smartfix.domains.scm.git_operations.run_command')
     def test_check_status_no_changes(self, mock_run_command):
@@ -74,7 +74,7 @@ class TestGitOperations(unittest.TestCase):
     @patch('src.smartfix.domains.scm.git_operations.run_command')
     def test_get_uncommitted_changed_files(self, mock_run_command):
         """Test getting uncommitted changed files."""
-        mock_run_command.return_value = "M  src/test.py\nA  src/new.py\n?? untracked.txt"
+        mock_run_command.return_value = "src/test.py\nsrc/new.py\nuntracked.txt"
         result = self.git_ops.get_uncommitted_changed_files()
         expected = ["src/test.py", "src/new.py", "untracked.txt"]
         self.assertEqual(result, expected)
@@ -90,19 +90,33 @@ class TestGitOperations(unittest.TestCase):
     @patch('src.smartfix.domains.scm.git_operations.run_command')
     def test_push_branch(self, mock_run_command):
         """Test pushing branch."""
-        branch_name = "smartfix-test-123"
-        self.git_ops.push_branch(branch_name)
-        mock_run_command.assert_called_once_with(['git', 'push', 'origin', branch_name])
+        with patch('src.smartfix.domains.scm.git_operations.get_config') as mock_config:
+            mock_config.return_value = MagicMock(
+                GITHUB_TOKEN="mock-token",
+                GITHUB_SERVER_URL="https://mockhub.com",
+                GITHUB_REPOSITORY="mock/repo",
+                BASE_BRANCH="main",
+                testing=True
+            )
+            git_ops = GitOperations()
+            branch_name = "smartfix-test-123"
+            git_ops.push_branch(branch_name)
+            # Should use authenticated URL with token
+            mock_run_command.assert_called_once()
+            call_args = mock_run_command.call_args[0][0]
+            self.assertEqual(call_args[0:2], ['git', 'push'])
+            self.assertIn('--set-upstream', call_args)
+            self.assertIn('x-access-token:mock-token', call_args[3])
 
     def test_extract_issue_number_from_branch(self):
         """Test extracting issue number from branch name."""
         test_cases = [
-            ("smartfix-123-issue", 123),
-            ("smartfix-issue-456", 456),
-            ("issue-789", 789),
-            ("123-issue", 123),
+            ("copilot/fix-123", 123),
+            ("claude/issue-456-20251211-1430", 456),
+            ("copilot/fix-789", 789),
             ("no-issue-here", None),
             ("smartfix-abc-issue", None),
+            ("claude/issue-abc-20251211-1430", None),  # Invalid: non-numeric issue
         ]
 
         for branch_name, expected in test_cases:
@@ -117,9 +131,9 @@ class TestGitOperations(unittest.TestCase):
         self.git_ops.cleanup_branch(branch_name)
 
         expected_calls = [
+            unittest.mock.call(['git', 'reset', '--hard'], check=False),
             unittest.mock.call(['git', 'checkout', 'main'], check=False),
-            unittest.mock.call(['git', 'branch', '-D', branch_name], check=False),
-            unittest.mock.call(['git', 'push', 'origin', '--delete', branch_name], check=False)
+            unittest.mock.call(['git', 'branch', '-D', branch_name], check=False)
         ]
         mock_run_command.assert_has_calls(expected_calls)
 

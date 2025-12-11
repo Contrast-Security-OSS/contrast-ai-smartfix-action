@@ -20,7 +20,7 @@
 import os
 import json
 import re
-from typing import List
+from typing import List, Optional
 from src.utils import run_command, debug_log, log, error_exit
 from src.smartfix.shared.failure_categories import FailureCategory
 from src.config import get_config
@@ -117,518 +117,1020 @@ class GitHubOperations(ScmOperations):
             return -1
 
     def check_issues_enabled(self) -> bool:
-        """
-        Check if issues are enabled for the current repository.
+        """Check if GitHub Issues are enabled for the repository.
 
         Returns:
-            bool: True if issues are enabled, False otherwise
+            bool: True if Issues are enabled, False if disabled
         """
         try:
-            result = run_command(
-                ['gh', 'repo', 'view', '--json', 'hasIssuesEnabled'],
-                env=self.get_gh_env(),
-                check=False
-            )
-            if result is None:
-                debug_log("Failed to check if issues are enabled")
+            # Try to list issues - this will fail if Issues are disabled
+            result = run_command(['gh', 'issue', 'list', '--repo', self.config.GITHUB_REPOSITORY, '--limit', '1'],
+                                 env=self.get_gh_env(), check=False)
+
+            # If the command succeeded, Issues are enabled
+            if result is not None:
+                debug_log("GitHub Issues are enabled for this repository")
+                return True
+            else:
+                debug_log("GitHub Issues appear to be disabled for this repository")
                 return False
 
-            data = json.loads(result)
-            return data.get('hasIssuesEnabled', False)
-
         except Exception as e:
-            debug_log(f"Exception while checking if issues are enabled: {e}")
-            return False
+            error_message = str(e).lower()
+            if "issues are disabled" in error_message:
+                debug_log("GitHub Issues are disabled for this repository")
+                return False
+            else:
+                # If it's a different error, assume Issues are enabled but there's another problem
+                debug_log(f"Error checking if Issues are enabled, assuming they are: {e}")
+                return True
 
     def generate_label_details(self, vuln_uuid: str) -> tuple[str, str, str]:
-        """Generate label name, description, and color for a vulnerability."""
-        label_name = f"smartfix-id:{vuln_uuid}"
-        description = f"SmartFix remediation tracking label for {vuln_uuid}"
-        color = "0052cc"  # Blue color
-        return label_name, description, color
+        """Generates the label name, description, and color."""
+        label_name = f"contrast-vuln-id:VULN-{vuln_uuid}"
+        label_description = "Vulnerability identified by Contrast AI SmartFix"
+        label_color = "ff0000"  # Red
+        return label_name, label_description, label_color
 
     def ensure_label(self, label_name: str, description: str, color: str) -> bool:
         """
-        Ensure a label exists in the repository, creating it if necessary.
-
-        Args:
-            label_name: The name of the label
-            description: The description of the label
-            color: The hex color code for the label (without #)
+        Ensures the GitHub label exists, creating it if necessary.
 
         Returns:
-            bool: True if label exists or was created successfully, False otherwise
+            bool: True if label exists or was successfully created, False otherwise
         """
-        try:
-            # Check if label already exists
-            result = run_command(
-                ['gh', 'label', 'list', '--json', 'name'],
-                env=self.get_gh_env(),
-                check=False
-            )
-            if result is not None:
-                labels = json.loads(result)
-                for label in labels:
-                    if label['name'] == label_name:
-                        debug_log(f"Label {label_name} already exists")
-                        return True
+        debug_log(f"Ensuring GitHub label exists: {label_name}")
+        if len(label_name) > 50:
+            log(f"Label name '{label_name}' exceeds GitHub's 50-character limit.", is_error=True)
+            return False
 
-            # Create the label
-            debug_log(f"Creating label: {label_name}")
-            result = run_command(
-                ['gh', 'label', 'create', label_name,
-                 '--description', description,
-                 '--color', color],
-                env=self.get_gh_env(),
+        gh_env = self.get_gh_env()
+
+        # First try to list labels to see if it already exists
+        try:
+            list_command = [
+                "gh", "label", "list",
+                "--repo", self.config.GITHUB_REPOSITORY,
+                "--json", "name"
+            ]
+            import json
+            list_output = run_command(list_command, env=gh_env, check=False)
+            try:
+                labels = json.loads(list_output)
+                existing_label_names = [label.get("name") for label in labels]
+                if label_name in existing_label_names:
+                    debug_log(f"Label '{label_name}' already exists.")
+                    return True
+            except json.JSONDecodeError:
+                debug_log(f"Could not parse label list JSON: {list_output}")
+        except Exception as e:
+            debug_log(f"Error listing labels: {e}")
+
+        # Create the label if it doesn't exist
+        label_command = [
+            "gh", "label", "create", label_name,
+            "--description", description,
+            "--color", color,
+            "--repo", self.config.GITHUB_REPOSITORY
+        ]
+
+        try:
+            # Run with check=False to handle the label already existing
+            import subprocess
+            process = subprocess.run(
+                label_command,
+                env=gh_env,
+                capture_output=True,
+                text=True,
                 check=False
             )
-            if result is not None:
-                debug_log(f"Successfully created label: {label_name}")
+
+            if process.returncode == 0:
+                debug_log(f"Label '{label_name}' created successfully.")
                 return True
             else:
-                debug_log(f"Failed to create label: {label_name}")
-                return False
-
+                # Check for "already exists" type of error which is OK
+                if "already exists" in process.stderr.lower():
+                    log(f"Label '{label_name}' already exists.")
+                    return True
+                else:
+                    log(f"Error creating label: {process.stderr}", is_error=True)
+                    return False
         except Exception as e:
-            debug_log(f"Exception while ensuring label {label_name}: {e}")
+            log(f"Exception while creating label: {e}", is_error=True)
             return False
 
     def check_pr_status_for_label(self, label_name: str) -> str:
         """
-        Check the status of PRs with a specific label.
-
-        Args:
-            label_name: The label to search for
+        Checks GitHub for OPEN or MERGED PRs with the given label.
 
         Returns:
-            str: "open", "merged", "closed", or "none" if no PR found
+            str: 'OPEN', 'MERGED', or 'NONE'
         """
+        log(f"Checking GitHub PR status for label: {label_name}")
+        gh_env = self.get_gh_env()
+
+        # Check for OPEN PRs
+        open_pr_command = [
+            "gh", "pr", "list",
+            "--repo", self.config.GITHUB_REPOSITORY,
+            "--label", label_name,
+            "--state", "open",
+            "--limit", "1",  # We only need to know if at least one exists
+            "--json", "number"  # Requesting JSON output
+        ]
+        open_pr_output = run_command(open_pr_command, env=gh_env, check=False)  # Don't exit if command fails (e.g., no PRs found)
         try:
-            # Search for PRs with the specific label
-            result = run_command(
-                ['gh', 'pr', 'list', '--label', label_name, '--json', 'state,title,number'],
-                env=self.get_gh_env(),
-                check=False
-            )
-            if result is None:
-                debug_log(f"Failed to search for PRs with label: {label_name}")
-                return "none"
+            if open_pr_output and json.loads(open_pr_output):  # Check if output is not empty and contains JSON data
+                debug_log(f"Found OPEN PR for label {label_name}.")
+                return "OPEN"
+        except json.JSONDecodeError:
+            log(f"Could not parse JSON output from gh pr list (open): {open_pr_output}", is_error=True)
 
-            prs = json.loads(result)
-            if not prs:
-                debug_log(f"No PRs found with label: {label_name}")
-                return "none"
+        # Check for MERGED PRs
+        merged_pr_command = [
+            "gh", "pr", "list",
+            "--repo", self.config.GITHUB_REPOSITORY,
+            "--label", label_name,
+            "--state", "merged",
+            "--limit", "1",
+            "--json", "number"
+        ]
+        merged_pr_output = run_command(merged_pr_command, env=gh_env, check=False)
+        try:
+            if merged_pr_output and json.loads(merged_pr_output):
+                debug_log(f"Found MERGED PR for label {label_name}.")
+                return "MERGED"
+        except json.JSONDecodeError:
+            log(f"Could not parse JSON output from gh pr list (merged): {merged_pr_output}", is_error=True)
 
-            # Return the state of the first PR found
-            pr_state = prs[0]['state'].lower()
-            debug_log(f"Found PR #{prs[0]['number']} with label {label_name}, state: {pr_state}")
-            return pr_state
-
-        except Exception as e:
-            debug_log(f"Exception while checking PR status for label {label_name}: {e}")
-            return "none"
+        debug_log(f"No existing OPEN or MERGED PR found for label {label_name}.")
+        return "NONE"
 
     def count_open_prs_with_prefix(self, label_prefix: str) -> int:
-        """
-        Count open PRs with labels matching a prefix.
+        """Counts the number of open GitHub PRs with at least one label starting with the given prefix."""
+        log(f"Counting open PRs with label prefix: '{label_prefix}'")
+        gh_env = self.get_gh_env()
 
-        Args:
-            label_prefix: The label prefix to search for
+        # Fetch labels of open PRs in JSON format. Limit might need adjustment if > 100 open PRs.
+        # Using --search to filter by label prefix might be more efficient if supported, but --json gives flexibility.
+        # Let's try fetching labels and filtering locally first.
+        pr_list_command = [
+            "gh", "pr", "list",
+            "--repo", self.config.GITHUB_REPOSITORY,
+            "--state", "open",
+            "--limit", "100",  # Adjust if needed, max is 100 for this command without pagination
+            "--json", "number,labels"  # Get PR number and labels
+        ]
 
-        Returns:
-            int: Number of open PRs with matching labels
-        """
         try:
-            # Get all open PRs
-            result = run_command(
-                ['gh', 'pr', 'list', '--state', 'open', '--json', 'labels'],
-                env=self.get_gh_env(),
-                check=False
-            )
-            if result is None:
-                debug_log("Failed to get open PRs")
-                return 0
-
-            prs = json.loads(result)
-            count = 0
-
-            for pr in prs:
-                for label in pr.get('labels', []):
-                    if label['name'].startswith(label_prefix):
-                        count += 1
-                        break  # Count each PR only once
-
-            debug_log(f"Found {count} open PRs with label prefix: {label_prefix}")
-            return count
-
+            pr_list_output = run_command(pr_list_command, env=gh_env, check=True)
+            prs_data = json.loads(pr_list_output)
+        except json.JSONDecodeError:
+            log(f"Could not parse JSON output from gh pr list: {pr_list_output}", is_error=True)
+            return 0  # Assume zero if we can't parse
         except Exception as e:
-            debug_log(f"Exception while counting open PRs with prefix {label_prefix}: {e}")
+            log(f"Error running gh pr list command: {e}", is_error=True)
+            # Consider if we should exit or return 0. Returning 0 might be safer to avoid blocking unnecessarily.
             return 0
 
+        count = 0
+        for pr in prs_data:
+            if "labels" in pr and isinstance(pr["labels"], list):
+                for label in pr["labels"]:
+                    if "name" in label and label["name"].startswith(label_prefix):
+                        count += 1
+                        break  # Count this PR once, even if it has multiple matching labels
+
+        debug_log(f"Found {count} open PR(s) with label prefix '{label_prefix}'.")
+        return count
+
     def generate_pr_title(self, vuln_title: str) -> str:
-        """Generate a standardized PR title."""
-        return f"SmartFix: {vuln_title}"
+        """Generates the Pull Request title."""
+        return f"Fix: {vuln_title[:100]}"
 
     def create_pr(self, title: str, body: str, remediation_id: str, base_branch: str, label: str) -> str:
-        """
-        Create a pull request and return the PR URL.
-
-        Args:
-            title: The PR title
-            body: The PR body/description
-            remediation_id: The remediation ID
-            base_branch: The base branch to merge into
-            label: The label to apply to the PR
+        """Creates a GitHub Pull Request.
 
         Returns:
-            str: The PR URL if successful, empty string if failed
+            str: The URL of the created pull request, or an empty string if creation failed (though gh usually exits).
         """
-        try:
-            head_branch = self.git_ops.get_branch_name(remediation_id)
-            # Create the PR
-            result = run_command(
-                ['gh', 'pr', 'create',
-                 '--title', title,
-                 '--body', body,
-                 '--base', base_branch,
-                 '--head', head_branch,
-                 '--label', label],
-                env=self.get_gh_env(),
-                check=False
-            )
-            if result is None:
-                debug_log("Failed to create PR")
-                return ""
+        log("Creating Pull Request...")
+        import tempfile
+        import os.path
+        import subprocess
 
-            pr_url = result.strip()
-            debug_log(f"Successfully created PR: {pr_url}")
+        head_branch = self.git_ops.get_branch_name(remediation_id)
+
+        # Set a maximum PR body size (GitHub recommends keeping it under 65536 chars)
+        MAX_PR_BODY_SIZE = 32000
+
+        # Truncate PR body if too large
+        if len(body) > MAX_PR_BODY_SIZE:
+            log(f"PR body is too large ({len(body)} chars). Truncating to {MAX_PR_BODY_SIZE} chars.", is_warning=True)
+            body = body[:MAX_PR_BODY_SIZE] + "\n\n...[Content truncated due to size limits]..."
+
+        # Add disclaimer to PR body
+        body += "\n\n*Contrast AI SmartFix is powered by AI, so mistakes are possible.  Review before merging.*\n\n"
+
+        # Create a temporary file to store the PR body
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.md') as temp_file:
+            temp_file_path = temp_file.name
+            temp_file.write(body)
+            debug_log(f"PR body written to temporary file: {temp_file_path}")
+
+        try:
+            # Check file exists and print size for debugging
+            if os.path.exists(temp_file_path):
+                file_size = os.path.getsize(temp_file_path)
+                debug_log(f"Temporary file exists: {temp_file_path}, size: {file_size} bytes")
+            else:
+                log(f"Error: Temporary file {temp_file_path} does not exist", is_error=True)
+                return
+
+            gh_env = self.get_gh_env()
+
+            # First check if gh is available
+            try:
+                version_output = subprocess.run(
+                    ["gh", "--version"],
+                    check=False,
+                    capture_output=True,
+                    text=True
+                )
+                debug_log(f"GitHub CLI version: {version_output.stdout.strip() if version_output.returncode == 0 else 'Not available'}")
+            except Exception as e:
+                log(f"Could not determine GitHub CLI version: {e}", is_error=True)
+
+            # Note: We intentionally do NOT use --label with gh pr create because
+            # as of Dec 8, 2025, GitHub's GITHUB_TOKEN permissions changes cause
+            # the internal UPDATE mutation (used to add labels) to fail with
+            # "does not have permission to update the pull request".
+            # Instead, we create the PR first, then add labels separately.
+            pr_command = [
+                "gh", "pr", "create",
+                "--title", title,
+                "--body-file", temp_file_path,
+                "--base", base_branch,
+                "--head", head_branch,
+            ]
+
+            # Run the command and capture the output (PR URL)
+            pr_url = run_command(pr_command, env=gh_env, check=True)
+            if pr_url:
+                log(f"Successfully created PR: {pr_url}")
+
+                # Add labels separately using gh pr edit (works with GITHUB_TOKEN)
+                if label:
+                    try:
+                        # Extract PR number from URL (format: https://github.com/owner/repo/pull/123)
+                        pr_number = int(pr_url.strip().split('/')[-1])
+                        debug_log(f"Extracted PR number {pr_number} from URL, adding label: {label}")
+                        self.add_labels_to_pr(pr_number, [label])
+                    except (ValueError, IndexError) as e:
+                        log(f"Could not extract PR number from URL to add label: {e}", is_warning=True)
             return pr_url
 
+        except FileNotFoundError:
+            log("Error: gh command not found. Please ensure the GitHub CLI is installed and in PATH.", is_error=True)
+            error_exit(remediation_id, FailureCategory.GENERATE_PR_FAILURE.value)
         except Exception as e:
-            debug_log(f"Exception while creating PR: {e}")
-            return ""
+            log(f"An unexpected error occurred during PR creation: {e}", is_error=True)
+            error_exit(remediation_id, FailureCategory.GENERATE_PR_FAILURE.value)
+        finally:
+            # Clean up the temporary file
+            if os.path.exists(temp_file_path):
+                try:
+                    os.remove(temp_file_path)
+                    debug_log(f"Temporary PR body file {temp_file_path} removed.")
+                except OSError as e:
+                    log(f"Could not remove temporary file {temp_file_path}: {e}", is_error=True)
 
     def create_claude_pr(self, title: str, body: str, base_branch: str, head_branch: str) -> str:
         """
-        Create a pull request for Claude Code workflow.
+        Creates a GitHub Pull Request specifically for Claude fixes using the GitHub CLI.
 
         Args:
-            title: The PR title
-            body: The PR body/description
-            base_branch: The base branch to merge into
-            head_branch: The head branch to merge from
+            title: The title of the PR
+            body: The body content of the PR
+            base_branch: The branch to merge into (target branch)
+            head_branch: The branch containing the changes (source branch)
 
         Returns:
-            str: The PR URL if successful, empty string if failed
+            str: The URL of the created pull request, or empty string if creation failed
         """
+        log(f"Creating Claude PR with title: '{title}'")
+        import tempfile
+        import os.path
+
+        # Set a maximum PR body size (GitHub recommends keeping it under 65536 chars)
+        max_pr_body_size = 32000
+
+        # Truncate PR body if too large
+        if len(body) > max_pr_body_size:
+            log(f"PR body is too large ({len(body)} chars). Truncating to {max_pr_body_size} chars.", is_warning=True)
+            body = body[:max_pr_body_size] + "\n\n...[Content truncated due to size limits]..."
+
+        # Create a temporary file to store the PR body
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.md') as temp_file:
+            temp_file_path = temp_file.name
+            temp_file.write(body)
+            debug_log(f"PR body written to temporary file: {temp_file_path}")
+
         try:
-            result = run_command(
-                ['gh', 'pr', 'create',
-                 '--title', title,
-                 '--body', body,
-                 '--base', base_branch,
-                 '--head', head_branch],
-                env=self.get_gh_env(),
-                check=False
-            )
-            if result is None:
-                debug_log("Failed to create Claude PR")
+            # Check file exists and print size for debugging
+            if os.path.exists(temp_file_path):
+                file_size = os.path.getsize(temp_file_path)
+                debug_log(f"Temporary file exists: {temp_file_path}, size: {file_size} bytes")
+            else:
+                log(f"Error: Temporary file {temp_file_path} does not exist", is_error=True)
                 return ""
 
-            pr_url = result.strip()
-            debug_log(f"Successfully created Claude PR: {pr_url}")
-            return pr_url
+            gh_env = self.get_gh_env()
+            pr_command = [
+                "gh", "pr", "create",
+                "--title", title,
+                "--body-file", temp_file_path,
+                "--base", base_branch,
+                "--head", head_branch
+            ]
+
+            # Run the command and capture the output (PR URL)
+            pr_url = run_command(pr_command, env=gh_env, check=True)
+            if pr_url:
+                debug_log(f"Successfully created Claude PR: {pr_url}")
+            return pr_url.strip() if pr_url else ""
 
         except Exception as e:
-            debug_log(f"Exception while creating Claude PR: {e}")
+            log(f"Error creating Claude PR: {e}", is_error=True)
             return ""
+        finally:
+            # Clean up the temporary file
+            if os.path.exists(temp_file_path):
+                try:
+                    os.remove(temp_file_path)
+                    debug_log(f"Temporary PR body file {temp_file_path} removed.")
+                except OSError as e:
+                    log(f"Could not remove temporary file {temp_file_path}: {e}", is_error=True)
 
     def create_issue(self, title: str, body: str, vuln_label: str, remediation_label: str) -> int:
         """
-        Create a GitHub issue and return the issue number.
+        Creates a GitHub issue with the specified title, body, and labels.
 
         Args:
-            title: The issue title
-            body: The issue body/description
-            vuln_label: The vulnerability label
-            remediation_label: The remediation tracking label
+            title: The title of the issue
+            body: The body content of the issue
+            vuln_label: The vulnerability label (contrast-vuln-id:*)
+            remediation_label: The remediation label (smartfix-id:*)
 
         Returns:
-            int: The issue number if successful, -1 if failed
+            int: The issue number if created successfully, None otherwise
         """
-        try:
-            # Create the issue
-            result = run_command(
-                ['gh', 'issue', 'create',
-                 '--title', title,
-                 '--body', body,
-                 '--label', vuln_label,
-                 '--label', remediation_label],
-                env=self.get_gh_env(),
-                check=False
-            )
-            if result is None:
-                debug_log("Failed to create issue")
-                return -1
+        log(f"Creating GitHub issue with title: {title}")
 
-            issue_url = result.strip()
-            # Extract issue number from URL
-            match = re.search(r'/issues/(\d+)$', issue_url)
-            if match:
-                issue_number = int(match.group(1))
-                debug_log(f"Successfully created issue #{issue_number}: {issue_url}")
-                # Try to assign to Copilot if configured
-                if self.config.coding_agent == CodingAgents.COPILOT:
-                    try:
-                        assign_result = run_command(
-                            ['gh', 'issue', 'edit', str(issue_number),
-                             '--add-assignee', '@Copilot'],
-                            env=self.get_gh_env(),
-                            check=False
-                        )
-                        if assign_result is not None:
-                            debug_log(f"Successfully assigned issue #{issue_number} to @Copilot")
-                        else:
-                            debug_log(f"Failed to assign issue #{issue_number} to @Copilot")
-                    except Exception as e:
-                        self.log_copilot_assignment_error(issue_number, e, remediation_label)
+        # Check if Issues are enabled for this repository
+        if not self.check_issues_enabled():
+            log("GitHub Issues are disabled for this repository. Cannot create issue.", is_error=True)
+            return None
+
+        gh_env = self.get_gh_env()
+
+        # Ensure both labels exist
+        self.ensure_label(vuln_label, "Vulnerability identified by Contrast", "ff0000")  # Red
+        self.ensure_label(remediation_label, "Remediation ID for Contrast vulnerability", "0075ca")  # Blue
+
+        # Format labels for the command
+        labels = f"{vuln_label},{remediation_label}"
+
+        # Create the issue first without assignment
+        issue_command = [
+            "gh", "issue", "create",
+            "--repo", self.config.GITHUB_REPOSITORY,
+            "--title", title,
+            "--body", body,
+            "--label", labels
+        ]
+
+        try:
+            # Run the command and capture the output (issue URL)
+            issue_url = run_command(issue_command, env=gh_env, check=True)
+            log(f"Successfully created issue: {issue_url}")
+
+            # Extract the issue number from the URL
+            # URL format is typically: https://github.com/owner/repo/issues/123
+            try:
+                issue_number = int(os.path.basename(issue_url.strip()))
+                log(f"Issue number extracted: {issue_number}")
+
+                if self.config.CODING_AGENT == CodingAgents.CLAUDE_CODE.name:
+                    debug_log("Claude code external agent detected no need to edit issue for assignment")
+                    return issue_number
+
+                # Now try to assign to @copilot separately
+                assign_command = [
+                    "gh", "issue", "edit",
+                    "--repo", self.config.GITHUB_REPOSITORY,
+                    str(issue_number),
+                    "--add-assignee", "@copilot"
+                ]
+
+                try:
+                    run_command(assign_command, env=gh_env, check=True)
+                    debug_log("Issue assigned to @Copilot")
+                except Exception as assign_error:
+                    self.log_copilot_assignment_error(issue_number, assign_error, remediation_label)
+
                 return issue_number
-            else:
-                debug_log(f"Could not extract issue number from URL: {issue_url}")
-                return -1
+            except ValueError:
+                log(f"Could not extract issue number from URL: {issue_url}", is_error=True)
+                return None
 
         except Exception as e:
-            debug_log(f"Exception while creating issue: {e}")
-            return -1
+            log(f"Failed to create GitHub issue: {e}", is_error=True)
+            return None
 
     def find_issue_with_label(self, label: str) -> int:
         """
-        Find an issue with a specific label.
+        Searches for a GitHub issue with a specific label.
 
         Args:
             label: The label to search for
 
         Returns:
-            int: The issue number if found, -1 if not found
+            int: The issue number if found, None otherwise
         """
+        log(f"Searching for GitHub issue with label: {label}")
+
+        # Check if Issues are enabled for this repository
+        if not self.check_issues_enabled():
+            log("GitHub Issues are disabled for this repository. Cannot search for issues.", is_error=True)
+            return None
+
+        gh_env = self.get_gh_env()
+
+        issue_list_command = [
+            "gh", "issue", "list",
+            "--repo", self.config.GITHUB_REPOSITORY,
+            "--label", label,
+            "--state", "open",
+            "--limit", "1",  # Limit to 1 result to get the newest/first one
+            "--json", "number,createdAt"
+        ]
+
         try:
-            result = run_command(
-                ['gh', 'issue', 'list', '--label', label, '--json', 'number'],
-                env=self.get_gh_env(),
-                check=False
-            )
-            if result is None:
-                debug_log(f"Failed to search for issues with label: {label}")
-                return -1
+            issue_list_output = run_command(issue_list_command, env=gh_env, check=False)
 
-            issues = json.loads(result)
-            if not issues:
+            if not issue_list_output:
                 debug_log(f"No issues found with label: {label}")
-                return -1
+                return None
 
-            issue_number = issues[0]['number']
-            debug_log(f"Found issue #{issue_number} with label: {label}")
-            return issue_number
+            issues_data = json.loads(issue_list_output)
 
+            if not issues_data:
+                debug_log(f"No issues found with label: {label}")
+                return None
+
+            # Get the first (newest) issue
+            issue_number = issues_data[0].get("number")
+            if issue_number:
+                debug_log(f"Found issue #{issue_number} with label: {label}")
+                return issue_number
+
+            return None
+        except json.JSONDecodeError:
+            log(f"Could not parse JSON output from gh issue list: {issue_list_output}", is_error=True)
+            return None
         except Exception as e:
-            debug_log(f"Exception while finding issue with label {label}: {e}")
-            return -1
+            log(f"Error searching for GitHub issue with label: {e}", is_error=True)
+            return None
 
     def reset_issue(self, issue_number: int, issue_title: str, remediation_label: str) -> bool:
         """
-        Reset an issue by removing assignees and adding a reset comment.
+        Resets a GitHub issue by:
+        1. Removing all existing labels that start with "smartfix-id:"
+        2. Adding the specified remediation label
+        3. If coding agent is CoPilot then unassigning the @Copilot user and reassigning the issue to @Copilot
+        4. If coding agent is Claude Code then adding a comment to notify @claude to reprocess the issue
+
+        The reset will not occur if there's an open PR for the issue.
 
         Args:
             issue_number: The issue number to reset
-            issue_title: The issue title
-            remediation_label: The remediation label
+            remediation_label: The new remediation label to add
 
         Returns:
-            bool: True if reset successful, False otherwise
+            bool: True if the issue was successfully reset, False otherwise
         """
-        try:
-            # Remove all assignees
-            result = run_command(
-                ['gh', 'issue', 'edit', str(issue_number), '--remove-assignee', '@me'],
-                env=self.get_gh_env(),
-                check=False
-            )
-            # Add a comment about the reset
-            reset_comment = f"Issue #{issue_number} has been reset. Previous work may have failed or been abandoned."
-            comment_result = run_command(
-                ['gh', 'issue', 'comment', str(issue_number), '--body', reset_comment],
-                env=self.get_gh_env(),
-                check=False
-            )
-            if result is not None and comment_result is not None:
-                debug_log(f"Successfully reset issue #{issue_number}")
-                return True
-            else:
-                debug_log(f"Failed to reset issue #{issue_number}")
-                return False
+        log(f"Resetting GitHub issue #{issue_number}")
 
+        # Check if Issues are enabled for this repository
+        if not self.check_issues_enabled():
+            log("GitHub Issues are disabled for this repository. Cannot reset issue.", is_error=True)
+            return False
+
+        # First check if there's an open PR for this issue
+        open_pr = self.find_open_pr_for_issue(issue_number, issue_title)
+        if open_pr:
+            pr_number = open_pr.get("number")
+            pr_url = open_pr.get("url")
+            log(f"Cannot reset issue #{issue_number} because it has an open PR #{pr_number}: {pr_url}", is_error=True)
+            return False
+
+        gh_env = self.get_gh_env()
+
+        try:
+            # First, get the current labels for the issue
+            issue_info_command = [
+                "gh", "issue", "view",
+                "--repo", self.config.GITHUB_REPOSITORY,
+                str(issue_number),
+                "--json", "labels"
+            ]
+
+            issue_info = run_command(issue_info_command, env=gh_env, check=True)
+
+            try:
+                labels_data = json.loads(issue_info)
+                current_labels = [label["name"] for label in labels_data.get("labels", [])]
+                debug_log(f"Current labels on issue #{issue_number}: {current_labels}")
+
+                # Find any remediation labels to remove
+                labels_to_remove = [label for label in current_labels
+                                    if label.startswith("smartfix-id:")]
+
+                if labels_to_remove:
+                    debug_log(f"Labels to remove: {labels_to_remove}")
+
+                    # Remove the old remediation labels
+                    remove_label_command = [
+                        "gh", "issue", "edit",
+                        "--repo", self.config.GITHUB_REPOSITORY,
+                        str(issue_number),
+                        "--remove-label", ",".join(labels_to_remove)
+                    ]
+
+                    run_command(remove_label_command, env=gh_env, check=True)
+                    debug_log(f"Removed existing remediation labels from issue #{issue_number}")
+            except json.JSONDecodeError:
+                debug_log(f"Could not parse issue info JSON: {issue_info}")
+            except Exception as e:
+                log(f"Error processing current issue labels: {e}", is_error=True)
+
+            # Ensure the remediation label exists
+            self.ensure_label(remediation_label, "Remediation ID for Contrast vulnerability", "0075ca")
+
+            # Add the new remediation label
+            add_label_command = [
+                "gh", "issue", "edit",
+                "--repo", self.config.GITHUB_REPOSITORY,
+                str(issue_number),
+                "--add-label", remediation_label
+            ]
+
+            run_command(add_label_command, env=gh_env, check=True)
+            log(f"Added new remediation label to issue #{issue_number}")
+
+            # If using CLAUDE_CODE, skip reassignment and tag @claude in comment
+            if self.config.CODING_AGENT == CodingAgents.CLAUDE_CODE.name:
+                debug_log("Claude code agent detected need to add a comment and tag @claude for reprocessing")
+                # Add a comment to the existing issue to notify @claude to reprocess
+                comment: str = f"@claude reprocess this issue with the new remediation label: `{remediation_label}` and attempt a fix."
+
+                comment_command = [
+                    "gh", "issue", "comment",
+                    str(issue_number),
+                    "--repo", self.config.GITHUB_REPOSITORY,
+                    "--body", comment
+                ]
+
+                # add a new comment and use the @claude handle to reprocess the issue
+                run_command(comment_command, env=gh_env, check=True)
+                log(f"Added new comment tagging @claude to issue #{issue_number}")
+                return True
+
+            # Unassign from @Copilot (if assigned)
+            unassign_command = [
+                "gh", "issue", "edit",
+                "--repo", self.config.GITHUB_REPOSITORY,
+                str(issue_number),
+                "--remove-assignee", "@copilot"
+            ]
+
+            # Don't check here as it might not be assigned
+            run_command(unassign_command, env=gh_env, check=False)
+
+            # Reassign to @Copilot
+            assign_command = [
+                "gh", "issue", "edit",
+                "--repo", self.config.GITHUB_REPOSITORY,
+                str(issue_number),
+                "--add-assignee", "@copilot"
+            ]
+
+            try:
+                run_command(assign_command, env=gh_env, check=True)
+                debug_log(f"Reassigned issue #{issue_number} to @Copilot")
+            except Exception as assign_error:
+                self.log_copilot_assignment_error(issue_number, assign_error, remediation_label)
+
+            return True
         except Exception as e:
-            debug_log(f"Exception while resetting issue #{issue_number}: {e}")
+            log(f"Failed to reset issue #{issue_number}: {e}", is_error=True)
             return False
 
     def find_open_pr_for_issue(self, issue_number: int, issue_title: str) -> dict:
         """
-        Find an open PR that references a specific issue.
+        Finds an open pull request associated with the given issue number.
+        Specifically looks for PRs with branch names matching the pattern 'copilot/fix-{issue_number}'
+        or 'claude/issue-{issue_number}-'.
 
         Args:
-            issue_number: The issue number to search for
-            issue_title: The issue title
+            issue_number: The issue number to find a PR for
 
         Returns:
-            dict: PR information if found, empty dict if not found
+            dict: A dictionary with PR information (number, url, title) if found, None otherwise
         """
+        debug_log(f"Searching for open PR related to issue #{issue_number}")
+        gh_env = self.get_gh_env()
+
+        # Use search patterns that match PRs with branch names for both Copilot and Claude Code
+        # First try to find PRs with Copilot branch pattern
+        search_pattern = f"head:copilot/fix-{issue_number}"
+
+        pr_list_command = [
+            "gh", "pr", "list",
+            "--repo", self.config.GITHUB_REPOSITORY,
+            "--state", "open",
+            "--search", search_pattern,
+            "--limit", "1",  # Limit to 1 result as we only need the first match
+            "--json", "number,url,title,headRefName,baseRefName,state"
+        ]
+
         try:
-            # Search for PRs that mention the issue
-            result = run_command(
-                ['gh', 'pr', 'list', '--state', 'open', '--json', 'number,title,body,url'],
-                env=self.get_gh_env(),
-                check=False
-            )
-            if result is None:
-                debug_log("Failed to get open PRs")
-                return {}
+            pr_list_output = run_command(pr_list_command, env=gh_env, check=False)
 
-            prs = json.loads(result)
-            for pr in prs:
-                # Check if PR title or body references the issue
-                pr_text = f"{pr['title']} {pr.get('body', '')}".lower()
-                issue_text = issue_title.lower()
-                if ((f"#{issue_number}" in pr_text)
-                        or (f"issue {issue_number}" in pr_text)
-                        or (issue_text in pr_text)):
-                    debug_log(f"Found open PR #{pr['number']} for issue #{issue_number}")
-                    return pr
+            if not pr_list_output or pr_list_output.strip() == "[]":
+                # Try again with claude branch pattern
+                claude_search_pattern = f"head:claude/issue-{issue_number}-"
+                claude_pr_list_command = [
+                    "gh", "pr", "list",
+                    "--repo", self.config.GITHUB_REPOSITORY,
+                    "--state", "open",
+                    "--search", claude_search_pattern,
+                    "--limit", "1",
+                    "--json", "number,url,title,headRefName,baseRefName,state"
+                ]
 
-            debug_log(f"No open PR found for issue #{issue_number}")
-            return {}
+                pr_list_output = run_command(claude_pr_list_command, env=gh_env, check=False)
 
+                if not pr_list_output or pr_list_output.strip() == "[]":
+                    escaped_issue_title = issue_title.replace('"', '\\"')
+                    copilot_issue_title_search_pattern = f"in:title \"[WIP] {escaped_issue_title}\""
+                    copilot_issue_title_list_command = [
+                        "gh", "pr", "list",
+                        "--repo", self.config.GITHUB_REPOSITORY,
+                        "--state", "open",
+                        "--search", copilot_issue_title_search_pattern,
+                        "--limit", "1",
+                        "--json", "number,url,title,headRefName,baseRefName,state"
+                    ]
+
+                    pr_list_output = run_command(copilot_issue_title_list_command, env=gh_env, check=False)
+
+                    if not pr_list_output or pr_list_output.strip() == "[]":
+                        debug_log(f"No open PRs found for issue #{issue_number} with either Copilot or Claude branch pattern")
+                        return None
+
+            prs_data = json.loads(pr_list_output)
+
+            if not prs_data:
+                debug_log(f"No open PRs found for issue #{issue_number}")
+                return None
+
+            # Get the first matching PR
+            pr_info = prs_data[0]
+            pr_number = pr_info.get("number")
+            pr_url = pr_info.get("url")
+            pr_title = pr_info.get("title")
+
+            if pr_number and pr_url:
+                log(f"Found open PR #{pr_number} for issue #{issue_number}: {pr_title}")
+                return pr_info
+
+            return None
+        except json.JSONDecodeError:
+            log(f"Could not parse JSON output from gh pr list: {pr_list_output}", is_error=True)
+            return None
         except Exception as e:
-            debug_log(f"Exception while finding open PR for issue #{issue_number}: {e}")
-            return {}
+            log(f"Error searching for PRs related to issue #{issue_number}: {e}", is_error=True)
+            return None
 
     def add_labels_to_pr(self, pr_number: int, labels: List[str]) -> bool:
         """
-        Add labels to a pull request.
+        Add labels to an existing pull request.
 
         Args:
-            pr_number: The PR number
+            pr_number: The PR number to add labels to
             labels: List of label names to add
 
         Returns:
-            bool: True if successful, False otherwise
+            bool: True if labels were successfully added, False otherwise
         """
-        try:
-            for label in labels:
-                result = run_command(
-                    ['gh', 'pr', 'edit', str(pr_number), '--add-label', label],
-                    env=self.get_gh_env(),
-                    check=False
-                )
-                if result is None:
-                    debug_log(f"Failed to add label {label} to PR #{pr_number}")
-                    return False
-
-            debug_log(f"Successfully added labels {labels} to PR #{pr_number}")
+        if not labels:
+            debug_log("No labels provided to add to PR")
             return True
 
+        log(f"Adding labels to PR #{pr_number}: {labels}")
+        gh_env = self.get_gh_env()
+
+        # First ensure all labels exist
+        for label_name in labels:
+            if label_name.startswith("contrast-vuln-id:"):
+                self.ensure_label(label_name, "Vulnerability identified by Contrast", "ff0000")  # Red
+            elif label_name.startswith("smartfix-id:"):
+                self.ensure_label(label_name, "Remediation ID for Contrast vulnerability", "0075ca")  # Blue
+            else:
+                # For other labels, use default description and color
+                self.ensure_label(label_name, "Label added by Contrast AI SmartFix", "cccccc")  # Gray
+
+        # Add labels to the PR
+        add_labels_command = [
+            "gh", "pr", "edit",
+            "--repo", self.config.GITHUB_REPOSITORY,
+            str(pr_number),
+            "--add-label", ",".join(labels)
+        ]
+
+        try:
+            run_command(add_labels_command, env=gh_env, check=True)
+            log(f"Successfully added labels to PR #{pr_number}: {labels}")
+            return True
         except Exception as e:
-            debug_log(f"Exception while adding labels to PR #{pr_number}: {e}")
+            log(f"Failed to add labels to PR #{pr_number}: {e}", is_error=True)
             return False
 
     def get_issue_comments(self, issue_number: int, author: str = None) -> List[dict]:
         """
-        Get comments from an issue, optionally filtered by author.
+        Gets comments on a GitHub issue by issue number. Returns latest comments
+        by author (defaults to claude) first  (sorted in reverse chronological order).
 
         Args:
-            issue_number: The issue number
-            author: Optional author to filter by
+            issue_number: The issue number to fetch comments from
+            author: The author username to filter comments by [default: "claude"]
 
         Returns:
-            List[dict]: List of comment dictionaries
+            List[dict]: A list of comment data dictionaries or empty list if no comments or error
         """
+        author_log = f"and author: {author}" if author else ""
+        debug_log(f"Getting comments for issue #{issue_number} {author_log}")
+        gh_env = self.get_gh_env()
+        author_filter = f"| map(select(.author.login == \"{author}\")) " if author else ""
+        jq_filter = f'.comments {author_filter}| sort_by(.createdAt) | reverse'
+
+        issue_comment_command = [
+            "gh", "issue", "view",
+            str(issue_number),
+            "--repo", self.config.GITHUB_REPOSITORY,
+            "--json", "comments",
+            "--jq", jq_filter
+        ]
+
+        comment_output = None
         try:
-            result = run_command(
-                ['gh', 'issue', 'view', str(issue_number), '--json', 'comments'],
-                env=self.get_gh_env(),
-                check=False
-            )
-            if result is None:
-                debug_log(f"Failed to get comments for issue #{issue_number}")
+            comment_output = run_command(issue_comment_command, env=gh_env, check=False)
+
+            if not comment_output or comment_output.strip() == "[]" or comment_output.strip() == "null":
+                debug_log(f"No comments found for issue #{issue_number}")
                 return []
 
-            data = json.loads(result)
-            comments = data.get('comments', [])
+            comments_data = json.loads(comment_output)
+            debug_log(f"Found {len(comments_data)} comments on issue #{issue_number}")
 
-            if author:
-                comments = [c for c in comments if c.get('author', {}).get('login') == author]
-
-            debug_log(f"Retrieved {len(comments)} comments for issue #{issue_number}")
-            return comments
-
+            return comments_data
+        except json.JSONDecodeError as e:
+            log(f"Could not parse JSON output from gh issue view: {e}. Output: {comment_output}", is_error=True)
+            return []
         except Exception as e:
-            debug_log(f"Exception while getting comments for issue #{issue_number}: {e}")
+            log(f"Error getting comments for issue #{issue_number}: {e}", is_error=True)
             return []
 
     def watch_github_action_run(self, run_id: int) -> bool:
         """
-        Watch a GitHub Action run until completion.
+        Watches a GitHub Actions workflow run until it completes.
+        Uses 'gh run watch' to poll the run status with 10-second intervals.
 
         Args:
-            run_id: The workflow run ID to watch
+            run_id: The GitHub Actions run ID to watch
 
         Returns:
-            bool: True if run completed successfully, False otherwise
+            bool: True if the run completed successfully, False if it failed
         """
-        try:
-            result = run_command(
-                ['gh', 'run', 'watch', str(run_id)],
-                env=self.get_gh_env(),
-                check=False
-            )
-            if result is not None:
-                debug_log(f"GitHub Action run {run_id} completed")
-                return True
-            else:
-                debug_log(f"GitHub Action run {run_id} failed or was cancelled")
-                return False
+        log(f"OK. Now watching GitHub action run #{run_id} until completion... This may take several minutes...")
 
+        gh_env = self.get_gh_env()
+        watch_command = [
+            "gh", "run", "watch",
+            str(run_id),
+            "--repo", self.config.GITHUB_REPOSITORY,
+            "--compact",
+            "--exit-status",
+            "--interval", "10"
+        ]
+
+        try:
+            # run_command will return the command's output if successful
+            # Since --exit-status is used, the command will exit with status 0 for success, non-zero for failure
+            run_command(watch_command, env=gh_env, check=True)
+            log(f"GitHub action run #{run_id} completed successfully")
+            return True
         except Exception as e:
-            debug_log(f"Exception while watching GitHub Action run {run_id}: {e}")
+            # If run_command throws an exception, it means the gh command returned a non-zero exit code,
+            # which with --exit-status means the workflow failed
+            log(f"GitHub action run #{run_id} failed with error: {e}", is_error=True)
             return False
 
     def get_claude_workflow_run_id(self) -> int:
         """
-        Get the workflow run ID for Claude Code workflow.
+        Lists in-progress Claude GitHub workflow runs and returns the workflow run ID.
+        Uses the GitHub CLI to find the most recent in-progress workflow run for claude.yml.
 
         Returns:
-            int: The workflow run ID if found, -1 if not found
+            int: The workflow run ID if found, or None if no in-progress runs are found
         """
+        debug_log("Getting in-progress Claude workflow run ID")
+
+        gh_env = self.get_gh_env()
+        jq_filter = (
+            'map(select(.event == "issues" or .event == "issue_comment") | '
+            'select(.status == "in_progress") | select(.conclusion != "skipped")) | '
+            'sort_by(.createdAt) | reverse | .[0]'
+        )
+        workflow_command = [
+            "gh", "run", "list",
+            "--repo", self.config.GITHUB_REPOSITORY,
+            "--workflow", "claude.yml",
+            "--limit", "5",
+            "--json", "databaseId,status,event,createdAt,conclusion",
+            "--jq", jq_filter
+        ]
+
         try:
-            # Get recent workflow runs
-            result = run_command(
-                ['gh', 'run', 'list', '--limit', '10', '--json', 'databaseId,name,status'],
-                env=self.get_gh_env(),
-                check=False
-            )
-            if result is None:
-                debug_log("Failed to get workflow runs")
-                return -1
+            run_output = run_command(workflow_command, env=gh_env, check=True)
 
-            runs = json.loads(result)
-            for run in runs:
-                if 'claude' in run.get('name', '').lower():
-                    run_id = run['databaseId']
-                    debug_log(f"Found Claude workflow run ID: {run_id}")
-                    return run_id
+            if not run_output or run_output.strip() == "[]":
+                debug_log("No in-progress Claude workflow runs found")
+                return None
 
-            debug_log("No Claude workflow run found")
-            return -1
+            run_data = json.loads(run_output)
+
+            if not run_data:
+                debug_log("No in-progress Claude workflow runs found in JSON response")
+                return None
+
+            # Extract the databaseId from the first (and only) run in the response
+            workflow_run_id = run_data.get("databaseId")
+            event = run_data.get("event")
+            status = run_data.get("status")
+            created_at = run_data.get("createdAt")
+            conclusion = run_data.get("conclusion")
+            debug_log(f"Found workflow run - ID: {workflow_run_id}, Event: {event}, Status: {status}, CreatedAt: {created_at}, conclusion: {conclusion}")
+
+            if workflow_run_id is not None:
+                workflow_run_id = int(workflow_run_id)
+                debug_log(f"Found in-progress Claude workflow run ID: {workflow_run_id}")
+                return workflow_run_id
+            else:
+                debug_log("No databaseId found in workflow run data")
+                return None
+
+        except json.JSONDecodeError as e:
+            log(f"Could not parse JSON output from gh run list: {e}", is_error=True)
+            return None
+        except Exception as e:
+            log(f"Error getting in-progress Claude workflow run ID: {e}", is_error=True)
+            return None
+
+    def extract_issue_number_from_branch(self, branch_name: str) -> Optional[int]:
+        """
+        Extracts the GitHub issue number from a branch name with format 'copilot/fix-<issue_number>'
+        or 'claude/issue-<issue_number>-YYYYMMDD-HHMM'.
+
+        Args:
+            branch_name: The branch name to extract the issue number from
+
+        Returns:
+            Optional[int]: The issue number if found and valid, None otherwise
+        """
+        if not branch_name:
+            return None
+
+        # Check for copilot branch format: copilot/fix-<number>
+        copilot_pattern = r'^copilot/fix-(\d+)$'
+        match = re.match(copilot_pattern, branch_name)
+
+        if not match:
+            # Check for claude branch format: claude/issue-<number>-YYYYMMDD-HHMM
+            claude_pattern = r'^claude/issue-(\d+)-\d{8}-\d{4}$'
+            match = re.match(claude_pattern, branch_name)
+
+        if match:
+            try:
+                issue_number = int(match.group(1))
+                # Validate that it's a positive number (GitHub issue numbers start from 1)
+                if issue_number > 0:
+                    return issue_number
+            except ValueError:
+                debug_log(f"Failed to convert extracted issue number '{match.group(1)}' from copilot or claude branch to int")
+                pass
+
+        return None
+
+    def get_latest_branch_by_pattern(self, pattern: str) -> Optional[str]:
+        """
+        Gets the latest branch matching a specific pattern, ignoring author information.
+
+        This function is particularly useful for finding Claude-generated branches
+        which follow a specific naming pattern regardless of the commit author.
+
+        Args:
+            pattern: The regex pattern to match branch names against
+
+        Returns:
+            Optional[str]: The latest matching branch name or None if no matches found
+        """
+
+        debug_log(f"Finding latest branch matching pattern '{pattern}'")
+
+        # Construct GraphQL query to get branches
+        # Limit to 100 most recent branches, ordered by commit date descending
+        graphql_query = """
+        query($repo_owner: String!, $repo_name: String!) {
+          repository(owner: $repo_owner, name: $repo_name) {
+            refs(refPrefix: "refs/heads/", first: 100, orderBy: {field: TAG_COMMIT_DATE, direction: DESC}) {
+              nodes {
+                name
+                target {
+                  ... on Commit {
+                    committedDate
+                  }
+                }
+              }
+            }
+          }
+        }
+        """
+
+        try:
+            repo_data = self.config.GITHUB_REPOSITORY.split('/')
+            if len(repo_data) != 2:
+                log(f"Invalid repository format: {self.config.GITHUB_REPOSITORY}", is_error=True)
+                return None
+
+            repo_owner, repo_name = repo_data
+
+            gh_env = self.get_gh_env()
+            latest_branch_command = [
+                'gh', 'api', 'graphql',
+                '-f', f'query={graphql_query}',
+                '-f', f'repo_owner={repo_owner}',
+                '-f', f'repo_name={repo_name}'
+            ]
+            result = run_command(latest_branch_command, env=gh_env, check=False)
+
+            if not result:
+                debug_log("Failed to get branches from GitHub GraphQL API")
+                return None
+
+            # Parse JSON response
+            data = json.loads(result)
+            branches = data.get('data', {}).get('repository', {}).get('refs', {}).get('nodes', [])
+
+            # Compile regex pattern
+            pattern_regex = re.compile(pattern)
+
+            # Filter branches by pattern only (ignoring author)
+            matching_branches = []
+            for branch in branches:
+                branch_name = branch.get('name')
+                if not branch_name or not pattern_regex.match(branch_name):
+                    continue
+
+                # Always collect the committed date for sorting
+                committed_date = branch.get('target', {}).get('committedDate')
+                if committed_date:
+                    matching_branches.append((branch_name, committed_date))
+
+            # Sort by commit date in descending order (newest first)
+            matching_branches.sort(key=lambda x: x[1], reverse=True)
+
+            if matching_branches:
+                latest_branch = matching_branches[0][0]
+                debug_log(f"Found latest matching branch: {latest_branch}")
+                return latest_branch
+            else:
+                debug_log(f"No branches found matching pattern '{pattern}'")
+                return None
 
         except Exception as e:
-            debug_log(f"Exception while getting Claude workflow run ID: {e}")
-            return -1
+            log(f"Error finding latest branch: {str(e)}", is_error=True)
+            return None

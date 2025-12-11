@@ -31,9 +31,9 @@ class TestGitHubOperations(unittest.TestCase):
         vuln_uuid = "test-uuid-123"
         label_name, description, color = self.github_ops.generate_label_details(vuln_uuid)
 
-        expected_name = "smartfix-id:test-uuid-123"
-        expected_desc = "SmartFix remediation tracking label for test-uuid-123"
-        expected_color = "0052cc"
+        expected_name = "contrast-vuln-id:VULN-test-uuid-123"
+        expected_desc = "Vulnerability identified by Contrast AI SmartFix"
+        expected_color = "ff0000"
 
         self.assertEqual(label_name, expected_name)
         self.assertEqual(description, expected_desc)
@@ -42,20 +42,20 @@ class TestGitHubOperations(unittest.TestCase):
     def test_generate_pr_title(self):
         """Test PR title generation."""
         result = self.github_ops.generate_pr_title("SQL Injection vulnerability")
-        expected = "SmartFix: SQL Injection vulnerability"
+        expected = "Fix: SQL Injection vulnerability"
         self.assertEqual(result, expected)
 
     @patch('src.github.github_operations.run_command')
     def test_check_issues_enabled_true(self, mock_run_command):
         """Test checking if issues are enabled (true case)."""
-        mock_run_command.return_value = json.dumps({"hasIssuesEnabled": True})
+        mock_run_command.return_value = "[]"  # Empty list means issues are enabled
         result = self.github_ops.check_issues_enabled()
         self.assertTrue(result)
 
     @patch('src.github.github_operations.run_command')
     def test_check_issues_enabled_false(self, mock_run_command):
         """Test checking if issues are enabled (false case)."""
-        mock_run_command.return_value = json.dumps({"hasIssuesEnabled": False})
+        mock_run_command.return_value = None  # None means command failed (issues disabled)
         result = self.github_ops.check_issues_enabled()
         self.assertFalse(result)
 
@@ -85,15 +85,14 @@ class TestGitHubOperations(unittest.TestCase):
         result = self.github_ops.ensure_label("smartfix-id:test-uuid", "Test description", "0052cc")
         self.assertTrue(result)
 
+    @patch('subprocess.run')
     @patch('src.github.github_operations.run_command')
-    def test_ensure_label_creates_new(self, mock_run_command):
+    def test_ensure_label_creates_new(self, mock_run_command, mock_subprocess_run):
         """Test ensuring label creates new label when it doesn't exist."""
         # First call returns empty list (no existing labels)
-        # Second call returns success for label creation
-        mock_run_command.side_effect = [
-            json.dumps([]),  # No existing labels
-            "Label created successfully"  # Create label success
-        ]
+        mock_run_command.return_value = json.dumps([])
+        # subprocess.run for label creation succeeds
+        mock_subprocess_run.return_value = MagicMock(returncode=0)
 
         result = self.github_ops.ensure_label("new-label", "New description", "ff0000")
         self.assertTrue(result)
@@ -115,25 +114,26 @@ class TestGitHubOperations(unittest.TestCase):
         mock_run_command.return_value = json.dumps([])
 
         result = self.github_ops.find_issue_with_label("nonexistent-label")
-        self.assertEqual(result, -1)
+        self.assertIsNone(result)
 
     @patch('src.github.github_operations.run_command')
     def test_check_pr_status_for_label_open(self, mock_run_command):
         """Test checking PR status for label (open state)."""
         mock_run_command.return_value = json.dumps([
-            {"state": "OPEN", "title": "Test PR", "number": 123}
+            {"number": 123}
         ])
 
         result = self.github_ops.check_pr_status_for_label("test-label")
-        self.assertEqual(result, "open")
+        self.assertEqual(result, "OPEN")
 
     @patch('src.github.github_operations.run_command')
     def test_check_pr_status_for_label_none(self, mock_run_command):
         """Test checking PR status for label when no PR exists."""
-        mock_run_command.return_value = json.dumps([])
+        # Return empty for both open and merged PR checks
+        mock_run_command.side_effect = [json.dumps([]), json.dumps([])]
 
         result = self.github_ops.check_pr_status_for_label("nonexistent-label")
-        self.assertEqual(result, "none")
+        self.assertEqual(result, "NONE")
 
     @patch('src.github.github_operations.run_command')
     def test_count_open_prs_with_prefix(self, mock_run_command):
@@ -148,50 +148,67 @@ class TestGitHubOperations(unittest.TestCase):
         result = self.github_ops.count_open_prs_with_prefix("smartfix-id:")
         self.assertEqual(result, 3)  # Three PRs have smartfix-id: labels
 
+    @patch('subprocess.run')
     @patch('src.github.github_operations.run_command')
-    def test_add_labels_to_pr_success(self, mock_run_command):
+    def test_add_labels_to_pr_success(self, mock_run_command, mock_subprocess_run):
         """Test adding labels to PR successfully."""
-        mock_run_command.return_value = "Success"
+        # Mock ensure_label checking for existing labels
+        mock_run_command.side_effect = [
+            json.dumps([]),  # First label doesn't exist
+            json.dumps([]),  # Second label doesn't exist
+            "Success"  # Final add labels command
+        ]
+        mock_subprocess_run.return_value = MagicMock(returncode=0)
 
         result = self.github_ops.add_labels_to_pr(123, ["label1", "label2"])
         self.assertTrue(result)
 
-        # Verify correct number of calls
-        self.assertEqual(mock_run_command.call_count, 2)
-
+    @patch('subprocess.run')
     @patch('src.github.github_operations.run_command')
-    def test_add_labels_to_pr_failure(self, mock_run_command):
+    def test_add_labels_to_pr_failure(self, mock_run_command, mock_subprocess_run):
         """Test adding labels to PR with failure."""
-        mock_run_command.return_value = None  # Simulate failure
+        # Mock ensure_label succeeding (label list + create), but final add_labels failing
+        mock_run_command.side_effect = [
+            json.dumps([]),  # Label check for label1
+            None  # Add labels command fails (raises exception)
+        ]
+        mock_subprocess_run.return_value = MagicMock(returncode=0)
 
-        result = self.github_ops.add_labels_to_pr(123, ["label1"])
-        self.assertFalse(result)
+        # The final add_labels command should raise an exception and be caught
+        with patch('src.github.github_operations.run_command', side_effect=[
+            json.dumps([]),  # Label check
+            Exception("Failed to add labels")  # Final command fails
+        ]):
+            result = self.github_ops.add_labels_to_pr(123, ["label1"])
+            self.assertFalse(result)
 
     @patch('src.github.github_operations.run_command')
     def test_get_issue_comments_all(self, mock_run_command):
         """Test getting all issue comments."""
+        # jq filter returns the comments array directly (sorted by createdAt reversed)
         mock_comments = [
-            {"body": "Comment 1", "author": {"login": "user1"}},
-            {"body": "Comment 2", "author": {"login": "user2"}}
+            {"body": "Comment 2", "author": {"login": "user2"}, "createdAt": "2025-01-02"},
+            {"body": "Comment 1", "author": {"login": "user1"}, "createdAt": "2025-01-01"}
         ]
-        mock_run_command.return_value = json.dumps({"comments": mock_comments})
+        mock_run_command.return_value = json.dumps(mock_comments)
 
         result = self.github_ops.get_issue_comments(123)
         self.assertEqual(len(result), 2)
-        self.assertEqual(result[0]["body"], "Comment 1")
+        self.assertEqual(result[0]["body"], "Comment 2")  # Most recent first
 
     @patch('src.github.github_operations.run_command')
     def test_get_issue_comments_filtered(self, mock_run_command):
         """Test getting issue comments filtered by author."""
+        # jq filter only returns comments from user1 (sorted by createdAt reversed)
         mock_comments = [
-            {"body": "Comment 1", "author": {"login": "user1"}},
-            {"body": "Comment 2", "author": {"login": "user2"}},
-            {"body": "Comment 3", "author": {"login": "user1"}}
+            {"body": "Comment 3", "author": {"login": "user1"}, "createdAt": "2025-01-03"},
+            {"body": "Comment 1", "author": {"login": "user1"}, "createdAt": "2025-01-01"}
         ]
-        mock_run_command.return_value = json.dumps({"comments": mock_comments})
+        mock_run_command.return_value = json.dumps(mock_comments)
 
         result = self.github_ops.get_issue_comments(123, author="user1")
         self.assertEqual(len(result), 2)  # Only comments from user1
+        self.assertEqual(result[0]["body"], "Comment 3")  # Most recent first
 
 
 if __name__ == '__main__':
