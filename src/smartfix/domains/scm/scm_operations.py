@@ -6,7 +6,7 @@ for implementing SCM platform-specific operations (GitHub, GitLab, BitBucket, et
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 
 class ScmOperations(ABC):
