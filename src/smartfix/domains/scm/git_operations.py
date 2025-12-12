@@ -31,10 +31,6 @@ class GitOperations:
     staging, committing, and status checking.
     """
 
-    def __init__(self):
-        """Initialize Git operations handler."""
-        pass
-
     def configure_git_user(self) -> None:
         """Configures git user email and name."""
         from src.utils import log
@@ -146,17 +142,27 @@ class GitOperations:
         run_command(["git", "commit", "--amend", "--no-edit"])  # run_command exits on failure
 
     def push_branch(self, branch_name: str) -> None:
-        """Pushes the current branch to the remote repository."""
+        """Pushes the current branch to the remote repository using environment variable authentication."""
         from src.utils import log
         from urllib.parse import urlparse
         from src.config import get_config
+        import os
         config = get_config()
         log(f"Pushing branch {branch_name} to remote...")
+
+        # Use environment variables for authentication (more secure than embedding token in URL)
+        env = os.environ.copy()
+        env['GIT_ASKPASS'] = 'echo'  # Prevent interactive prompts
+        env['GIT_USERNAME'] = 'x-access-token'
+        env['GIT_PASSWORD'] = config.GITHUB_TOKEN
+
         # Extract hostname from GITHUB_SERVER_URL (e.g., "https://github.com" -> "github.com")
         parsed = urlparse(config.GITHUB_SERVER_URL)
         github_host = parsed.netloc
-        remote_url = f"https://x-access-token:{config.GITHUB_TOKEN}@{github_host}/{config.GITHUB_REPOSITORY}.git"
-        run_command(["git", "push", "--set-upstream", remote_url, branch_name])  # run_command exits on failure
+        # Use HTTPS URL WITHOUT embedded credentials
+        remote_url = f"https://{github_host}/{config.GITHUB_REPOSITORY}.git"
+
+        run_command(["git", "push", "--set-upstream", remote_url, branch_name], env=env)  # run_command exits on failure
 
     def cleanup_branch(self, branch_name: str) -> None:
         """Cleans up a git branch by switching back to the base branch and deleting the specified branch.
@@ -173,131 +179,3 @@ class GitOperations:
         run_command(["git", "checkout", config.BASE_BRANCH], check=False)
         run_command(["git", "branch", "-D", branch_name], check=False)
         log("Branch cleanup completed.")
-
-    def extract_issue_number_from_branch(self, branch_name: str) -> Optional[int]:
-        """Extracts the GitHub issue number from a branch name with format 'copilot/fix-<issue_number>'
-        or 'claude/issue-<issue_number>-YYYYMMDD-HHMM'.
-
-        Args:
-            branch_name: The branch name to extract the issue number from
-
-        Returns:
-            Optional[int]: The issue number if found and valid, None otherwise
-        """
-        if not branch_name:
-            return None
-
-        # Check for copilot branch format: copilot/fix-<number>
-        copilot_pattern = r'^copilot/fix-(\d+)$'
-        match = re.match(copilot_pattern, branch_name)
-
-        if not match:
-            # Check for claude branch format: claude/issue-<number>-YYYYMMDD-HHMM
-            claude_pattern = r'^claude/issue-(\d+)-\d{8}-\d{4}$'
-            match = re.match(claude_pattern, branch_name)
-
-        if match:
-            try:
-                issue_number = int(match.group(1))
-                # Validate that it's a positive number (GitHub issue numbers start from 1)
-                if issue_number > 0:
-                    return issue_number
-            except ValueError:
-                debug_log(f"Failed to convert extracted issue number '{match.group(1)}' from copilot or claude branch to int")
-                pass
-
-        return None
-
-    def get_latest_branch_by_pattern(self, pattern: str) -> Optional[str]:
-        """Gets the latest branch matching a specific pattern, ignoring author information.
-
-        This function is particularly useful for finding Claude-generated branches
-        which follow a specific naming pattern regardless of the commit author.
-
-        Args:
-            pattern: The regex pattern to match branch names against
-
-        Returns:
-            Optional[str]: The latest matching branch name or None if no matches found
-        """
-        from src.utils import log
-        from src.config import get_config
-        import json
-        config = get_config()
-
-        debug_log(f"Finding latest branch matching pattern '{pattern}'")
-
-        # Construct GraphQL query to get branches
-        # Limit to 100 most recent branches, ordered by commit date descending
-        graphql_query = """
-        query($repo_owner: String!, $repo_name: String!) {
-          repository(owner: $repo_owner, name: $repo_name) {
-            refs(refPrefix: "refs/heads/", first: 100, orderBy: {field: TAG_COMMIT_DATE, direction: DESC}) {
-              nodes {
-                name
-                target {
-                  ... on Commit {
-                    committedDate
-                  }
-                }
-              }
-            }
-          }
-        }
-        """
-
-        try:
-            repo_data = config.GITHUB_REPOSITORY.split('/')
-            if len(repo_data) != 2:
-                log(f"Invalid repository format: {config.GITHUB_REPOSITORY}", is_error=True)
-                return None
-
-            repo_owner, repo_name = repo_data
-
-            from src.git_handler import get_gh_env
-            gh_env = get_gh_env()
-            latest_branch_command = [
-                'gh', 'api', 'graphql',
-                '-f', f'query={graphql_query}',
-                '-f', f'repo_owner={repo_owner}',
-                '-f', f'repo_name={repo_name}'
-            ]
-            result = run_command(latest_branch_command, env=gh_env, check=False)
-
-            if not result:
-                debug_log("Failed to get branches from GitHub GraphQL API")
-                return None
-
-            # Parse JSON response
-            data = json.loads(result)
-            branches = data.get('data', {}).get('repository', {}).get('refs', {}).get('nodes', [])
-
-            # Compile regex pattern
-            pattern_regex = re.compile(pattern)
-
-            # Filter branches by pattern only (ignoring author)
-            matching_branches = []
-            for branch in branches:
-                branch_name = branch.get('name')
-                if not branch_name or not pattern_regex.match(branch_name):
-                    continue
-
-                # Always collect the committed date for sorting
-                committed_date = branch.get('target', {}).get('committedDate')
-                if committed_date:
-                    matching_branches.append((branch_name, committed_date))
-
-            # Sort by commit date in descending order (newest first)
-            matching_branches.sort(key=lambda x: x[1], reverse=True)
-
-            if matching_branches:
-                latest_branch = matching_branches[0][0]
-                debug_log(f"Found latest matching branch: {latest_branch}")
-                return latest_branch
-            else:
-                debug_log(f"No branches found matching pattern '{pattern}'")
-                return None
-
-        except Exception as e:
-            log(f"Error finding latest branch: {str(e)}", is_error=True)
-            return None

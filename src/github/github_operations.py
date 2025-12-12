@@ -37,7 +37,7 @@ class GitHubOperations(ScmOperations):
     issues, pull requests, labels, and GitHub Actions.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize GitHub operations handler."""
         self.config = get_config()
         self.git_ops = GitOperations()

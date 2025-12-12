@@ -77,8 +77,8 @@ def _extract_remediation_info(pull_request: dict) -> tuple:
         debug_log("Branch appears to be created by external agent. Extracting remediation ID from PR labels.")
         remediation_id = extract_remediation_id_from_labels(labels)
         # Extract GitHub issue number from branch name
-        git_ops = GitOperations()
-        issue_number = git_ops.extract_issue_number_from_branch(branch_name)
+        github_ops = GitHubOperations()
+        issue_number = github_ops.extract_issue_number_from_branch(branch_name)
         if issue_number:
             telemetry_handler.update_telemetry("additionalAttributes.externalIssueNumber", issue_number)
             debug_log(f"Extracted external issue number from branch name: {issue_number}")

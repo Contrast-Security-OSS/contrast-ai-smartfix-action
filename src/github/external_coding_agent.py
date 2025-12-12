@@ -592,8 +592,8 @@ Please review this security vulnerability and implement appropriate fixes to add
             # Pattern to match claude/issue-NUMBER-YYYYMMDD-HHMM format
             pattern = fr'^claude/issue-{issue_number}-\d{{8}}-\d{{4}}$'
             debug_log(f"Falling back to GraphQL API call method with pattern: {pattern}")
-            git_ops = GitOperations()
-            head_branch = git_ops.get_latest_branch_by_pattern(pattern)
+            github_ops = GitHubOperations()
+            head_branch = github_ops.get_latest_branch_by_pattern(pattern)
 
             if head_branch:
                 debug_log(f"Using head branch from GitHub GraphQl API call: {head_branch}")
