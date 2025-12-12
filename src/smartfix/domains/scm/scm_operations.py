@@ -1,7 +1,7 @@
 """
 Base class for SCM operations.
 
-This module defines the ScmOperations abstract base class which serves as a contrac
+This module defines the ScmOperations abstract base class which serves as a contract
 for implementing SCM platform-specific operations (GitHub, GitLab, BitBucket, etc.).
 """
 
