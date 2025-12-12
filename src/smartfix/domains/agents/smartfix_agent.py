@@ -15,7 +15,7 @@ from src.build_output_analyzer import extract_build_errors
 from src.utils import debug_log, log, error_exit, tail_string
 from src.smartfix.shared.failure_categories import FailureCategory
 from src import telemetry_handler
-from src.git_handler import get_uncommitted_changed_files
+from src.smartfix.domains.scm.git_operations import GitOperations
 
 from .coding_agent import CodingAgentStrategy
 from .agent_session import AgentSession
@@ -345,7 +345,8 @@ class SmartFixAgent(CodingAgentStrategy):
         build_output = "Build not run."
         # Get the current list of uncommitted changed files from git
         # This is the minimal git operation needed to track what files the agents are modifying
-        changed_files = get_uncommitted_changed_files()
+        git_ops = GitOperations()
+        changed_files = git_ops.get_uncommitted_changed_files()
         debug_log(f"Detected {len(changed_files)} uncommitted changed files at start of QA loop")
         qa_summary_log = []  # Log QA agent summaries
 
@@ -366,7 +367,7 @@ class SmartFixAgent(CodingAgentStrategy):
         if formatting_command:
             run_formatting_command(formatting_command, repo_root, remediation_id)
             # Update changed_files list after formatting
-            changed_files = get_uncommitted_changed_files()
+            changed_files = git_ops.get_uncommitted_changed_files()
             debug_log(f"After formatting: {len(changed_files)} uncommitted changed files")
 
         # Try initial build first (before entering QA loop)
@@ -423,14 +424,14 @@ class SmartFixAgent(CodingAgentStrategy):
                 # The QA agent has made changes to files, and we just need to check if the build passes now
 
                 # Update changed_files list after QA agent made modifications
-                changed_files = get_uncommitted_changed_files()
+                changed_files = git_ops.get_uncommitted_changed_files()
                 debug_log(f"After QA agent: {len(changed_files)} uncommitted changed files")
 
                 # Always run formatting command before build, if specified
                 if formatting_command:
                     run_formatting_command(formatting_command, repo_root, remediation_id)
                     # Update changed_files list after formatting
-                    changed_files = get_uncommitted_changed_files()
+                    changed_files = git_ops.get_uncommitted_changed_files()
                     debug_log(f"After QA formatting: {len(changed_files)} uncommitted changed files")
 
                 telemetry_handler.update_telemetry("resultInfo.filesModified", len(changed_files))

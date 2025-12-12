@@ -25,7 +25,7 @@ import sys
 from src import contrast_api
 from src.config import get_config  # Using get_config function instead of direct import
 from src.utils import debug_log, extract_remediation_id_from_branch, extract_remediation_id_from_labels, log
-from src.git_handler import extract_issue_number_from_branch, get_pr_changed_files_count
+from src.github.github_operations import GitHubOperations
 import src.telemetry_handler as telemetry_handler
 
 
@@ -77,7 +77,8 @@ def _extract_remediation_info(pull_request: dict) -> tuple:
         debug_log("Branch appears to be created by external agent. Extracting remediation ID from PR labels.")
         remediation_id = extract_remediation_id_from_labels(labels)
         # Extract GitHub issue number from branch name
-        issue_number = extract_issue_number_from_branch(branch_name)
+        github_ops = GitHubOperations()
+        issue_number = github_ops.extract_issue_number_from_branch(branch_name)
         if issue_number:
             telemetry_handler.update_telemetry("additionalAttributes.externalIssueNumber", issue_number)
             debug_log(f"Extracted external issue number from branch name: {issue_number}")
@@ -130,7 +131,8 @@ def _notify_remediation_service(remediation_id: str, pr_number: int = None):
 
     # Check if PR has no changed files (for external agents like Copilot)
     if pr_number is not None:
-        changed_files_count = get_pr_changed_files_count(pr_number)
+        github_ops = GitHubOperations()
+        changed_files_count = github_ops.get_pr_changed_files_count(pr_number)
         if changed_files_count == 0:
             # PR has no changes - report as failed remediation
             log(f"PR {pr_number} has no changed files. Reporting as failed remediation.")

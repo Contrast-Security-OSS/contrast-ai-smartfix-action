@@ -55,7 +55,7 @@ class TestMain(unittest.TestCase):
         self.mock_subprocess.return_value = mock_process
 
         # Mock git configuration
-        self.git_patcher = patch('src.git_handler.configure_git_user')
+        self.git_patcher = patch('src.smartfix.domains.scm.git_operations.GitOperations.configure_git_user')
         self.mock_git = self.git_patcher.start()
 
         # Mock API calls
@@ -155,11 +155,11 @@ class TestMain(unittest.TestCase):
         self.mock_api.side_effect = [vuln_data, vuln_data, None]
 
         # Mock PR status check to return OPEN (simulating existing PR)
-        with patch('src.git_handler.check_pr_status_for_label') as mock_pr_check:
+        with patch('src.github.github_operations.GitHubOperations.check_pr_status_for_label') as mock_pr_check:
             mock_pr_check.return_value = "OPEN"
 
             # Mock generate_label_details
-            with patch('src.git_handler.generate_label_details') as mock_label:
+            with patch('src.github.github_operations.GitHubOperations.generate_label_details') as mock_label:
                 mock_label.return_value = ('contrast-vuln-id:TEST-VULN-UUID-123', 'color', 'desc')
 
                 with patch.dict('os.environ', self.env_vars, clear=True):

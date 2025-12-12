@@ -38,7 +38,8 @@ from src.smartfix.shared.failure_categories import FailureCategory
 
 # Import domain-specific handlers
 from src import contrast_api
-from src import git_handler
+from src.smartfix.domains.scm.git_operations import GitOperations
+from src.github.github_operations import GitHubOperations
 
 # Import domain models
 from src.smartfix.domains.vulnerability.context import RemediationContext, PromptConfiguration, BuildConfiguration, RepositoryConfiguration
@@ -49,6 +50,10 @@ from src.github.agent_factory import GitHubAgentFactory
 
 config = get_config()
 telemetry_handler.initialize_telemetry()
+
+# Create SCM operations instances
+git_ops = GitOperations()
+github_ops = GitHubOperations()
 
 # NOTE: Google ADK appears to have issues with asyncio event loop cleanup, and has had attempts to address them in versions 1.4.0-1.5.0
 # Configure warnings to ignore asyncio ResourceWarnings during shutdown
@@ -258,12 +263,12 @@ def main():  # noqa: C901
     max_open_prs_setting = config.MAX_OPEN_PRS
 
     # --- Initial Setup ---
-    git_handler.configure_git_user()
+    git_ops.configure_git_user()
 
     # Check Open PR Limit
     log("\n::group::--- Checking Open PR Limit ---")
     label_prefix_to_check = "contrast-vuln-id:"
-    current_open_pr_count = git_handler.count_open_prs_with_prefix(label_prefix_to_check)
+    current_open_pr_count = github_ops.count_open_prs_with_prefix(label_prefix_to_check)
     if current_open_pr_count >= max_open_prs_setting:
         log(f"Found {current_open_pr_count} open PR(s) with label prefix '{label_prefix_to_check}'.")
         log(f"This meets or exceeds the configured limit of {max_open_prs_setting}.")
@@ -334,7 +339,7 @@ def main():  # noqa: C901
             break
 
         # Check if we've reached the max PR limit
-        current_open_pr_count = git_handler.count_open_prs_with_prefix(label_prefix_to_check)
+        current_open_pr_count = github_ops.count_open_prs_with_prefix(label_prefix_to_check)
         if current_open_pr_count >= max_open_prs_setting:
             log(f"\n--- Reached max PR limit ({max_open_prs_setting}). Current open PRs: {current_open_pr_count}. Stopping processing. ---")
             break
@@ -429,8 +434,8 @@ def main():  # noqa: C901
         log(f"\n::group::--- Considering Vulnerability: {vuln_title} (UUID: {vuln_uuid}) ---")
 
         # --- Check for Existing PRs ---
-        label_name, _, _ = git_handler.generate_label_details(vuln_uuid)
-        pr_status = git_handler.check_pr_status_for_label(label_name)
+        label_name, _, _ = github_ops.generate_label_details(vuln_uuid)
+        pr_status = github_ops.check_pr_status_for_label(label_name)
 
         # Changed this logic to check only for OPEN PRs for dev purposes
         if pr_status == "OPEN":
@@ -476,9 +481,9 @@ def main():  # noqa: C901
         telemetry_handler.update_telemetry("additionalAttributes.codingAgent", "INTERNAL-SMARTFIX")
 
         # Prepare a clean repository state and branch for the fix
-        new_branch_name = git_handler.get_branch_name(remediation_id)
+        new_branch_name = git_ops.get_branch_name(remediation_id)
         try:
-            git_handler.prepare_feature_branch(remediation_id)
+            git_ops.prepare_feature_branch(remediation_id)
         except SystemExit:
             log(f"Error preparing feature branch {new_branch_name}. Skipping to next vulnerability.")
             continue
@@ -500,7 +505,7 @@ def main():  # noqa: C901
         if not session_result.should_continue:
             # QA Agent failed to fix the build
             log(f"Agent failed with reason: {session_result.failure_category}")
-            git_handler.cleanup_branch(new_branch_name)
+            git_ops.cleanup_branch(new_branch_name)
             contrast_api.notify_remediation_failed(
                 remediation_id=remediation_id,
                 failure_category=session_result.failure_category,
@@ -526,22 +531,22 @@ def main():  # noqa: C901
         # All file changes from the agent (fix + QA + formatting) are uncommitted at this point
         # Stage and commit everything together
         log("\n--- Proceeding with Git & GitHub Operations ---")
-        git_handler.stage_changes()
+        git_ops.stage_changes()
 
         # Check if there are changes to commit
-        if not git_handler.check_status():
+        if not git_ops.check_status():
             # No changes detected - agent didn't make any modifications
             log("No changes detected from agent execution. Skipping PR creation.")
-            git_handler.cleanup_branch(new_branch_name)
+            git_ops.cleanup_branch(new_branch_name)
             continue
 
         # Commit all changes together (fix + QA fixes + formatting)
-        commit_message = git_handler.generate_commit_message(vuln_title, vuln_uuid)
-        git_handler.commit_changes(commit_message)
+        commit_message = git_ops.generate_commit_message(vuln_title, vuln_uuid)
+        git_ops.commit_changes(commit_message)
         log("Committed all agent changes.")
 
         # --- Create Pull Request ---
-        pr_title = git_handler.generate_pr_title(vuln_title)
+        pr_title = github_ops.generate_pr_title(vuln_title)
         # Use the result from SmartFix agent remediation as the base PR body.
         # The agent returns the PR body content (extracted from <pr_body> tags)
         # or the full agent summary if extraction fails.
@@ -549,16 +554,16 @@ def main():  # noqa: C901
         debug_log("Using SmartFix agent's output as PR body base.")
 
         # --- Push and Create PR ---
-        git_handler.push_branch(new_branch_name)  # Push the final commit (original or amended)
+        git_ops.push_branch(new_branch_name)  # Push the final commit (original or amended)
 
-        label_name, label_desc, label_color = git_handler.generate_label_details(vuln_uuid)
-        label_created = git_handler.ensure_label(label_name, label_desc, label_color)
+        label_name, label_desc, label_color = github_ops.generate_label_details(vuln_uuid)
+        label_created = github_ops.ensure_label(label_name, label_desc, label_color)
 
         if not label_created:
             log(f"Could not create GitHub label '{label_name}'. PR will be created without a label.", is_warning=True)
             label_name = ""  # Clear label_name to avoid using it in PR creation
 
-        pr_title = git_handler.generate_pr_title(vuln_title)
+        pr_title = github_ops.generate_pr_title(vuln_title)
 
         updated_pr_body = pr_body_base + qa_section
 
@@ -600,7 +605,7 @@ def main():  # noqa: C901
 
             # Try to create the PR using the GitHub CLI
             log("Attempting to create a pull request...")
-            pr_url = git_handler.create_pr(pr_title, updated_pr_body, remediation_id, config.BASE_BRANCH, label_name)
+            pr_url = github_ops.create_pr(pr_title, updated_pr_body, remediation_id, config.BASE_BRANCH, label_name)
 
             if pr_url:
                 pr_creation_success = True
