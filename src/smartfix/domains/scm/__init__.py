@@ -5,10 +5,7 @@ branch management, and pull request handling across different providers.
 
 Key Components:
 - GitOperations: Git command operations and repository management
-- Repository: Repository operations and workspace management (to be implemented)
-- PullRequest: Pull request lifecycle and metadata management (to be implemented)
-- Branch: Branch operations and state tracking (to be implemented)
-- ScmProvider: Abstract interface for SCM provider implementations (to be implemented)
+- ScmOperations: Abstract interface for SCM provider implementations (such as GitHubOperations in `src/github`)
 """
 
 from .git_operations import GitOperations

@@ -277,3 +277,29 @@ class ScmOperations(ABC):
             int: Workflow run ID
         """
         pass
+
+    @abstractmethod
+    def extract_issue_number_from_branch(self, branch_name: str) -> Optional[int]:
+        """
+        Extracts the issue number from a branch name.
+
+        Args:
+            branch_name (str): The branch name to extract from
+
+        Returns:
+            Optional[int]: The issue number if found, None otherwise
+        """
+        pass
+
+    @abstractmethod
+    def get_latest_branch_by_pattern(self, pattern: str) -> Optional[str]:
+        """
+        Gets the latest branch matching a specific pattern.
+
+        Args:
+            pattern (str): The regex pattern to match branch names against
+
+        Returns:
+            Optional[str]: The latest matching branch name or None if no matches found
+        """
+        pass
