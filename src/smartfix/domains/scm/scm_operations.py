@@ -33,9 +33,9 @@ class ScmOperations(ABC):
         Logs a standardized error message for agent assignment failures.
 
         Args:
-            issue_number (int): The issue number that failed assignmen
+            issue_number (int): The issue number that failed assignment
             error (Exception): The exception that occurred
-            label (str): The label associated with the assignmen
+            label (str): The label associated with the assignment
 
         Returns:
             None
