@@ -25,7 +25,7 @@ import sys
 from src import contrast_api
 from src.config import get_config  # Using get_config function instead of direct import
 from src.utils import debug_log, extract_remediation_id_from_branch, extract_remediation_id_from_labels, log
-from src.smartfix.domains.scm.git_operations import GitOperations
+from src.github.github_operations import GitHubOperations
 import src.telemetry_handler as telemetry_handler
 
 

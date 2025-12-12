@@ -17,8 +17,7 @@
 # #L%
 #
 
-import re
-from typing import List, Optional
+from typing import List
 from src.utils import run_command, debug_log
 from src.config import get_config
 

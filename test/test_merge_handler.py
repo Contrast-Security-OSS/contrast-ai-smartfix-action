@@ -148,8 +148,8 @@ class TestMergeHandler(unittest.TestCase):
         """Test _extract_remediation_info with Copilot branch"""
         # Mock objects
         mock_extract_remediation_id = MagicMock(return_value="REM-456")
-        git_ops_mock = MagicMock()
-        git_ops_mock.extract_issue_number_from_branch.return_value = 42
+        github_ops_mock = MagicMock()
+        github_ops_mock.extract_issue_number_from_branch.return_value = 42
         telemetry_mock = MagicMock()
         # Test data
         pull_request = {
@@ -158,23 +158,23 @@ class TestMergeHandler(unittest.TestCase):
         }
         # Need to patch the GitOperations class and not just the constructor
         with patch('src.merge_handler.extract_remediation_id_from_labels', mock_extract_remediation_id):
-            with patch('src.merge_handler.GitOperations') as mock_git_ops_class:
+            with patch('src.merge_handler.GitHubOperations') as mock_github_ops_class:
                 # Return our mock instance when the class is instantiated
-                mock_git_ops_class.return_value = git_ops_mock
+                mock_github_ops_class.return_value = github_ops_mock
                 with patch('src.telemetry_handler.update_telemetry', telemetry_mock):
                     # Execute
                     result = merge_handler._extract_remediation_info(pull_request)
         # Assert - only check the result and that functions were called
         self.assertEqual(result, ("REM-456", [{"name": "smartfix-id:REM-456"}]))
         mock_extract_remediation_id.assert_called_once()
-        git_ops_mock.extract_issue_number_from_branch.assert_called_once_with("copilot/fix-42")
+        github_ops_mock.extract_issue_number_from_branch.assert_called_once_with("copilot/fix-42")
 
     def test_extract_remediation_info_claude_branch(self):
         """Test _extract_remediation_info with Claude Code branch"""
         # Mock objects
         mock_extract_remediation_id = MagicMock(return_value="REM-789")
-        git_ops_mock = MagicMock()
-        git_ops_mock.extract_issue_number_from_branch.return_value = 75
+        github_ops_mock = MagicMock()
+        github_ops_mock.extract_issue_number_from_branch.return_value = 75
         telemetry_mock = MagicMock()
         # Test data
         pull_request = {
@@ -183,23 +183,23 @@ class TestMergeHandler(unittest.TestCase):
         }
         # Need to patch the GitOperations class and not just the constructor
         with patch('src.merge_handler.extract_remediation_id_from_labels', mock_extract_remediation_id):
-            with patch('src.merge_handler.GitOperations') as mock_git_ops_class:
+            with patch('src.merge_handler.GitHubOperations') as mock_github_ops_class:
                 # Return our mock instance when the class is instantiated
-                mock_git_ops_class.return_value = git_ops_mock
+                mock_github_ops_class.return_value = github_ops_mock
                 with patch('src.telemetry_handler.update_telemetry', telemetry_mock):
                     # Execute
                     result = merge_handler._extract_remediation_info(pull_request)
         # Assert - only check the result and that functions were called
         self.assertEqual(result, ("REM-789", [{"name": "smartfix-id:REM-789"}]))
         mock_extract_remediation_id.assert_called_once()
-        git_ops_mock.extract_issue_number_from_branch.assert_called_once_with("claude/issue-75-20250908-1723")
+        github_ops_mock.extract_issue_number_from_branch.assert_called_once_with("claude/issue-75-20250908-1723")
 
     def test_extract_remediation_info_claude_branch_no_issue_number(self):
         """Test _extract_remediation_info with Claude Code branch without extractable issue number"""
         # Mock objects
         mock_extract_remediation_id = MagicMock(return_value="REM-789")
-        git_ops_mock = MagicMock()
-        git_ops_mock.extract_issue_number_from_branch.return_value = None
+        github_ops_mock = MagicMock()
+        github_ops_mock.extract_issue_number_from_branch.return_value = None
         telemetry_mock = MagicMock()
         # Test data
         pull_request = {
@@ -208,16 +208,16 @@ class TestMergeHandler(unittest.TestCase):
         }
         # Need to patch the GitOperations class and not just the constructor
         with patch('src.merge_handler.extract_remediation_id_from_labels', mock_extract_remediation_id):
-            with patch('src.merge_handler.GitOperations') as mock_git_ops_class:
+            with patch('src.merge_handler.GitHubOperations') as mock_github_ops_class:
                 # Return our mock instance when the class is instantiated
-                mock_git_ops_class.return_value = git_ops_mock
+                mock_github_ops_class.return_value = github_ops_mock
                 with patch('src.telemetry_handler.update_telemetry', telemetry_mock):
                     # Execute
                     result = merge_handler._extract_remediation_info(pull_request)
         # Assert - only check the result and that functions were called
         self.assertEqual(result, ("REM-789", [{"name": "smartfix-id:REM-789"}]))
         mock_extract_remediation_id.assert_called_once()
-        git_ops_mock.extract_issue_number_from_branch.assert_called_once_with("claude/issue-75-20250908-1723")
+        github_ops_mock.extract_issue_number_from_branch.assert_called_once_with("claude/issue-75-20250908-1723")
 
 
 if __name__ == '__main__':

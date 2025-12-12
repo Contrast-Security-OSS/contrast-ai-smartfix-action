@@ -101,28 +101,23 @@ class TestGitOperations(unittest.TestCase):
             git_ops = GitOperations()
             branch_name = "smartfix-test-123"
             git_ops.push_branch(branch_name)
-            # Should use authenticated URL with token
+            # Should use authenticated URL WITHOUT token in URL (uses env vars instead)
             mock_run_command.assert_called_once()
             call_args = mock_run_command.call_args[0][0]
+            # Check that we're calling git push with the correct arguments
             self.assertEqual(call_args[0:2], ['git', 'push'])
             self.assertIn('--set-upstream', call_args)
-            self.assertIn('x-access-token:mock-token', call_args[3])
+            # Token should NOT be in URL (security fix - now uses env vars)
+            self.assertNotIn('x-access-token', call_args[3])
+            # Verify environment variables were passed
+            call_kwargs = mock_run_command.call_args[1]
+            self.assertIn('env', call_kwargs)
+            env = call_kwargs['env']
+            self.assertEqual(env.get('GIT_USERNAME'), 'x-access-token')
+            self.assertEqual(env.get('GIT_PASSWORD'), 'mock-token')
 
-    def test_extract_issue_number_from_branch(self):
-        """Test extracting issue number from branch name."""
-        test_cases = [
-            ("copilot/fix-123", 123),
-            ("claude/issue-456-20251211-1430", 456),
-            ("copilot/fix-789", 789),
-            ("no-issue-here", None),
-            ("smartfix-abc-issue", None),
-            ("claude/issue-abc-20251211-1430", None),  # Invalid: non-numeric issue
-        ]
-
-        for branch_name, expected in test_cases:
-            with self.subTest(branch=branch_name):
-                result = self.git_ops.extract_issue_number_from_branch(branch_name)
-                self.assertEqual(result, expected)
+    # NOTE: test_extract_issue_number_from_branch moved to test_github_operations.py
+    # This method is now in GitHubOperations (GitHub-specific operation using GraphQL)
 
     @patch('src.smartfix.domains.scm.git_operations.run_command')
     def test_cleanup_branch(self, mock_run_command):

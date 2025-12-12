@@ -210,6 +210,22 @@ class TestGitHubOperations(unittest.TestCase):
         self.assertEqual(len(result), 2)  # Only comments from user1
         self.assertEqual(result[0]["body"], "Comment 3")  # Most recent first
 
+    def test_extract_issue_number_from_branch(self):
+        """Test extracting issue number from branch name (moved from test_git_operations.py)."""
+        test_cases = [
+            ("copilot/fix-123", 123),
+            ("claude/issue-456-20251211-1430", 456),
+            ("copilot/fix-789", 789),
+            ("no-issue-here", None),
+            ("smartfix-abc-issue", None),
+            ("claude/issue-abc-20251211-1430", None),  # Invalid: non-numeric issue
+        ]
+
+        for branch_name, expected in test_cases:
+            with self.subTest(branch=branch_name):
+                result = self.github_ops.extract_issue_number_from_branch(branch_name)
+                self.assertEqual(result, expected)
+
 
 if __name__ == '__main__':
     unittest.main()

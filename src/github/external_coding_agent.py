@@ -22,7 +22,6 @@ import time
 from typing import Optional
 from src.utils import log, debug_log, error_exit, tail_string
 from src.config import Config
-from src.smartfix.domains.scm.git_operations import GitOperations
 from src.github.github_operations import GitHubOperations
 from src import telemetry_handler
 from src.contrast_api import notify_remediation_pr_opened
