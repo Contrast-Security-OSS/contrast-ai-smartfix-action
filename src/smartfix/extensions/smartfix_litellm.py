@@ -416,10 +416,9 @@ class SmartFixLiteLlm(LiteLlm):
                     jitter = delay * random.uniform(0, 0.25)
                     delay += jitter
 
-                    log(
+                    debug_log(
                         f"LLM call failed (attempt {attempt + 1}/{self._max_retries}), retrying: "
-                        f"{type(e).__name__}: {e}",
-                        is_warning=True
+                        f"{type(e).__name__}: {e}"
                     )
                     debug_log(f"Waiting {delay:.1f}s before next retry...")
 
