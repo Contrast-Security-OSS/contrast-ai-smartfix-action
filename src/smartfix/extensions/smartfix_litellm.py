@@ -36,6 +36,7 @@ from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
 from litellm import Message
 from pydantic import Field
+from src.config import get_config
 from src.utils import debug_log, log
 
 
@@ -162,7 +163,6 @@ class SmartFixLiteLlm(LiteLlm):
         self._system_prompt = kwargs.get('system')
 
         # Load retry configuration from config
-        from src.config import get_config
         config = get_config()
         self._max_retries = config.LLM_MAX_RETRIES
         self._initial_retry_delay = config.LLM_INITIAL_RETRY_DELAY_SECONDS
@@ -174,7 +174,6 @@ class SmartFixLiteLlm(LiteLlm):
         Applies cache_control to the content array within each message, which is
         the documented format for Anthropic's prompt caching feature.
         """
-        from src.config import get_config
         config = get_config()
 
         # Skip if prompt caching is disabled or using Contrast LLM
