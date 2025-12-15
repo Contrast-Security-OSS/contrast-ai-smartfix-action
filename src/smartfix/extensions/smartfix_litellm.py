@@ -24,9 +24,13 @@
 from typing import List, AsyncGenerator
 import asyncio
 import json
+import os
 import random
 
 import litellm
+# Suppress LiteLLM's "Give Feedback" and "LiteLLM.Info" messages unless debugging
+litellm.suppress_debug_info = os.environ.get("DEBUG_MODE", "").lower() != "true"
+
 from google.adk.models.lite_llm import LiteLlm, _get_completion_inputs
 from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
