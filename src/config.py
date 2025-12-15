@@ -124,6 +124,11 @@ class Config:
         self.USE_CONTRAST_LLM = self._get_bool_env("USE_CONTRAST_LLM", default=True)
         self.ENABLE_ANTHROPIC_PROMPT_CACHING = self._get_bool_env("ENABLE_ANTHROPIC_PROMPT_CACHING", default=True)
 
+        # --- LLM Retry Configuration ---
+        self.LLM_MAX_RETRIES = self._get_validated_int("LLM_MAX_RETRIES", default=7, min_val=1)
+        self.LLM_INITIAL_RETRY_DELAY_SECONDS = self._get_validated_int("LLM_INITIAL_RETRY_DELAY_SECONDS", default=1, min_val=1)
+        self.LLM_RETRY_MULTIPLIER = self._get_validated_int("LLM_RETRY_MULTIPLIER", default=2, min_val=2)
+
         # Update agent model for Contrast LLM if no explicit model was set
         if (is_smartfix_coding_agent
                 and self.USE_CONTRAST_LLM
