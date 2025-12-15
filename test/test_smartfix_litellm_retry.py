@@ -26,7 +26,7 @@ This module tests the exponential backoff retry mechanism for LLM calls.
 
 import asyncio
 import unittest
-from unittest.mock import Mock, patch, AsyncMock, MagicMock
+from unittest.mock import patch, AsyncMock, MagicMock
 
 import litellm
 
