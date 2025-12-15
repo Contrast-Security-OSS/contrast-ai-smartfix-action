@@ -22,7 +22,9 @@
 #
 
 from typing import List, AsyncGenerator
+import asyncio
 import json
+import random
 
 import litellm
 from google.adk.models.lite_llm import LiteLlm, _get_completion_inputs
@@ -154,6 +156,13 @@ class SmartFixLiteLlm(LiteLlm):
         debug_log(f"SmartFixLiteLlm initialized with model: {model}")
         # Store system prompt for use with Contrast models
         self._system_prompt = kwargs.get('system')
+
+        # Load retry configuration from config
+        from src.config import get_config
+        config = get_config()
+        self._max_retries = config.LLM_MAX_RETRIES
+        self._initial_retry_delay = config.LLM_INITIAL_RETRY_DELAY_SECONDS
+        self._retry_multiplier = config.LLM_RETRY_MULTIPLIER
 
     def _add_cache_control_to_message(self, message: dict) -> None:
         """Add cache_control to message content for Anthropic API compatibility.
@@ -353,6 +362,75 @@ class SmartFixLiteLlm(LiteLlm):
                 role = 'unknown'
             debug_log(f"  Final message {i}: role='{role}'")
 
+    def _is_retryable_exception(self, error: Exception) -> bool:
+        """Check if an exception is retryable.
+
+        Retryable exceptions include rate limits, timeouts, and transient server errors.
+        Non-retryable exceptions include authentication errors, invalid requests, etc.
+        """
+        retryable_types = (
+            litellm.RateLimitError,
+            litellm.APIError,
+            litellm.ServiceUnavailableError,
+            litellm.Timeout,
+            asyncio.TimeoutError,
+            ConnectionError,
+        )
+
+        if isinstance(error, retryable_types):
+            # Check for non-retryable API errors (4xx client errors except 429)
+            if isinstance(error, litellm.APIError):
+                status_code = getattr(error, 'status_code', None)
+                if status_code and 400 <= status_code < 500 and status_code != 429:
+                    return False
+            return True
+
+        return False
+
+    async def _call_llm_with_retry(self, completion_args: dict) -> dict:
+        """Execute acompletion with exponential backoff retry.
+
+        Args:
+            completion_args: Arguments to pass to acompletion
+
+        Returns:
+            The response from acompletion
+
+        Raises:
+            The last exception if all retries are exhausted
+        """
+        last_error = None
+
+        for attempt in range(self._max_retries):
+            try:
+                return await self.llm_client.acompletion(**completion_args)
+            except Exception as e:
+                last_error = e
+
+                if not self._is_retryable_exception(e):
+                    debug_log(f"LLM call failed with non-retryable error: {type(e).__name__}: {e}")
+                    raise
+
+                if attempt < self._max_retries - 1:
+                    delay = self._initial_retry_delay * (self._retry_multiplier ** attempt)
+                    jitter = delay * random.uniform(0, 0.25)
+                    delay += jitter
+
+                    debug_log(
+                        f"LLM call failed, retry ({attempt + 1} of {self._max_retries}): "
+                        f"{type(e).__name__}: {e}"
+                    )
+                    debug_log(f"Waiting {delay:.1f}s before next retry...")
+
+                    await asyncio.sleep(delay)
+                else:
+                    debug_log(
+                        f"LLM call failed after {self._max_retries} retries: "
+                        f"{type(e).__name__}: {e}"
+                    )
+
+        raise last_error
+
     async def generate_content_async(  # noqa: C901
         self, llm_request: LlmRequest, stream: bool = False
     ) -> AsyncGenerator[LlmResponse, None]:
@@ -397,7 +475,7 @@ class SmartFixLiteLlm(LiteLlm):
         if generation_params:
             completion_args.update(generation_params)
 
-        response = await self.llm_client.acompletion(**completion_args)
+        response = await self._call_llm_with_retry(completion_args)
 
         # Call our override to capture cache tokens from raw response
         self._log_cost_analysis(response)
