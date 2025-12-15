@@ -28,9 +28,6 @@ import os
 import random
 
 import litellm
-# Suppress LiteLLM's "Give Feedback" and "LiteLLM.Info" messages unless debugging
-litellm.suppress_debug_info = os.environ.get("DEBUG_MODE", "").lower() != "true"
-
 from google.adk.models.lite_llm import LiteLlm, _get_completion_inputs
 from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
@@ -38,6 +35,9 @@ from litellm import Message
 from pydantic import Field
 from src.config import get_config
 from src.utils import debug_log, log
+
+# Suppress LiteLLM's "Give Feedback" and "LiteLLM.Info" messages unless debugging
+litellm.suppress_debug_info = os.environ.get("DEBUG_MODE", "").lower() != "true"
 
 
 class TokenCostAccumulator:
