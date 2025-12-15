@@ -32,7 +32,7 @@ from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
 from litellm import Message
 from pydantic import Field
-from src.utils import debug_log
+from src.utils import debug_log, log
 
 
 class TokenCostAccumulator:
@@ -408,7 +408,7 @@ class SmartFixLiteLlm(LiteLlm):
                 last_error = e
 
                 if not self._is_retryable_exception(e):
-                    debug_log(f"LLM call failed with non-retryable error: {type(e).__name__}: {e}")
+                    log(f"LLM call failed with non-retryable error: {type(e).__name__}: {e}", is_error=True)
                     raise
 
                 if attempt < self._max_retries - 1:
@@ -416,17 +416,19 @@ class SmartFixLiteLlm(LiteLlm):
                     jitter = delay * random.uniform(0, 0.25)
                     delay += jitter
 
-                    debug_log(
-                        f"LLM call failed, retry ({attempt + 1} of {self._max_retries}): "
-                        f"{type(e).__name__}: {e}"
+                    log(
+                        f"LLM call failed (attempt {attempt + 1}/{self._max_retries}), retrying: "
+                        f"{type(e).__name__}: {e}",
+                        is_warning=True
                     )
                     debug_log(f"Waiting {delay:.1f}s before next retry...")
 
                     await asyncio.sleep(delay)
                 else:
-                    debug_log(
+                    log(
                         f"LLM call failed after {self._max_retries} retries: "
-                        f"{type(e).__name__}: {e}"
+                        f"{type(e).__name__}: {e}",
+                        is_error=True
                     )
 
         raise last_error
