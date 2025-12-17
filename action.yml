@@ -87,6 +87,10 @@ inputs:
     description: 'Array of vulnerability severity levels to process (allowed: CRITICAL, HIGH, MEDIUM, LOW, NOTE)'
     required: false
     default: '["CRITICAL", "HIGH"]'
+  run_task:
+    description: '[DEPRECATED] This input is now automatically determined. Setting this will be ignored.'
+    required: false
+    default: 'auto'
   enable_full_telemetry:
     description: 'Enable full telemetry, including potentially sensitive data. Defaults to true.'
     required: false
