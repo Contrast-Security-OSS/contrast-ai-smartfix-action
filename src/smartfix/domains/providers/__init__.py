@@ -3,6 +3,9 @@ import os
 from src.config import get_config
 from src.utils import normalize_host
 
+# Enable verbose debugging for litellm
+litellm.set_verbose = True
+
 config = get_config()
 
 # Contrast LLM model constants
