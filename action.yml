@@ -338,8 +338,7 @@ runs:
         event_name="${{ github.event_name }}"
         pr_action="${{ github.event.action }}"
         pr_merged="${{ github.event.pull_request.merged }}"
-        # Convert to lowercase for case-insensitive matching
-        pr_head_ref_lower=$(echo "${{ github.event.pull_request.head.ref }}" | tr '[:upper:]' '[:lower:]')
+        pr_head_ref=$(echo "${{ github.event.pull_request.head.ref }}" | tr '[:upper:]' '[:lower:]')
 
         # Check if this is a SmartFix-generated branch
         is_smartfix_branch="false"
