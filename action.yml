@@ -335,19 +335,34 @@ runs:
       id: determine-run-task
       shell: bash
       run: |
+        event_name="${{ github.event_name }}"
+        pr_action="${{ github.event.action }}"
+        pr_merged="${{ github.event.pull_request.merged }}"
+        # Convert to lowercase for case-insensitive matching
+        pr_head_ref_lower=$(echo "${{ github.event.pull_request.head.ref }}" | tr '[:upper:]' '[:lower:]')
+
         # Check if this is a SmartFix-generated branch
         is_smartfix_branch="false"
-        if [[ ( "${{ contains(github.event.pull_request.head.ref, 'smartfix/remediation-') }}" == "true" || "${{ contains(github.event.pull_request.head.ref, 'copilot/fix-') }}" == "true" || "${{ contains(github.event.pull_request.head.ref, 'claude/issue-') }}" == "true" ) ]]; then
+        if [[ "$pr_head_ref" =~ ^smartfix/remediation- ]] || \
+           [[ "$pr_head_ref" =~ ^copilot/fix- ]] || \
+           [[ "$pr_head_ref" =~ ^claude/issue- ]]; then
           is_smartfix_branch="true"
         fi
 
-        if [[ ("${{ github.event_name == 'pull_request' && github.event.action ==  'closed' && github.event.pull_request.merged }}" == "true") && "$is_smartfix_branch" == "true" ]]; then
+        if [[ "$event_name" == "pull_request" ]] && \
+           [[ "$pr_action" == "closed" ]] && \
+           [[ "$pr_merged" == "true" ]] && \
+           [[ "$is_smartfix_branch" == "true" ]]; then
           echo "run_task=merge" >> $GITHUB_OUTPUT
-        elif [[ ("${{ github.event_name == 'pull_request' && github.event.action ==  'closed' && github.event.pull_request.merged }}" == "false") && "$is_smartfix_branch" == "true" ]]; then
+        elif [[ "$event_name" == "pull_request" ]] && \
+             [[ "$pr_action" == "closed" ]] && \
+             [[ "$pr_merged" == "false" ]] && \
+             [[ "$is_smartfix_branch" == "true" ]]; then
           echo "run_task=closed" >> $GITHUB_OUTPUT
         else
           echo "run_task=generate_fix" >> $GITHUB_OUTPUT
         fi
+        echo "Determined run_task: $(cat $GITHUB_OUTPUT | grep run_task | cut -d'=' -f2)"
         echo ""
         echo "✅ Determine task to run complete"
         echo ""
