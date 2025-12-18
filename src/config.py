@@ -249,14 +249,13 @@ class Config:
                 "This is required for both AWS IAM credentials and AWS Bearer Token authentication."
             )
 
-        # Validate region format (should be like "us-east-1", no special chars)
-        # AWS regions follow the pattern: 2-letter area code, dash, region name, dash, number
-        # Examples: us-east-1, eu-west-2, ap-southeast-1, us-gov-west-1, cn-north-1
-        if not re.match(r'^[a-z]{2}(-gov)?-[a-z]+-\d+$', aws_region):
+        # Validate region format - just catch obvious mistakes like quotes or special chars
+        # Allow only lowercase letters, numbers, and hyphens (flexible for future regions)
+        if not re.match(r'^[a-z][a-z0-9-]*[a-z0-9]$', aws_region):
             raise ConfigurationError(
                 f"Error: Invalid aws_region format: '{aws_region}'\n"
-                "Expected format: 'us-east-1', 'eu-west-2', 'us-gov-west-1', etc.\n"
-                "Check for leading/trailing whitespace or quotes in your configuration."
+                "Region should contain only lowercase letters, numbers, and hyphens.\n"
+                "Check for quotes, spaces, or uppercase letters in your configuration."
             )
 
         # Check for AWS credentials (either bearer token OR IAM credentials)

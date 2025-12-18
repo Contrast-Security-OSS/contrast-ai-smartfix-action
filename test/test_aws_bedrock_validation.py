@@ -164,20 +164,19 @@ class TestAwsBedrockValidation(unittest.TestCase):
     # Tests: Invalid AWS_REGION_NAME format
     # ========================================================================
 
-    def test_error_when_aws_region_has_invalid_format(self):
-        """Should raise ConfigurationError when AWS_REGION_NAME has invalid format."""
+    def test_error_when_aws_region_has_special_characters(self):
+        """Should raise ConfigurationError when AWS_REGION_NAME has special characters."""
         env = self._get_base_env()
         env['USE_CONTRAST_LLM'] = 'false'
         env['AGENT_MODEL'] = 'bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0'
         env['AWS_ACCESS_KEY_ID'] = 'test-access-key'
         env['AWS_SECRET_ACCESS_KEY'] = 'test-secret-key'
-        env['AWS_REGION_NAME'] = 'invalid-region'
+        env['AWS_REGION_NAME'] = 'us-east-1!'
 
         with self.assertRaises(ConfigurationError) as context:
             Config(env=env, testing=False)
 
         self.assertIn('Invalid aws_region format', str(context.exception))
-        self.assertIn('invalid-region', str(context.exception))
 
     def test_error_when_aws_region_has_quotes(self):
         """Should raise ConfigurationError when AWS_REGION_NAME contains quotes."""
