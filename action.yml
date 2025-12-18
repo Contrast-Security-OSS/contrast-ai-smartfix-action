@@ -59,7 +59,6 @@ inputs:
   aws_region:
     description: 'AWS Region for Bedrock (required when using aws_bearer_token_bedrock)'
     required: false
-    default: 'us-west-2'
   azure_api_key:
     description: 'Azure API Key for Azure OpenAI'
     required: false
