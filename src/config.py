@@ -258,6 +258,11 @@ class Config:
                 "Check for quotes, spaces, or uppercase letters in your configuration."
             )
 
+        # Normalize the region value in the environment so LiteLLM gets the trimmed value
+        # This fixes cases where whitespace was present in the original input
+        if self.env.get('AWS_REGION_NAME', '') != aws_region:
+            os.environ['AWS_REGION_NAME'] = aws_region
+
         # Check for AWS credentials (either bearer token OR IAM credentials)
         has_bearer_token = bool(self.env.get('AWS_BEARER_TOKEN_BEDROCK', '').strip())
         has_access_key = bool(self.env.get('AWS_ACCESS_KEY_ID', '').strip())

@@ -327,7 +327,7 @@ class TestAwsBedrockValidation(unittest.TestCase):
         self.assertIsNotNone(config)
 
     def test_region_with_leading_trailing_whitespace_is_trimmed(self):
-        """Should trim whitespace from AWS_REGION_NAME and validate correctly."""
+        """Should trim whitespace from AWS_REGION_NAME and normalize in environment."""
         env = self._get_base_env()
         env['USE_CONTRAST_LLM'] = 'false'
         env['AGENT_MODEL'] = 'bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0'
@@ -337,6 +337,9 @@ class TestAwsBedrockValidation(unittest.TestCase):
         # Should NOT raise an error - whitespace should be trimmed
         config = Config(env=env, testing=False)
         self.assertIsNotNone(config)
+
+        # Verify the trimmed value is written back to os.environ so LiteLLM gets the clean value
+        self.assertEqual(os.environ.get('AWS_REGION_NAME'), 'us-east-1')
 
 
 if __name__ == '__main__':
