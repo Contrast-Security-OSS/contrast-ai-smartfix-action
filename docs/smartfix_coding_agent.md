@@ -266,7 +266,7 @@ The following are key inputs for the SmartFix GitHub Action using SmartFix Codin
 | `enable_anthropic_prompt_caching` | Enable Anthropic prompt caching for supported models (bedrock/claude and anthropic/claude). Set to 'false' if your platform doesn't support prompt caching. | No | `true` |
 | `anthropic_api_key` | Anthropic API key (if using direct Anthropic API). | No |  |
 | `aws_bearer_token_bedrock` | AWS Bedrock API Bearer Token (alternative to IAM credentials). Use with caution - less secure than IAM. | No |  |
-| `aws_region` | AWS Region for Bedrock (required when using `aws_bearer_token_bedrock`). | No |  |
+| `aws_region` | AWS Region for Bedrock (required for all Bedrock auth methods: IAM or bearer token). | No |  |
 | `gemini_api_key` | Gemini API key (if using Gemini). | No |  |
 | `build_command` | Command to build the application (for QA). | Yes, for generating fixes |  |
 | `formatting_command` | Command to format code. | No |  |
