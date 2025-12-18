@@ -71,7 +71,7 @@ class TestAwsBedrockValidation(unittest.TestCase):
         env = self._get_base_env()
         env['USE_CONTRAST_LLM'] = 'true'
         env['AGENT_MODEL'] = 'bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0'
-        # Intentionally NOT setting AWS_REGION to verify it's not checked
+        # Intentionally NOT setting AWS_REGION_NAME to verify it's not checked
 
         # Should NOT raise an error because USE_CONTRAST_LLM=True skips validation
         config = Config(env=env, testing=False)
@@ -83,7 +83,7 @@ class TestAwsBedrockValidation(unittest.TestCase):
         env['USE_CONTRAST_LLM'] = 'false'
         env['AGENT_MODEL'] = 'anthropic/claude-sonnet-4-5-20250929'
         env['ANTHROPIC_API_KEY'] = 'test-anthropic-key'
-        # Intentionally NOT setting AWS_REGION to verify it's not checked
+        # Intentionally NOT setting AWS_REGION_NAME to verify it's not checked
 
         # Should NOT raise an error because model is not Bedrock
         config = Config(env=env, testing=False)
@@ -95,7 +95,7 @@ class TestAwsBedrockValidation(unittest.TestCase):
         env['USE_CONTRAST_LLM'] = 'false'
         env['AGENT_MODEL'] = 'gemini/gemini-2.5-pro-preview-05-06'
         env['GEMINI_API_KEY'] = 'test-gemini-key'
-        # Intentionally NOT setting AWS_REGION to verify it's not checked
+        # Intentionally NOT setting AWS_REGION_NAME to verify it's not checked
 
         # Should NOT raise an error because model is not Bedrock
         config = Config(env=env, testing=False)
@@ -108,18 +108,18 @@ class TestAwsBedrockValidation(unittest.TestCase):
         env['AGENT_MODEL'] = 'azure/gpt-4'
         env['AZURE_API_KEY'] = 'test-azure-key'
         env['AZURE_API_BASE'] = 'https://test.openai.azure.com'
-        # Intentionally NOT setting AWS_REGION to verify it's not checked
+        # Intentionally NOT setting AWS_REGION_NAME to verify it's not checked
 
         # Should NOT raise an error because model is not Bedrock
         config = Config(env=env, testing=False)
         self.assertEqual(config.AGENT_MODEL, 'azure/gpt-4')
 
     # ========================================================================
-    # Tests: Missing AWS_REGION
+    # Tests: Missing AWS_REGION_NAME
     # ========================================================================
 
     def test_error_when_aws_region_missing_with_bedrock(self):
-        """Should raise ConfigurationError when AWS_REGION is missing for Bedrock."""
+        """Should raise ConfigurationError when AWS_REGION_NAME is missing for Bedrock."""
         env = self._get_base_env()
         env['USE_CONTRAST_LLM'] = 'false'
         env['AGENT_MODEL'] = 'bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0'
@@ -133,13 +133,13 @@ class TestAwsBedrockValidation(unittest.TestCase):
         self.assertIn('aws_region is required', str(context.exception))
 
     def test_error_when_aws_region_empty_with_bedrock(self):
-        """Should raise ConfigurationError when AWS_REGION is empty string."""
+        """Should raise ConfigurationError when AWS_REGION_NAME is empty string."""
         env = self._get_base_env()
         env['USE_CONTRAST_LLM'] = 'false'
         env['AGENT_MODEL'] = 'bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0'
         env['AWS_ACCESS_KEY_ID'] = 'test-access-key'
         env['AWS_SECRET_ACCESS_KEY'] = 'test-secret-key'
-        env['AWS_REGION'] = ''
+        env['AWS_REGION_NAME'] = ''
 
         with self.assertRaises(ConfigurationError) as context:
             Config(env=env, testing=False)
@@ -147,13 +147,13 @@ class TestAwsBedrockValidation(unittest.TestCase):
         self.assertIn('aws_region is required', str(context.exception))
 
     def test_error_when_aws_region_whitespace_only(self):
-        """Should raise ConfigurationError when AWS_REGION is only whitespace."""
+        """Should raise ConfigurationError when AWS_REGION_NAME is only whitespace."""
         env = self._get_base_env()
         env['USE_CONTRAST_LLM'] = 'false'
         env['AGENT_MODEL'] = 'bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0'
         env['AWS_ACCESS_KEY_ID'] = 'test-access-key'
         env['AWS_SECRET_ACCESS_KEY'] = 'test-secret-key'
-        env['AWS_REGION'] = '   '
+        env['AWS_REGION_NAME'] = '   '
 
         with self.assertRaises(ConfigurationError) as context:
             Config(env=env, testing=False)
@@ -161,17 +161,17 @@ class TestAwsBedrockValidation(unittest.TestCase):
         self.assertIn('aws_region is required', str(context.exception))
 
     # ========================================================================
-    # Tests: Invalid AWS_REGION format
+    # Tests: Invalid AWS_REGION_NAME format
     # ========================================================================
 
     def test_error_when_aws_region_has_invalid_format(self):
-        """Should raise ConfigurationError when AWS_REGION has invalid format."""
+        """Should raise ConfigurationError when AWS_REGION_NAME has invalid format."""
         env = self._get_base_env()
         env['USE_CONTRAST_LLM'] = 'false'
         env['AGENT_MODEL'] = 'bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0'
         env['AWS_ACCESS_KEY_ID'] = 'test-access-key'
         env['AWS_SECRET_ACCESS_KEY'] = 'test-secret-key'
-        env['AWS_REGION'] = 'invalid-region'
+        env['AWS_REGION_NAME'] = 'invalid-region'
 
         with self.assertRaises(ConfigurationError) as context:
             Config(env=env, testing=False)
@@ -180,13 +180,13 @@ class TestAwsBedrockValidation(unittest.TestCase):
         self.assertIn('invalid-region', str(context.exception))
 
     def test_error_when_aws_region_has_quotes(self):
-        """Should raise ConfigurationError when AWS_REGION contains quotes."""
+        """Should raise ConfigurationError when AWS_REGION_NAME contains quotes."""
         env = self._get_base_env()
         env['USE_CONTRAST_LLM'] = 'false'
         env['AGENT_MODEL'] = 'bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0'
         env['AWS_ACCESS_KEY_ID'] = 'test-access-key'
         env['AWS_SECRET_ACCESS_KEY'] = 'test-secret-key'
-        env['AWS_REGION'] = '"us-east-1"'
+        env['AWS_REGION_NAME'] = '"us-east-1"'
 
         with self.assertRaises(ConfigurationError) as context:
             Config(env=env, testing=False)
@@ -194,13 +194,13 @@ class TestAwsBedrockValidation(unittest.TestCase):
         self.assertIn('Invalid aws_region format', str(context.exception))
 
     def test_error_when_aws_region_has_uppercase(self):
-        """Should raise ConfigurationError when AWS_REGION has uppercase letters."""
+        """Should raise ConfigurationError when AWS_REGION_NAME has uppercase letters."""
         env = self._get_base_env()
         env['USE_CONTRAST_LLM'] = 'false'
         env['AGENT_MODEL'] = 'bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0'
         env['AWS_ACCESS_KEY_ID'] = 'test-access-key'
         env['AWS_SECRET_ACCESS_KEY'] = 'test-secret-key'
-        env['AWS_REGION'] = 'US-EAST-1'
+        env['AWS_REGION_NAME'] = 'US-EAST-1'
 
         with self.assertRaises(ConfigurationError) as context:
             Config(env=env, testing=False)
@@ -216,7 +216,7 @@ class TestAwsBedrockValidation(unittest.TestCase):
         env = self._get_base_env()
         env['USE_CONTRAST_LLM'] = 'false'
         env['AGENT_MODEL'] = 'bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0'
-        env['AWS_REGION'] = 'us-east-1'
+        env['AWS_REGION_NAME'] = 'us-east-1'
         # Intentionally NOT setting any AWS credentials
 
         with self.assertRaises(ConfigurationError) as context:
@@ -231,7 +231,7 @@ class TestAwsBedrockValidation(unittest.TestCase):
         env = self._get_base_env()
         env['USE_CONTRAST_LLM'] = 'false'
         env['AGENT_MODEL'] = 'bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0'
-        env['AWS_REGION'] = 'us-east-1'
+        env['AWS_REGION_NAME'] = 'us-east-1'
         env['AWS_ACCESS_KEY_ID'] = 'test-access-key'
         # Missing AWS_SECRET_ACCESS_KEY
 
@@ -245,7 +245,7 @@ class TestAwsBedrockValidation(unittest.TestCase):
         env = self._get_base_env()
         env['USE_CONTRAST_LLM'] = 'false'
         env['AGENT_MODEL'] = 'bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0'
-        env['AWS_REGION'] = 'us-east-1'
+        env['AWS_REGION_NAME'] = 'us-east-1'
         env['AWS_SECRET_ACCESS_KEY'] = 'test-secret-key'
         # Missing AWS_ACCESS_KEY_ID
 
@@ -263,7 +263,7 @@ class TestAwsBedrockValidation(unittest.TestCase):
         env = self._get_base_env()
         env['USE_CONTRAST_LLM'] = 'false'
         env['AGENT_MODEL'] = 'bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0'
-        env['AWS_REGION'] = 'us-east-1'
+        env['AWS_REGION_NAME'] = 'us-east-1'
         env['AWS_ACCESS_KEY_ID'] = 'test-access-key'
         env['AWS_SECRET_ACCESS_KEY'] = 'test-secret-key'
 
@@ -276,7 +276,7 @@ class TestAwsBedrockValidation(unittest.TestCase):
         env = self._get_base_env()
         env['USE_CONTRAST_LLM'] = 'false'
         env['AGENT_MODEL'] = 'bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0'
-        env['AWS_REGION'] = 'us-east-1'
+        env['AWS_REGION_NAME'] = 'us-east-1'
         env['AWS_BEARER_TOKEN_BEDROCK'] = 'test-bearer-token'
 
         # Should NOT raise an error
@@ -288,7 +288,7 @@ class TestAwsBedrockValidation(unittest.TestCase):
         env = self._get_base_env()
         env['USE_CONTRAST_LLM'] = 'false'
         env['AGENT_MODEL'] = 'bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0'
-        env['AWS_REGION'] = 'eu-west-2'
+        env['AWS_REGION_NAME'] = 'eu-west-2'
         env['AWS_BEARER_TOKEN_BEDROCK'] = 'test-bearer-token'
 
         config = Config(env=env, testing=False)
@@ -299,7 +299,7 @@ class TestAwsBedrockValidation(unittest.TestCase):
         env = self._get_base_env()
         env['USE_CONTRAST_LLM'] = 'false'
         env['AGENT_MODEL'] = 'bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0'
-        env['AWS_REGION'] = 'ap-southeast-1'
+        env['AWS_REGION_NAME'] = 'ap-southeast-1'
         env['AWS_BEARER_TOKEN_BEDROCK'] = 'test-bearer-token'
 
         config = Config(env=env, testing=False)
@@ -310,7 +310,7 @@ class TestAwsBedrockValidation(unittest.TestCase):
         env = self._get_base_env()
         env['USE_CONTRAST_LLM'] = 'false'
         env['AGENT_MODEL'] = 'bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0'
-        env['AWS_REGION'] = 'us-gov-west-1'
+        env['AWS_REGION_NAME'] = 'us-gov-west-1'
         env['AWS_BEARER_TOKEN_BEDROCK'] = 'test-bearer-token'
 
         config = Config(env=env, testing=False)
@@ -321,18 +321,18 @@ class TestAwsBedrockValidation(unittest.TestCase):
         env = self._get_base_env()
         env['USE_CONTRAST_LLM'] = 'false'
         env['AGENT_MODEL'] = 'bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0'
-        env['AWS_REGION'] = 'cn-north-1'
+        env['AWS_REGION_NAME'] = 'cn-north-1'
         env['AWS_BEARER_TOKEN_BEDROCK'] = 'test-bearer-token'
 
         config = Config(env=env, testing=False)
         self.assertIsNotNone(config)
 
     def test_region_with_leading_trailing_whitespace_is_trimmed(self):
-        """Should trim whitespace from AWS_REGION and validate correctly."""
+        """Should trim whitespace from AWS_REGION_NAME and validate correctly."""
         env = self._get_base_env()
         env['USE_CONTRAST_LLM'] = 'false'
         env['AGENT_MODEL'] = 'bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0'
-        env['AWS_REGION'] = '  us-east-1  '  # Has whitespace
+        env['AWS_REGION_NAME'] = '  us-east-1  '  # Has whitespace
         env['AWS_BEARER_TOKEN_BEDROCK'] = 'test-bearer-token'
 
         # Should NOT raise an error - whitespace should be trimmed

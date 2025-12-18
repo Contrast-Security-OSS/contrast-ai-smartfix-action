@@ -238,9 +238,8 @@ class Config:
         if self.USE_CONTRAST_LLM or "bedrock/" not in model_lower:
             return
 
-        # Check for AWS_REGION (user-facing) or AWS_REGION_NAME (LiteLLM internal)
-        # main.py maps AWS_REGION -> AWS_REGION_NAME before imports
-        aws_region = self.env.get('AWS_REGION', '').strip() or self.env.get('AWS_REGION_NAME', '').strip()
+        # Check for AWS_REGION_NAME (what LiteLLM expects)
+        aws_region = self.env.get('AWS_REGION_NAME', '').strip()
 
         if not aws_region:
             raise ConfigurationError(

@@ -17,16 +17,6 @@
 # #L%
 #
 
-import os
-
-# Map AWS_REGION to AWS_REGION_NAME for LiteLLM compatibility.
-# LiteLLM requires the non-standard AWS_REGION_NAME, but we expose the standard
-# AWS_REGION to users. Only set AWS_REGION_NAME if AWS_REGION has a non-empty value
-# to prevent IDNA encoding errors from empty region strings.
-_aws_region = os.environ.get('AWS_REGION', '').strip()
-if _aws_region:
-    os.environ['AWS_REGION_NAME'] = _aws_region
-
 import sys
 import re
 import asyncio
