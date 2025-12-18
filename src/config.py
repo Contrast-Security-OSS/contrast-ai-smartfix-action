@@ -18,6 +18,7 @@
 #
 
 import os
+import re
 import sys
 import json
 from pathlib import Path
@@ -135,6 +136,10 @@ class Config:
                 and self._get_env_var("AGENT_MODEL", required=False) is None):
             self.AGENT_MODEL = "contrast/claude-sonnet-4-5"
 
+        # Validate AWS Bedrock configuration if applicable
+        if not testing:
+            self._validate_aws_bedrock_config()
+
         # --- Vulnerability Configuration ---
         self.VULNERABILITY_SEVERITIES = self._parse_and_validate_severities(
             self._get_env_var("VULNERABILITY_SEVERITIES", required=False, default='["CRITICAL", "HIGH"]')
@@ -219,6 +224,53 @@ class Config:
         except json.JSONDecodeError:
             _log_config_message(f"Error parsing vulnerability_severities JSON: {json_str}. Using default.", is_error=True)
             return default_severities
+
+    def _validate_aws_bedrock_config(self) -> None:
+        """Validate AWS Bedrock configuration when using Bedrock models.
+
+        This prevents cryptic IDNA encoding errors when AWS_REGION_NAME is missing
+        or contains invalid characters. Without this validation, users would see:
+        'UnicodeError: encoding with 'idna' codec failed (UnicodeError: label empty or too long)'
+        which is very difficult to debug.
+        """
+        model_lower = self.AGENT_MODEL.lower() if self.AGENT_MODEL else ""
+
+        # Only validate if using Bedrock models (not Contrast LLM)
+        if self.USE_CONTRAST_LLM or "bedrock/" not in model_lower:
+            return
+
+        # Check for AWS_REGION_NAME
+        aws_region = self.env.get('AWS_REGION_NAME', '').strip()
+
+        if not aws_region:
+            raise ConfigurationError(
+                "Error: AWS_REGION_NAME is required when using Bedrock models.\n"
+                "Set the 'aws_region' input in your workflow (e.g., aws_region: 'us-east-1').\n"
+                "This is required for both AWS IAM credentials and AWS Bearer Token authentication."
+            )
+
+        # Validate region format (should be like "us-east-1", no special chars)
+        # AWS regions follow the pattern: 2-letter area code, dash, region name, dash, number
+        # Examples: us-east-1, eu-west-2, ap-southeast-1, us-gov-west-1, cn-north-1
+        if not re.match(r'^[a-z]{2}(-gov)?-[a-z]+-\d+$', aws_region):
+            raise ConfigurationError(
+                f"Error: Invalid AWS_REGION_NAME format: '{aws_region}'\n"
+                "Expected format: 'us-east-1', 'eu-west-2', 'us-gov-west-1', etc.\n"
+                "Check for leading/trailing whitespace or quotes in your configuration."
+            )
+
+        # Check for AWS credentials (either bearer token OR IAM credentials)
+        has_bearer_token = bool(self.env.get('AWS_BEARER_TOKEN_BEDROCK', '').strip())
+        has_access_key = bool(self.env.get('AWS_ACCESS_KEY_ID', '').strip())
+        has_secret_key = bool(self.env.get('AWS_SECRET_ACCESS_KEY', '').strip())
+
+        if not has_bearer_token and not (has_access_key and has_secret_key):
+            raise ConfigurationError(
+                "Error: AWS credentials required for Bedrock models.\n"
+                "Provide either:\n"
+                "  1. AWS_BEARER_TOKEN_BEDROCK (via aws_bearer_token_bedrock input), OR\n"
+                "  2. AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables"
+            )
 
     def _log_initial_settings(self):
         if not self.DEBUG_MODE:
