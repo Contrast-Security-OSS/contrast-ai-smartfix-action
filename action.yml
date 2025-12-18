@@ -389,7 +389,7 @@ runs:
         ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
         # --- AWS Bedrock API Bearer Token (LiteLLM) ---
         AWS_BEARER_TOKEN_BEDROCK: ${{ inputs.aws_bearer_token_bedrock }}
-        AWS_REGION_NAME: ${{ inputs.aws_region }}
+        AWS_REGION_NAME: ${{ inputs.aws_region || env.AWS_REGION_NAME }}
         # --- Azure Credentials for Azure OpenAI (LiteLLM) ---
         AZURE_API_KEY: ${{ inputs.azure_api_key }}
         AZURE_API_BASE: ${{ inputs.azure_api_base }}
