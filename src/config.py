@@ -239,6 +239,7 @@ class Config:
             return
 
         # Check for AWS_REGION_NAME (what LiteLLM expects)
+        # action.yml sets this from inputs.aws_region or env.AWS_REGION
         aws_region = self.env.get('AWS_REGION_NAME', '').strip()
 
         if not aws_region:
