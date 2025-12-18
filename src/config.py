@@ -137,8 +137,7 @@ class Config:
             self.AGENT_MODEL = "contrast/claude-sonnet-4-5"
 
         # Validate AWS Bedrock configuration if applicable
-        if not testing:
-            self._validate_aws_bedrock_config()
+        self._validate_aws_bedrock_config()
 
         # --- Vulnerability Configuration ---
         self.VULNERABILITY_SEVERITIES = self._parse_and_validate_severities(
@@ -228,7 +227,7 @@ class Config:
     def _validate_aws_bedrock_config(self) -> None:
         """Validate AWS Bedrock configuration when using Bedrock models.
 
-        This prevents cryptic IDNA encoding errors when AWS_REGION_NAME is missing
+        This prevents cryptic IDNA encoding errors when AWS region is missing
         or contains invalid characters. Without this validation, users would see:
         'UnicodeError: encoding with 'idna' codec failed (UnicodeError: label empty or too long)'
         which is very difficult to debug.
@@ -239,12 +238,13 @@ class Config:
         if self.USE_CONTRAST_LLM or "bedrock/" not in model_lower:
             return
 
-        # Check for AWS_REGION_NAME
-        aws_region = self.env.get('AWS_REGION_NAME', '').strip()
+        # Check for AWS_REGION (user-facing) or AWS_REGION_NAME (LiteLLM internal)
+        # main.py maps AWS_REGION -> AWS_REGION_NAME before imports
+        aws_region = self.env.get('AWS_REGION', '').strip() or self.env.get('AWS_REGION_NAME', '').strip()
 
         if not aws_region:
             raise ConfigurationError(
-                "Error: AWS_REGION_NAME is required when using Bedrock models.\n"
+                "Error: aws_region is required when using Bedrock models.\n"
                 "Set the 'aws_region' input in your workflow (e.g., aws_region: 'us-east-1').\n"
                 "This is required for both AWS IAM credentials and AWS Bearer Token authentication."
             )
@@ -254,7 +254,7 @@ class Config:
         # Examples: us-east-1, eu-west-2, ap-southeast-1, us-gov-west-1, cn-north-1
         if not re.match(r'^[a-z]{2}(-gov)?-[a-z]+-\d+$', aws_region):
             raise ConfigurationError(
-                f"Error: Invalid AWS_REGION_NAME format: '{aws_region}'\n"
+                f"Error: Invalid aws_region format: '{aws_region}'\n"
                 "Expected format: 'us-east-1', 'eu-west-2', 'us-gov-west-1', etc.\n"
                 "Check for leading/trailing whitespace or quotes in your configuration."
             )

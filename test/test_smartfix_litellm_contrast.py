@@ -183,7 +183,7 @@ class TestSmartFixLiteLlmContrast(unittest.TestCase):
         self.assertEqual(message['content'], original_content)
         self.assertIsInstance(message['content'], str)
 
-    @patch.dict('os.environ', {'USE_CONTRAST_LLM': 'false', 'ENABLE_ANTHROPIC_PROMPT_CACHING': 'true'})
+    @patch.dict('os.environ', {'USE_CONTRAST_LLM': 'false', 'ENABLE_ANTHROPIC_PROMPT_CACHING': 'true', 'AGENT_MODEL': 'anthropic/claude-sonnet-4-5'})
     def test_add_cache_control_applied_when_contrast_llm_disabled(self):
         """Test that _add_cache_control_to_message applies caching when USE_CONTRAST_LLM is False"""
         reset_config()
@@ -205,7 +205,7 @@ class TestSmartFixLiteLlmContrast(unittest.TestCase):
         self.assertIn('cache_control', message['content'][0])
         self.assertEqual(message['content'][0]['cache_control']['type'], 'ephemeral')
 
-    @patch.dict('os.environ', {'USE_CONTRAST_LLM': 'false', 'ENABLE_ANTHROPIC_PROMPT_CACHING': 'false'})
+    @patch.dict('os.environ', {'USE_CONTRAST_LLM': 'false', 'ENABLE_ANTHROPIC_PROMPT_CACHING': 'false', 'AGENT_MODEL': 'anthropic/claude-sonnet-4-5'})
     def test_add_cache_control_skipped_when_caching_disabled(self):
         """Test that _add_cache_control_to_message skips when ENABLE_ANTHROPIC_PROMPT_CACHING is False"""
         reset_config()

@@ -100,39 +100,39 @@ class TestAwsBearerTokenBedrock(unittest.TestCase):
             if 'AWS_BEARER_TOKEN_BEDROCK' in os.environ:
                 del os.environ['AWS_BEARER_TOKEN_BEDROCK']
 
-    def test_aws_region_name_can_be_set(self):
-        """Test that AWS_REGION_NAME environment variable can be set and retrieved."""
+    def test_aws_region_can_be_set(self):
+        """Test that AWS_REGION environment variable can be set and retrieved."""
         test_region = "us-east-1"
 
         # Set the environment variable
-        os.environ['AWS_REGION_NAME'] = test_region
+        os.environ['AWS_REGION'] = test_region
 
         try:
             # Verify it can be retrieved
-            self.assertEqual(os.environ.get('AWS_REGION_NAME'), test_region)
+            self.assertEqual(os.environ.get('AWS_REGION'), test_region)
 
         finally:
             # Clean up
-            if 'AWS_REGION_NAME' in os.environ:
-                del os.environ['AWS_REGION_NAME']
+            if 'AWS_REGION' in os.environ:
+                del os.environ['AWS_REGION']
 
     def test_bearer_token_and_region_together(self):
-        """Test that AWS_BEARER_TOKEN_BEDROCK and AWS_REGION_NAME can be used together."""
+        """Test that AWS_BEARER_TOKEN_BEDROCK and AWS_REGION can be used together."""
         test_token = "test-bearer-token-abc123"
         test_region = "us-west-2"
 
         # Set both environment variables
         os.environ['AWS_BEARER_TOKEN_BEDROCK'] = test_token
-        os.environ['AWS_REGION_NAME'] = test_region
+        os.environ['AWS_REGION'] = test_region
 
         try:
             # Verify both are set correctly
             self.assertEqual(os.environ.get('AWS_BEARER_TOKEN_BEDROCK'), test_token)
-            self.assertEqual(os.environ.get('AWS_REGION_NAME'), test_region)
+            self.assertEqual(os.environ.get('AWS_REGION'), test_region)
 
         finally:
             # Clean up
-            for key in ['AWS_BEARER_TOKEN_BEDROCK', 'AWS_REGION_NAME']:
+            for key in ['AWS_BEARER_TOKEN_BEDROCK', 'AWS_REGION']:
                 if key in os.environ:
                     del os.environ[key]
 
