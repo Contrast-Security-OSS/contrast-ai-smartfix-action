@@ -24,7 +24,9 @@ class TestContrastLlmConfig(unittest.TestCase):
             'CONTRAST_ORG_ID': 'test-org-id',
             'CONTRAST_APP_ID': 'test-app-id',
             'CONTRAST_AUTHORIZATION_KEY': 'test-auth-key',
-            'CONTRAST_API_KEY': 'test-api-key'
+            'CONTRAST_API_KEY': 'test-api-key',
+            # Use non-Bedrock model to avoid AWS validation when USE_CONTRAST_LLM=false
+            'AGENT_MODEL': 'anthropic/claude-sonnet-4-5'
         }
 
         os.environ.update(self.env_vars)

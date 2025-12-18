@@ -70,7 +70,7 @@ class TestTelemetryAttributes(unittest.TestCase):
     @patch.dict(os.environ, clear=True)
     def test_llm_provider_byollm(self):
         """Test that llmProvider is set to BYOLLM when USE_CONTRAST_LLM is false"""
-        test_env = {**self.env_vars, 'USE_CONTRAST_LLM': 'false', 'CODING_AGENT': 'SMARTFIX'}
+        test_env = {**self.env_vars, 'USE_CONTRAST_LLM': 'false', 'CODING_AGENT': 'SMARTFIX', 'AGENT_MODEL': 'anthropic/claude-sonnet-4-5'}
 
         with patch.dict(os.environ, test_env):
             reset_config()
