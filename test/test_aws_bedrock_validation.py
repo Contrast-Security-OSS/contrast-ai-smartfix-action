@@ -246,7 +246,7 @@ class TestAwsBedrockValidation(unittest.TestCase):
 
         self.assertIn('AWS credentials are required', str(context.exception))
         self.assertIn('AWS IAM credentials', str(context.exception))
-        self.assertIn('AWS Bearer Token', str(context.exception))
+        self.assertIn('AWS Other Tokens', str(context.exception))
 
     def test_error_when_aws_credentials_missing_with_bedrock(self):
         """Should raise ConfigurationError when no AWS credentials provided for Bedrock."""
@@ -259,7 +259,7 @@ class TestAwsBedrockValidation(unittest.TestCase):
         with self.assertRaises(ConfigurationError) as context:
             Config(env=env, testing=False)
 
-        self.assertIn('AWS credentials required', str(context.exception))
+        self.assertIn('AWS credentials are required', str(context.exception))
         self.assertIn('AWS_BEARER_TOKEN_BEDROCK', str(context.exception))
         self.assertIn('AWS_ACCESS_KEY_ID', str(context.exception))
 
@@ -314,7 +314,8 @@ class TestAwsBedrockValidation(unittest.TestCase):
         env['USE_CONTRAST_LLM'] = 'false'
         env['AGENT_MODEL'] = 'bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0'
         env['AWS_REGION_NAME'] = 'us-east-1'
-        env['AWS_BEARER_TOKEN_BEDROCK'] = 'test-bearer-token'
+        env['AWS_ACCESS_KEY_ID'] = 'test-access-key'
+        env['AWS_SECRET_ACCESS_KEY'] = 'test-secret-key'
 
         # Should NOT raise an error
         config = Config(env=env, testing=False)
@@ -326,7 +327,8 @@ class TestAwsBedrockValidation(unittest.TestCase):
         env['USE_CONTRAST_LLM'] = 'false'
         env['AGENT_MODEL'] = 'bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0'
         env['AWS_REGION_NAME'] = 'eu-west-2'
-        env['AWS_BEARER_TOKEN_BEDROCK'] = 'test-bearer-token'
+        env['AWS_ACCESS_KEY_ID'] = 'test-access-key'
+        env['AWS_SECRET_ACCESS_KEY'] = 'test-secret-key'
 
         config = Config(env=env, testing=False)
         self.assertIsNotNone(config)
@@ -337,7 +339,8 @@ class TestAwsBedrockValidation(unittest.TestCase):
         env['USE_CONTRAST_LLM'] = 'false'
         env['AGENT_MODEL'] = 'bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0'
         env['AWS_REGION_NAME'] = 'ap-southeast-1'
-        env['AWS_BEARER_TOKEN_BEDROCK'] = 'test-bearer-token'
+        env['AWS_ACCESS_KEY_ID'] = 'test-access-key'
+        env['AWS_SECRET_ACCESS_KEY'] = 'test-secret-key'
 
         config = Config(env=env, testing=False)
         self.assertIsNotNone(config)
@@ -348,7 +351,8 @@ class TestAwsBedrockValidation(unittest.TestCase):
         env['USE_CONTRAST_LLM'] = 'false'
         env['AGENT_MODEL'] = 'bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0'
         env['AWS_REGION_NAME'] = 'us-gov-west-1'
-        env['AWS_BEARER_TOKEN_BEDROCK'] = 'test-bearer-token'
+        env['AWS_ACCESS_KEY_ID'] = 'test-access-key'
+        env['AWS_SECRET_ACCESS_KEY'] = 'test-secret-key'
 
         config = Config(env=env, testing=False)
         self.assertIsNotNone(config)
@@ -359,7 +363,8 @@ class TestAwsBedrockValidation(unittest.TestCase):
         env['USE_CONTRAST_LLM'] = 'false'
         env['AGENT_MODEL'] = 'bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0'
         env['AWS_REGION_NAME'] = 'cn-north-1'
-        env['AWS_BEARER_TOKEN_BEDROCK'] = 'test-bearer-token'
+        env['AWS_ACCESS_KEY_ID'] = 'test-access-key'
+        env['AWS_SECRET_ACCESS_KEY'] = 'test-secret-key'
 
         config = Config(env=env, testing=False)
         self.assertIsNotNone(config)
@@ -370,7 +375,8 @@ class TestAwsBedrockValidation(unittest.TestCase):
         env['USE_CONTRAST_LLM'] = 'false'
         env['AGENT_MODEL'] = 'bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0'
         env['AWS_REGION_NAME'] = '  us-east-1  '  # Has whitespace
-        env['AWS_BEARER_TOKEN_BEDROCK'] = 'test-bearer-token'
+        env['AWS_ACCESS_KEY_ID'] = 'test-access-key'
+        env['AWS_SECRET_ACCESS_KEY'] = 'test-secret-key'
 
         # Should NOT raise an error - whitespace should be trimmed
         config = Config(env=env, testing=False)

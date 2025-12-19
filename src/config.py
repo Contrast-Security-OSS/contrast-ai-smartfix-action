@@ -253,7 +253,7 @@ class Config:
                 "Error: AWS credentials are required when using Bedrock models.\n"
                 "You must set either:\n"
                 "  - AWS IAM credentials (such as AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN)\n"
-                "  - AWS Bearer Token (AWS_BEARER_TOKEN_BEDROCK)\n"
+                "  - AWS Other Tokens (AWS_BEARER_TOKEN_BEDROCK)\n"
                 f"Current model: {self.AGENT_MODEL}"
             )
 
