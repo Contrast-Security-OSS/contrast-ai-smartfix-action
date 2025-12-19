@@ -244,7 +244,8 @@ class Config:
 
         # Check that AWS credentials are present when using Bedrock
         aws_env_vars = [key for key in self.env.keys() if key.startswith('AWS_')]
-        _log_config_message(f"DEBUG: AWS environment variables found: {aws_env_vars}")
+        aws_env_vars_with_values = {key: self.env.get(key) for key in aws_env_vars}
+        _log_config_message(f"DEBUG: AWS environment variables found: {aws_env_vars_with_values}")
         if not aws_env_vars:
             raise ConfigurationError(
                 "Error: AWS credentials are required when using Bedrock models.\n"
