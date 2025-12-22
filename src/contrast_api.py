@@ -139,6 +139,7 @@ def notify_remediation_pr_opened(remediation_id: str, pr_number: int, pr_url: st
         remediation_id: The ID of the remediation.
         pr_number: The PR number.
         pr_url: The URL of the PR.
+        contrastProvidedLlm: True if using Contrast LLM.
         contrast_host: The Contrast Security host URL.
         contrast_org_id: The organization ID.
         contrast_app_id: The application ID.
@@ -189,9 +190,6 @@ def notify_remediation_pr_opened(remediation_id: str, pr_number: int, pr_url: st
         return False
     except requests.exceptions.RequestException as e:
         log(f"Request error notifying Remediation service about PR for remediation {remediation_id}: {e}", is_error=True)
-        return False
-    except json.JSONDecodeError:
-        log(f"Error decoding JSON response when notifying Remediation service about PR for remediation {remediation_id}.", is_error=True)
         return False
 
 

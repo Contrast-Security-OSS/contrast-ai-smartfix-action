@@ -3,12 +3,13 @@
 # run_tests.sh - Install dependencies with UV and run tests
 #
 # Usage:
-#   ./run_tests.sh [--skip-install] [test_files...]
+#   ./run_tests.sh [--skip-install] [--coverage] [test_files...]
 #
 # Examples:
 #   ./run_tests.sh                    # Install deps and run all tests
 #   ./run_tests.sh test_main.py       # Install deps and run specific test
 #   ./run_tests.sh --skip-install     # Skip installation, run all tests
+#   ./run_tests.sh --coverage         # Run tests with coverage report
 #
 
 set -e  # Exit on error
@@ -17,11 +18,14 @@ set -e  # Exit on error
 PROJECT_ROOT=$(cd "$(dirname "$0")/.." && pwd)
 REQUIREMENTS_LOCK="$PROJECT_ROOT/src/requirements.lock"
 SKIP_INSTALL=0
+COVERAGE=0
 
 # Process arguments
 TEST_FILES=()
 for arg in "$@"; do
-    if [[ "$arg" == "--skip-install" ]]; then
+    if [[ "$arg" == "--coverage" ]]; then
+        COVERAGE=1
+    elif [[ "$arg" == "--skip-install" ]]; then
         SKIP_INSTALL=1
     else
         TEST_FILES+=("$arg")
@@ -92,10 +96,24 @@ if [[ -d "$VENV_DIR" ]]; then
     PYTHON_CMD="$VENV_DIR/bin/python"
 fi
 
-if [[ ${#TEST_FILES[@]} -eq 0 ]]; then
-    echo "Running all tests..."
-    "$PYTHON_CMD" -m unittest discover -s test
+# Install coverage if needed
+if [[ $COVERAGE -eq 1 ]]; then
+    uv pip install coverage
+fi
+
+# Run tests
+if [[ $COVERAGE -eq 1 ]]; then
+    echo "Running tests with coverage..."
+    "$PYTHON_CMD" -m coverage run --omit="test/*" -m unittest discover -s test "${TEST_FILES[@]}"
+    "$PYTHON_CMD" -m coverage report
+    "$PYTHON_CMD" -m coverage html
+    echo "HTML report: htmlcov/index.html"
 else
-    echo "Running specific tests: ${TEST_FILES[*]}"
-    "$PYTHON_CMD" -m unittest "${TEST_FILES[@]}"
+    if [[ ${#TEST_FILES[@]} -eq 0 ]]; then
+        echo "Running all tests..."
+        "$PYTHON_CMD" -m unittest discover -s test
+    else
+        echo "Running specific tests: ${TEST_FILES[*]}"
+        "$PYTHON_CMD" -m unittest "${TEST_FILES[@]}"
+    fi
 fi
