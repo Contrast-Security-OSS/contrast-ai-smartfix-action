@@ -19,7 +19,6 @@
 #
 
 import unittest
-import json
 from unittest.mock import patch, MagicMock
 import requests
 
@@ -31,8 +30,7 @@ class TestContrastApiSendTelemetryData(unittest.TestCase):
 
     @patch('src.contrast_api.requests.post')
     @patch('src.contrast_api.telemetry_handler.get_telemetry_data')
-    def test_send_telemetry_data_returns_valid_response(self,
-        mock_get_telemetry, mock_post):
+    def test_send_telemetry_data_returns_valid_response(self, mock_get_telemetry, mock_post):
         """Test that successful API call returns True."""
         mock_get_telemetry.return_value = {
             'additionalAttributes': {'remediationId': 'test-id'}
@@ -48,8 +46,7 @@ class TestContrastApiSendTelemetryData(unittest.TestCase):
         self.assertTrue(result)
 
     @patch('src.contrast_api.telemetry_handler.get_telemetry_data')
-    def test_send_telemetry_data_missing_remediation_id(self,
-        mock_get_telemetry):
+    def test_send_telemetry_data_missing_remediation_id(self, mock_get_telemetry):
         """Test that no ID short circuits to return None."""
         mock_get_telemetry.return_value = {
             'additionalAttributes': {'remediationId': None}
@@ -59,7 +56,6 @@ class TestContrastApiSendTelemetryData(unittest.TestCase):
 
         # Focus on behavior: what does the user get back?
         self.assertIsNone(result)
-
 
     @patch('src.contrast_api.telemetry_handler.get_telemetry_data')
     @patch('src.contrast_api.config.CONTRAST_HOST', None)
@@ -73,11 +69,9 @@ class TestContrastApiSendTelemetryData(unittest.TestCase):
 
         self.assertFalse(result)
 
-
     @patch('src.contrast_api.requests.post')
     @patch('src.contrast_api.telemetry_handler.get_telemetry_data')
-    def test_send_telemetry_data_returns_not_found(self,
-        mock_get_telemetry, mock_post):
+    def test_send_telemetry_data_returns_not_found(self, mock_get_telemetry, mock_post):
         """Test that error API call returns False."""
         mock_get_telemetry.return_value = {
             'additionalAttributes': {'remediationId': 'test-id'}
@@ -92,11 +86,9 @@ class TestContrastApiSendTelemetryData(unittest.TestCase):
         # Focus on behavior: what does the user get back?
         self.assertFalse(result)
 
-
     @patch('src.contrast_api.requests.post')
     @patch('src.contrast_api.telemetry_handler.get_telemetry_data')
-    def test_send_telemetry_data_request_error(self,
-        mock_get_telemetry, mock_post):
+    def test_send_telemetry_data_request_error(self, mock_get_telemetry, mock_post):
         """Test handling of request exceptions."""
         mock_get_telemetry.return_value = {
             'additionalAttributes': {'remediationId': 'test-id'}
@@ -108,6 +100,7 @@ class TestContrastApiSendTelemetryData(unittest.TestCase):
         result = contrast_api.send_telemetry_data()
 
         self.assertFalse(result)
+
 
 if __name__ == '__main__':
     unittest.main()
