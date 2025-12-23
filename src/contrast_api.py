@@ -130,7 +130,7 @@ def get_vulnerability_with_prompts(contrast_host, contrast_org_id, contrast_app_
         sys.exit(1)
 
 
-def notify_remediation_pr_opened(remediation_id: str, pr_number: int, pr_url: str, contrastProvidedLlm: bool, contrast_host: str,
+def notify_remediation_pr_opened(remediation_id: str, pr_number: int, pr_url: str, contrast_provided_llm: bool, contrast_host: str,
                                  contrast_org_id: str, contrast_app_id: str, contrast_auth_key: str,
                                  contrast_api_key: str) -> bool:
     """Notifies the Remediation backend service that a PR has been opened for a remediation.
@@ -139,7 +139,7 @@ def notify_remediation_pr_opened(remediation_id: str, pr_number: int, pr_url: st
         remediation_id: The ID of the remediation.
         pr_number: The PR number.
         pr_url: The URL of the PR.
-        contrastProvidedLlm: True if using Contrast LLM.
+        contrast_provided_llm: True if using Contrast LLM.
         contrast_host: The Contrast Security host URL.
         contrast_org_id: The organization ID.
         contrast_app_id: The application ID.
@@ -163,7 +163,7 @@ def notify_remediation_pr_opened(remediation_id: str, pr_number: int, pr_url: st
     payload = {
         "pullRequestNumber": pr_number,
         "pullRequestUrl": pr_url,
-        "contrastProvidedLlm": contrastProvidedLlm
+        "contrastProvidedLlm": contrast_provided_llm
     }
 
     try:

@@ -46,7 +46,7 @@ class TestContrastApiNotifyRemediationMerged(unittest.TestCase):
             **{**defaults, **overrides})
 
     @patch('src.contrast_api.requests.put')
-    def test_put_pr_merged_returns_valid_response_object(self, mock_put):
+    def test_pr_merged_returns_valid_response_object(self, mock_put):
         """Test successful API call returns True."""
         # Mock successful response
         self.mock_response.status_code = 204
@@ -58,7 +58,7 @@ class TestContrastApiNotifyRemediationMerged(unittest.TestCase):
         self.assertTrue(result)
 
     @patch('src.contrast_api.requests.put')
-    def test_put_pr_merged_http_error_returns_false(self, mock_put):
+    def test_pr_merged_should_return_http_error_on_exception(self, mock_put):
         """Test that HTTP errors return False."""
         self.mock_response.status_code = 404
         self.mock_response.text = "Not found"
@@ -89,7 +89,7 @@ class TestContrastApiNotifyRemediationMerged(unittest.TestCase):
         self.assertFalse(result)
 
     @patch('src.contrast_api.requests.put')
-    def test_put_pr_merged_request_error(self, mock_put):
+    def test_pr_merged_request_error(self, mock_put):
         """Test handling of request exceptions."""
         # Create a RequestException instance
         mock_put.side_effect = requests.exceptions.RequestException(
@@ -100,7 +100,7 @@ class TestContrastApiNotifyRemediationMerged(unittest.TestCase):
         self.assertFalse(result)
 
     @patch('src.contrast_api.requests.put')
-    def test_put_pr_merged_json_error(self, mock_put):
+    def test_pr_merged_json_error(self, mock_put):
         """Test that malformed JSON results in return False."""
         self.mock_response.status_code = 200
         self.mock_response.json.side_effect = json.JSONDecodeError(

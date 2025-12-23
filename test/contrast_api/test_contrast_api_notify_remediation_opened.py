@@ -37,7 +37,7 @@ class TestContrastApiNotifyRemediationOpened(unittest.TestCase):
             'remediation_id': 'test-reme-d1at-ion1d',
             'pr_number': '123-pr-number',
             'pr_url': 'https://pr.url.com/123-pr-number',
-            'contrastProvidedLlm': True,
+            'contrast_provided_llm': True,
             'contrast_host': 'test.contrastsecurity.com',
             'contrast_org_id': 'test-org-id',
             'contrast_app_id': 'test-app-id',
@@ -48,7 +48,7 @@ class TestContrastApiNotifyRemediationOpened(unittest.TestCase):
             **{**defaults, **overrides})
 
     @patch('src.contrast_api.requests.put')
-    def test_put_pr_opened_returns_valid_response_object(self, mock_put):
+    def test_pr_opened_returns_valid_response_object(self, mock_put):
         """Test successful API call returns True."""
         # Mock successful response
         self.mock_response.status_code = 200
@@ -69,7 +69,7 @@ class TestContrastApiNotifyRemediationOpened(unittest.TestCase):
         self.assertTrue(result)
 
     @patch('src.contrast_api.requests.put')
-    def test_put_pr_opened_http_error_returns_false(self, mock_put):
+    def test_pr_opened_http_error_returns_false(self, mock_put):
         """Test that HTTP errors return False."""
         self.mock_response.status_code = 404
         self.mock_response.text = "Not found"
@@ -100,7 +100,7 @@ class TestContrastApiNotifyRemediationOpened(unittest.TestCase):
         self.assertFalse(result)
 
     @patch('src.contrast_api.requests.put')
-    def test_put_pr_opened_request_error(self, mock_put):
+    def test_pr_opened_request_error(self, mock_put):
         """Test handling of request exceptions."""
         # Create a RequestException instance
         mock_put.side_effect = requests.exceptions.RequestException(
