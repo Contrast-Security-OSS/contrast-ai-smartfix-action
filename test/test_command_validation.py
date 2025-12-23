@@ -17,7 +17,6 @@ import unittest
 from src.smartfix.config.command_validator import (
     validate_command,
     CommandValidationError,
-    ALLOWED_COMMANDS,
 )
 
 
