@@ -114,6 +114,30 @@ class TestAwsBedrockValidation(unittest.TestCase):
         config = Config(env=env, testing=False)
         self.assertEqual(config.AGENT_MODEL, 'azure/gpt-4')
 
+    def test_validation_skipped_for_merge_task(self):
+        """Validation should be skipped when RUN_TASK is 'merge'."""
+        env = self._get_base_env()
+        env['RUN_TASK'] = 'merge'
+        env['USE_CONTRAST_LLM'] = 'false'
+        env['AGENT_MODEL'] = 'bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0'
+        # Intentionally NOT setting AWS_REGION_NAME or credentials to verify it's not checked
+
+        # Should NOT raise an error because RUN_TASK='merge' skips validation
+        config = Config(env=env, testing=False)
+        self.assertEqual(config.RUN_TASK, 'merge')
+
+    def test_validation_skipped_for_closed_task(self):
+        """Validation should be skipped when RUN_TASK is 'closed'."""
+        env = self._get_base_env()
+        env['RUN_TASK'] = 'closed'
+        env['USE_CONTRAST_LLM'] = 'false'
+        env['AGENT_MODEL'] = 'bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0'
+        # Intentionally NOT setting AWS_REGION_NAME or credentials to verify it's not checked
+
+        # Should NOT raise an error because RUN_TASK='closed' skips validation
+        config = Config(env=env, testing=False)
+        self.assertEqual(config.RUN_TASK, 'closed')
+
     # ========================================================================
     # Tests: Missing AWS_REGION_NAME
     # ========================================================================
@@ -210,6 +234,20 @@ class TestAwsBedrockValidation(unittest.TestCase):
     # Tests: Missing AWS credentials
     # ========================================================================
 
+    def test_error_when_no_aws_env_vars_with_bedrock(self):
+        """Should raise ConfigurationError when no AWS environment variables exist for Bedrock."""
+        env = self._get_base_env()
+        env['USE_CONTRAST_LLM'] = 'false'
+        env['AGENT_MODEL'] = 'bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0'
+        # Intentionally NOT setting ANY AWS_* environment variables
+
+        with self.assertRaises(ConfigurationError) as context:
+            Config(env=env, testing=False)
+
+        self.assertIn('AWS credentials are required', str(context.exception))
+        self.assertIn('AWS IAM credentials', str(context.exception))
+        self.assertIn('AWS Other Tokens', str(context.exception))
+
     def test_error_when_aws_credentials_missing_with_bedrock(self):
         """Should raise ConfigurationError when no AWS credentials provided for Bedrock."""
         env = self._get_base_env()
@@ -221,7 +259,7 @@ class TestAwsBedrockValidation(unittest.TestCase):
         with self.assertRaises(ConfigurationError) as context:
             Config(env=env, testing=False)
 
-        self.assertIn('AWS credentials required', str(context.exception))
+        self.assertIn('AWS credentials are required', str(context.exception))
         self.assertIn('AWS_BEARER_TOKEN_BEDROCK', str(context.exception))
         self.assertIn('AWS_ACCESS_KEY_ID', str(context.exception))
 
@@ -276,7 +314,8 @@ class TestAwsBedrockValidation(unittest.TestCase):
         env['USE_CONTRAST_LLM'] = 'false'
         env['AGENT_MODEL'] = 'bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0'
         env['AWS_REGION_NAME'] = 'us-east-1'
-        env['AWS_BEARER_TOKEN_BEDROCK'] = 'test-bearer-token'
+        env['AWS_ACCESS_KEY_ID'] = 'test-access-key'
+        env['AWS_SECRET_ACCESS_KEY'] = 'test-secret-key'
 
         # Should NOT raise an error
         config = Config(env=env, testing=False)
@@ -288,7 +327,8 @@ class TestAwsBedrockValidation(unittest.TestCase):
         env['USE_CONTRAST_LLM'] = 'false'
         env['AGENT_MODEL'] = 'bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0'
         env['AWS_REGION_NAME'] = 'eu-west-2'
-        env['AWS_BEARER_TOKEN_BEDROCK'] = 'test-bearer-token'
+        env['AWS_ACCESS_KEY_ID'] = 'test-access-key'
+        env['AWS_SECRET_ACCESS_KEY'] = 'test-secret-key'
 
         config = Config(env=env, testing=False)
         self.assertIsNotNone(config)
@@ -299,7 +339,8 @@ class TestAwsBedrockValidation(unittest.TestCase):
         env['USE_CONTRAST_LLM'] = 'false'
         env['AGENT_MODEL'] = 'bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0'
         env['AWS_REGION_NAME'] = 'ap-southeast-1'
-        env['AWS_BEARER_TOKEN_BEDROCK'] = 'test-bearer-token'
+        env['AWS_ACCESS_KEY_ID'] = 'test-access-key'
+        env['AWS_SECRET_ACCESS_KEY'] = 'test-secret-key'
 
         config = Config(env=env, testing=False)
         self.assertIsNotNone(config)
@@ -310,7 +351,8 @@ class TestAwsBedrockValidation(unittest.TestCase):
         env['USE_CONTRAST_LLM'] = 'false'
         env['AGENT_MODEL'] = 'bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0'
         env['AWS_REGION_NAME'] = 'us-gov-west-1'
-        env['AWS_BEARER_TOKEN_BEDROCK'] = 'test-bearer-token'
+        env['AWS_ACCESS_KEY_ID'] = 'test-access-key'
+        env['AWS_SECRET_ACCESS_KEY'] = 'test-secret-key'
 
         config = Config(env=env, testing=False)
         self.assertIsNotNone(config)
@@ -321,7 +363,8 @@ class TestAwsBedrockValidation(unittest.TestCase):
         env['USE_CONTRAST_LLM'] = 'false'
         env['AGENT_MODEL'] = 'bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0'
         env['AWS_REGION_NAME'] = 'cn-north-1'
-        env['AWS_BEARER_TOKEN_BEDROCK'] = 'test-bearer-token'
+        env['AWS_ACCESS_KEY_ID'] = 'test-access-key'
+        env['AWS_SECRET_ACCESS_KEY'] = 'test-secret-key'
 
         config = Config(env=env, testing=False)
         self.assertIsNotNone(config)
@@ -332,7 +375,8 @@ class TestAwsBedrockValidation(unittest.TestCase):
         env['USE_CONTRAST_LLM'] = 'false'
         env['AGENT_MODEL'] = 'bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0'
         env['AWS_REGION_NAME'] = '  us-east-1  '  # Has whitespace
-        env['AWS_BEARER_TOKEN_BEDROCK'] = 'test-bearer-token'
+        env['AWS_ACCESS_KEY_ID'] = 'test-access-key'
+        env['AWS_SECRET_ACCESS_KEY'] = 'test-secret-key'
 
         # Should NOT raise an error - whitespace should be trimmed
         config = Config(env=env, testing=False)
