@@ -8,6 +8,24 @@ Thank you for your interest in contributing to SmartFix! This guide will help yo
 
 If you or your company do not have a CLA on file with Contrast Security, please contact us before submitting pull requests. This requirement does not apply to Contrast Security employees.
 
+## 🔀 Branching Strategy
+
+**Important**: All development should be based on the `release_candidate` branch:
+
+- **Feature branches**: Branch from `release_candidate`
+- **Pull requests**: Merge into `release_candidate`
+- **Release process**: Periodically, `release_candidate` is merged to `main` for releases
+
+```bash
+# Create a new feature branch from release_candidate
+git checkout release_candidate
+git pull origin release_candidate
+git checkout -b feature/your-feature-name
+
+# When ready to submit
+# Create PR targeting release_candidate (not main)
+```
+
 ## 🚀 Quick Start
 
 ### 1. Clone and Setup

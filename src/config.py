@@ -232,11 +232,30 @@ class Config:
         'UnicodeError: encoding with 'idna' codec failed (UnicodeError: label empty or too long)'
         which is very difficult to debug.
         """
+        # Only validate for generate_fix task
+        if self.RUN_TASK != "generate_fix":
+            return
+
         model_lower = self.AGENT_MODEL.lower() if self.AGENT_MODEL else ""
 
         # Only validate if using Bedrock models (not Contrast LLM)
         if self.USE_CONTRAST_LLM or "bedrock/" not in model_lower:
             return
+
+        # Check that AWS credentials are present when using Bedrock
+        # Exclude AWS_BEARER_TOKEN_BEDROCK and AWS_REGION_NAME as they may be empty from action.yml
+        has_aws_credentials = any(
+            key.startswith('AWS_') and key not in ('AWS_BEARER_TOKEN_BEDROCK', 'AWS_REGION_NAME')
+            for key in self.env.keys()
+        )
+        if not has_aws_credentials:
+            raise ConfigurationError(
+                "Error: AWS credentials are required when using Bedrock models.\n"
+                "You must set either:\n"
+                "  - AWS IAM credentials (such as AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN)\n"
+                "  - AWS Other Tokens (AWS_BEARER_TOKEN_BEDROCK)\n"
+                f"Current model: {self.AGENT_MODEL}"
+            )
 
         # Check for AWS_REGION_NAME (what LiteLLM expects)
         # action.yml sets this from inputs.aws_region or env.AWS_REGION
