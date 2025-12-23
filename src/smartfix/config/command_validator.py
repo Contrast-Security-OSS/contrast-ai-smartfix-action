@@ -28,10 +28,8 @@ import re
 import shlex
 from typing import List, Tuple, Optional
 
-from src.config import ConfigurationError
 
-
-class CommandValidationError(ConfigurationError):
+class CommandValidationError(Exception):
     """Raised when a command fails allowlist validation."""
     pass
 
