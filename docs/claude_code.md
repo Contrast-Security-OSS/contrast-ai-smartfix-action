@@ -65,10 +65,9 @@ on:
   workflow_dispatch: # Allows manual triggering
 
 jobs:
-  generate_fixes:
-    name: Generate Fixes
+  run_smartfix:
+    name: SmartFix
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     steps:
       # When using Claude Code, it is unnecessary to authenticate with an LLM API from this step.
       # You must authenticate with your LLM provider in the claude.yml workflow file instead.
@@ -78,7 +77,18 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Run Contrast AI SmartFix - Generate Fixes Action
+      - name: Determine SmartFix Job Type
+        id: determine_job_name
+        shell: bash
+        run: |
+          if [[ "${{ github.event.pull_request.merged }}" == "true" ]]; then
+            echo "job_name=Notify Contrast on PR Merge" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event.pull_request.merged }}" == "false" ]]; then
+            echo "job_name=Handle PR Close" >> $GITHUB_OUTPUT
+          else
+            echo "job_name=Run Contrast AI SmartFix - Generate Fixes" >> $GITHUB_OUTPUT
+          fi
+      - name: ${{ steps.determine_job_name.outputs.job_name }}
         uses: Contrast-Security-OSS/contrast-ai-smartfix-action@v1 # Replace with the latest version
         with:
           # Contrast Configuration
@@ -96,57 +106,6 @@ jobs:
           # Other Optional Inputs (see action.yml for defaults and more options)
           # max_open_prs: 5 # This is the maximum limit for the number of PRs that SmartFix will have open at single time
 
-  handle_pr_merge:
-    name: Handle PR Merge
-    runs-on: ubuntu-latest
-    if: github.event.pull_request.merged == true && contains(github.event.pull_request.head.ref, 'claude/issue-')
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Notify Contrast on PR Merge
-        uses: Contrast-Security-OSS/contrast-ai-smartfix-action@v1 # Replace with the latest version
-        with:
-          run_task: merge
-          coding_agent: 'CLAUDE_CODE'
-          # --- GitHub Token ---
-          github_token: ${{ secrets.PAT_TOKEN }}
-          # --- Contrast API Credentials ---
-          contrast_host: ${{ vars.CONTRAST_HOST }}
-          contrast_org_id: ${{ vars.CONTRAST_ORG_ID }}
-          contrast_app_id: ${{ vars.CONTRAST_APP_ID }}
-          contrast_authorization_key: ${{ secrets.CONTRAST_AUTHORIZATION_KEY }}
-          contrast_api_key: ${{ secrets.CONTRAST_API_KEY }}
-        env:
-          GITHUB_EVENT_PATH: ${{ github.event_path }}
-
-  handle_pr_closed:
-    name: Handle PR Close
-    runs-on: ubuntu-latest
-    if: github.event.pull_request.merged == false && contains(github.event.pull_request.head.ref, 'claude/issue-')
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Notify Contrast on PR Closed
-        uses: Contrast-Security-OSS/contrast-ai-smartfix-action@v1 # Replace with the latest version
-        with:
-          run_task: closed
-          coding_agent: 'CLAUDE_CODE'
-          # --- GitHub Token ---
-          github_token: ${{ secrets.PAT_TOKEN }}
-          # --- Contrast API Credentials ---
-          contrast_host: ${{ vars.CONTRAST_HOST }}
-          contrast_org_id: ${{ vars.CONTRAST_ORG_ID }}
-          contrast_app_id: ${{ vars.CONTRAST_APP_ID }}
-          contrast_authorization_key: ${{ secrets.CONTRAST_AUTHORIZATION_KEY }}
-          contrast_api_key: ${{ secrets.CONTRAST_API_KEY }}
-        env:
-          GITHUB_EVENT_PATH: ${{ github.event_path }}
 ```
 
 **Important:**
