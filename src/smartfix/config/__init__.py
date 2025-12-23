@@ -13,6 +13,15 @@ Key Components (to be implemented):
 - TelemetryConfig: Telemetry and observability configuration
 """
 
+from src.smartfix.config.command_validator import (
+    validate_command,
+    CommandValidationError,
+    ALLOWED_COMMANDS,
+)
+
 __all__ = [
     # Configuration components will be exported as they are implemented
+    "validate_command",
+    "CommandValidationError",
+    "ALLOWED_COMMANDS",
 ]

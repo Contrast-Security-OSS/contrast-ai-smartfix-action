@@ -38,6 +38,145 @@ Please follow the specific setup instructions link for the coding agent of your 
 * **Configurable PR Throttling:** Control the volume of automated PRs using `max_open_prs`.
 * **Debug Mode:** Enable `debug_mode: 'true'` for verbose logging in the GitHub Action output.
 
+## Security
+
+### Command Allowlist
+
+SmartFix validates all build and format commands against a security allowlist to prevent arbitrary command execution in GitHub Actions workflows. This protection applies to the `BUILD_COMMAND` and `FORMATTING_COMMAND` configuration parameters.
+
+#### Allowed Commands
+
+Commands are organized by language ecosystem:
+
+**Java:**
+- `mvn`, `gradle`, `ant`, `junit`, `testng`
+- `./gradlew`, `./mvnw`, `gradlew`, `mvnw`
+- `google-java-format`, `checkstyle`
+
+**.NET:**
+- `dotnet`, `msbuild`, `nuget`
+- `nunit-console`, `nunit3-console`, `xunit.console`, `vstest.console`, `mstest`
+- `csharpier`
+
+**Python:**
+- `pip`, `pip3`, `python`, `python3`
+- `pytest`, `nose2`, `unittest`, `coverage`
+- `poetry`, `pipenv`, `uv`, `tox`, `virtualenv`
+- `black`, `autopep8`, `yapf`, `isort`, `ruff`, `flake8`, `pylint`
+
+**Node.js/JavaScript/TypeScript:**
+- `npm`, `npx`, `yarn`, `node`, `pnpm`, `bun`
+- `jest`, `mocha`, `jasmine`, `karma`, `ava`, `vitest`, `nyc`
+- `prettier`, `eslint`, `standard`
+
+**PHP:**
+- `composer`, `php`, `phpunit`, `pest`, `codeception`
+- `php-cs-fixer`, `phpcbf`
+
+**Build Tools & Utilities:**
+- `make`, `cmake`, `ninja`, `bazel`, `ctest`
+- `echo`, `sh`, `bash`, `grep`, `sed`, `awk`, `cat`, `tee`
+- `clang-format` (multi-language)
+
+#### Allowed Operators
+
+Commands can be chained using these operators:
+- `&&` (sequential execution)
+- `||` (fallback execution)
+- `;` (command separator)
+- `|` (pipe)
+
+#### File Redirects
+
+File redirects are allowed with these restrictions:
+- ✅ Relative paths: `npm test > build.log`
+- ✅ Append mode: `npm test >> output.txt`
+- ✅ Error redirect: `npm test 2> error.log`
+- ❌ Absolute paths: `npm test > /etc/passwd`
+- ❌ Parent traversal: `npm test > ../../sensitive.txt`
+- ❌ Home directory: `npm test > ~/secrets.txt`
+
+#### Shell Command Restrictions
+
+Shell commands (`sh`/`bash`) have special restrictions:
+- ✅ Allowed: `sh ./build.sh`, `bash ./scripts/test.sh`
+- ❌ Blocked: `sh -c "command"`, `bash -c 'code'`
+- Must execute `.sh` files only
+
+#### Blocked Patterns
+
+These dangerous patterns are automatically blocked:
+- Command substitution: `$(...)` or `` `...` ``
+- Variable expansion: `${...}`
+- Execution commands: `eval`, `exec`
+- Dangerous operations: `rm -rf`
+- Piping to shell: `curl ... | sh`, `wget ... | bash`
+- Device access: `> /dev/...`
+
+#### Examples
+
+**Valid Commands:**
+```bash
+# Java
+BUILD_COMMAND="mvn clean install && mvn test"
+
+# Python
+BUILD_COMMAND="pip install -r requirements.txt && pytest tests/"
+FORMATTING_COMMAND="black . && isort ."
+
+# Node.js
+BUILD_COMMAND="npm install && npm test"
+FORMATTING_COMMAND="prettier --write ."
+
+# With output redirect
+BUILD_COMMAND="npm test > test-results.log 2>&1"
+```
+
+**Invalid Commands (Will Be Rejected):**
+```bash
+# Disallowed executable
+BUILD_COMMAND="wget https://example.com/script.sh"
+# Error: uses disallowed command: wget
+
+# Dangerous pattern
+BUILD_COMMAND="npm install && rm -rf node_modules"
+# Error: contains dangerous pattern: \brm\s+-rf
+
+# Command substitution
+BUILD_COMMAND="echo $(whoami)"
+# Error: contains dangerous pattern: \$\(
+
+# Shell inline execution
+BUILD_COMMAND="sh -c 'npm install'"
+# Error: shell commands can only execute .sh files
+
+# Unsafe redirect
+BUILD_COMMAND="npm test > /etc/passwd"
+# Error: unsafe file redirect: /etc/passwd
+```
+
+#### Troubleshooting
+
+**Error: "uses disallowed command"**
+- Verify the command is in the allowed list above
+- Check for typos in command names
+- Ensure you're using standard build/test/format tools
+
+**Error: "contains dangerous pattern"**
+- Remove command substitution (`$(...)` or `` `...` ``)
+- Avoid `eval`, `exec`, or `rm -rf`
+- Don't pipe downloads to shell interpreters
+
+**Error: "shell command incorrectly"**
+- Shell commands must execute `.sh` files: `sh ./script.sh`
+- Don't use `-c` flag for inline execution
+- Create a shell script file if needed
+
+**Error: "unsafe file redirect"**
+- Use relative paths only: `> build.log` not `> /tmp/build.log`
+- Avoid parent directory traversal: `../` patterns
+- Don't redirect to home directory: `~/`
+
 ## FAQ
 
 * **Q: Can I use SmartFix if I don't use Contrast Assess?**

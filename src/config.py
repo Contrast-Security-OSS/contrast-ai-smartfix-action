@@ -23,6 +23,8 @@ import json
 from pathlib import Path
 from typing import Optional, Any, Dict, List
 
+from src.smartfix.config.command_validator import validate_command, CommandValidationError
+
 
 def _log_config_message(message: str, is_error: bool = False, is_warning: bool = False):
     """A minimal logger for use only within the config module before full logging is set up."""
@@ -81,7 +83,15 @@ class Config:
         else:
             self.BUILD_COMMAND = self._get_env_var("BUILD_COMMAND", required=is_build_command_required)
 
+        # Validate BUILD_COMMAND if present
+        if not testing:
+            self._validate_command("BUILD_COMMAND", self.BUILD_COMMAND)
+
         self.FORMATTING_COMMAND = self._get_env_var("FORMATTING_COMMAND", required=False)
+
+        # Validate FORMATTING_COMMAND if present
+        if not testing:
+            self._validate_command("FORMATTING_COMMAND", self.FORMATTING_COMMAND)
 
         # --- Validated and normalized settings ---
         self.MAX_QA_ATTEMPTS = self._get_validated_int("MAX_QA_ATTEMPTS", default=6, min_val=0, max_val=10)
@@ -174,6 +184,27 @@ class Config:
     def _check_contrast_config_values_exist(self):
         if not all([self.CONTRAST_HOST, self.CONTRAST_ORG_ID, self.CONTRAST_APP_ID, self.CONTRAST_AUTHORIZATION_KEY, self.CONTRAST_API_KEY]):
             raise ConfigurationError("Error: Missing one or more Contrast API configuration variables (HOST, ORG_ID, APP_ID, AUTH_KEY, API_KEY).")
+
+    def _validate_command(self, var_name: str, command: Optional[str]) -> None:
+        """
+        Validate a command against the allowlist.
+
+        Args:
+            var_name: Name of the config variable (for error messages)
+            command: Command string to validate (can be None)
+
+        Raises:
+            ConfigurationError: If command fails validation
+        """
+        if not command:
+            # Empty or None commands are allowed (handled by required flag in _get_env_var)
+            return
+
+        try:
+            validate_command(var_name, command)
+        except CommandValidationError as e:
+            # Convert CommandValidationError to ConfigurationError
+            raise ConfigurationError(str(e)) from e
 
     def _get_coding_agent(self) -> str:
         from src.smartfix.shared.coding_agents import CodingAgents
