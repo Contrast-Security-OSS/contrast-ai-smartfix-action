@@ -28,7 +28,7 @@ Tests the SmartFixAgent remediation workflow state machine including:
 """
 
 import unittest
-from unittest.mock import patch, MagicMock, Mock
+from unittest.mock import patch, Mock
 from pathlib import Path
 
 from src.smartfix.domains.agents.smartfix_agent import SmartFixAgent
