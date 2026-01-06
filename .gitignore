@@ -185,3 +185,10 @@ cython_debug/
 # Temporary planning files
 plan/
 plan.zip
+
+# bv (beads viewer) local config and caches
+.bv/
+
+# Claude Code local session files
+.claude/learnings/
+docs/plans/
