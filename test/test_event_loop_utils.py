@@ -136,7 +136,7 @@ class TestEventLoopUtils(unittest.TestCase):
             async def never_complete():
                 await asyncio.sleep(100)
 
-            task = asyncio.create_task(never_complete())
+            _task = asyncio.create_task(never_complete())  # noqa: F841 - intentionally unused
             raise RuntimeError("Intentional error")
 
         with self.assertRaises(RuntimeError):
