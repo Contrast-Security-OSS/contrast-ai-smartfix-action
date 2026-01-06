@@ -430,6 +430,7 @@ class TestGitHubOperations(unittest.TestCase):
         written_content = "".join([call[0][0] for call in mock_temp.write.call_args_list])
         self.assertLess(len(written_content), 33000)  # Should be truncated + message
         self.assertIn("truncated", written_content.lower())
+        self.assertEqual(result, "https://github.com/test/repo/pull/456")
 
     @patch('src.github.github_operations.run_command')
     def test_create_issue_with_issues_disabled(self, mock_run_command):
@@ -616,6 +617,7 @@ class TestGitHubOperations(unittest.TestCase):
                 written_content = "".join([call[0][0] for call in mock_temp.write.call_args_list])
                 self.assertLess(len(written_content), 33000)  # Should be truncated + disclaimer
                 self.assertIn("truncated", written_content.lower())
+                self.assertEqual(result, "https://github.com/test/repo/pull/456")
 
     @patch('subprocess.run')
     @patch('src.github.github_operations.run_command')
