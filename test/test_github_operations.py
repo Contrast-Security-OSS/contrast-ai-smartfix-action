@@ -407,9 +407,11 @@ class TestGitHubOperations(unittest.TestCase):
 
     @patch('tempfile.NamedTemporaryFile')
     @patch('os.path.exists')
+    @patch('os.path.getsize')
     @patch('os.remove')
+    @patch('subprocess.run')
     @patch('src.github.github_operations.run_command')
-    def test_create_claude_pr_truncates_large_body(self, mock_run_command, mock_remove, mock_exists, mock_tempfile):
+    def test_create_claude_pr_truncates_large_body(self, mock_run_command, mock_subprocess_run, mock_remove, mock_getsize, mock_exists, mock_tempfile):
         """Test creating Claude PR truncates body over 32000 chars."""
         # Mock temp file
         mock_temp = MagicMock()
@@ -419,6 +421,8 @@ class TestGitHubOperations(unittest.TestCase):
         mock_tempfile.return_value = mock_temp
 
         mock_exists.return_value = True
+        mock_getsize.return_value = 1000
+        mock_subprocess_run.return_value = MagicMock(returncode=0, stdout="gh version 2.0.0")
         mock_run_command.return_value = "https://github.com/test/repo/pull/456"
 
         # Create body larger than 32000 chars
