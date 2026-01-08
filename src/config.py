@@ -220,6 +220,11 @@ class Config:
         try:
             validate_command(var_name, command)
         except CommandValidationError as e:
+            # Log the validation failure for debugging
+            _log_config_message(
+                f"Command validation failed for {var_name}: {str(e)}",
+                is_error=True
+            )
             # Convert CommandValidationError to ConfigurationError
             raise ConfigurationError(str(e)) from e
 
