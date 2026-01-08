@@ -163,6 +163,83 @@ class TestConfigIntegration(unittest.TestCase):
         self.assertTrue(config.SKIP_WRITING_SECURITY_TEST)
         self.assertFalse(config.ENABLE_FULL_TELEMETRY)
 
+    def test_config_sourced_commands_skip_validation(self):
+        """Test that config-sourced commands skip allowlist validation."""
+        # Set a command that would normally be blocked (dangerous pattern)
+        os.environ['BUILD_COMMAND'] = 'rm -rf /tmp/test && echo "done"'
+        reset_config()
+
+        # Should not raise an error because config-sourced commands skip validation
+        config = get_config(testing=True)
+
+        # Verify the dangerous command was accepted
+        self.assertEqual(config.BUILD_COMMAND, 'rm -rf /tmp/test && echo "done"')
+
+    def test_config_sourced_commands_with_command_substitution(self):
+        """Test that config-sourced commands skip validation even with command substitution."""
+        # Command substitution would normally be blocked
+        os.environ['BUILD_COMMAND'] = 'echo $(date) && npm test'
+        reset_config()
+
+        # Should not raise an error
+        config = get_config(testing=True)
+        self.assertEqual(config.BUILD_COMMAND, 'echo $(date) && npm test')
+
+    def test_config_sourced_commands_with_piping_to_shell(self):
+        """Test that config-sourced commands skip validation even with shell piping."""
+        # Piping to shell would normally be blocked
+        os.environ['BUILD_COMMAND'] = 'curl http://example.com/script.sh | sh'
+        reset_config()
+
+        # Should not raise an error
+        config = get_config(testing=True)
+        self.assertEqual(config.BUILD_COMMAND, 'curl http://example.com/script.sh | sh')
+
+    def test_config_sourced_formatting_command_skips_validation(self):
+        """Test that config-sourced FORMATTING_COMMAND also skips validation."""
+        # Set a formatting command with dangerous pattern
+        os.environ['FORMATTING_COMMAND'] = 'prettier --write src/ && eval "echo test"'
+        reset_config()
+
+        # Should not raise an error
+        config = get_config(testing=True)
+        self.assertEqual(config.FORMATTING_COMMAND, 'prettier --write src/ && eval "echo test"')
+
+    def test_backward_compatibility_default_parameter(self):
+        """Test that existing code works without passing source parameter (backward compatibility)."""
+        # Use a safe command to test backward compatibility
+        os.environ['BUILD_COMMAND'] = 'mvn clean test'
+        reset_config()
+
+        # Should work as before, defaulting to config source
+        config = get_config(testing=True)
+        self.assertEqual(config.BUILD_COMMAND, 'mvn clean test')
+
+    def test_empty_commands_allowed_regardless_of_source(self):
+        """Test that empty/None commands are allowed for both sources."""
+        # Don't set BUILD_COMMAND - it should be None/empty
+        if 'BUILD_COMMAND' in os.environ:
+            del os.environ['BUILD_COMMAND']
+        reset_config()
+
+        # Should not raise an error
+        config = get_config(testing=True)
+        # BUILD_COMMAND should be None or empty string
+        self.assertIn(config.BUILD_COMMAND, [None, ''])
+
+    def test_both_build_and_format_commands_skip_validation(self):
+        """Test that both BUILD_COMMAND and FORMATTING_COMMAND skip validation."""
+        os.environ['BUILD_COMMAND'] = 'npm test'
+        os.environ['FORMATTING_COMMAND'] = 'prettier --write .'
+        reset_config()
+
+        # Both commands should be accepted without errors
+        config = get_config(testing=True)
+
+        # Verify both commands are set correctly
+        self.assertEqual(config.BUILD_COMMAND, 'npm test')
+        self.assertEqual(config.FORMATTING_COMMAND, 'prettier --write .')
+
 
 if __name__ == '__main__':
     unittest.main()
