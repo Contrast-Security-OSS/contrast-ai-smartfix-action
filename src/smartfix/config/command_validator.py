@@ -42,8 +42,8 @@ ALLOWED_COMMANDS: List[str] = [
     'vstest.console', 'mstest',
     'csharpier',
 
-    # Java
-    'mvn', 'gradle', 'ant', 'junit', 'testng',
+    # Java / Scala
+    'mvn', 'gradle', 'ant', 'sbt', 'junit', 'testng',
     './gradlew', './mvnw', 'gradlew', 'mvnw',  # Wrapper scripts
     'google-java-format', 'checkstyle',
 
