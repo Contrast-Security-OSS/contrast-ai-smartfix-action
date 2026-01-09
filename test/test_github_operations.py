@@ -145,7 +145,7 @@ class TestGitHubOperations(unittest.TestCase):
             {"labels": [{"name": "smartfix-id:789"}, {"name": "documentation"}]}
         ])
 
-        result = self.github_ops.count_open_prs_with_prefix("smartfix-id:")
+        result = self.github_ops.count_open_prs_with_prefix("smartfix-id:", "test-remediation-id")
         self.assertEqual(result, 3)  # Three PRs have smartfix-id: labels
 
     @patch('subprocess.run')
