@@ -178,3 +178,10 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# bv (beads viewer) local config and caches
+.bv/
+
+# Local development and planning artifacts
+docs/plans/
+.claude/learnings/

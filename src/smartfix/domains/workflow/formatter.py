@@ -47,14 +47,16 @@ def run_formatting_command(formatting_command: Optional[str], repo_root: Path, r
         return changed_files
 
     log(f"\n--- Running Formatting Command: {formatting_command} ---")
-    # Modified to match run_command signature which returns only stdout
+    # Use shell=True to preserve shell operators like &&, ||, ; etc.
+    # The command is validated by command_validator.py before reaching here.
     current_dir = os.getcwd()
     try:
         os.chdir(str(repo_root))  # Change to repo root directory
         try:
             format_output = run_command(
-                formatting_command.split(),  # Split string into list for Popen
-                check=False  # Don't exit on failure, we'll check status
+                formatting_command,  # Pass as string for shell=True
+                check=False,  # Don't exit on failure, we'll check status
+                shell=True  # Enable shell operators (&&, ||, |, ;)
             )
             format_success = True  # If no exception was raised, consider it successful
         except Exception as e:
