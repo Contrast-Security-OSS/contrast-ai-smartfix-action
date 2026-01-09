@@ -825,6 +825,59 @@ class GitHubOperations(ScmOperations):
             log(f"Error searching for PRs related to issue #{issue_number}: {e}", is_error=True)
             return None
 
+    def find_pr_by_branch(self, branch_name: str) -> Optional[dict]:
+        """
+        Find an open pull request by exact branch name match.
+
+        Args:
+            branch_name: The head branch name (e.g., "copilot/fix-semantic-auth-bug")
+
+        Returns:
+            dict: PR info dict with keys: number, url, title, headRefName, baseRefName, state
+                  Returns None if no PR found
+        """
+        debug_log(f"Searching for open PR on branch '{branch_name}'")
+        gh_env = self.get_gh_env()
+
+        pr_list_command = [
+            "gh", "pr", "list",
+            "--repo", self.config.GITHUB_REPOSITORY,
+            "--state", "open",
+            "--head", branch_name,  # Exact branch match
+            "--json", "number,url,title,headRefName,baseRefName,state",
+            "--limit", "1"
+        ]
+
+        try:
+            pr_list_output = run_command(pr_list_command, env=gh_env, check=False)
+
+            if not pr_list_output or pr_list_output.strip() == "[]":
+                debug_log(f"No open PR found for branch '{branch_name}'")
+                return None
+
+            prs_data = json.loads(pr_list_output)
+
+            if not prs_data:
+                debug_log(f"No PRs in parsed JSON for branch '{branch_name}'")
+                return None
+
+            pr_info = prs_data[0]
+            pr_number = pr_info.get("number")
+            pr_url = pr_info.get("url")
+            pr_title = pr_info.get("title")
+
+            if pr_number and pr_url:
+                log(f"Found open PR #{pr_number} on branch '{branch_name}': {pr_title}")
+                return pr_info
+
+            return None
+        except json.JSONDecodeError as e:
+            log(f"Could not parse JSON output from gh pr list for branch '{branch_name}': {e}", is_error=True)
+            return None
+        except Exception as e:
+            log(f"Error searching for PR on branch '{branch_name}': {e}", is_error=True)
+            return None
+
     def add_labels_to_pr(self, pr_number: int, labels: List[str]) -> bool:
         """
         Add labels to an existing pull request.

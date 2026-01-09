@@ -291,9 +291,8 @@ Please review this security vulnerability and implement appropriate fixes to add
                     time.sleep(25)
                 pr_info = self._process_claude_workflow_run(issue_number, remediation_id)
             else:
-                # GitHub Copilot agent
-                github_ops = GitHubOperations()
-                pr_info = github_ops.find_open_pr_for_issue(issue_number, issue_title)
+                # GitHub Copilot agent - watch workflow for actual branch name
+                pr_info = self._process_copilot_workflow_run(issue_number)
 
             if pr_info:
                 pr_number = pr_info.get("number")
@@ -451,10 +450,7 @@ Please review this security vulnerability and implement appropriate fixes to add
 
     def _process_copilot_workflow_run(
         self,
-        issue_number: int,
-        issue_title: str,
-        check_interval: int = 30,
-        timeout: int = 900
+        issue_number: int
     ) -> Optional[dict]:
         """
         Watch Copilot workflow completion and find PR using actual branch name from workflow metadata.
@@ -465,9 +461,6 @@ Please review this security vulnerability and implement appropriate fixes to add
 
         Args:
             issue_number: The GitHub issue number
-            issue_title: The issue title (for logging)
-            check_interval: Seconds between workflow status checks (default: 30)
-            timeout: Maximum seconds to wait for workflow completion (default: 900)
 
         Returns:
             Optional[dict]: PR info dict with keys: number, url, title, headRefName, baseRefName, state
@@ -490,20 +483,12 @@ Please review this security vulnerability and implement appropriate fixes to add
 
             log(f"Found Copilot workflow {run_id} on branch '{head_branch}' for issue #{issue_number}")
 
-            # Watch workflow completion (reuse existing method)
-            from src.github.git_handler import GitHandler
-            git_handler = GitHandler(self.config)
+            # Watch workflow completion using github_ops method
+            workflow_success = github_ops.watch_github_action_run(run_id)
 
-            workflow_success = git_handler.watch_github_action_run(
-                run_id=run_id,
-                check_interval=check_interval,
-                timeout=timeout
-            )
-
-            if not workflow_success or workflow_success != "success":
+            if not workflow_success:
                 log(
-                    f"Copilot workflow {run_id} did not complete successfully for issue #{issue_number}. "
-                    f"Result: {workflow_success}",
+                    f"Copilot workflow {run_id} did not complete successfully for issue #{issue_number}.",
                     is_error=True
                 )
                 return None
