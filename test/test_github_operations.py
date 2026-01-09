@@ -225,6 +225,106 @@ class TestGitHubOperations(unittest.TestCase):
             with self.subTest(branch=branch_name):
                 result = self.github_ops.extract_issue_number_from_branch(branch_name)
                 self.assertEqual(result, expected)
+    @patch('src.github.github_operations.debug_log')
+    @patch('src.github.github_operations.run_command')
+    def test_get_copilot_workflow_run_id_success(self, mock_run_command, mock_debug_log):
+        """Test getting Copilot workflow run ID and branch successfully."""
+        mock_workflow_data = json.dumps([
+            {
+                "databaseId": 12345,
+                "status": "completed",
+                "event": "issues",
+                "createdAt": "2026-01-09T15:00:00Z",
+                "conclusion": "success",
+                "headBranch": "copilot/fix-semantic-auth-bug"
+            }
+        ])
+        mock_run_command.return_value = mock_workflow_data
+
+        run_id, head_branch = self.github_ops.get_copilot_workflow_run_id(issue_number=123)
+
+        self.assertEqual(run_id, 12345)
+        self.assertEqual(head_branch, "copilot/fix-semantic-auth-bug")
+
+    @patch('src.github.github_operations.debug_log')
+    @patch('src.github.github_operations.run_command')
+    def test_get_copilot_workflow_run_id_not_found(self, mock_run_command, mock_debug_log):
+        """Test when no Copilot workflow run is found."""
+        mock_run_command.return_value = json.dumps([])
+
+        run_id, head_branch = self.github_ops.get_copilot_workflow_run_id(issue_number=999)
+
+        self.assertIsNone(run_id)
+        self.assertIsNone(head_branch)
+
+    @patch('src.github.github_operations.debug_log')
+    @patch('src.github.github_operations.run_command')
+    def test_get_copilot_workflow_run_id_no_head_branch(self, mock_run_command, mock_debug_log):
+        """Test when workflow run exists but has no headBranch."""
+        mock_workflow_data = json.dumps([
+            {
+                "databaseId": 12345,
+                "status": "completed",
+                "event": "issues",
+                "createdAt": "2026-01-09T15:00:00Z",
+                "conclusion": "success"
+                # headBranch is missing
+            }
+        ])
+        mock_run_command.return_value = mock_workflow_data
+
+        run_id, head_branch = self.github_ops.get_copilot_workflow_run_id(issue_number=123)
+
+        self.assertEqual(run_id, 12345)
+        self.assertIsNone(head_branch)
+
+    @patch('src.github.github_operations.debug_log')
+    @patch('src.github.github_operations.run_command')
+    def test_get_copilot_workflow_run_id_json_error(self, mock_run_command, mock_debug_log):
+        """Test handling of JSON decode error."""
+        mock_run_command.return_value = "invalid json{"
+
+        run_id, head_branch = self.github_ops.get_copilot_workflow_run_id(issue_number=123)
+
+        self.assertIsNone(run_id)
+        self.assertIsNone(head_branch)
+
+    @patch('src.github.github_operations.debug_log')
+    @patch('src.github.github_operations.run_command')
+    def test_get_copilot_workflow_run_id_command_error(self, mock_run_command, mock_debug_log):
+        """Test handling of command execution error."""
+        mock_run_command.side_effect = Exception("Command failed")
+
+        run_id, head_branch = self.github_ops.get_copilot_workflow_run_id(issue_number=123)
+
+        self.assertIsNone(run_id)
+        self.assertIsNone(head_branch)
+
+    @patch('src.github.github_operations.debug_log')
+    @patch('src.github.github_operations.run_command')
+    def test_get_copilot_workflow_run_id_multiple_workflows(self, mock_run_command, mock_debug_log):
+        """Test that most recent workflow is selected when multiple exist."""
+        mock_workflow_data = json.dumps([
+            {
+                "databaseId": 99999,
+                "status": "completed",
+                "createdAt": "2026-01-09T15:30:00Z",  # Most recent
+                "headBranch": "copilot/fix-latest-issue"
+            },
+            {
+                "databaseId": 12345,
+                "status": "completed",
+                "createdAt": "2026-01-09T15:00:00Z",  # Older
+                "headBranch": "copilot/fix-older-issue"
+            }
+        ])
+        mock_run_command.return_value = mock_workflow_data
+
+        run_id, head_branch = self.github_ops.get_copilot_workflow_run_id(issue_number=123)
+
+        # Should select the most recent (first in list)
+        self.assertEqual(run_id, 99999)
+        self.assertEqual(head_branch, "copilot/fix-latest-issue")
 
 
 if __name__ == '__main__':

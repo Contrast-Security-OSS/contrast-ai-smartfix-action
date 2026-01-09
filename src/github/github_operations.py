@@ -1010,6 +1010,77 @@ class GitHubOperations(ScmOperations):
             log(f"Error getting in-progress Claude workflow run ID: {e}", is_error=True)
             return None
 
+    def get_copilot_workflow_run_id(self, issue_number: int) -> tuple[Optional[int], Optional[str]]:
+        """
+        Find the most recent Copilot workflow run and extract branch name.
+
+        Note: Currently returns the most recent "Copilot coding agent" workflow without
+        validating it's associated with the specific issue_number. In repositories with
+        multiple concurrent Copilot workflows, this may return an unrelated workflow.
+        Future enhancement: Add issue-to-workflow linkage validation (see plan Component 1).
+
+        Args:
+            issue_number: The GitHub issue number (currently used for logging only)
+
+        Returns:
+            tuple: (run_id, head_branch) where:
+                - run_id: The workflow run ID (databaseId) if found, or None
+                - head_branch: The branch name from headBranch field if present, or None
+        """
+        debug_log(f"Getting Copilot workflow run for issue #{issue_number}")
+
+        gh_env = self.get_gh_env()
+        workflow_command = [
+            "gh", "run", "list",
+            "--repo", self.config.GITHUB_REPOSITORY,
+            "--workflow", "Copilot coding agent",
+            "--limit", "50",
+            "--json", "databaseId,status,event,createdAt,conclusion,headBranch"
+        ]
+
+        try:
+            run_output = run_command(workflow_command, env=gh_env, check=True)
+
+            if not run_output or run_output.strip() == "[]":
+                debug_log(f"No Copilot workflow runs found for issue #{issue_number}")
+                return None, None
+
+            runs_data = json.loads(run_output)
+
+            if not runs_data:
+                debug_log(f"No Copilot workflow runs in JSON response for issue #{issue_number}")
+                return None, None
+
+            # Take the most recent run (first in list, sorted by createdAt desc)
+            # Note: This does not validate the workflow is associated with the specific issue.
+            # Future enhancement: Add sophisticated matching via commit messages, workflow
+            # inputs, or creation timestamp proximity. See plan Component 1 Critical Questions.
+            run_data = runs_data[0]  # gh run list always returns array
+
+            workflow_run_id = run_data.get("databaseId")
+            head_branch = run_data.get("headBranch")
+            status = run_data.get("status")
+            created_at = run_data.get("createdAt")
+            conclusion = run_data.get("conclusion")
+
+            debug_log(
+                f"Found Copilot workflow run - ID: {workflow_run_id}, "
+                f"Branch: {head_branch}, Status: {status}, "
+                f"CreatedAt: {created_at}, Conclusion: {conclusion}"
+            )
+
+            if workflow_run_id is not None:
+                workflow_run_id = int(workflow_run_id)
+
+            return workflow_run_id, head_branch
+
+        except json.JSONDecodeError as e:
+            log(f"Could not parse JSON output from gh run list: {e}", is_error=True)
+            return None, None
+        except Exception as e:
+            log(f"Error getting Copilot workflow run ID for issue #{issue_number}: {e}", is_error=True)
+            return None, None
+
     def extract_issue_number_from_branch(self, branch_name: str) -> Optional[int]:
         """
         Extracts the GitHub issue number from a branch name with format 'copilot/fix-<issue_number>'
