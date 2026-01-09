@@ -449,6 +449,83 @@ Please review this security vulnerability and implement appropriate fixes to add
             self._update_telemetry_and_exit_claude_agent_failure(msg, remediation_id, issue_number)
             return None
 
+    def _process_copilot_workflow_run(
+        self,
+        issue_number: int,
+        issue_title: str,
+        check_interval: int = 30,
+        timeout: int = 900
+    ) -> Optional[dict]:
+        """
+        Watch Copilot workflow completion and find PR using actual branch name from workflow metadata.
+
+        Unlike Claude Code which requires creating the PR, Copilot creates its own PR during the
+        workflow. This method watches for workflow completion, extracts the headBranch from workflow
+        run metadata, and finds the PR that Copilot created.
+
+        Args:
+            issue_number: The GitHub issue number
+            issue_title: The issue title (for logging)
+            check_interval: Seconds between workflow status checks (default: 30)
+            timeout: Maximum seconds to wait for workflow completion (default: 900)
+
+        Returns:
+            Optional[dict]: PR info dict with keys: number, url, title, headRefName, baseRefName, state
+                           Returns None if workflow not found, failed, or PR not found
+        """
+        try:
+            # Initialize GitHub operations
+            github_ops = GitHubOperations()
+
+            # Get Copilot workflow run ID and branch
+            run_id, head_branch = github_ops.get_copilot_workflow_run_id(issue_number)
+
+            if not run_id:
+                debug_log(f"No Copilot workflow found for issue #{issue_number}, checking again...")
+                return None
+
+            if not head_branch:
+                log(f"Copilot workflow {run_id} has no headBranch metadata for issue #{issue_number}", is_error=True)
+                return None
+
+            log(f"Found Copilot workflow {run_id} on branch '{head_branch}' for issue #{issue_number}")
+
+            # Watch workflow completion (reuse existing method)
+            from src.github.git_handler import GitHandler
+            git_handler = GitHandler(self.config)
+
+            workflow_success = git_handler.watch_github_action_run(
+                run_id=run_id,
+                check_interval=check_interval,
+                timeout=timeout
+            )
+
+            if not workflow_success or workflow_success != "success":
+                log(
+                    f"Copilot workflow {run_id} did not complete successfully for issue #{issue_number}. "
+                    f"Result: {workflow_success}",
+                    is_error=True
+                )
+                return None
+
+            log(f"Copilot workflow {run_id} completed successfully")
+
+            # Find PR using actual branch name from workflow metadata
+            pr_info = github_ops.find_pr_by_branch(head_branch)
+
+            if not pr_info:
+                log(f"No PR found for Copilot branch '{head_branch}' (issue #{issue_number})", is_error=True)
+                return None
+
+            pr_number = pr_info.get("number")
+            log(f"Successfully found Copilot PR #{pr_number} for issue #{issue_number} via workflow metadata")
+
+            return pr_info
+
+        except Exception as e:
+            log(f"Error processing Copilot workflow run for issue #{issue_number}: {e}", is_error=True)
+            return None
+
     def _process_claude_comment_body(self, comment_body: str, remediation_id: str, issue_number: int) -> dict:  # noqa: C901
         """
         Process Claude's comment body to extract PR information. Returning the pr_title
