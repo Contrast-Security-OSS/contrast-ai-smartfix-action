@@ -267,9 +267,15 @@ class GitHubOperations(ScmOperations):
         debug_log(f"No existing OPEN or MERGED PR found for label {label_name}.")
         return "NONE"
 
-    def count_open_prs_with_prefix(self, label_prefix: str) -> int:
-        """Counts the number of open GitHub PRs with at least one label starting with the given prefix."""
-        log(f"Counting open PRs with label prefix: '{label_prefix}'")
+    def count_open_prs_with_prefix(self, label_prefix: str, remediation_id: str) -> int:
+        """
+        Counts the number of open GitHub PRs with at least one label starting with the given prefix.
+
+        Args:
+            label_prefix: Prefix to match against PR labels
+            remediation_id: Remediation ID for error context
+        """
+        log(f"Counting open PRs with label prefix: '{label_prefix}' (remediation: {remediation_id})")
         gh_env = self.get_gh_env()
 
         # Fetch labels of open PRs in JSON format. Limit might need adjustment if > 100 open PRs.

@@ -107,12 +107,13 @@ class ScmOperations(ABC):
         pass
 
     @abstractmethod
-    def count_open_prs_with_prefix(self, label_prefix: str) -> int:
+    def count_open_prs_with_prefix(self, label_prefix: str, remediation_id: str) -> int:
         """
         Counts open PRs with labels matching a prefix.
 
         Args:
             label_prefix (str): Label prefix to match
+            remediation_id (str): Remediation ID for error context
 
         Returns:
             int: Count of matching open PRs
