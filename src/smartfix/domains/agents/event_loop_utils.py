@@ -44,6 +44,8 @@ try:
 except ImportError:
     pass
 
+MAX_PENDING_TASKS = 100
+
 
 def _run_agent_in_event_loop(coroutine_func, *args, **kwargs):
     """
@@ -124,17 +126,32 @@ def _run_agent_in_event_loop(coroutine_func, *args, **kwargs):
     finally:
         # Clean up any remaining tasks
         pending = asyncio.all_tasks(loop)
+
+        # Security: Limit maximum tasks to prevent resource exhaustion
+        if len(pending) > MAX_PENDING_TASKS:
+            log(
+                f"Security Warning: {len(pending)} pending tasks exceeds limit of {MAX_PENDING_TASKS}",
+                is_error=True
+            )
+            # Proceed with cancellation but log the security concern
+
         if pending:
             # Cancel all pending tasks
             for task in pending:
                 if not task.done():
                     task.cancel()
 
-            # Give tasks a chance to terminate
+            # Give tasks a chance to terminate with shorter timeout
             try:
-                # Use a timeout to avoid hanging
-                wait_task = asyncio.wait(pending, timeout=2.0, return_when=asyncio.ALL_COMPLETED)
+                # Use a short timeout to avoid hanging (reduced from 2.0s)
+                wait_task = asyncio.wait(pending, timeout=0.5, return_when=asyncio.ALL_COMPLETED)
                 loop.run_until_complete(wait_task)
+            except asyncio.TimeoutError:
+                # Security: Log force-killed tasks
+                log(
+                    f"Security Warning: Force-killed {len(pending)} tasks after timeout",
+                    is_error=True
+                )
             except (asyncio.CancelledError, Exception):
                 pass
 
