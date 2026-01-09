@@ -44,6 +44,8 @@ try:
 except ImportError:
     pass
 
+MAX_PENDING_TASKS = 100
+
 
 def _run_agent_in_event_loop(coroutine_func, *args, **kwargs):
     """
@@ -126,7 +128,6 @@ def _run_agent_in_event_loop(coroutine_func, *args, **kwargs):
         pending = asyncio.all_tasks(loop)
 
         # Security: Limit maximum tasks to prevent resource exhaustion
-        MAX_PENDING_TASKS = 100
         if len(pending) > MAX_PENDING_TASKS:
             log(
                 f"Security Warning: {len(pending)} pending tasks exceeds limit of {MAX_PENDING_TASKS}",
