@@ -225,6 +225,7 @@ class TestGitHubOperations(unittest.TestCase):
             with self.subTest(branch=branch_name):
                 result = self.github_ops.extract_issue_number_from_branch(branch_name)
                 self.assertEqual(result, expected)
+
     @patch('src.github.github_operations.debug_log')
     @patch('src.github.github_operations.run_command')
     def test_get_copilot_workflow_run_id_success(self, mock_run_command, mock_debug_log):
