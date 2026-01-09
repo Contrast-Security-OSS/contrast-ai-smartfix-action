@@ -181,7 +181,25 @@ cython_debug/
 
 # macOS
 .DS_Store
+.AppleDouble
+.LSOverride
+._*
 
 # Temporary planning files
 plan/
 plan.zip
+
+# bv (beads viewer) local config and caches
+.bv/
+
+# Beads runtime and temporary files
+.beads/daemon.lock
+.beads/daemon.pid
+.beads/daemon.log
+.beads/bd.sock
+.beads/beads.left.jsonl
+.beads/beads.left.meta.json
+
+# Claude Code local session files
+.claude/learnings/
+docs/plans/
