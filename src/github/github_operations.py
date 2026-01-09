@@ -296,8 +296,35 @@ class GitHubOperations(ScmOperations):
             log(f"Could not parse JSON output from gh pr list: {pr_list_output}", is_error=True)
             return 0  # Assume zero if we can't parse
         except Exception as e:
+            error_msg = str(e).lower()
+
+            # Check for authentication errors (401, 403)
+            if any(indicator in error_msg for indicator in ['401', '403', 'unauthorized', 'forbidden', 'authentication', 'authenticating']):
+                log(
+                    f"GitHub CLI authentication failed when counting PRs with prefix '{label_prefix}'.\n"
+                    f"Error: {e}\n"
+                    f"\n"
+                    f"This typically indicates:\n"
+                    f"1. GitHub CLI (gh) is not authenticated\n"
+                    f"2. The GITHUB_TOKEN environment variable is missing or invalid\n"
+                    f"3. The token lacks required permissions (repo scope needed)\n"
+                    f"\n"
+                    f"Remediation steps:\n"
+                    f"1. Run 'gh auth login' to authenticate GitHub CLI\n"
+                    f"2. Verify GITHUB_TOKEN is set correctly\n"
+                    f"3. Ensure the token has 'repo' scope for private repositories\n"
+                    f"4. Check token expiration and regenerate if needed\n"
+                    f"\n"
+                    f"Remediation ID: {remediation_id}",
+                    is_error=True
+                )
+                # Import here to avoid circular dependency
+                from src.utils import error_exit
+                from src.smartfix.shared.failure_categories import FailureCategory
+                error_exit(remediation_id, FailureCategory.GIT_COMMAND_FAILURE.value)
+
+            # Non-authentication errors: log and return 0 (existing behavior)
             log(f"Error running gh pr list command: {e}", is_error=True)
-            # Consider if we should exit or return 0. Returning 0 might be safer to avoid blocking unnecessarily.
             return 0
 
         count = 0
