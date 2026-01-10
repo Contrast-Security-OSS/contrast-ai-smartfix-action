@@ -15,6 +15,7 @@ class TestGitHubOperations(unittest.TestCase):
         with patch('src.github.github_operations.get_config') as mock_config:
             mock_config.return_value = MagicMock(
                 GITHUB_TOKEN="test-token",
+                GITHUB_REPOSITORY="test-owner/test-repo",
                 testing=True,
                 coding_agent=None
             )
