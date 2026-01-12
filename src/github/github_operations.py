@@ -558,16 +558,15 @@ class GitHubOperations(ScmOperations):
             self.ensure_label(vuln_label, "Vulnerability identified by Contrast", "ff0000")  # Red
             self.ensure_label(remediation_label, "Remediation ID for Contrast vulnerability", "0075ca")  # Blue
 
-            # Format labels for the command
-            labels = f"{vuln_label},{remediation_label}"
-
-            # Create the issue using --body-file to avoid argument escaping issues
+            # Note: We intentionally do NOT use --label with gh issue create because
+            # GitHub's GITHUB_TOKEN permissions changes cause GraphQL errors like
+            # "Resource not accessible by personal access token (repository.defaultBranchRef)".
+            # Instead, we create the issue first, then add labels separately.
             issue_command = [
                 "gh", "issue", "create",
                 "--repo", self.config.GITHUB_REPOSITORY,
                 "--title", title,
                 "--body-file", temp_file_path,
-                "--label", labels
             ]
 
             # Run the command and capture the output (issue URL)
@@ -579,6 +578,11 @@ class GitHubOperations(ScmOperations):
             try:
                 issue_number = int(os.path.basename(issue_url.strip()))
                 log(f"Issue number extracted: {issue_number}")
+
+                # Add labels separately (works with GITHUB_TOKEN)
+                labels_to_add = [vuln_label, remediation_label]
+                if not self.add_labels_to_issue(issue_number, labels_to_add):
+                    log(f"Warning: Failed to add labels to issue #{issue_number}", is_warning=True)
 
                 if self.config.CODING_AGENT == CodingAgents.CLAUDE_CODE.name:
                     debug_log("Claude code external agent detected no need to edit issue for assignment")
@@ -614,6 +618,40 @@ class GitHubOperations(ScmOperations):
                 debug_log(f"Deleted temporary file: {temp_file_path}")
             except Exception as e:
                 debug_log(f"Failed to delete temporary file {temp_file_path}: {e}")
+
+    def add_labels_to_issue(self, issue_number: int, labels: List[str]) -> bool:
+        """
+        Add labels to an existing issue.
+
+        Args:
+            issue_number: The issue number to add labels to
+            labels: List of label names to add
+
+        Returns:
+            bool: True if labels were successfully added, False otherwise
+        """
+        if not labels:
+            debug_log("No labels provided to add to issue")
+            return True
+
+        log(f"Adding labels to issue #{issue_number}: {labels}")
+        gh_env = self.get_gh_env()
+
+        # Add labels to the issue using gh issue edit
+        add_labels_command = [
+            "gh", "issue", "edit",
+            "--repo", self.config.GITHUB_REPOSITORY,
+            str(issue_number),
+            "--add-label", ",".join(labels)
+        ]
+
+        try:
+            run_command(add_labels_command, env=gh_env, check=True)
+            log(f"Successfully added labels to issue #{issue_number}: {labels}")
+            return True
+        except Exception as e:
+            log(f"Failed to add labels to issue #{issue_number}: {e}", is_error=True)
+            return False
 
     def find_issue_with_label(self, label: str) -> int:
         """
