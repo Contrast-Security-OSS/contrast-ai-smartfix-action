@@ -519,6 +519,9 @@ class GitHubOperations(ScmOperations):
         Returns:
             int: The issue number if created successfully, None otherwise
         """
+        import tempfile
+        import os.path
+
         log(f"Creating GitHub issue with title: {title}")
 
         # Check if Issues are enabled for this repository
@@ -526,25 +529,47 @@ class GitHubOperations(ScmOperations):
             log("GitHub Issues are disabled for this repository. Cannot create issue.", is_error=True)
             return None
 
-        gh_env = self.get_gh_env()
+        # Set maximum issue body size (GitHub has 65536 char limit)
+        MAX_ISSUE_BODY_SIZE = 32000
 
-        # Ensure both labels exist
-        self.ensure_label(vuln_label, "Vulnerability identified by Contrast", "ff0000")  # Red
-        self.ensure_label(remediation_label, "Remediation ID for Contrast vulnerability", "0075ca")  # Blue
+        # Truncate if too large
+        if len(body) > MAX_ISSUE_BODY_SIZE:
+            log(f"Issue body too large ({len(body)} chars). Truncating to {MAX_ISSUE_BODY_SIZE}.", is_warning=True)
+            body = body[:MAX_ISSUE_BODY_SIZE] + "\n\n...[Content truncated due to size limits]..."
 
-        # Format labels for the command
-        labels = f"{vuln_label},{remediation_label}"
-
-        # Create the issue first without assignment
-        issue_command = [
-            "gh", "issue", "create",
-            "--repo", self.config.GITHUB_REPOSITORY,
-            "--title", title,
-            "--body", body,
-            "--label", labels
-        ]
+        # Create temporary file to store issue body
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.md') as temp_file:
+            temp_file_path = temp_file.name
+            temp_file.write(body)
+            debug_log(f"Issue body written to temporary file: {temp_file_path}")
 
         try:
+            # Check file exists and print size for debugging
+            if os.path.exists(temp_file_path):
+                file_size = os.path.getsize(temp_file_path)
+                debug_log(f"Temporary file exists: {temp_file_path}, size: {file_size} bytes")
+            else:
+                log(f"Error: Temporary file {temp_file_path} does not exist", is_error=True)
+                return None
+
+            gh_env = self.get_gh_env()
+
+            # Ensure both labels exist
+            self.ensure_label(vuln_label, "Vulnerability identified by Contrast", "ff0000")  # Red
+            self.ensure_label(remediation_label, "Remediation ID for Contrast vulnerability", "0075ca")  # Blue
+
+            # Format labels for the command
+            labels = f"{vuln_label},{remediation_label}"
+
+            # Create the issue using --body-file to avoid argument escaping issues
+            issue_command = [
+                "gh", "issue", "create",
+                "--repo", self.config.GITHUB_REPOSITORY,
+                "--title", title,
+                "--body-file", temp_file_path,
+                "--label", labels
+            ]
+
             # Run the command and capture the output (issue URL)
             issue_url = run_command(issue_command, env=gh_env, check=True)
             log(f"Successfully created issue: {issue_url}")
@@ -581,6 +606,14 @@ class GitHubOperations(ScmOperations):
         except Exception as e:
             log(f"Failed to create GitHub issue: {e}", is_error=True)
             return None
+
+        finally:
+            # Clean up temp file
+            try:
+                os.remove(temp_file_path)
+                debug_log(f"Deleted temporary file: {temp_file_path}")
+            except Exception as e:
+                debug_log(f"Failed to delete temporary file {temp_file_path}: {e}")
 
     def find_issue_with_label(self, label: str) -> int:
         """
