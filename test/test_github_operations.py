@@ -630,6 +630,119 @@ class TestGitHubOperations(unittest.TestCase):
         self.assertIsNone(run_id)
         self.assertIsNone(head_branch)
 
+    @patch('src.github.github_operations.run_command')
+    def test_get_copilot_workflow_metadata_caches_timestamp(self, mock_run_command):
+        """Test that issue timestamps are cached to reduce API calls."""
+        # Mock issue view and workflow runs
+        mock_run_command.side_effect = [
+            # First call: issue view
+            json.dumps({"updatedAt": "2024-01-10T12:00:00Z"}),
+            # First call: workflow runs
+            json.dumps([{
+                "databaseId": 123,
+                "status": "completed",
+                "event": "issues",
+                "createdAt": "2024-01-10T12:05:00Z",
+                "conclusion": "success",
+                "headBranch": "copilot/fix-bug"
+            }])
+        ]
+
+        # First call should fetch from API
+        run_id1, branch1 = self.github_ops.get_copilot_workflow_metadata(456)
+        self.assertEqual(run_id1, 123)
+        self.assertEqual(branch1, "copilot/fix-bug")
+
+        # Verify issue was fetched (2 calls: issue view + workflow runs)
+        self.assertEqual(mock_run_command.call_count, 2)
+
+        # Reset mock to ensure no new calls
+        mock_run_command.reset_mock()
+        mock_run_command.side_effect = [
+            # Second call: only workflow runs (no issue view call expected)
+            json.dumps([{
+                "databaseId": 124,
+                "status": "completed",
+                "event": "issues",
+                "createdAt": "2024-01-10T12:10:00Z",
+                "conclusion": "success",
+                "headBranch": "copilot/fix-another-bug"
+            }])
+        ]
+
+        # Second call should use cached timestamp
+        run_id2, branch2 = self.github_ops.get_copilot_workflow_metadata(456)
+        self.assertEqual(run_id2, 124)
+        self.assertEqual(branch2, "copilot/fix-another-bug")
+
+        # Verify only 1 call (workflow runs, no issue view)
+        self.assertEqual(mock_run_command.call_count, 1)
+
+    @patch('src.github.github_operations.run_command')
+    def test_clear_issue_timestamp_cache_specific_issue(self, mock_run_command):
+        """Test clearing cache for a specific issue."""
+        # Setup: fetch and cache timestamp for issue 123
+        mock_run_command.side_effect = [
+            json.dumps({"updatedAt": "2024-01-10T12:00:00Z"}),
+            json.dumps([])  # No workflows
+        ]
+        self.github_ops.get_copilot_workflow_metadata(123)
+
+        # Verify cache has the entry
+        self.assertIn(123, self.github_ops._issue_timestamp_cache)
+
+        # Clear cache for issue 123
+        self.github_ops.clear_issue_timestamp_cache(123)
+
+        # Verify cache no longer has the entry
+        self.assertNotIn(123, self.github_ops._issue_timestamp_cache)
+
+    @patch('src.github.github_operations.run_command')
+    def test_clear_issue_timestamp_cache_all(self, mock_run_command):
+        """Test clearing entire cache."""
+        # Setup: fetch and cache timestamps for multiple issues
+        mock_run_command.side_effect = [
+            json.dumps({"updatedAt": "2024-01-10T12:00:00Z"}),
+            json.dumps([]),
+            json.dumps({"updatedAt": "2024-01-10T13:00:00Z"}),
+            json.dumps([])
+        ]
+        self.github_ops.get_copilot_workflow_metadata(123)
+        self.github_ops.get_copilot_workflow_metadata(456)
+
+        # Verify cache has both entries
+        self.assertIn(123, self.github_ops._issue_timestamp_cache)
+        self.assertIn(456, self.github_ops._issue_timestamp_cache)
+
+        # Clear entire cache
+        self.github_ops.clear_issue_timestamp_cache()
+
+        # Verify cache is empty
+        self.assertEqual(len(self.github_ops._issue_timestamp_cache), 0)
+
+    @patch('src.github.github_operations.run_command')
+    def test_issue_timestamp_cache_survives_workflow_errors(self, mock_run_command):
+        """Test that cached timestamp is used even when workflow fetch fails."""
+        # First call: success
+        mock_run_command.side_effect = [
+            json.dumps({"updatedAt": "2024-01-10T12:00:00Z"}),
+            json.dumps([{"databaseId": 123, "createdAt": "2024-01-10T12:05:00Z", "headBranch": "test"}])
+        ]
+        run_id1, _ = self.github_ops.get_copilot_workflow_metadata(789)
+        self.assertEqual(run_id1, 123)
+
+        # Second call: workflow fetch fails, but should still use cached timestamp
+        mock_run_command.reset_mock()
+        mock_run_command.side_effect = Exception("API rate limit")
+
+        run_id2, branch2 = self.github_ops.get_copilot_workflow_metadata(789)
+
+        # Should return None due to workflow error, but cache was used
+        self.assertIsNone(run_id2)
+        self.assertIsNone(branch2)
+        # Verify only 1 call was made (workflow fetch failed, no issue view)
+        self.assertEqual(mock_run_command.call_count, 1)
+
     @patch('src.github.github_operations.log')
     @patch('src.github.github_operations.error_exit')
     def test_log_copilot_assignment_error_in_testing_mode(self, mock_error_exit, mock_log):

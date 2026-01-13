@@ -57,6 +57,8 @@ class GitHubOperations(ScmOperations):
         """Initialize GitHub operations handler."""
         self.config = get_config()
         self.git_ops = GitOperations()
+        # Cache for issue timestamps to reduce API calls during polling
+        self._issue_timestamp_cache: dict[int, str] = {}
 
     def get_gh_env(self) -> dict[str, str]:
         """
@@ -72,6 +74,21 @@ class GitHubOperations(ScmOperations):
         gh_env["GITHUB_TOKEN"] = gh_token
         gh_env["GITHUB_ENTERPRISE_TOKEN"] = gh_token
         return gh_env
+
+    def clear_issue_timestamp_cache(self, issue_number: Optional[int] = None) -> None:
+        """
+        Clear the issue timestamp cache.
+
+        Args:
+            issue_number: If provided, clears only this issue's cache entry.
+                         If None, clears the entire cache.
+        """
+        if issue_number is not None:
+            self._issue_timestamp_cache.pop(issue_number, None)
+            debug_log(f"Cleared timestamp cache for issue #{issue_number}")
+        else:
+            self._issue_timestamp_cache.clear()
+            debug_log("Cleared entire timestamp cache")
 
     def _write_to_temp_file(self, content: str, description: str) -> str:
         """
@@ -1230,28 +1247,35 @@ class GitHubOperations(ScmOperations):
 
         gh_env = self.get_gh_env()
 
-        # First, get the issue update timestamp (captures @copilot assignment)
-        issue_command = [
-            "gh", "issue", "view",
-            str(issue_number),
-            "--repo", self.config.GITHUB_REPOSITORY,
-            "--json", "updatedAt"
-        ]
+        # Check cache first to reduce API calls during polling
+        if issue_number in self._issue_timestamp_cache:
+            issue_updated_at = self._issue_timestamp_cache[issue_number]
+            debug_log(f"Using cached timestamp for issue #{issue_number}: {issue_updated_at}")
+        else:
+            # First, get the issue update timestamp (captures @copilot assignment)
+            issue_command = [
+                "gh", "issue", "view",
+                str(issue_number),
+                "--repo", self.config.GITHUB_REPOSITORY,
+                "--json", "updatedAt"
+            ]
 
-        try:
-            issue_output = run_command(issue_command, env=gh_env, check=True)
-            issue_data = json.loads(issue_output)
-            issue_updated_at = issue_data.get("updatedAt")
+            try:
+                issue_output = run_command(issue_command, env=gh_env, check=True)
+                issue_data = json.loads(issue_output)
+                issue_updated_at = issue_data.get("updatedAt")
 
-            if not issue_updated_at:
-                log(f"Could not get update timestamp for issue #{issue_number}", is_error=True)
+                if not issue_updated_at:
+                    log(f"Could not get update timestamp for issue #{issue_number}", is_error=True)
+                    return None, None
+
+                # Cache the timestamp for future calls
+                self._issue_timestamp_cache[issue_number] = issue_updated_at
+                debug_log(f"Issue #{issue_number} was last updated at {issue_updated_at} (cached)")
+
+            except Exception as e:
+                log(f"Error getting issue #{issue_number} creation time: {e}", is_error=True)
                 return None, None
-
-            debug_log(f"Issue #{issue_number} was last updated at {issue_updated_at}")
-
-        except Exception as e:
-            log(f"Error getting issue #{issue_number} creation time: {e}", is_error=True)
-            return None, None
 
         # Now get workflow runs
         workflow_command = [
