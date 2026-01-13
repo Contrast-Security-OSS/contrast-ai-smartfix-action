@@ -231,6 +231,10 @@ class TestGitHubOperations(unittest.TestCase):
     @patch('src.github.github_operations.run_command')
     def test_get_copilot_workflow_run_id_success(self, mock_run_command, mock_debug_log):
         """Test getting Copilot workflow run ID and branch successfully."""
+        # Mock issue creation time (issue created before workflow)
+        mock_issue_data = json.dumps({"createdAt": "2026-01-09T14:00:00Z"})
+
+        # Mock workflow data (workflow created after issue)
         mock_workflow_data = json.dumps([
             {
                 "databaseId": 12345,
@@ -241,7 +245,9 @@ class TestGitHubOperations(unittest.TestCase):
                 "headBranch": "copilot/fix-semantic-auth-bug"
             }
         ])
-        mock_run_command.return_value = mock_workflow_data
+
+        # Return issue data on first call, workflow data on second call
+        mock_run_command.side_effect = [mock_issue_data, mock_workflow_data]
 
         run_id, head_branch = self.github_ops.get_copilot_workflow_run_id(issue_number=123)
 
@@ -252,7 +258,14 @@ class TestGitHubOperations(unittest.TestCase):
     @patch('src.github.github_operations.run_command')
     def test_get_copilot_workflow_run_id_not_found(self, mock_run_command, mock_debug_log):
         """Test when no Copilot workflow run is found."""
-        mock_run_command.return_value = json.dumps([])
+        # Mock issue creation time
+        mock_issue_data = json.dumps({"createdAt": "2026-01-09T14:00:00Z"})
+
+        # Mock empty workflow list
+        mock_workflow_data = json.dumps([])
+
+        # Return issue data on first call, empty workflow list on second call
+        mock_run_command.side_effect = [mock_issue_data, mock_workflow_data]
 
         run_id, head_branch = self.github_ops.get_copilot_workflow_run_id(issue_number=999)
 
@@ -263,6 +276,10 @@ class TestGitHubOperations(unittest.TestCase):
     @patch('src.github.github_operations.run_command')
     def test_get_copilot_workflow_run_id_no_head_branch(self, mock_run_command, mock_debug_log):
         """Test when workflow run exists but has no headBranch."""
+        # Mock issue creation time
+        mock_issue_data = json.dumps({"createdAt": "2026-01-09T14:00:00Z"})
+
+        # Mock workflow data (workflow created after issue, but no headBranch)
         mock_workflow_data = json.dumps([
             {
                 "databaseId": 12345,
@@ -273,7 +290,9 @@ class TestGitHubOperations(unittest.TestCase):
                 # headBranch is missing
             }
         ])
-        mock_run_command.return_value = mock_workflow_data
+
+        # Return issue data on first call, workflow data on second call
+        mock_run_command.side_effect = [mock_issue_data, mock_workflow_data]
 
         run_id, head_branch = self.github_ops.get_copilot_workflow_run_id(issue_number=123)
 
@@ -305,28 +324,65 @@ class TestGitHubOperations(unittest.TestCase):
     @patch('src.github.github_operations.debug_log')
     @patch('src.github.github_operations.run_command')
     def test_get_copilot_workflow_run_id_multiple_workflows(self, mock_run_command, mock_debug_log):
-        """Test that most recent workflow is selected when multiple exist."""
+        """Test that most recent workflow created after issue is selected when multiple exist."""
+        # Mock issue creation time (between the two workflows)
+        mock_issue_data = json.dumps({"createdAt": "2026-01-09T15:00:00Z"})
+
+        # Mock multiple workflows - one before and one after issue creation
         mock_workflow_data = json.dumps([
             {
                 "databaseId": 99999,
                 "status": "completed",
-                "createdAt": "2026-01-09T15:30:00Z",  # Most recent
+                "createdAt": "2026-01-09T15:30:00Z",  # Most recent, after issue
                 "headBranch": "copilot/fix-latest-issue"
             },
             {
                 "databaseId": 12345,
                 "status": "completed",
-                "createdAt": "2026-01-09T15:00:00Z",  # Older
+                "createdAt": "2026-01-09T14:00:00Z",  # Older, before issue (should be filtered out)
                 "headBranch": "copilot/fix-older-issue"
             }
         ])
-        mock_run_command.return_value = mock_workflow_data
+
+        # Return issue data on first call, workflow data on second call
+        mock_run_command.side_effect = [mock_issue_data, mock_workflow_data]
 
         run_id, head_branch = self.github_ops.get_copilot_workflow_run_id(issue_number=123)
 
-        # Should select the most recent (first in list)
+        # Should select the most recent workflow created after the issue (99999)
         self.assertEqual(run_id, 99999)
         self.assertEqual(head_branch, "copilot/fix-latest-issue")
+
+    @patch('src.github.github_operations.debug_log')
+    @patch('src.github.github_operations.run_command')
+    def test_get_copilot_workflow_run_id_filters_old_workflows(self, mock_run_command, mock_debug_log):
+        """Test that workflows created before the issue are filtered out.
+
+        This test documents the bug fix for AIML-245 where workflows from unrelated
+        issues were incorrectly matched when processing multiple issues concurrently.
+        """
+        # Mock issue creation time
+        mock_issue_data = json.dumps({"createdAt": "2026-01-12T22:01:22Z"})
+
+        # Mock workflow that was created BEFORE the issue (should be filtered out)
+        mock_workflow_data = json.dumps([
+            {
+                "databaseId": 20936246677,
+                "status": "completed",
+                "createdAt": "2026-01-12T21:51:46Z",  # Before issue creation
+                "headBranch": "copilot/fix-different-issue",
+                "conclusion": "success"
+            }
+        ])
+
+        # Return issue data on first call, workflow data on second call
+        mock_run_command.side_effect = [mock_issue_data, mock_workflow_data]
+
+        run_id, head_branch = self.github_ops.get_copilot_workflow_run_id(issue_number=367)
+
+        # Should return None because the only workflow was created before the issue
+        self.assertIsNone(run_id)
+        self.assertIsNone(head_branch)
 
     @patch('src.github.github_operations.log')
     @patch('src.github.github_operations.error_exit')

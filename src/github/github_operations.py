@@ -1169,15 +1169,14 @@ class GitHubOperations(ScmOperations):
 
     def get_copilot_workflow_run_id(self, issue_number: int) -> tuple[Optional[int], Optional[str]]:
         """
-        Find the most recent Copilot workflow run and extract branch name.
+        Find the most recent Copilot workflow run created after the given issue.
 
-        Note: Currently returns the most recent "Copilot coding agent" workflow without
-        validating it's associated with the specific issue_number. In repositories with
-        multiple concurrent Copilot workflows, this may return an unrelated workflow.
-        Future enhancement: Add issue-to-workflow linkage validation (see plan Component 1).
+        Filters workflows by creation timestamp to ensure we only return workflows
+        triggered after the issue was created. This prevents matching workflows
+        from unrelated issues when processing multiple issues concurrently.
 
         Args:
-            issue_number: The GitHub issue number (currently used for logging only)
+            issue_number: The GitHub issue number to find a workflow for
 
         Returns:
             tuple: (run_id, head_branch) where:
@@ -1187,6 +1186,31 @@ class GitHubOperations(ScmOperations):
         debug_log(f"Getting Copilot workflow run for issue #{issue_number}")
 
         gh_env = self.get_gh_env()
+
+        # First, get the issue creation timestamp
+        issue_command = [
+            "gh", "issue", "view",
+            str(issue_number),
+            "--repo", self.config.GITHUB_REPOSITORY,
+            "--json", "createdAt"
+        ]
+
+        try:
+            issue_output = run_command(issue_command, env=gh_env, check=True)
+            issue_data = json.loads(issue_output)
+            issue_created_at = issue_data.get("createdAt")
+
+            if not issue_created_at:
+                log(f"Could not get creation timestamp for issue #{issue_number}", is_error=True)
+                return None, None
+
+            debug_log(f"Issue #{issue_number} was created at {issue_created_at}")
+
+        except Exception as e:
+            log(f"Error getting issue #{issue_number} creation time: {e}", is_error=True)
+            return None, None
+
+        # Now get workflow runs
         workflow_command = [
             "gh", "run", "list",
             "--repo", self.config.GITHUB_REPOSITORY,
@@ -1208,28 +1232,37 @@ class GitHubOperations(ScmOperations):
                 debug_log(f"No Copilot workflow runs in JSON response for issue #{issue_number}")
                 return None, None
 
-            # Take the most recent run (first in list, sorted by createdAt desc)
-            # Note: This does not validate the workflow is associated with the specific issue.
-            # Future enhancement: Add sophisticated matching via commit messages, workflow
-            # inputs, or creation timestamp proximity. See plan Component 1 Critical Questions.
-            run_data = runs_data[0]  # gh run list always returns array
+            # Filter workflows to only those created after the issue
+            # Workflows are sorted by createdAt descending, so we take the first match
+            for run_data in runs_data:
+                workflow_created_at = run_data.get("createdAt")
 
-            workflow_run_id = run_data.get("databaseId")
-            head_branch = run_data.get("headBranch")
-            status = run_data.get("status")
-            created_at = run_data.get("createdAt")
-            conclusion = run_data.get("conclusion")
+                if not workflow_created_at:
+                    continue
+
+                # Compare timestamps (ISO 8601 format allows string comparison)
+                if workflow_created_at >= issue_created_at:
+                    workflow_run_id = run_data.get("databaseId")
+                    head_branch = run_data.get("headBranch")
+                    status = run_data.get("status")
+                    conclusion = run_data.get("conclusion")
+
+                    debug_log(
+                        f"Found Copilot workflow run - ID: {workflow_run_id}, "
+                        f"Branch: {head_branch}, Status: {status}, "
+                        f"CreatedAt: {workflow_created_at}, Conclusion: {conclusion}"
+                    )
+
+                    if workflow_run_id is not None:
+                        workflow_run_id = int(workflow_run_id)
+
+                    return workflow_run_id, head_branch
 
             debug_log(
-                f"Found Copilot workflow run - ID: {workflow_run_id}, "
-                f"Branch: {head_branch}, Status: {status}, "
-                f"CreatedAt: {created_at}, Conclusion: {conclusion}"
+                f"No Copilot workflow runs found created after issue #{issue_number} "
+                f"(issue created at {issue_created_at})"
             )
-
-            if workflow_run_id is not None:
-                workflow_run_id = int(workflow_run_id)
-
-            return workflow_run_id, head_branch
+            return None, None
 
         except json.JSONDecodeError as e:
             log(f"Could not parse JSON output from gh run list: {e}", is_error=True)
