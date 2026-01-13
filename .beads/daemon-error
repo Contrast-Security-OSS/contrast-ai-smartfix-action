@@ -1,5 +1,6 @@
 Error: Multiple database files found in /Users/jacobmages-haskins/jacob-dev/contrast-ai-smartfix-action/.beads:
   - .!75005!beads.db
+  - .!75084!beads.db
   - .!96434!beads.db
   - beads.db
 
