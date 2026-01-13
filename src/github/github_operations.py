@@ -141,7 +141,7 @@ class GitHubOperations(ScmOperations):
 
         # Mask tokens and API keys (various patterns)
         sanitized = re.sub(r'(token|key|secret|password|apikey)["\s:=]+[a-zA-Z0-9_\-/+=]+',
-                          r'\1=***', sanitized, flags=re.IGNORECASE)
+                           r'\1=***', sanitized, flags=re.IGNORECASE)
 
         # Mask GitHub tokens specifically (ghp_, gho_, ghs_, ghu_, ghr_)
         sanitized = re.sub(r'gh[pousr]_[a-zA-Z0-9]{36,255}', 'gh*_***', sanitized)
@@ -153,7 +153,7 @@ class GitHubOperations(ScmOperations):
 
         # Mask email addresses
         sanitized = re.sub(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b',
-                          '[EMAIL]', sanitized)
+                           '[EMAIL]', sanitized)
 
         # Mask URLs with embedded credentials
         sanitized = re.sub(r'https?://[^:]+:[^@]+@', 'https://[USER]:[PASS]@', sanitized)
@@ -348,7 +348,7 @@ class GitHubOperations(ScmOperations):
                 debug_log(f"Found OPEN PR for label {label_name}.")
                 return "OPEN"
         except json.JSONDecodeError:
-            log(f"Could not parse JSON output from gh pr list (open): Invalid JSON format", is_error=True)
+            log("Could not parse JSON output from gh pr list (open): Invalid JSON format", is_error=True)
 
         # Check for MERGED PRs
         merged_pr_command = [
@@ -365,7 +365,7 @@ class GitHubOperations(ScmOperations):
                 debug_log(f"Found MERGED PR for label {label_name}.")
                 return "MERGED"
         except json.JSONDecodeError:
-            log(f"Could not parse JSON output from gh pr list (merged): Invalid JSON format", is_error=True)
+            log("Could not parse JSON output from gh pr list (merged): Invalid JSON format", is_error=True)
 
         debug_log(f"No existing OPEN or MERGED PR found for label {label_name}.")
         return "NONE"
@@ -395,7 +395,7 @@ class GitHubOperations(ScmOperations):
         try:
             pr_list_output = run_command(pr_list_command, env=gh_env, check=True)
             prs_data = json.loads(pr_list_output)
-        except json.JSONDecodeError as e:
+        except json.JSONDecodeError:
             log(f"Failed to parse GitHub API response (remediation: {remediation_id}): Invalid JSON", is_error=True)
             error_exit(remediation_id, FailureCategory.GIT_COMMAND_FAILURE.value)
         except Exception as e:
@@ -455,8 +455,6 @@ class GitHubOperations(ScmOperations):
             str: The URL of the created pull request, or an empty string if creation failed (though gh usually exits).
         """
         log("Creating Pull Request...")
-        import tempfile
-        import os.path
         import subprocess
 
         head_branch = self.git_ops.get_branch_name(remediation_id)
@@ -583,9 +581,6 @@ class GitHubOperations(ScmOperations):
         Returns:
             int: The issue number if created successfully, None otherwise
         """
-        import tempfile
-        import os.path
-
         log(f"Creating GitHub issue with title: {title}")
 
         # Check if Issues are enabled for this repository
