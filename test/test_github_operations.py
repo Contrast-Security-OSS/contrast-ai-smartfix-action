@@ -279,6 +279,122 @@ class TestGitHubOperations(unittest.TestCase):
         log_calls = [str(call) for call in mock_log.call_args_list]
         self.assertTrue(any('json' in str(call).lower() for call in log_calls))
 
+    @patch('src.github.github_operations.run_command')
+    def test_find_pr_by_branch_success(self, mock_run_command):
+        """Test finding PR by branch name returns PRInfo."""
+        mock_pr_data = [{
+            "number": 123,
+            "url": "https://github.com/test-owner/test-repo/pull/123",
+            "title": "Fix authentication bug",
+            "headRefName": "copilot/fix-auth-bug",
+            "baseRefName": "main",
+            "state": "OPEN"
+        }]
+        mock_run_command.return_value = json.dumps(mock_pr_data)
+
+        result = self.github_ops.find_pr_by_branch("copilot/fix-auth-bug")
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result["number"], 123)
+        self.assertEqual(result["url"], "https://github.com/test-owner/test-repo/pull/123")
+        self.assertEqual(result["title"], "Fix authentication bug")
+        self.assertEqual(result["headRefName"], "copilot/fix-auth-bug")
+        self.assertEqual(result["baseRefName"], "main")
+        self.assertEqual(result["state"], "OPEN")
+
+    @patch('src.github.github_operations.run_command')
+    def test_find_pr_by_branch_not_found_empty_array(self, mock_run_command):
+        """Test finding PR by branch when no PR exists returns None."""
+        mock_run_command.return_value = "[]"
+
+        result = self.github_ops.find_pr_by_branch("nonexistent-branch")
+
+        self.assertIsNone(result)
+
+    @patch('src.github.github_operations.run_command')
+    def test_find_pr_by_branch_not_found_empty_output(self, mock_run_command):
+        """Test finding PR by branch with empty output returns None."""
+        mock_run_command.return_value = ""
+
+        result = self.github_ops.find_pr_by_branch("another-branch")
+
+        self.assertIsNone(result)
+
+    @patch('src.github.github_operations.log')
+    @patch('src.github.github_operations.run_command')
+    def test_find_pr_by_branch_json_decode_error(self, mock_run_command, mock_log):
+        """Test finding PR by branch with invalid JSON returns None."""
+        mock_run_command.return_value = "invalid json {{{"
+
+        result = self.github_ops.find_pr_by_branch("test-branch")
+
+        self.assertIsNone(result)
+        # Verify error is logged
+        log_calls = [str(call) for call in mock_log.call_args_list]
+        self.assertTrue(any('json' in str(call).lower() for call in log_calls))
+
+    @patch('src.github.github_operations.run_command')
+    def test_find_pr_by_branch_missing_required_fields_no_number(self, mock_run_command):
+        """Test finding PR by branch with missing 'number' field returns None."""
+        mock_pr_data = [{
+            "url": "https://github.com/test-owner/test-repo/pull/123",
+            "title": "Test PR",
+            "headRefName": "test-branch",
+            "baseRefName": "main",
+            "state": "OPEN"
+        }]
+        mock_run_command.return_value = json.dumps(mock_pr_data)
+
+        result = self.github_ops.find_pr_by_branch("test-branch")
+
+        self.assertIsNone(result)
+
+    @patch('src.github.github_operations.run_command')
+    def test_find_pr_by_branch_missing_required_fields_no_url(self, mock_run_command):
+        """Test finding PR by branch with missing 'url' field returns None."""
+        mock_pr_data = [{
+            "number": 123,
+            "title": "Test PR",
+            "headRefName": "test-branch",
+            "baseRefName": "main",
+            "state": "OPEN"
+        }]
+        mock_run_command.return_value = json.dumps(mock_pr_data)
+
+        result = self.github_ops.find_pr_by_branch("test-branch")
+
+        self.assertIsNone(result)
+
+    @patch('src.github.github_operations.log')
+    @patch('src.github.github_operations.run_command')
+    def test_find_pr_by_branch_general_exception(self, mock_run_command, mock_log):
+        """Test finding PR by branch with general exception returns None."""
+        mock_run_command.side_effect = Exception("Network error occurred")
+
+        result = self.github_ops.find_pr_by_branch("test-branch")
+
+        self.assertIsNone(result)
+        # Verify error is logged and sanitized
+        log_calls = [str(call) for call in mock_log.call_args_list]
+        self.assertTrue(any('error' in str(call).lower() for call in log_calls))
+
+    @patch('src.github.github_operations.log')
+    @patch('src.github.github_operations.run_command')
+    def test_find_pr_by_branch_error_message_sanitized(self, mock_run_command, mock_log):
+        """Test that error messages are sanitized in find_pr_by_branch."""
+        mock_run_command.side_effect = Exception("Auth failed with token ghp_1234567890abcdefghijklmnopqrstuvwxyz1234")
+
+        result = self.github_ops.find_pr_by_branch("test-branch")
+
+        self.assertIsNone(result)
+        # Verify token is NOT in the logged error message
+        log_calls = [str(call) for call in mock_log.call_args_list]
+        error_logs = [call for call in log_calls if 'error' in str(call).lower()]
+        self.assertTrue(len(error_logs) > 0)
+        # Token should be masked in all error logs
+        for log_call in error_logs:
+            self.assertNotIn('ghp_1234567890abcdefghijklmnopqrstuvwxyz1234', str(log_call))
+
     @patch('subprocess.run')
     @patch('src.github.github_operations.run_command')
     def test_add_labels_to_pr_success(self, mock_run_command, mock_subprocess_run):
