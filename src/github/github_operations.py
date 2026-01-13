@@ -20,7 +20,7 @@
 import os
 import json
 import re
-from typing import List, Optional
+from typing import List, Optional, TypedDict
 from src.utils import run_command, debug_log, log, error_exit
 from src.smartfix.shared.failure_categories import FailureCategory
 from src.config import get_config
@@ -33,6 +33,16 @@ from src.github.constants import (
     GITHUB_PR_LIST_LIMIT,
     GITHUB_WORKFLOW_RUN_LIMIT
 )
+
+
+class PRInfo(TypedDict):
+    """Type definition for GitHub Pull Request information."""
+    number: int
+    url: str
+    title: str
+    headRefName: str
+    baseRefName: str
+    state: str
 
 
 class GitHubOperations(ScmOperations):
@@ -48,14 +58,14 @@ class GitHubOperations(ScmOperations):
         self.config = get_config()
         self.git_ops = GitOperations()
 
-    def get_gh_env(self) -> dict:
+    def get_gh_env(self) -> dict[str, str]:
         """
         Returns an environment dictionary with the GitHub token set.
         Used for GitHub CLI commands that require authentication.
         Sets both GITHUB_TOKEN and GITHUB_ENTERPRISE_TOKEN for GitHub Enterprise Server compatibility.
 
         Returns:
-            dict: Environment variables dictionary with GitHub token
+            dict[str, str]: Environment variables dictionary with GitHub token
         """
         gh_env = os.environ.copy()
         gh_token = self.config.GITHUB_TOKEN
@@ -400,21 +410,10 @@ class GitHubOperations(ScmOperations):
         # Add disclaimer to PR body
         body += "\n\n*Contrast AI SmartFix is powered by AI, so mistakes are possible.  Review before merging.*\n\n"
 
-        # Create a temporary file to store the PR body
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.md') as temp_file:
-            temp_file_path = temp_file.name
-            temp_file.write(body)
-            debug_log(f"PR body written to temporary file: {temp_file_path}")
+        # Write to temporary file
+        temp_file_path = self._write_to_temp_file(body, "PR body")
 
         try:
-            # Check file exists and print size for debugging
-            if os.path.exists(temp_file_path):
-                file_size = os.path.getsize(temp_file_path)
-                debug_log(f"Temporary file exists: {temp_file_path}, size: {file_size} bytes")
-            else:
-                log(f"Error: Temporary file {temp_file_path} does not exist", is_error=True)
-                return
-
             gh_env = self.get_gh_env()
 
             # First check if gh is available
@@ -465,13 +464,7 @@ class GitHubOperations(ScmOperations):
             log(f"An unexpected error occurred during PR creation: {e}", is_error=True)
             error_exit(remediation_id, FailureCategory.GENERATE_PR_FAILURE.value)
         finally:
-            # Clean up the temporary file
-            if os.path.exists(temp_file_path):
-                try:
-                    os.remove(temp_file_path)
-                    debug_log(f"Temporary PR body file {temp_file_path} removed.")
-                except OSError as e:
-                    log(f"Could not remove temporary file {temp_file_path}: {e}", is_error=True)
+            self._cleanup_temp_file(temp_file_path)
 
     def create_claude_pr(self, title: str, body: str, base_branch: str, head_branch: str) -> str:
         """
@@ -487,29 +480,16 @@ class GitHubOperations(ScmOperations):
             str: The URL of the created pull request, or empty string if creation failed
         """
         log(f"Creating Claude PR with title: '{title}'")
-        import tempfile
-        import os.path
 
         # Truncate PR body if too large
         if len(body) > GITHUB_MAX_PR_BODY_SIZE:
             log(f"PR body is too large ({len(body)} chars). Truncating to {GITHUB_MAX_PR_BODY_SIZE} chars.", is_warning=True)
             body = body[:GITHUB_MAX_PR_BODY_SIZE] + "\n\n...[Content truncated due to size limits]..."
 
-        # Create a temporary file to store the PR body
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.md') as temp_file:
-            temp_file_path = temp_file.name
-            temp_file.write(body)
-            debug_log(f"PR body written to temporary file: {temp_file_path}")
+        # Write to temporary file
+        temp_file_path = self._write_to_temp_file(body, "PR body")
 
         try:
-            # Check file exists and print size for debugging
-            if os.path.exists(temp_file_path):
-                file_size = os.path.getsize(temp_file_path)
-                debug_log(f"Temporary file exists: {temp_file_path}, size: {file_size} bytes")
-            else:
-                log(f"Error: Temporary file {temp_file_path} does not exist", is_error=True)
-                return ""
-
             gh_env = self.get_gh_env()
             pr_command = [
                 "gh", "pr", "create",
@@ -529,13 +509,7 @@ class GitHubOperations(ScmOperations):
             log(f"Error creating Claude PR: {e}", is_error=True)
             return ""
         finally:
-            # Clean up the temporary file
-            if os.path.exists(temp_file_path):
-                try:
-                    os.remove(temp_file_path)
-                    debug_log(f"Temporary PR body file {temp_file_path} removed.")
-                except OSError as e:
-                    log(f"Could not remove temporary file {temp_file_path}: {e}", is_error=True)
+            self._cleanup_temp_file(temp_file_path)
 
     def create_issue(self, title: str, body: str, vuln_label: str, remediation_label: str) -> int:
         """
@@ -565,21 +539,10 @@ class GitHubOperations(ScmOperations):
             log(f"Issue body too large ({len(body)} chars). Truncating to {GITHUB_MAX_ISSUE_BODY_SIZE}.", is_warning=True)
             body = body[:GITHUB_MAX_ISSUE_BODY_SIZE] + "\n\n...[Content truncated due to size limits]..."
 
-        # Create temporary file to store issue body
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.md') as temp_file:
-            temp_file_path = temp_file.name
-            temp_file.write(body)
-            debug_log(f"Issue body written to temporary file: {temp_file_path}")
+        # Write to temporary file
+        temp_file_path = self._write_to_temp_file(body, "Issue body")
 
         try:
-            # Check file exists and print size for debugging
-            if os.path.exists(temp_file_path):
-                file_size = os.path.getsize(temp_file_path)
-                debug_log(f"Temporary file exists: {temp_file_path}, size: {file_size} bytes")
-            else:
-                log(f"Error: Temporary file {temp_file_path} does not exist", is_error=True)
-                return None
-
             gh_env = self.get_gh_env()
 
             # Ensure both labels exist
@@ -640,12 +603,7 @@ class GitHubOperations(ScmOperations):
             return None
 
         finally:
-            # Clean up temp file
-            try:
-                os.remove(temp_file_path)
-                debug_log(f"Deleted temporary file: {temp_file_path}")
-            except Exception as e:
-                debug_log(f"Failed to delete temporary file {temp_file_path}: {e}")
+            self._cleanup_temp_file(temp_file_path)
 
     def add_labels_to_issue(self, issue_number: int, labels: List[str]) -> bool:
         """
@@ -957,7 +915,7 @@ class GitHubOperations(ScmOperations):
             log(f"Error searching for PRs related to issue #{issue_number}: {e}", is_error=True)
             return None
 
-    def find_pr_by_branch(self, branch_name: str) -> Optional[dict]:
+    def find_pr_by_branch(self, branch_name: str) -> Optional[PRInfo]:
         """
         Find an open pull request by exact branch name match.
 
@@ -965,8 +923,8 @@ class GitHubOperations(ScmOperations):
             branch_name: The head branch name (e.g., "copilot/fix-semantic-auth-bug")
 
         Returns:
-            dict: PR info dict with keys: number, url, title, headRefName, baseRefName, state
-                  Returns None if no PR found
+            PRInfo: PR info dict with keys: number, url, title, headRefName, baseRefName, state
+                    Returns None if no PR found
         """
         debug_log(f"Searching for open PR on branch '{branch_name}'")
         gh_env = self.get_gh_env()
