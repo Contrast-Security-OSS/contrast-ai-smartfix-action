@@ -339,9 +339,9 @@ class GitHubOperations(ScmOperations):
         try:
             pr_list_output = run_command(pr_list_command, env=gh_env, check=True)
             prs_data = json.loads(pr_list_output)
-        except json.JSONDecodeError:
-            log(f"Could not parse JSON output from gh pr list: {pr_list_output}", is_error=True)
-            return 0  # Assume zero if we can't parse
+        except json.JSONDecodeError as e:
+            log(f"Failed to parse GitHub API response (remediation: {remediation_id}): Invalid JSON", is_error=True)
+            error_exit(remediation_id, FailureCategory.GIT_COMMAND_FAILURE.value)
         except Exception as e:
             error_msg = str(e).lower()
 
@@ -365,14 +365,16 @@ class GitHubOperations(ScmOperations):
                     f"Remediation ID: {remediation_id}",
                     is_error=True
                 )
-                # Import here to avoid circular dependency
-                from src.utils import error_exit
-                from src.smartfix.shared.failure_categories import FailureCategory
                 error_exit(remediation_id, FailureCategory.GIT_COMMAND_FAILURE.value)
 
-            # Non-authentication errors: log and return 0 (existing behavior)
-            log(f"Error running gh pr list command: {e}", is_error=True)
-            return 0
+            # Check for rate limiting errors
+            if '429' in error_msg or 'rate limit' in error_msg:
+                log(f"GitHub API rate limit exceeded (remediation: {remediation_id})", is_error=True)
+                error_exit(remediation_id, FailureCategory.GIT_COMMAND_FAILURE.value)
+
+            # All other errors: fail closed to prevent bypassing MAX_OPEN_PRS limits
+            log(f"GitHub API error when counting PRs (remediation: {remediation_id}): {type(e).__name__}", is_error=True)
+            error_exit(remediation_id, FailureCategory.GIT_COMMAND_FAILURE.value)
 
         count = 0
         for pr in prs_data:
@@ -1024,6 +1026,16 @@ class GitHubOperations(ScmOperations):
         Returns:
             List[dict]: A list of comment data dictionaries or empty list if no comments or error
         """
+        # Validate author parameter to prevent jq filter injection
+        if author is not None:
+            # GitHub usernames: alphanumeric, hyphens, max 39 chars, cannot start/end with hyphen
+            if not re.match(r'^[a-zA-Z0-9]([a-zA-Z0-9-]{0,37}[a-zA-Z0-9])?$', author):
+                log(f"Invalid author username format: {author}", is_error=True)
+                return []
+            if len(author) > 39:
+                log(f"Author username exceeds maximum length (39): {author}", is_error=True)
+                return []
+
         author_log = f"and author: {author}" if author else ""
         debug_log(f"Getting comments for issue #{issue_number} {author_log}")
         gh_env = self.get_gh_env()
