@@ -4,6 +4,7 @@ import unittest
 from unittest.mock import patch, MagicMock
 import json
 from src.github.github_operations import GitHubOperations
+from src.smartfix.shared.failure_categories import FailureCategory
 
 
 class TestGitHubOperations(unittest.TestCase):
@@ -148,6 +149,135 @@ class TestGitHubOperations(unittest.TestCase):
 
         result = self.github_ops.count_open_prs_with_prefix("smartfix-id:", "test-remediation-id")
         self.assertEqual(result, 3)  # Three PRs have smartfix-id: labels
+
+    @patch('src.github.github_operations.error_exit')
+    @patch('src.github.github_operations.log')
+    @patch('src.github.github_operations.run_command')
+    def test_count_open_prs_with_prefix_auth_error_401(self, mock_run_command, mock_log, mock_error_exit):
+        """Test that 401 authentication errors trigger error_exit."""
+        mock_run_command.side_effect = Exception("HTTP 401 unauthorized")
+
+        self.github_ops.count_open_prs_with_prefix("smartfix-id:", "test-rem-123")
+
+        # Should call error_exit with proper parameters
+        mock_error_exit.assert_called_once_with(
+            "test-rem-123",
+            FailureCategory.GIT_COMMAND_FAILURE.value
+        )
+        # Should log the error with sanitized message
+        self.assertTrue(mock_log.called)
+        # Verify the log contains remediation guidance
+        log_calls = [str(call) for call in mock_log.call_args_list]
+        self.assertTrue(any('authentication' in str(call).lower() for call in log_calls))
+
+    @patch('src.github.github_operations.error_exit')
+    @patch('src.github.github_operations.log')
+    @patch('src.github.github_operations.run_command')
+    def test_count_open_prs_with_prefix_auth_error_403(self, mock_run_command, mock_log, mock_error_exit):
+        """Test that 403 forbidden errors trigger error_exit."""
+        mock_run_command.side_effect = Exception("HTTP 403 forbidden")
+
+        self.github_ops.count_open_prs_with_prefix("smartfix-id:", "test-rem-456")
+
+        mock_error_exit.assert_called_once_with(
+            "test-rem-456",
+            FailureCategory.GIT_COMMAND_FAILURE.value
+        )
+        self.assertTrue(mock_log.called)
+
+    @patch('src.github.github_operations.error_exit')
+    @patch('src.github.github_operations.log')
+    @patch('src.github.github_operations.run_command')
+    def test_count_open_prs_with_prefix_auth_error_unauthorized_string(self, mock_run_command, mock_log, mock_error_exit):
+        """Test that 'unauthorized' string in error message triggers error_exit."""
+        mock_run_command.side_effect = Exception("Request failed: unauthorized access")
+
+        self.github_ops.count_open_prs_with_prefix("smartfix-id:", "test-rem-789")
+
+        mock_error_exit.assert_called_once_with(
+            "test-rem-789",
+            FailureCategory.GIT_COMMAND_FAILURE.value
+        )
+        self.assertTrue(mock_log.called)
+
+    @patch('src.github.github_operations.error_exit')
+    @patch('src.github.github_operations.log')
+    @patch('src.github.github_operations.run_command')
+    def test_count_open_prs_with_prefix_auth_error_forbidden_string(self, mock_run_command, mock_log, mock_error_exit):
+        """Test that 'forbidden' string in error message triggers error_exit."""
+        mock_run_command.side_effect = Exception("Access forbidden for this resource")
+
+        self.github_ops.count_open_prs_with_prefix("smartfix-id:", "test-rem-abc")
+
+        mock_error_exit.assert_called_once_with(
+            "test-rem-abc",
+            FailureCategory.GIT_COMMAND_FAILURE.value
+        )
+        self.assertTrue(mock_log.called)
+
+    @patch('src.github.github_operations.error_exit')
+    @patch('src.github.github_operations.log')
+    @patch('src.github.github_operations.run_command')
+    def test_count_open_prs_with_prefix_rate_limit_429(self, mock_run_command, mock_log, mock_error_exit):
+        """Test that 429 rate limit errors trigger error_exit."""
+        mock_run_command.side_effect = Exception("HTTP 429 rate limit exceeded")
+
+        self.github_ops.count_open_prs_with_prefix("smartfix-id:", "test-rem-rate")
+
+        mock_error_exit.assert_called_once_with(
+            "test-rem-rate",
+            FailureCategory.GIT_COMMAND_FAILURE.value
+        )
+        # Verify rate limit specific logging
+        log_calls = [str(call) for call in mock_log.call_args_list]
+        self.assertTrue(any('rate limit' in str(call).lower() for call in log_calls))
+
+    @patch('src.github.github_operations.error_exit')
+    @patch('src.github.github_operations.log')
+    @patch('src.github.github_operations.run_command')
+    def test_count_open_prs_with_prefix_rate_limit_string(self, mock_run_command, mock_log, mock_error_exit):
+        """Test that 'rate limit' string in error message triggers error_exit."""
+        mock_run_command.side_effect = Exception("API rate limit exceeded, please try again later")
+
+        self.github_ops.count_open_prs_with_prefix("smartfix-id:", "test-rem-rate2")
+
+        mock_error_exit.assert_called_once_with(
+            "test-rem-rate2",
+            FailureCategory.GIT_COMMAND_FAILURE.value
+        )
+
+    @patch('src.github.github_operations.error_exit')
+    @patch('src.github.github_operations.log')
+    @patch('src.github.github_operations.run_command')
+    def test_count_open_prs_with_prefix_generic_error_fails_closed(self, mock_run_command, mock_log, mock_error_exit):
+        """Test that generic errors trigger error_exit (fail-closed behavior)."""
+        mock_run_command.side_effect = Exception("Network timeout error")
+
+        self.github_ops.count_open_prs_with_prefix("smartfix-id:", "test-rem-generic")
+
+        # Even generic errors should fail closed
+        mock_error_exit.assert_called_once_with(
+            "test-rem-generic",
+            FailureCategory.GIT_COMMAND_FAILURE.value
+        )
+        self.assertTrue(mock_log.called)
+
+    @patch('src.github.github_operations.error_exit')
+    @patch('src.github.github_operations.log')
+    @patch('src.github.github_operations.run_command')
+    def test_count_open_prs_with_prefix_json_decode_error(self, mock_run_command, mock_log, mock_error_exit):
+        """Test that JSON decode errors trigger error_exit."""
+        mock_run_command.return_value = "invalid json {{{{"
+
+        self.github_ops.count_open_prs_with_prefix("smartfix-id:", "test-rem-json")
+
+        mock_error_exit.assert_called_once_with(
+            "test-rem-json",
+            FailureCategory.GIT_COMMAND_FAILURE.value
+        )
+        # Verify JSON parse error is logged
+        log_calls = [str(call) for call in mock_log.call_args_list]
+        self.assertTrue(any('json' in str(call).lower() for call in log_calls))
 
     @patch('subprocess.run')
     @patch('src.github.github_operations.run_command')
