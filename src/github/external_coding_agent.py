@@ -470,8 +470,8 @@ Please review this security vulnerability and implement appropriate fixes to add
             # Initialize GitHub operations
             github_ops = GitHubOperations()
 
-            # Get Copilot workflow run ID and branch
-            run_id, head_branch = github_ops.get_copilot_workflow_run_id(issue_number)
+            # Get Copilot workflow metadata (run ID and branch)
+            run_id, head_branch = github_ops.get_copilot_workflow_metadata(issue_number)
 
             if not run_id:
                 debug_log(f"No Copilot workflow found for issue #{issue_number}, checking again...")

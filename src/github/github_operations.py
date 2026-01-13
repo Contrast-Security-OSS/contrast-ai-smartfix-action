@@ -27,6 +27,12 @@ from src.config import get_config
 from src.smartfix.shared.coding_agents import CodingAgents
 from src.smartfix.domains.scm.git_operations import GitOperations
 from src.smartfix.domains.scm.scm_operations import ScmOperations
+from src.github.constants import (
+    GITHUB_MAX_PR_BODY_SIZE,
+    GITHUB_MAX_ISSUE_BODY_SIZE,
+    GITHUB_PR_LIST_LIMIT,
+    GITHUB_WORKFLOW_RUN_LIMIT
+)
 
 
 class GitHubOperations(ScmOperations):
@@ -56,6 +62,37 @@ class GitHubOperations(ScmOperations):
         gh_env["GITHUB_TOKEN"] = gh_token
         gh_env["GITHUB_ENTERPRISE_TOKEN"] = gh_token
         return gh_env
+
+    def _write_to_temp_file(self, content: str, description: str) -> str:
+        """
+        Write content to a temporary file and return the file path.
+
+        Args:
+            content: The content to write
+            description: Description for debug logging (e.g., "PR body", "Issue body")
+
+        Returns:
+            str: Path to the temporary file
+        """
+        import tempfile
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.md') as temp_file:
+            temp_file.write(content)
+            debug_log(f"{description} written to temporary file: {temp_file.name}")
+            return temp_file.name
+
+    def _cleanup_temp_file(self, file_path: str) -> None:
+        """
+        Remove a temporary file if it exists.
+
+        Args:
+            file_path: Path to the temporary file to remove
+        """
+        if os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+                debug_log(f"Temporary file {file_path} removed.")
+            except OSError as e:
+                log(f"Could not remove temporary file {file_path}: {e}", is_error=True)
 
     def log_copilot_assignment_error(self, issue_number: int, error: Exception, remediation_label: str) -> None:
         """
@@ -285,7 +322,7 @@ class GitHubOperations(ScmOperations):
             "gh", "pr", "list",
             "--repo", self.config.GITHUB_REPOSITORY,
             "--state", "open",
-            "--limit", "100",  # Adjust if needed, max is 100 for this command without pagination
+            "--limit", str(GITHUB_PR_LIST_LIMIT),
             "--json", "number,labels"  # Get PR number and labels
         ]
 
@@ -355,13 +392,10 @@ class GitHubOperations(ScmOperations):
 
         head_branch = self.git_ops.get_branch_name(remediation_id)
 
-        # Set a maximum PR body size (GitHub recommends keeping it under 65536 chars)
-        MAX_PR_BODY_SIZE = 32000
-
         # Truncate PR body if too large
-        if len(body) > MAX_PR_BODY_SIZE:
-            log(f"PR body is too large ({len(body)} chars). Truncating to {MAX_PR_BODY_SIZE} chars.", is_warning=True)
-            body = body[:MAX_PR_BODY_SIZE] + "\n\n...[Content truncated due to size limits]..."
+        if len(body) > GITHUB_MAX_PR_BODY_SIZE:
+            log(f"PR body is too large ({len(body)} chars). Truncating to {GITHUB_MAX_PR_BODY_SIZE} chars.", is_warning=True)
+            body = body[:GITHUB_MAX_PR_BODY_SIZE] + "\n\n...[Content truncated due to size limits]..."
 
         # Add disclaimer to PR body
         body += "\n\n*Contrast AI SmartFix is powered by AI, so mistakes are possible.  Review before merging.*\n\n"
@@ -456,13 +490,10 @@ class GitHubOperations(ScmOperations):
         import tempfile
         import os.path
 
-        # Set a maximum PR body size (GitHub recommends keeping it under 65536 chars)
-        max_pr_body_size = 32000
-
         # Truncate PR body if too large
-        if len(body) > max_pr_body_size:
-            log(f"PR body is too large ({len(body)} chars). Truncating to {max_pr_body_size} chars.", is_warning=True)
-            body = body[:max_pr_body_size] + "\n\n...[Content truncated due to size limits]..."
+        if len(body) > GITHUB_MAX_PR_BODY_SIZE:
+            log(f"PR body is too large ({len(body)} chars). Truncating to {GITHUB_MAX_PR_BODY_SIZE} chars.", is_warning=True)
+            body = body[:GITHUB_MAX_PR_BODY_SIZE] + "\n\n...[Content truncated due to size limits]..."
 
         # Create a temporary file to store the PR body
         with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.md') as temp_file:
@@ -529,13 +560,10 @@ class GitHubOperations(ScmOperations):
             log("GitHub Issues are disabled for this repository. Cannot create issue.", is_error=True)
             return None
 
-        # Set maximum issue body size (GitHub has 65536 char limit)
-        MAX_ISSUE_BODY_SIZE = 32000
-
         # Truncate if too large
-        if len(body) > MAX_ISSUE_BODY_SIZE:
-            log(f"Issue body too large ({len(body)} chars). Truncating to {MAX_ISSUE_BODY_SIZE}.", is_warning=True)
-            body = body[:MAX_ISSUE_BODY_SIZE] + "\n\n...[Content truncated due to size limits]..."
+        if len(body) > GITHUB_MAX_ISSUE_BODY_SIZE:
+            log(f"Issue body too large ({len(body)} chars). Truncating to {GITHUB_MAX_ISSUE_BODY_SIZE}.", is_warning=True)
+            body = body[:GITHUB_MAX_ISSUE_BODY_SIZE] + "\n\n...[Content truncated due to size limits]..."
 
         # Create temporary file to store issue body
         with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.md') as temp_file:
@@ -1167,9 +1195,9 @@ class GitHubOperations(ScmOperations):
             log(f"Error getting in-progress Claude workflow run ID: {e}", is_error=True)
             return None
 
-    def get_copilot_workflow_run_id(self, issue_number: int) -> tuple[Optional[int], Optional[str]]:
+    def get_copilot_workflow_metadata(self, issue_number: int) -> tuple[Optional[int], Optional[str]]:
         """
-        Find the most recent Copilot workflow run created after the given issue was updated.
+        Find the most recent Copilot workflow run metadata for the given issue.
 
         Filters workflows by creation timestamp compared to the issue's last update time
         (which typically captures the @copilot assignment event). This ensures we only
@@ -1177,14 +1205,14 @@ class GitHubOperations(ScmOperations):
         matching workflows from unrelated issues when processing multiple issues concurrently.
 
         Args:
-            issue_number: The GitHub issue number to find a workflow for
+            issue_number: The GitHub issue number to find workflow metadata for
 
         Returns:
             tuple: (run_id, head_branch) where:
                 - run_id: The workflow run ID (databaseId) if found, or None
                 - head_branch: The branch name from headBranch field if present, or None
         """
-        debug_log(f"Getting Copilot workflow run for issue #{issue_number}")
+        debug_log(f"Getting Copilot workflow metadata for issue #{issue_number}")
 
         gh_env = self.get_gh_env()
 
@@ -1216,7 +1244,7 @@ class GitHubOperations(ScmOperations):
             "gh", "run", "list",
             "--repo", self.config.GITHUB_REPOSITORY,
             "--workflow", "Copilot coding agent",
-            "--limit", "50",
+            "--limit", str(GITHUB_WORKFLOW_RUN_LIMIT),
             "--json", "databaseId,status,event,createdAt,conclusion,headBranch"
         ]
 
