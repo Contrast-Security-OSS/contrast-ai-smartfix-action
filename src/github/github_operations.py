@@ -1169,11 +1169,12 @@ class GitHubOperations(ScmOperations):
 
     def get_copilot_workflow_run_id(self, issue_number: int) -> tuple[Optional[int], Optional[str]]:
         """
-        Find the most recent Copilot workflow run created after the given issue.
+        Find the most recent Copilot workflow run created after the given issue was updated.
 
-        Filters workflows by creation timestamp to ensure we only return workflows
-        triggered after the issue was created. This prevents matching workflows
-        from unrelated issues when processing multiple issues concurrently.
+        Filters workflows by creation timestamp compared to the issue's last update time
+        (which typically captures the @copilot assignment event). This ensures we only
+        return workflows triggered after the issue was assigned to Copilot, preventing
+        matching workflows from unrelated issues when processing multiple issues concurrently.
 
         Args:
             issue_number: The GitHub issue number to find a workflow for
@@ -1187,24 +1188,24 @@ class GitHubOperations(ScmOperations):
 
         gh_env = self.get_gh_env()
 
-        # First, get the issue creation timestamp
+        # First, get the issue update timestamp (captures @copilot assignment)
         issue_command = [
             "gh", "issue", "view",
             str(issue_number),
             "--repo", self.config.GITHUB_REPOSITORY,
-            "--json", "createdAt"
+            "--json", "updatedAt"
         ]
 
         try:
             issue_output = run_command(issue_command, env=gh_env, check=True)
             issue_data = json.loads(issue_output)
-            issue_created_at = issue_data.get("createdAt")
+            issue_updated_at = issue_data.get("updatedAt")
 
-            if not issue_created_at:
-                log(f"Could not get creation timestamp for issue #{issue_number}", is_error=True)
+            if not issue_updated_at:
+                log(f"Could not get update timestamp for issue #{issue_number}", is_error=True)
                 return None, None
 
-            debug_log(f"Issue #{issue_number} was created at {issue_created_at}")
+            debug_log(f"Issue #{issue_number} was last updated at {issue_updated_at}")
 
         except Exception as e:
             log(f"Error getting issue #{issue_number} creation time: {e}", is_error=True)
@@ -1232,7 +1233,8 @@ class GitHubOperations(ScmOperations):
                 debug_log(f"No Copilot workflow runs in JSON response for issue #{issue_number}")
                 return None, None
 
-            # Filter workflows to only those created after the issue
+            # Filter workflows to only those created after the issue was last updated
+            # (The update typically captures the @copilot assignment event)
             # Workflows are sorted by createdAt descending, so we take the first match
             for run_data in runs_data:
                 workflow_created_at = run_data.get("createdAt")
@@ -1241,7 +1243,7 @@ class GitHubOperations(ScmOperations):
                     continue
 
                 # Compare timestamps (ISO 8601 format allows string comparison)
-                if workflow_created_at >= issue_created_at:
+                if workflow_created_at >= issue_updated_at:
                     workflow_run_id = run_data.get("databaseId")
                     head_branch = run_data.get("headBranch")
                     status = run_data.get("status")
@@ -1260,7 +1262,7 @@ class GitHubOperations(ScmOperations):
 
             debug_log(
                 f"No Copilot workflow runs found created after issue #{issue_number} "
-                f"(issue created at {issue_created_at})"
+                f"(issue last updated at {issue_updated_at})"
             )
             return None, None
 
