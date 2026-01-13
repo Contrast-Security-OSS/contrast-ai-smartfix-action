@@ -104,6 +104,45 @@ class GitHubOperations(ScmOperations):
             except OSError as e:
                 log(f"Could not remove temporary file {file_path}: {e}", is_error=True)
 
+    def _sanitize_error_message(self, message: str) -> str:
+        """
+        Sanitize error messages to prevent information disclosure.
+
+        Removes or masks:
+        - Tokens and API keys
+        - File paths that reveal system structure
+        - Email addresses
+        - URLs with embedded credentials
+
+        Args:
+            message: The error message to sanitize
+
+        Returns:
+            str: Sanitized error message safe for logging
+        """
+        sanitized = message
+
+        # Mask tokens and API keys (various patterns)
+        sanitized = re.sub(r'(token|key|secret|password|apikey)["\s:=]+[a-zA-Z0-9_\-/+=]+',
+                          r'\1=***', sanitized, flags=re.IGNORECASE)
+
+        # Mask GitHub tokens specifically (ghp_, gho_, ghs_, ghu_, ghr_)
+        sanitized = re.sub(r'gh[pousr]_[a-zA-Z0-9]{36,255}', 'gh*_***', sanitized)
+
+        # Mask file paths (Unix and Windows)
+        sanitized = re.sub(r'/home/[^/\s]+', '/home/[USER]', sanitized)
+        sanitized = re.sub(r'/Users/[^/\s]+', '/Users/[USER]', sanitized)
+        sanitized = re.sub(r'C:\\Users\\[^\\]+', 'C:\\Users\\[USER]', sanitized)
+
+        # Mask email addresses
+        sanitized = re.sub(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b',
+                          '[EMAIL]', sanitized)
+
+        # Mask URLs with embedded credentials
+        sanitized = re.sub(r'https?://[^:]+:[^@]+@', 'https://[USER]:[PASS]@', sanitized)
+
+        return sanitized
+
     def log_copilot_assignment_error(self, issue_number: int, error: Exception, remediation_label: str) -> None:
         """
         Logs a standardized error message for Copilot assignment failures and exits.
@@ -292,7 +331,7 @@ class GitHubOperations(ScmOperations):
                 debug_log(f"Found OPEN PR for label {label_name}.")
                 return "OPEN"
         except json.JSONDecodeError:
-            log(f"Could not parse JSON output from gh pr list (open): {open_pr_output}", is_error=True)
+            log(f"Could not parse JSON output from gh pr list (open): Invalid JSON format", is_error=True)
 
         # Check for MERGED PRs
         merged_pr_command = [
@@ -309,7 +348,7 @@ class GitHubOperations(ScmOperations):
                 debug_log(f"Found MERGED PR for label {label_name}.")
                 return "MERGED"
         except json.JSONDecodeError:
-            log(f"Could not parse JSON output from gh pr list (merged): {merged_pr_output}", is_error=True)
+            log(f"Could not parse JSON output from gh pr list (merged): Invalid JSON format", is_error=True)
 
         debug_log(f"No existing OPEN or MERGED PR found for label {label_name}.")
         return "NONE"
@@ -347,9 +386,10 @@ class GitHubOperations(ScmOperations):
 
             # Check for authentication errors (401, 403)
             if any(indicator in error_msg for indicator in ['401', '403', 'unauthorized', 'forbidden', 'authentication', 'authenticating']):
+                sanitized_error = self._sanitize_error_message(str(e))
                 log(
                     f"GitHub CLI authentication failed when counting PRs with prefix '{label_prefix}'.\n"
-                    f"Error: {e}\n"
+                    f"Error: {sanitized_error}\n"
                     f"\n"
                     f"This typically indicates:\n"
                     f"1. GitHub CLI (gh) is not authenticated\n"
@@ -964,10 +1004,11 @@ class GitHubOperations(ScmOperations):
 
             return None
         except json.JSONDecodeError as e:
-            log(f"Could not parse JSON output from gh pr list for branch '{branch_name}': {e}", is_error=True)
+            log(f"Could not parse JSON output from gh pr list for branch '{branch_name}': {type(e).__name__}", is_error=True)
             return None
         except Exception as e:
-            log(f"Error searching for PR on branch '{branch_name}': {e}", is_error=True)
+            sanitized_error = self._sanitize_error_message(str(e))
+            log(f"Error searching for PR on branch '{branch_name}': {sanitized_error}", is_error=True)
             return None
 
     def add_labels_to_pr(self, pr_number: int, labels: List[str]) -> bool:
@@ -1063,10 +1104,13 @@ class GitHubOperations(ScmOperations):
 
             return comments_data
         except json.JSONDecodeError as e:
-            log(f"Could not parse JSON output from gh issue view: {e}. Output: {comment_output}", is_error=True)
+            sanitized_output = self._sanitize_error_message(str(comment_output)) if comment_output else "None"
+            log(f"Could not parse JSON output from gh issue view: {type(e).__name__}. Output length: {len(comment_output) if comment_output else 0} chars", is_error=True)
+            debug_log(f"Sanitized output sample: {sanitized_output[:200]}")  # Only in debug mode
             return []
         except Exception as e:
-            log(f"Error getting comments for issue #{issue_number}: {e}", is_error=True)
+            sanitized_error = self._sanitize_error_message(str(e))
+            log(f"Error getting comments for issue #{issue_number}: {sanitized_error}", is_error=True)
             return []
 
     def watch_github_action_run(self, run_id: int) -> bool:
