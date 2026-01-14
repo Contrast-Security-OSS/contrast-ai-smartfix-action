@@ -6,7 +6,7 @@ for implementing SCM platform-specific operations (GitHub, GitLab, BitBucket, et
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 
 class ScmOperations(ABC):
@@ -23,7 +23,7 @@ class ScmOperations(ABC):
         Returns environment dictionary with authentication tokens set for CLI commands.
 
         Returns:
-            Dict[str, str]: Environment dictionary with auth tokens
+            dict[str, str]: Environment dictionary with auth tokens
         """
         pass
 
