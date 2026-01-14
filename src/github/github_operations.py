@@ -149,7 +149,7 @@ class GitHubOperations(ScmOperations):
         # Mask file paths (Unix and Windows)
         sanitized = re.sub(r'/home/[^/\s]+', '/home/[USER]', sanitized)
         sanitized = re.sub(r'/Users/[^/\s]+', '/Users/[USER]', sanitized)
-        sanitized = re.sub(r'C:\\Users\\[^\\]+', 'C:\\Users\\[USER]', sanitized)
+        sanitized = re.sub(r'C:\\Users\\[^\\]+', r'C:\\Users\\[USER]', sanitized)
 
         # Mask email addresses
         sanitized = re.sub(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b',
@@ -398,6 +398,7 @@ class GitHubOperations(ScmOperations):
         except json.JSONDecodeError:
             log(f"Failed to parse GitHub API response (remediation: {remediation_id}): Invalid JSON", is_error=True)
             error_exit(remediation_id, FailureCategory.GIT_COMMAND_FAILURE.value)
+            return 0  # Return after error_exit for test scenarios where error_exit is mocked
         except Exception as e:
             error_msg = str(e).lower()
 
@@ -423,15 +424,18 @@ class GitHubOperations(ScmOperations):
                     is_error=True
                 )
                 error_exit(remediation_id, FailureCategory.GIT_COMMAND_FAILURE.value)
+                return 0  # Return after error_exit for test scenarios where error_exit is mocked
 
             # Check for rate limiting errors
             if '429' in error_msg or 'rate limit' in error_msg:
                 log(f"GitHub API rate limit exceeded (remediation: {remediation_id})", is_error=True)
                 error_exit(remediation_id, FailureCategory.GIT_COMMAND_FAILURE.value)
+                return 0  # Return after error_exit for test scenarios where error_exit is mocked
 
             # All other errors: fail closed to prevent bypassing MAX_OPEN_PRS limits
             log(f"GitHub API error when counting PRs (remediation: {remediation_id}): {type(e).__name__}", is_error=True)
             error_exit(remediation_id, FailureCategory.GIT_COMMAND_FAILURE.value)
+            return 0  # Return after error_exit for test scenarios where error_exit is mocked
 
         count = 0
         for pr in prs_data:
