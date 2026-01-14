@@ -956,6 +956,70 @@ class TestGitHubOperations(unittest.TestCase):
 
         self.assertEqual(result, 789)
 
+    @patch('src.github.github_operations.run_command')
+    def test_find_open_pr_for_issue_copilot_branch(self, mock_run_command):
+        """Test finding open PR for issue with Copilot branch pattern."""
+        mock_pr_data = [{
+            "number": 456,
+            "url": "https://github.com/test/repo/pull/456",
+            "title": "[WIP] Fix issue",
+            "headRefName": "copilot/fix-123",
+            "baseRefName": "main",
+            "state": "OPEN"
+        }]
+        mock_run_command.return_value = json.dumps(mock_pr_data)
+
+        result = self.github_ops.find_open_pr_for_issue(123, "Test Issue")
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result["number"], 456)
+
+    @patch('src.github.github_operations.run_command')
+    def test_find_open_pr_for_issue_claude_branch(self, mock_run_command):
+        """Test finding open PR for issue with Claude branch pattern."""
+        # First call for copilot pattern returns empty, second for claude pattern returns PR
+        mock_pr_data = [{
+            "number": 789,
+            "url": "https://github.com/test/repo/pull/789",
+            "title": "Fix: Test Issue",
+            "headRefName": "claude/issue-123-20251211-1430",
+            "baseRefName": "main",
+            "state": "OPEN"
+        }]
+        mock_run_command.side_effect = ["[]", json.dumps(mock_pr_data)]
+
+        result = self.github_ops.find_open_pr_for_issue(123, "Test Issue")
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result["number"], 789)
+
+    @patch('src.github.github_operations.run_command')
+    def test_find_open_pr_for_issue_not_found(self, mock_run_command):
+        """Test finding open PR for issue when none exists."""
+        # All three search patterns return empty
+        mock_run_command.side_effect = ["[]", "[]", "[]"]
+
+        result = self.github_ops.find_open_pr_for_issue(999, "Nonexistent Issue")
+
+        self.assertIsNone(result)
+
+    @patch('src.github.github_operations.run_command')
+    def test_reset_issue_with_open_pr(self, mock_run_command):
+        """Test reset_issue when issue has open PR (should not reset)."""
+        # Mock check_issues_enabled
+        mock_run_command.return_value = "[]"
+
+        # Mock find_open_pr_for_issue to return an open PR
+        with patch.object(self.github_ops, 'find_open_pr_for_issue') as mock_find_pr:
+            mock_find_pr.return_value = {
+                "number": 456,
+                "url": "https://github.com/test/repo/pull/456"
+            }
+
+            result = self.github_ops.reset_issue(123, "Test Issue", "smartfix-id:new-rem")
+
+            self.assertFalse(result)
+
     @patch('subprocess.run')
     @patch('src.github.github_operations.run_command')
     def test_reset_issue_success_claude_mode(self, mock_run_command, mock_subprocess_run):
@@ -974,10 +1038,11 @@ class TestGitHubOperations(unittest.TestCase):
 
         # Mock calls in sequence:
         # 1. check_issues_enabled
-        # 2. get current labels
-        # 3. ensure_label (check)
-        # 4. add label command
-        # 5. comment command
+        # 2. find_open_pr_for_issue (no PR)
+        # 3. get current labels
+        # 4. ensure_label (check)
+        # 5. add label command
+        # 6. comment command
         mock_run_command.side_effect = [
             "[]",  # check_issues_enabled
             json.dumps({"labels": [{"name": "smartfix-id:old-rem"}]}),  # get labels
@@ -988,9 +1053,13 @@ class TestGitHubOperations(unittest.TestCase):
         ]
         mock_subprocess_run.return_value = MagicMock(returncode=0)
 
-        result = github_ops.reset_issue(123, "Test Issue", "smartfix-id:new-rem")
+        # Mock find_open_pr_for_issue to return None (no open PR)
+        with patch.object(github_ops, 'find_open_pr_for_issue') as mock_find_pr:
+            mock_find_pr.return_value = None
 
-        self.assertTrue(result)
+            result = github_ops.reset_issue(123, "Test Issue", "smartfix-id:new-rem")
+
+            self.assertTrue(result)
 
     @patch('tempfile.NamedTemporaryFile')
     @patch('os.path.exists')

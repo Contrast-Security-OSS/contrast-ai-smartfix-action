@@ -6,7 +6,7 @@ for implementing SCM platform-specific operations (GitHub, GitLab, BitBucket, et
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 
 class ScmOperations(ABC):
@@ -211,6 +211,20 @@ class ScmOperations(ABC):
 
         Returns:
             bool: True if successful, False otherwise
+        """
+        pass
+
+    @abstractmethod
+    def find_open_pr_for_issue(self, issue_number: int, issue_title: str) -> Dict:
+        """
+        Finds an open PR that references a specific issue.
+
+        Args:
+            issue_number (int): Issue number
+            issue_title (str): Issue title
+
+        Returns:
+            Dict: PR details if found, empty dict otherwise
         """
         pass
 
