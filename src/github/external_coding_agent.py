@@ -17,6 +17,7 @@
 # #L%
 #
 
+import random
 import re
 import time
 from typing import Optional
@@ -220,10 +221,11 @@ Please review this security vulnerability and implement appropriate fixes to add
             # Poll for PR creation by the external agent
             log(f"Waiting for external agent to create a PR for issue #{issue_number}, '{issue_title}'")
 
-            # Poll for a PR to be created by the external agent (100 attempts, 5 seconds apart = ~8.3 minutes max)
+            # Poll for a PR to be created by the external agent
+            # Uses exponential backoff: 50 attempts with increasing delays = ~8-10 minutes max
             pr_info = self._process_external_coding_agent_run(
                 issue_number, issue_title, remediation_id, vulnerability_label,
-                remediation_label, is_existing_issue, max_attempts=100, sleep_seconds=5
+                remediation_label, is_existing_issue, max_attempts=50, base_sleep_seconds=5
             )
 
             log("\n::endgroup::")
@@ -263,9 +265,15 @@ Please review this security vulnerability and implement appropriate fixes to add
 
     def _process_external_coding_agent_run(self, issue_number: int, issue_title: str, remediation_id: str, vulnerability_label: str,
                                            remediation_label: str, is_existing_issue: bool,
-                                           max_attempts: int = 100, sleep_seconds: int = 5) -> Optional[dict]:
+                                           max_attempts: int = 50, base_sleep_seconds: int = 5) -> Optional[dict]:
         """
-        Poll for a PR to be created by the external agent.
+        Poll for a PR to be created by the external agent using exponential backoff.
+
+        Uses exponential backoff strategy to reduce API calls:
+        - Starts with base_sleep_seconds between attempts
+        - Doubles sleep time every 5 attempts (5s → 10s → 20s → 40s → 60s max)
+        - Adds ±20% random jitter to prevent thundering herd
+        - Max 50 attempts with ~8-10 minutes total timeout
 
         Args:
             issue_number: The issue number to check for a PR
@@ -273,13 +281,13 @@ Please review this security vulnerability and implement appropriate fixes to add
             vulnerability_label: The vulnerability label to add to the PR
             remediation_label: The remediation label to add to the PR
             is_existing_issue: Flag indicating if this is an existing issue being reprocessed
-            max_attempts: Maximum number of polling attempts (default: 100)
-            sleep_seconds: Time to sleep between attempts (default: 5 seconds)
+            max_attempts: Maximum number of polling attempts (default: 50, reduced from 100)
+            base_sleep_seconds: Base sleep time between attempts (default: 5 seconds)
 
         Returns:
             Optional[dict]: PR information if found, None if not found after max attempts
         """
-        debug_log(f"Polling for PR creation for issue #{issue_number}, max {max_attempts} attempts with {sleep_seconds}s interval")
+        debug_log(f"Polling for PR creation for issue #{issue_number}, max {max_attempts} attempts with exponential backoff")
 
         for attempt in range(1, max_attempts + 1):
             debug_log(f"Polling attempt {attempt}/{max_attempts} for PR related to issue #{issue_number}")
@@ -333,7 +341,17 @@ Please review this security vulnerability and implement appropriate fixes to add
 
             # Sleep before the next attempt, but don't sleep after the last attempt
             if attempt < max_attempts:
-                time.sleep(sleep_seconds)
+                # Calculate exponential backoff: 5s → 10s → 20s → 40s → 60s (max)
+                # Doubles every 5 attempts: 2^(attempt//5)
+                backoff_factor = min(2 ** (attempt // 5), 60 / base_sleep_seconds)
+                sleep_time = base_sleep_seconds * backoff_factor
+
+                # Add jitter: ±20% randomness to prevent thundering herd
+                jitter = random.uniform(0.8, 1.2)
+                actual_sleep = sleep_time * jitter
+
+                debug_log(f"Backing off for {actual_sleep:.1f}s (attempt {attempt}/{max_attempts}, backoff factor: {backoff_factor}x)")
+                time.sleep(actual_sleep)
 
         log(f"No PR found for issue #{issue_number} after {max_attempts} polling attempts", is_error=True)
         return None

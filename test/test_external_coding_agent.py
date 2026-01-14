@@ -182,7 +182,7 @@ class TestExternalCodingAgent(unittest.TestCase):
             mock_poll_for_pr.assert_called_once_with(
                 42, "Fake Vulnerability Title", "1REM-FAKE-ABCD",
                 'contrast-vuln-id:VULN-1234-FAKE-ABCD', 'smartfix-id:1REM-FAKE-ABCD',
-                True, max_attempts=100, sleep_seconds=5
+                True, max_attempts=50, base_sleep_seconds=5
             )
         finally:
             # Restore original method
@@ -247,7 +247,7 @@ class TestExternalCodingAgent(unittest.TestCase):
             mock_poll_for_pr.assert_called_once_with(
                 42, "Fake Vulnerability Title", "1REM-FAKE-ABCD",
                 'contrast-vuln-id:VULN-1234-FAKE-ABCD', 'smartfix-id:1REM-FAKE-ABCD',
-                True, max_attempts=100, sleep_seconds=5
+                True, max_attempts=50, base_sleep_seconds=5
             )
         finally:
             # Restore original method
@@ -336,7 +336,7 @@ class TestExternalCodingAgent(unittest.TestCase):
             remediation_label="smartfix-id:1REM-FAKE-ABCD",
             is_existing_issue=False,
             max_attempts=3,
-            sleep_seconds=0.01
+            base_sleep_seconds=0.01
         )
 
         # Verify results
@@ -385,7 +385,7 @@ class TestExternalCodingAgent(unittest.TestCase):
             remediation_label="smartfix-id:remediation-67890",
             is_existing_issue=False,
             max_attempts=3,
-            sleep_seconds=0.01
+            base_sleep_seconds=0.01
         )
 
         # Verify results
@@ -396,7 +396,10 @@ class TestExternalCodingAgent(unittest.TestCase):
         # Sleep should be called twice (after first and second attempts)
         self.assertEqual(mock_sleep.call_count, 2)
         for call in mock_sleep.call_args_list:
-            self.assertEqual(call[0][0], 0.01)  # Verify sleep called with 0.01 seconds
+            # With jitter, sleep value should be within 80-120% of base_sleep_seconds (0.01)
+            sleep_value = call[0][0]
+            self.assertGreaterEqual(sleep_value, 0.008)  # 0.01 * 0.8
+            self.assertLessEqual(sleep_value, 0.012)  # 0.01 * 1.2
 
     @patch('src.github.external_coding_agent.ExternalCodingAgent._process_copilot_workflow_run')
     @patch('src.contrast_api.notify_remediation_pr_opened')
@@ -418,7 +421,7 @@ class TestExternalCodingAgent(unittest.TestCase):
             remediation_label="smartfix-id:remediation-67890",
             is_existing_issue=False,
             max_attempts=3,
-            sleep_seconds=0.01
+            base_sleep_seconds=0.01
         )
 
         # Verify results
@@ -428,7 +431,10 @@ class TestExternalCodingAgent(unittest.TestCase):
         # Sleep should be called twice (after first and second attempts)
         self.assertEqual(mock_sleep.call_count, 2)
         for call in mock_sleep.call_args_list:
-            self.assertEqual(call[0][0], 0.01)  # Verify sleep called with 0.01 seconds
+            # With jitter, sleep value should be within 80-120% of base_sleep_seconds (0.01)
+            sleep_value = call[0][0]
+            self.assertGreaterEqual(sleep_value, 0.008)  # 0.01 * 0.8
+            self.assertLessEqual(sleep_value, 0.012)  # 0.01 * 1.2
 
     @patch('src.github.github_operations.GitHubOperations.add_labels_to_pr')
     @patch('src.github.external_coding_agent.ExternalCodingAgent._process_copilot_workflow_run')
@@ -458,7 +464,7 @@ class TestExternalCodingAgent(unittest.TestCase):
             remediation_label="smartfix-id:remediation-67890",
             is_existing_issue=False,
             max_attempts=3,
-            sleep_seconds=0.01
+            base_sleep_seconds=0.01
         )
 
         # Verify results
@@ -775,7 +781,7 @@ class TestExternalCodingAgent(unittest.TestCase):
             remediation_label=remediation_label,
             is_existing_issue=False,
             max_attempts=3,
-            sleep_seconds=0.01
+            base_sleep_seconds=0.01
         )
 
         # Assert - tests may fail in this environment due to GitHub API permissions,
@@ -803,7 +809,11 @@ class TestExternalCodingAgent(unittest.TestCase):
         mock_create_claude_pr.assert_called()
 
         # Sleep should be called once after first attempt
-        mock_sleep.assert_called_once_with(0.01)
+        # With jitter, sleep value should be within 80-120% of base_sleep_seconds (0.01)
+        mock_sleep.assert_called_once()
+        sleep_value = mock_sleep.call_args[0][0]
+        self.assertGreaterEqual(sleep_value, 0.008)  # 0.01 * 0.8
+        self.assertLessEqual(sleep_value, 0.012)  # 0.01 * 1.2
 
         # Log messages
         mock_log.assert_any_call("Successfully created PR #123 for Claude Code fix")
@@ -860,7 +870,7 @@ class TestExternalCodingAgent(unittest.TestCase):
                 remediation_label=remediation_label,
                 is_existing_issue=False,
                 max_attempts=3,
-                sleep_seconds=0.01
+                base_sleep_seconds=0.01
             )
 
         # Assert
@@ -924,7 +934,7 @@ class TestExternalCodingAgent(unittest.TestCase):
                 remediation_label=remediation_label,
                 is_existing_issue=False,
                 max_attempts=3,
-                sleep_seconds=0.01
+                base_sleep_seconds=0.01
             )
 
         # Assert
@@ -978,7 +988,7 @@ class TestExternalCodingAgent(unittest.TestCase):
             remediation_label=remediation_label,
             is_existing_issue=False,
             max_attempts=3,
-            sleep_seconds=0.01
+            base_sleep_seconds=0.01
         )
 
         # Assert
@@ -1058,7 +1068,7 @@ class TestExternalCodingAgent(unittest.TestCase):
                 remediation_label=remediation_label,
                 is_existing_issue=False,
                 max_attempts=3,
-                sleep_seconds=0.01
+                base_sleep_seconds=0.01
             )
 
         # Assert
