@@ -145,22 +145,18 @@ class TestExternalCodingAgent(unittest.TestCase):
     @patch('src.github.external_coding_agent.error_exit')
     @patch('src.github.github_operations.GitHubOperations.find_issue_with_label')
     @patch('src.github.github_operations.GitHubOperations.create_issue')
-    @patch('src.github.github_operations.GitHubOperations.find_open_pr_for_issue')
     @patch('src.github.external_coding_agent.time.sleep')
     @patch('src.telemetry_handler.update_telemetry')
     @patch('src.github.external_coding_agent.debug_log')
     @patch('src.github.external_coding_agent.log')
     def test_remediate_with_external_agent_pr_timeout(self, mock_log, mock_debug_log, mock_update_telemetry,
-                                                      mock_sleep, mock_find_pr, mock_create_issue, mock_find_issue, mock_error_exit):
+                                                      mock_sleep, mock_create_issue, mock_find_issue, mock_error_exit):
         """Test remediate when PR creation times out"""
         # Set CODING_AGENT to GITHUB_COPILOT
         self.config.CODING_AGENT = "GITHUB_COPILOT"
 
         # Configure mock
         mock_find_issue.return_value = 42
-
-        # Mock the find_open_pr_for_issue to always return None (no PR found)
-        mock_find_pr.return_value = None
 
         # Create an ExternalCodingAgent object with a small max_attempts to speed up the test
         agent = ExternalCodingAgent(self.config)
@@ -204,14 +200,13 @@ class TestExternalCodingAgent(unittest.TestCase):
 
     @patch('src.github.github_operations.GitHubOperations.find_issue_with_label')
     @patch('src.github.github_operations.GitHubOperations.reset_issue')
-    @patch('src.github.github_operations.GitHubOperations.find_open_pr_for_issue')
     @patch('src.contrast_api.notify_remediation_pr_opened')
     @patch('src.github.external_coding_agent.time.sleep')
     @patch('src.telemetry_handler.update_telemetry')
     @patch('src.github.external_coding_agent.debug_log')
     @patch('src.github.external_coding_agent.log')
     def test_remediate_with_existing_issue(self, mock_log, mock_debug_log, mock_update_telemetry,
-                                           mock_sleep, mock_notify, mock_find_pr, mock_reset_issue,
+                                           mock_sleep, mock_notify, mock_reset_issue,
                                            mock_find_issue):
         """Test remediate when an existing GitHub issue is found"""
         # Set CODING_AGENT to GITHUB_COPILOT
@@ -226,7 +221,6 @@ class TestExternalCodingAgent(unittest.TestCase):
             "url": "https://github.com/owner/repo/pull/123",
             "title": "Fix test issue"
         }
-        mock_find_pr.return_value = pr_info
         mock_notify.return_value = True
 
         # Create an ExternalCodingAgent object

@@ -429,7 +429,7 @@ Please review this security vulnerability and implement appropriate fixes to add
 
             pr_number = int(pr_number_match.group(1))
 
-            # Create PR info object similar to what find_open_pr_for_issue returns
+            # Create PR info object
             pr_info = {
                 "number": pr_number,
                 "url": pr_url,

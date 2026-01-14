@@ -756,8 +756,6 @@ class GitHubOperations(ScmOperations):
         3. If coding agent is CoPilot then unassigning the @Copilot user and reassigning the issue to @Copilot
         4. If coding agent is Claude Code then adding a comment to notify @claude to reprocess the issue
 
-        The reset will not occur if there's an open PR for the issue.
-
         Args:
             issue_number: The issue number to reset
             remediation_label: The new remediation label to add
@@ -770,14 +768,6 @@ class GitHubOperations(ScmOperations):
         # Check if Issues are enabled for this repository
         if not self.check_issues_enabled():
             log("GitHub Issues are disabled for this repository. Cannot reset issue.", is_error=True)
-            return False
-
-        # First check if there's an open PR for this issue
-        open_pr = self.find_open_pr_for_issue(issue_number, issue_title)
-        if open_pr:
-            pr_number = open_pr.get("number")
-            pr_url = open_pr.get("url")
-            log(f"Cannot reset issue #{issue_number} because it has an open PR #{pr_number}: {pr_url}", is_error=True)
             return False
 
         gh_env = self.get_gh_env()
@@ -881,93 +871,6 @@ class GitHubOperations(ScmOperations):
         except Exception as e:
             log(f"Failed to reset issue #{issue_number}: {e}", is_error=True)
             return False
-
-    def find_open_pr_for_issue(self, issue_number: int, issue_title: str) -> dict:
-        """
-        Finds an open pull request associated with the given issue number.
-        Specifically looks for PRs with branch names matching the pattern 'copilot/fix-{issue_number}'
-        or 'claude/issue-{issue_number}-'.
-
-        Args:
-            issue_number: The issue number to find a PR for
-
-        Returns:
-            dict: A dictionary with PR information (number, url, title) if found, None otherwise
-        """
-        debug_log(f"Searching for open PR related to issue #{issue_number}")
-        gh_env = self.get_gh_env()
-
-        # Use search patterns that match PRs with branch names for both Copilot and Claude Code
-        # First try to find PRs with Copilot branch pattern
-        search_pattern = f"head:copilot/fix-{issue_number}"
-
-        pr_list_command = [
-            "gh", "pr", "list",
-            "--repo", self.config.GITHUB_REPOSITORY,
-            "--state", "open",
-            "--search", search_pattern,
-            "--limit", "1",  # Limit to 1 result as we only need the first match
-            "--json", "number,url,title,headRefName,baseRefName,state"
-        ]
-
-        try:
-            pr_list_output = run_command(pr_list_command, env=gh_env, check=False)
-
-            if not pr_list_output or pr_list_output.strip() == "[]":
-                # Try again with claude branch pattern
-                claude_search_pattern = f"head:claude/issue-{issue_number}-"
-                claude_pr_list_command = [
-                    "gh", "pr", "list",
-                    "--repo", self.config.GITHUB_REPOSITORY,
-                    "--state", "open",
-                    "--search", claude_search_pattern,
-                    "--limit", "1",
-                    "--json", "number,url,title,headRefName,baseRefName,state"
-                ]
-
-                pr_list_output = run_command(claude_pr_list_command, env=gh_env, check=False)
-
-                if not pr_list_output or pr_list_output.strip() == "[]":
-                    escaped_issue_title = issue_title.replace('"', '\\"')
-                    copilot_issue_title_search_pattern = f"in:title \"[WIP] {escaped_issue_title}\""
-                    copilot_issue_title_list_command = [
-                        "gh", "pr", "list",
-                        "--repo", self.config.GITHUB_REPOSITORY,
-                        "--state", "open",
-                        "--search", copilot_issue_title_search_pattern,
-                        "--limit", "1",
-                        "--json", "number,url,title,headRefName,baseRefName,state"
-                    ]
-
-                    pr_list_output = run_command(copilot_issue_title_list_command, env=gh_env, check=False)
-
-                    if not pr_list_output or pr_list_output.strip() == "[]":
-                        debug_log(f"No open PRs found for issue #{issue_number} with either Copilot or Claude branch pattern")
-                        return None
-
-            prs_data = json.loads(pr_list_output)
-
-            if not prs_data:
-                debug_log(f"No open PRs found for issue #{issue_number}")
-                return None
-
-            # Get the first matching PR
-            pr_info = prs_data[0]
-            pr_number = pr_info.get("number")
-            pr_url = pr_info.get("url")
-            pr_title = pr_info.get("title")
-
-            if pr_number and pr_url:
-                log(f"Found open PR #{pr_number} for issue #{issue_number}: {pr_title}")
-                return pr_info
-
-            return None
-        except json.JSONDecodeError:
-            log(f"Could not parse JSON output from gh pr list: {pr_list_output}", is_error=True)
-            return None
-        except Exception as e:
-            log(f"Error searching for PRs related to issue #{issue_number}: {e}", is_error=True)
-            return None
 
     def find_pr_by_branch(self, branch_name: str) -> Optional[PRInfo]:
         """
