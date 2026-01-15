@@ -24,10 +24,13 @@ When assigned to a SmartFix-created GitHub Issue describing a Contrast-discovere
 * **GitHub:** Your project must be hosted on GitHub and use GitHub Actions.  In the GitHub repository's Settings, enable the Actions > General > Workflow Permissions checkbox for "Allow GitHub Actions to create and approve pull requests".
 * **GitHub Copilot Requirements:**
   * GitHub repository with **Issues** and **GitHub Copilot** enabled
-  * GitHub Personal Access Token (PAT) with:
-    * `meta` (read permissions)
-    * `pulls` (read-write permissions)
-    * `issues` (read-write permissions)
+  * GitHub Personal Access Token (fine-grained PAT) with:
+    * **Actions**: Read (required to monitor workflow runs)
+    * **Contents**: Read and write (required to push code changes for PRs)
+    * **Issues**: Read and write (required to create issues and add labels)
+    * **Metadata**: Read (automatically included with all fine-grained PATs)
+    * **Pull requests**: Read and write (required to create PRs and add labels)
+    * **Workflows**: Read and write (required to trigger and monitor GitHub Copilot's workflow execution)
   * **Suggestion:** Set up a GitHub service account and use that to make the PAT for more explicit tracking of SmartFix's work in GitHub.
 * **Contrast API Credentials:** You will need your Contrast Host, Organization ID, Application ID, Authorization Key, and API Key.
 
@@ -93,7 +96,7 @@ jobs:
           contrast_api_key: ${{ secrets.CONTRAST_API_KEY }}
 
           # GitHub Configuration
-          github_token: ${{ secrets.PAT_TOKEN }} # Necessary for creating Issues and assigning to Copilot.  This token should have read permission for metadata and read-write permission for issues and pulls.  A best practice is to have an GitHub Organization service account create the PAT (an Organization admin may need to approve it)
+          github_token: ${{ secrets.PAT_TOKEN }} # Necessary for creating Issues and assigning to Copilot. This fine-grained PAT should have: Actions (read), Contents (read-write), Issues (read-write), Metadata (read), Pull requests (read-write), and Workflows (read-write). A best practice is to have a GitHub Organization service account create the PAT (an Organization admin may need to approve it).
           base_branch: '${{ github.event.repository.default_branch }}' # This will default to your repo default branch (other common base branches are 'main', 'master' or 'develop')
           coding_agent: 'GITHUB_COPILOT' # Specify the use of GitHub Copilot instead of the default SmartFix internal coding agent
 
@@ -195,7 +198,7 @@ SmartFix collects telemetry data to help improve the service and diagnose issues
   * Ensure the that the repository / organization has GitHub Issues enabled and that GitHub Copilot has a seat available
   * Check the GitHub Action logs for specific error messages from the GitHub Copilot agent.
 * **PR Creation Failures:**
-  * Ensure the `PAT_token` has the necessary permissions to create and read Issues and PRs in the repository.
+  * Ensure the `PAT_token` has the necessary permissions (Actions: read, Contents: read-write, Issues: read-write, Metadata: read, Pull requests: read-write, Workflows: read-write).
   * Check for branch protection rules that might prevent PR creation.
 * **No Fixes Generated:**
   * Confirm there are eligible CRITICAL or HIGH severity vulnerabilities in Contrast Assess for the configured `contrast_app_id`. SmartFix only attempts to fix vulnerabilities that are in the REPORTED state.

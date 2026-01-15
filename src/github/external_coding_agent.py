@@ -17,6 +17,7 @@
 # #L%
 #
 
+import random
 import re
 import time
 from typing import Optional
@@ -220,10 +221,12 @@ Please review this security vulnerability and implement appropriate fixes to add
             # Poll for PR creation by the external agent
             log(f"Waiting for external agent to create a PR for issue #{issue_number}, '{issue_title}'")
 
-            # Poll for a PR to be created by the external agent (100 attempts, 5 seconds apart = ~8.3 minutes max)
+            # Poll for a PR to be created by the external agent
+            # Uses exponential backoff: 22 attempts with increasing delays = ~8 minutes max
+            # (5s × 4) + (10s × 5) + (20s × 5) + (40s × 5) + (60s × 2) = 490s = 8.2 min
             pr_info = self._process_external_coding_agent_run(
                 issue_number, issue_title, remediation_id, vulnerability_label,
-                remediation_label, is_existing_issue, max_attempts=100, sleep_seconds=5
+                remediation_label, is_existing_issue, max_attempts=22, base_sleep_seconds=5
             )
 
             log("\n::endgroup::")
@@ -263,9 +266,15 @@ Please review this security vulnerability and implement appropriate fixes to add
 
     def _process_external_coding_agent_run(self, issue_number: int, issue_title: str, remediation_id: str, vulnerability_label: str,
                                            remediation_label: str, is_existing_issue: bool,
-                                           max_attempts: int = 100, sleep_seconds: int = 5) -> Optional[dict]:
+                                           max_attempts: int = 22, base_sleep_seconds: int = 5) -> Optional[dict]:
         """
-        Poll for a PR to be created by the external agent.
+        Poll for a PR to be created by the external agent using exponential backoff.
+
+        Uses exponential backoff strategy to reduce API calls:
+        - Starts with base_sleep_seconds between attempts
+        - Doubles sleep time every 5 attempts (5s → 10s → 20s → 40s → 60s max)
+        - Adds ±20% random jitter to prevent thundering herd
+        - Max 22 attempts with ~8 minutes total timeout
 
         Args:
             issue_number: The issue number to check for a PR
@@ -273,13 +282,17 @@ Please review this security vulnerability and implement appropriate fixes to add
             vulnerability_label: The vulnerability label to add to the PR
             remediation_label: The remediation label to add to the PR
             is_existing_issue: Flag indicating if this is an existing issue being reprocessed
-            max_attempts: Maximum number of polling attempts (default: 100)
-            sleep_seconds: Time to sleep between attempts (default: 5 seconds)
+            max_attempts: Maximum number of polling attempts (default: 22)
+            base_sleep_seconds: Base sleep time between attempts (default: 5 seconds)
 
         Returns:
             Optional[dict]: PR information if found, None if not found after max attempts
         """
-        debug_log(f"Polling for PR creation for issue #{issue_number}, max {max_attempts} attempts with {sleep_seconds}s interval")
+        debug_log(f"Polling for PR creation for issue #{issue_number}, max {max_attempts} attempts with exponential backoff")
+
+        # Create a single GitHubOperations instance to reuse across poll attempts
+        # This allows the issue timestamp cache to persist and reduce API calls
+        github_ops = GitHubOperations()
 
         for attempt in range(1, max_attempts + 1):
             debug_log(f"Polling attempt {attempt}/{max_attempts} for PR related to issue #{issue_number}")
@@ -291,9 +304,8 @@ Please review this security vulnerability and implement appropriate fixes to add
                     time.sleep(25)
                 pr_info = self._process_claude_workflow_run(issue_number, remediation_id)
             else:
-                # GitHub Copilot agent
-                github_ops = GitHubOperations()
-                pr_info = github_ops.find_open_pr_for_issue(issue_number, issue_title)
+                # GitHub Copilot agent - watch workflow for actual branch name
+                pr_info = self._process_copilot_workflow_run(issue_number, github_ops)
 
             if pr_info:
                 pr_number = pr_info.get("number")
@@ -301,9 +313,6 @@ Please review this security vulnerability and implement appropriate fixes to add
 
                 # Add vulnerability and remediation labels to the PR
                 labels_to_add = [vulnerability_label, remediation_label]
-                # Ensure github_ops is initialized
-                if 'github_ops' not in locals():
-                    github_ops = GitHubOperations()
                 if github_ops.add_labels_to_pr(pr_number, labels_to_add):
                     debug_log(f"Successfully added labels to PR #{pr_number}: {labels_to_add}")
                 else:
@@ -334,7 +343,17 @@ Please review this security vulnerability and implement appropriate fixes to add
 
             # Sleep before the next attempt, but don't sleep after the last attempt
             if attempt < max_attempts:
-                time.sleep(sleep_seconds)
+                # Calculate exponential backoff: 5s → 10s → 20s → 40s → 60s (max)
+                # Doubles every 5 attempts: 2^(attempt//5)
+                backoff_factor = min(2 ** (attempt // 5), 60 / base_sleep_seconds)
+                sleep_time = base_sleep_seconds * backoff_factor
+
+                # Add jitter: ±20% randomness to prevent thundering herd
+                jitter = random.uniform(0.8, 1.2)
+                actual_sleep = sleep_time * jitter
+
+                debug_log(f"Backing off for {actual_sleep:.1f}s (attempt {attempt}/{max_attempts}, backoff factor: {backoff_factor}x)")
+                time.sleep(actual_sleep)
 
         log(f"No PR found for issue #{issue_number} after {max_attempts} polling attempts", is_error=True)
         return None
@@ -430,7 +449,7 @@ Please review this security vulnerability and implement appropriate fixes to add
 
             pr_number = int(pr_number_match.group(1))
 
-            # Create PR info object similar to what find_open_pr_for_issue returns
+            # Create PR info object
             pr_info = {
                 "number": pr_number,
                 "url": pr_url,
@@ -447,6 +466,69 @@ Please review this security vulnerability and implement appropriate fixes to add
             msg = f"Error processing Claude external agent run : {str(e)}"
             log(msg, is_error=True)
             self._update_telemetry_and_exit_claude_agent_failure(msg, remediation_id, issue_number)
+            return None
+
+    def _process_copilot_workflow_run(
+        self,
+        issue_number: int,
+        github_ops: GitHubOperations
+    ) -> Optional[dict]:
+        """
+        Watch Copilot workflow completion and find PR using actual branch name from workflow metadata.
+
+        Unlike Claude Code which requires creating the PR, Copilot creates its own PR during the
+        workflow. This method watches for workflow completion, extracts the headBranch from workflow
+        run metadata, and finds the PR that Copilot created.
+
+        Args:
+            issue_number: The GitHub issue number
+            github_ops: Shared GitHubOperations instance (reused across polling attempts to preserve cache)
+
+        Returns:
+            Optional[dict]: PR info dict with keys: number, url, title, headRefName, baseRefName, state
+                           Returns None if workflow not found, failed, or PR not found
+        """
+        try:
+
+            # Get Copilot workflow metadata (run ID and branch)
+            run_id, head_branch = github_ops.get_copilot_workflow_metadata(issue_number)
+
+            if not run_id:
+                debug_log(f"No Copilot workflow found for issue #{issue_number}, checking again...")
+                return None
+
+            if not head_branch:
+                log(f"Copilot workflow {run_id} has no headBranch metadata for issue #{issue_number}", is_error=True)
+                return None
+
+            log(f"Found Copilot workflow {run_id} on branch '{head_branch}' for issue #{issue_number}")
+
+            # Watch workflow completion using github_ops method
+            workflow_success = github_ops.watch_github_action_run(run_id)
+
+            if not workflow_success:
+                log(
+                    f"Copilot workflow {run_id} did not complete successfully for issue #{issue_number}.",
+                    is_error=True
+                )
+                return None
+
+            log(f"Copilot workflow {run_id} completed successfully")
+
+            # Find PR using actual branch name from workflow metadata
+            pr_info = github_ops.find_pr_by_branch(head_branch)
+
+            if not pr_info:
+                log(f"No PR found for Copilot branch '{head_branch}' (issue #{issue_number})", is_error=True)
+                return None
+
+            pr_number = pr_info.get("number")
+            log(f"Successfully found Copilot PR #{pr_number} for issue #{issue_number} via workflow metadata")
+
+            return pr_info
+
+        except Exception as e:
+            log(f"Error processing Copilot workflow run for issue #{issue_number}: {e}", is_error=True)
             return None
 
     def _process_claude_comment_body(self, comment_body: str, remediation_id: str, issue_number: int) -> dict:  # noqa: C901
