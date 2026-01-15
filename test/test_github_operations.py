@@ -679,48 +679,6 @@ class TestGitHubOperations(unittest.TestCase):
         self.assertEqual(mock_run_command.call_count, 1)
 
     @patch('src.github.github_operations.run_command')
-    def test_clear_issue_timestamp_cache_specific_issue(self, mock_run_command):
-        """Test clearing cache for a specific issue."""
-        # Setup: fetch and cache timestamp for issue 123
-        mock_run_command.side_effect = [
-            json.dumps({"updatedAt": "2024-01-10T12:00:00Z"}),
-            json.dumps([])  # No workflows
-        ]
-        self.github_ops.get_copilot_workflow_metadata(123)
-
-        # Verify cache has the entry
-        self.assertIn(123, self.github_ops._issue_timestamp_cache)
-
-        # Clear cache for issue 123
-        self.github_ops.clear_issue_timestamp_cache(123)
-
-        # Verify cache no longer has the entry
-        self.assertNotIn(123, self.github_ops._issue_timestamp_cache)
-
-    @patch('src.github.github_operations.run_command')
-    def test_clear_issue_timestamp_cache_all(self, mock_run_command):
-        """Test clearing entire cache."""
-        # Setup: fetch and cache timestamps for multiple issues
-        mock_run_command.side_effect = [
-            json.dumps({"updatedAt": "2024-01-10T12:00:00Z"}),
-            json.dumps([]),
-            json.dumps({"updatedAt": "2024-01-10T13:00:00Z"}),
-            json.dumps([])
-        ]
-        self.github_ops.get_copilot_workflow_metadata(123)
-        self.github_ops.get_copilot_workflow_metadata(456)
-
-        # Verify cache has both entries
-        self.assertIn(123, self.github_ops._issue_timestamp_cache)
-        self.assertIn(456, self.github_ops._issue_timestamp_cache)
-
-        # Clear entire cache
-        self.github_ops.clear_issue_timestamp_cache()
-
-        # Verify cache is empty
-        self.assertEqual(len(self.github_ops._issue_timestamp_cache), 0)
-
-    @patch('src.github.github_operations.run_command')
     def test_issue_timestamp_cache_survives_workflow_errors(self, mock_run_command):
         """Test that cached timestamp is used even when workflow fetch fails."""
         # First call: success

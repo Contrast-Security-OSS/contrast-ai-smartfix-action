@@ -75,21 +75,6 @@ class GitHubOperations(ScmOperations):
         gh_env["GITHUB_ENTERPRISE_TOKEN"] = gh_token
         return gh_env
 
-    def clear_issue_timestamp_cache(self, issue_number: Optional[int] = None) -> None:
-        """
-        Clear the issue timestamp cache.
-
-        Args:
-            issue_number: If provided, clears only this issue's cache entry.
-                         If None, clears the entire cache.
-        """
-        if issue_number is not None:
-            self._issue_timestamp_cache.pop(issue_number, None)
-            debug_log(f"Cleared timestamp cache for issue #{issue_number}")
-        else:
-            self._issue_timestamp_cache.clear()
-            debug_log("Cleared entire timestamp cache")
-
     def _write_to_temp_file(self, content: str, description: str) -> str:
         """
         Write content to a temporary file and return the file path.
@@ -1083,15 +1068,6 @@ class GitHubOperations(ScmOperations):
         Returns:
             List[dict]: A list of comment data dictionaries or empty list if no comments or error
         """
-        # Validate author parameter to prevent jq filter injection
-        if author is not None:
-            # GitHub usernames: alphanumeric, hyphens, max 39 chars, cannot start/end with hyphen
-            if not re.match(r'^[a-zA-Z0-9]([a-zA-Z0-9-]{0,37}[a-zA-Z0-9])?$', author):
-                log(f"Invalid author username format: {author}", is_error=True)
-                return []
-            if len(author) > 39:
-                log(f"Author username exceeds maximum length (39): {author}", is_error=True)
-                return []
 
         author_log = f"and author: {author}" if author else ""
         debug_log(f"Getting comments for issue #{issue_number} {author_log}")
