@@ -182,7 +182,7 @@ class TestExternalCodingAgent(unittest.TestCase):
             mock_poll_for_pr.assert_called_once_with(
                 42, "Fake Vulnerability Title", "1REM-FAKE-ABCD",
                 'contrast-vuln-id:VULN-1234-FAKE-ABCD', 'smartfix-id:1REM-FAKE-ABCD',
-                True, max_attempts=50, base_sleep_seconds=5
+                True, max_attempts=22, base_sleep_seconds=5
             )
         finally:
             # Restore original method
@@ -247,7 +247,7 @@ class TestExternalCodingAgent(unittest.TestCase):
             mock_poll_for_pr.assert_called_once_with(
                 42, "Fake Vulnerability Title", "1REM-FAKE-ABCD",
                 'contrast-vuln-id:VULN-1234-FAKE-ABCD', 'smartfix-id:1REM-FAKE-ABCD',
-                True, max_attempts=50, base_sleep_seconds=5
+                True, max_attempts=22, base_sleep_seconds=5
             )
         finally:
             # Restore original method

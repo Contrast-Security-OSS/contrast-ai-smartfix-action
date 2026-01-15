@@ -222,10 +222,11 @@ Please review this security vulnerability and implement appropriate fixes to add
             log(f"Waiting for external agent to create a PR for issue #{issue_number}, '{issue_title}'")
 
             # Poll for a PR to be created by the external agent
-            # Uses exponential backoff: 50 attempts with increasing delays = ~8-10 minutes max
+            # Uses exponential backoff: 22 attempts with increasing delays = ~8 minutes max
+            # (5s × 4) + (10s × 5) + (20s × 5) + (40s × 5) + (60s × 2) = 490s = 8.2 min
             pr_info = self._process_external_coding_agent_run(
                 issue_number, issue_title, remediation_id, vulnerability_label,
-                remediation_label, is_existing_issue, max_attempts=50, base_sleep_seconds=5
+                remediation_label, is_existing_issue, max_attempts=22, base_sleep_seconds=5
             )
 
             log("\n::endgroup::")
@@ -265,7 +266,7 @@ Please review this security vulnerability and implement appropriate fixes to add
 
     def _process_external_coding_agent_run(self, issue_number: int, issue_title: str, remediation_id: str, vulnerability_label: str,
                                            remediation_label: str, is_existing_issue: bool,
-                                           max_attempts: int = 50, base_sleep_seconds: int = 5) -> Optional[dict]:
+                                           max_attempts: int = 22, base_sleep_seconds: int = 5) -> Optional[dict]:
         """
         Poll for a PR to be created by the external agent using exponential backoff.
 
@@ -273,7 +274,7 @@ Please review this security vulnerability and implement appropriate fixes to add
         - Starts with base_sleep_seconds between attempts
         - Doubles sleep time every 5 attempts (5s → 10s → 20s → 40s → 60s max)
         - Adds ±20% random jitter to prevent thundering herd
-        - Max 50 attempts with ~8-10 minutes total timeout
+        - Max 22 attempts with ~8 minutes total timeout
 
         Args:
             issue_number: The issue number to check for a PR
@@ -281,7 +282,7 @@ Please review this security vulnerability and implement appropriate fixes to add
             vulnerability_label: The vulnerability label to add to the PR
             remediation_label: The remediation label to add to the PR
             is_existing_issue: Flag indicating if this is an existing issue being reprocessed
-            max_attempts: Maximum number of polling attempts (default: 50, reduced from 100)
+            max_attempts: Maximum number of polling attempts (default: 22)
             base_sleep_seconds: Base sleep time between attempts (default: 5 seconds)
 
         Returns:
