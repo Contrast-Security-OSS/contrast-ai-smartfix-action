@@ -290,6 +290,10 @@ Please review this security vulnerability and implement appropriate fixes to add
         """
         debug_log(f"Polling for PR creation for issue #{issue_number}, max {max_attempts} attempts with exponential backoff")
 
+        # Create a single GitHubOperations instance to reuse across poll attempts
+        # This allows the issue timestamp cache to persist and reduce API calls
+        github_ops = GitHubOperations()
+
         for attempt in range(1, max_attempts + 1):
             debug_log(f"Polling attempt {attempt}/{max_attempts} for PR related to issue #{issue_number}")
             if self.config.CODING_AGENT == CodingAgents.CLAUDE_CODE.name:
@@ -301,7 +305,7 @@ Please review this security vulnerability and implement appropriate fixes to add
                 pr_info = self._process_claude_workflow_run(issue_number, remediation_id)
             else:
                 # GitHub Copilot agent - watch workflow for actual branch name
-                pr_info = self._process_copilot_workflow_run(issue_number)
+                pr_info = self._process_copilot_workflow_run(issue_number, github_ops)
 
             if pr_info:
                 pr_number = pr_info.get("number")
@@ -309,9 +313,6 @@ Please review this security vulnerability and implement appropriate fixes to add
 
                 # Add vulnerability and remediation labels to the PR
                 labels_to_add = [vulnerability_label, remediation_label]
-                # Ensure github_ops is initialized
-                if 'github_ops' not in locals():
-                    github_ops = GitHubOperations()
                 if github_ops.add_labels_to_pr(pr_number, labels_to_add):
                     debug_log(f"Successfully added labels to PR #{pr_number}: {labels_to_add}")
                 else:
@@ -469,7 +470,8 @@ Please review this security vulnerability and implement appropriate fixes to add
 
     def _process_copilot_workflow_run(
         self,
-        issue_number: int
+        issue_number: int,
+        github_ops: GitHubOperations
     ) -> Optional[dict]:
         """
         Watch Copilot workflow completion and find PR using actual branch name from workflow metadata.
@@ -480,14 +482,13 @@ Please review this security vulnerability and implement appropriate fixes to add
 
         Args:
             issue_number: The GitHub issue number
+            github_ops: Shared GitHubOperations instance (reused across polling attempts to preserve cache)
 
         Returns:
             Optional[dict]: PR info dict with keys: number, url, title, headRefName, baseRefName, state
                            Returns None if workflow not found, failed, or PR not found
         """
         try:
-            # Initialize GitHub operations
-            github_ops = GitHubOperations()
 
             # Get Copilot workflow metadata (run ID and branch)
             run_id, head_branch = github_ops.get_copilot_workflow_metadata(issue_number)

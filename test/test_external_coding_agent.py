@@ -20,7 +20,7 @@
 
 import re
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, ANY
 
 # Test setup imports (path is set up by conftest.py)
 from src.config import get_config, reset_config
@@ -341,7 +341,7 @@ class TestExternalCodingAgent(unittest.TestCase):
 
         # Verify results
         self.assertEqual(result, pr_info)
-        mock_process_copilot.assert_called_once_with(456)
+        mock_process_copilot.assert_called_once_with(456, ANY)
         mock_notify.assert_called_once_with(
             remediation_id="REM-789",
             pr_number=123,
@@ -471,7 +471,7 @@ class TestExternalCodingAgent(unittest.TestCase):
         self.assertEqual(result, pr_info)  # Still returns PR info even if notification fails
         mock_notify.assert_called_once()
         mock_add_labels.assert_called_once_with(123, ["contrast-vuln-id:VULN-12345", "smartfix-id:remediation-67890"])
-        mock_process_copilot.assert_called_once_with(456)
+        mock_process_copilot.assert_called_once_with(456, ANY)
         # No sleep calls needed
         mock_sleep.assert_not_called()
 
