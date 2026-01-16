@@ -487,3 +487,83 @@ class SubAgentExecutor:
             # Fallback values if stats retrieval fails
             debug_log(f"Could not retrieve statistics: {e}")
             return 0, 0.0
+
+    def execute_detection(self, prompt: str) -> str:
+        """
+        Execute command detection using LLM.
+
+        Simplified execution for command detection that doesn't require
+        the full agent framework or MCP tools. Synchronously calls the LLM
+        to analyze project structure and suggest build commands.
+
+        Args:
+            prompt: The detection prompt with project structure and error history
+
+        Returns:
+            str: The suggested command from the LLM
+
+        Raises:
+            AgentExecutionError: If LLM call fails
+        """
+        # Run the async implementation synchronously
+        return asyncio.run(self._execute_detection_async(prompt))
+
+    async def _execute_detection_async(self, prompt: str) -> str:
+        """
+        Async implementation of command detection.
+
+        Creates a minimal LLM model instance and makes a direct completion call
+        without the overhead of the full agent framework.
+        """
+        # System prompt for command detection
+        system_prompt = """You are a build command detection expert. Your task is to analyze project structure and error messages to suggest appropriate build/test commands.
+
+Rules:
+- Respond with ONLY the command, no explanations or markdown
+- Use standard commands: mvn test, npm test, pytest, ./gradlew test, dotnet test, etc.
+- For Maven: prefer ./mvnw over mvn if wrapper exists
+- For Gradle: prefer ./gradlew over gradle if wrapper exists
+- For Node.js: use npm ci && npm test (or yarn/pnpm equivalent)
+- Consider previous failures and adjust your suggestion accordingly
+- The command must be safe and from the standard build tool set"""
+
+        try:
+            # Create a minimal model instance without MCP tools
+            if hasattr(self.config, 'USE_CONTRAST_LLM') and self.config.USE_CONTRAST_LLM:
+                setup_contrast_provider()
+                model_instance = SmartFixLiteLlm(
+                    model=CONTRAST_CLAUDE_SONNET_4_5,
+                    temperature=0.0,  # Deterministic for command detection
+                    extra_headers={
+                        "Api-Key": f"{self.config.CONTRAST_API_KEY}",
+                        "Authorization": f"{self.config.CONTRAST_AUTHORIZATION_KEY}",
+                    }
+                )
+            else:
+                model_instance = SmartFixLiteLlm(
+                    model=self.config.AGENT_MODEL,
+                    temperature=0.0,  # Deterministic for command detection
+                )
+
+            # Make direct completion call
+            response = await model_instance.acompletion(
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": prompt}
+                ]
+            )
+
+            # Extract the command from the response
+            suggested_command = response.choices[0].message.content.strip()
+
+            # Clean up any markdown code blocks if present
+            if suggested_command.startswith("```"):
+                lines = suggested_command.split("\n")
+                # Remove first and last lines (the ``` markers)
+                suggested_command = "\n".join(lines[1:-1]) if len(lines) > 2 else suggested_command
+
+            return suggested_command.strip()
+
+        except Exception as e:
+            log(f"Error in command detection: {e}", is_error=True)
+            raise RuntimeError(f"Failed to execute command detection: {e}")
