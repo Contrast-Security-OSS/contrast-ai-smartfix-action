@@ -3,7 +3,7 @@
 import unittest
 import os
 from unittest.mock import patch
-from src.config import get_config, reset_config
+from src.config import get_config, reset_config, ConfigurationError
 
 
 class TestConfigIntegration(unittest.TestCase):
@@ -343,6 +343,90 @@ class TestCommandAutoDetection(unittest.TestCase):
         mock_detect.assert_not_called()
         # Should use provided command
         self.assertEqual(config.FORMATTING_COMMAND, 'prettier --write .')
+
+    @patch('src.smartfix.config.command_detector.detect_build_command')
+    def test_detection_fallback_to_none_when_fails(self, mock_detect):
+        """Config falls back to None when detection returns None."""
+        mock_detect.return_value = None  # Detection fails
+
+        if 'BUILD_COMMAND' in os.environ:
+            del os.environ['BUILD_COMMAND']
+
+        # Set RUN_TASK to make BUILD_COMMAND optional
+        os.environ['RUN_TASK'] = 'merge'
+
+        reset_config()
+        config = get_config(testing=False)
+
+        # Should have tried detection
+        mock_detect.assert_called_once()
+        # BUILD_COMMAND should be None since detection failed
+        self.assertIsNone(config.BUILD_COMMAND)
+
+    @patch('src.smartfix.config.command_detector.detect_build_command')
+    def test_detection_failure_raises_error_when_required(self, mock_detect):
+        """Config raises error when detection fails for required command."""
+        mock_detect.return_value = None  # Detection fails
+
+        if 'BUILD_COMMAND' in os.environ:
+            del os.environ['BUILD_COMMAND']
+
+        # Set RUN_TASK to generate_fix to make BUILD_COMMAND required
+        os.environ['RUN_TASK'] = 'generate_fix'
+        os.environ['CODING_AGENT'] = 'SMARTFIX'
+
+        reset_config()
+
+        # Should raise SystemExit (get_config catches ConfigurationError and exits)
+        with self.assertRaises(SystemExit) as context:
+            get_config(testing=False)
+
+        # Exit code should be 1
+        self.assertEqual(context.exception.code, 1)
+
+    @patch('src.config.Config._validate_command')
+    @patch('src.smartfix.config.command_detector.detect_build_command')
+    def test_detected_commands_are_validated(self, mock_detect, mock_validate):
+        """Detected commands are validated against allowlist."""
+        mock_detect.return_value = 'mvn test'
+
+        if 'BUILD_COMMAND' in os.environ:
+            del os.environ['BUILD_COMMAND']
+
+        os.environ['RUN_TASK'] = 'merge'
+
+        reset_config()
+        config = get_config(testing=False)
+
+        # Detection should be called
+        mock_detect.assert_called_once()
+        # Validation should be called with the detected command (among other calls)
+        mock_validate.assert_any_call('BUILD_COMMAND', 'mvn test')
+        # Config should have the validated command
+        self.assertEqual(config.BUILD_COMMAND, 'mvn test')
+
+    @patch('src.smartfix.config.command_detector.detect_format_command')
+    def test_config_state_after_successful_detection(self, mock_detect):
+        """Verify config state after successful auto-detection."""
+        mock_detect.return_value = 'prettier --write .'
+
+        if 'FORMATTING_COMMAND' in os.environ:
+            del os.environ['FORMATTING_COMMAND']
+
+        os.environ['RUN_TASK'] = 'merge'
+
+        reset_config()
+        config = get_config(testing=False)
+
+        # Verify detection was called
+        mock_detect.assert_called_once()
+        # Verify config has the command
+        self.assertEqual(config.FORMATTING_COMMAND, 'prettier --write .')
+        # Verify REPO_ROOT is set (needed for detection)
+        self.assertIsNotNone(config.REPO_ROOT)
+        # Verify other config is intact
+        self.assertEqual(config.BASE_BRANCH, 'main')
+        self.assertEqual(config.RUN_TASK, 'merge')
 
 
 if __name__ == '__main__':
