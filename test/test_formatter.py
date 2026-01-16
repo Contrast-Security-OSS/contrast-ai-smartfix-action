@@ -50,8 +50,9 @@ class TestFormatter(unittest.TestCase):
         # Verify
         self.assertEqual(result, [])  # Returns empty list (no files tracked)
         self.mock_run_command.assert_called_once_with(
-            ["black", "."],
-            check=False
+            "black .",
+            check=False,
+            shell=True
         )
         # Verify directory changes
         self.assertEqual(self.mock_chdir.call_count, 2)  # chdir to repo_root and back
@@ -146,7 +147,7 @@ class TestFormatter(unittest.TestCase):
             self.assertEqual(calls[1][0][0], self.original_cwd)
 
     def test_formatter_command_parsing(self):
-        """Test that formatter command is correctly split into arguments."""
+        """Test that formatter command is passed as string with shell=True."""
         # Setup mock
         self.mock_run_command.return_value = "Success"
 
@@ -157,10 +158,11 @@ class TestFormatter(unittest.TestCase):
             "test-remediation-id"
         )
 
-        # Verify command was split correctly
+        # Verify command was passed as string with shell=True
         self.mock_run_command.assert_called_once_with(
-            ["prettier", "--write", "--config", ".prettierrc", "."],
-            check=False
+            "prettier --write --config .prettierrc .",
+            check=False,
+            shell=True
         )
 
     def test_formatter_file_not_found_error(self):
