@@ -268,7 +268,7 @@ def main():  # noqa: C901
     # Check Open PR Limit
     log("\n::group::--- Checking Open PR Limit ---")
     label_prefix_to_check = "contrast-vuln-id:"
-    current_open_pr_count = github_ops.count_open_prs_with_prefix(label_prefix_to_check)
+    current_open_pr_count = github_ops.count_open_prs_with_prefix(label_prefix_to_check, "unknown")
     if current_open_pr_count >= max_open_prs_setting:
         log(f"Found {current_open_pr_count} open PR(s) with label prefix '{label_prefix_to_check}'.")
         log(f"This meets or exceeds the configured limit of {max_open_prs_setting}.")
@@ -339,7 +339,7 @@ def main():  # noqa: C901
             break
 
         # Check if we've reached the max PR limit
-        current_open_pr_count = github_ops.count_open_prs_with_prefix(label_prefix_to_check)
+        current_open_pr_count = github_ops.count_open_prs_with_prefix(label_prefix_to_check, remediation_id)
         if current_open_pr_count >= max_open_prs_setting:
             log(f"\n--- Reached max PR limit ({max_open_prs_setting}). Current open PRs: {current_open_pr_count}. Stopping processing. ---")
             break

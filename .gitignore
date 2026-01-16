@@ -196,9 +196,13 @@ plan.zip
 .beads/daemon.lock
 .beads/daemon.pid
 .beads/daemon.log
+.beads/daemon-error
 .beads/bd.sock
 .beads/beads.left.jsonl
 .beads/beads.left.meta.json
+.beads/.local_version
+.beads/*.db
+.beads/*.db-*
 
 # Claude Code local session files
 .claude/learnings/

@@ -4,6 +4,7 @@ import unittest
 from unittest.mock import patch, MagicMock
 import json
 from src.github.github_operations import GitHubOperations
+from src.smartfix.shared.failure_categories import FailureCategory
 
 
 class TestGitHubOperations(unittest.TestCase):
@@ -146,8 +147,253 @@ class TestGitHubOperations(unittest.TestCase):
             {"labels": [{"name": "smartfix-id:789"}, {"name": "documentation"}]}
         ])
 
-        result = self.github_ops.count_open_prs_with_prefix("smartfix-id:")
+        result = self.github_ops.count_open_prs_with_prefix("smartfix-id:", "test-remediation-id")
         self.assertEqual(result, 3)  # Three PRs have smartfix-id: labels
+
+    @patch('src.github.github_operations.error_exit')
+    @patch('src.github.github_operations.log')
+    @patch('src.github.github_operations.run_command')
+    def test_count_open_prs_with_prefix_auth_error_401(self, mock_run_command, mock_log, mock_error_exit):
+        """Test that 401 authentication errors trigger error_exit."""
+        mock_run_command.side_effect = Exception("HTTP 401 unauthorized")
+
+        self.github_ops.count_open_prs_with_prefix("smartfix-id:", "test-rem-123")
+
+        # Should call error_exit with proper parameters
+        mock_error_exit.assert_called_once_with(
+            "test-rem-123",
+            FailureCategory.GIT_COMMAND_FAILURE.value
+        )
+        # Should log the error with sanitized message
+        self.assertTrue(mock_log.called)
+        # Verify the log contains remediation guidance
+        log_calls = [str(call) for call in mock_log.call_args_list]
+        self.assertTrue(any('authentication' in str(call).lower() for call in log_calls))
+
+    @patch('src.github.github_operations.error_exit')
+    @patch('src.github.github_operations.log')
+    @patch('src.github.github_operations.run_command')
+    def test_count_open_prs_with_prefix_auth_error_403(self, mock_run_command, mock_log, mock_error_exit):
+        """Test that 403 forbidden errors trigger error_exit."""
+        mock_run_command.side_effect = Exception("HTTP 403 forbidden")
+
+        self.github_ops.count_open_prs_with_prefix("smartfix-id:", "test-rem-456")
+
+        mock_error_exit.assert_called_once_with(
+            "test-rem-456",
+            FailureCategory.GIT_COMMAND_FAILURE.value
+        )
+        self.assertTrue(mock_log.called)
+
+    @patch('src.github.github_operations.error_exit')
+    @patch('src.github.github_operations.log')
+    @patch('src.github.github_operations.run_command')
+    def test_count_open_prs_with_prefix_auth_error_unauthorized_string(self, mock_run_command, mock_log, mock_error_exit):
+        """Test that 'unauthorized' string in error message triggers error_exit."""
+        mock_run_command.side_effect = Exception("Request failed: unauthorized access")
+
+        self.github_ops.count_open_prs_with_prefix("smartfix-id:", "test-rem-789")
+
+        mock_error_exit.assert_called_once_with(
+            "test-rem-789",
+            FailureCategory.GIT_COMMAND_FAILURE.value
+        )
+        self.assertTrue(mock_log.called)
+
+    @patch('src.github.github_operations.error_exit')
+    @patch('src.github.github_operations.log')
+    @patch('src.github.github_operations.run_command')
+    def test_count_open_prs_with_prefix_auth_error_forbidden_string(self, mock_run_command, mock_log, mock_error_exit):
+        """Test that 'forbidden' string in error message triggers error_exit."""
+        mock_run_command.side_effect = Exception("Access forbidden for this resource")
+
+        self.github_ops.count_open_prs_with_prefix("smartfix-id:", "test-rem-abc")
+
+        mock_error_exit.assert_called_once_with(
+            "test-rem-abc",
+            FailureCategory.GIT_COMMAND_FAILURE.value
+        )
+        self.assertTrue(mock_log.called)
+
+    @patch('src.github.github_operations.error_exit')
+    @patch('src.github.github_operations.log')
+    @patch('src.github.github_operations.run_command')
+    def test_count_open_prs_with_prefix_rate_limit_429(self, mock_run_command, mock_log, mock_error_exit):
+        """Test that 429 rate limit errors trigger error_exit."""
+        mock_run_command.side_effect = Exception("HTTP 429 rate limit exceeded")
+
+        self.github_ops.count_open_prs_with_prefix("smartfix-id:", "test-rem-rate")
+
+        mock_error_exit.assert_called_once_with(
+            "test-rem-rate",
+            FailureCategory.GIT_COMMAND_FAILURE.value
+        )
+        # Verify rate limit specific logging
+        log_calls = [str(call) for call in mock_log.call_args_list]
+        self.assertTrue(any('rate limit' in str(call).lower() for call in log_calls))
+
+    @patch('src.github.github_operations.error_exit')
+    @patch('src.github.github_operations.log')
+    @patch('src.github.github_operations.run_command')
+    def test_count_open_prs_with_prefix_rate_limit_string(self, mock_run_command, mock_log, mock_error_exit):
+        """Test that 'rate limit' string in error message triggers error_exit."""
+        mock_run_command.side_effect = Exception("API rate limit exceeded, please try again later")
+
+        self.github_ops.count_open_prs_with_prefix("smartfix-id:", "test-rem-rate2")
+
+        mock_error_exit.assert_called_once_with(
+            "test-rem-rate2",
+            FailureCategory.GIT_COMMAND_FAILURE.value
+        )
+
+    @patch('src.github.github_operations.error_exit')
+    @patch('src.github.github_operations.log')
+    @patch('src.github.github_operations.run_command')
+    def test_count_open_prs_with_prefix_generic_error_fails_closed(self, mock_run_command, mock_log, mock_error_exit):
+        """Test that generic errors trigger error_exit (fail-closed behavior)."""
+        mock_run_command.side_effect = Exception("Network timeout error")
+
+        self.github_ops.count_open_prs_with_prefix("smartfix-id:", "test-rem-generic")
+
+        # Even generic errors should fail closed
+        mock_error_exit.assert_called_once_with(
+            "test-rem-generic",
+            FailureCategory.GIT_COMMAND_FAILURE.value
+        )
+        self.assertTrue(mock_log.called)
+
+    @patch('src.github.github_operations.error_exit')
+    @patch('src.github.github_operations.log')
+    @patch('src.github.github_operations.run_command')
+    def test_count_open_prs_with_prefix_json_decode_error(self, mock_run_command, mock_log, mock_error_exit):
+        """Test that JSON decode errors trigger error_exit."""
+        mock_run_command.return_value = "invalid json {{{{"
+
+        self.github_ops.count_open_prs_with_prefix("smartfix-id:", "test-rem-json")
+
+        mock_error_exit.assert_called_once_with(
+            "test-rem-json",
+            FailureCategory.GIT_COMMAND_FAILURE.value
+        )
+        # Verify JSON parse error is logged
+        log_calls = [str(call) for call in mock_log.call_args_list]
+        self.assertTrue(any('json' in str(call).lower() for call in log_calls))
+
+    @patch('src.github.github_operations.run_command')
+    def test_find_pr_by_branch_success(self, mock_run_command):
+        """Test finding PR by branch name returns PRInfo."""
+        mock_pr_data = [{
+            "number": 123,
+            "url": "https://github.com/test-owner/test-repo/pull/123",
+            "title": "Fix authentication bug",
+            "headRefName": "copilot/fix-auth-bug",
+            "baseRefName": "main",
+            "state": "OPEN"
+        }]
+        mock_run_command.return_value = json.dumps(mock_pr_data)
+
+        result = self.github_ops.find_pr_by_branch("copilot/fix-auth-bug")
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result["number"], 123)
+        self.assertEqual(result["url"], "https://github.com/test-owner/test-repo/pull/123")
+        self.assertEqual(result["title"], "Fix authentication bug")
+        self.assertEqual(result["headRefName"], "copilot/fix-auth-bug")
+        self.assertEqual(result["baseRefName"], "main")
+        self.assertEqual(result["state"], "OPEN")
+
+    @patch('src.github.github_operations.run_command')
+    def test_find_pr_by_branch_not_found_empty_array(self, mock_run_command):
+        """Test finding PR by branch when no PR exists returns None."""
+        mock_run_command.return_value = "[]"
+
+        result = self.github_ops.find_pr_by_branch("nonexistent-branch")
+
+        self.assertIsNone(result)
+
+    @patch('src.github.github_operations.run_command')
+    def test_find_pr_by_branch_not_found_empty_output(self, mock_run_command):
+        """Test finding PR by branch with empty output returns None."""
+        mock_run_command.return_value = ""
+
+        result = self.github_ops.find_pr_by_branch("another-branch")
+
+        self.assertIsNone(result)
+
+    @patch('src.github.github_operations.log')
+    @patch('src.github.github_operations.run_command')
+    def test_find_pr_by_branch_json_decode_error(self, mock_run_command, mock_log):
+        """Test finding PR by branch with invalid JSON returns None."""
+        mock_run_command.return_value = "invalid json {{{"
+
+        result = self.github_ops.find_pr_by_branch("test-branch")
+
+        self.assertIsNone(result)
+        # Verify error is logged
+        log_calls = [str(call) for call in mock_log.call_args_list]
+        self.assertTrue(any('json' in str(call).lower() for call in log_calls))
+
+    @patch('src.github.github_operations.run_command')
+    def test_find_pr_by_branch_missing_required_fields_no_number(self, mock_run_command):
+        """Test finding PR by branch with missing 'number' field returns None."""
+        mock_pr_data = [{
+            "url": "https://github.com/test-owner/test-repo/pull/123",
+            "title": "Test PR",
+            "headRefName": "test-branch",
+            "baseRefName": "main",
+            "state": "OPEN"
+        }]
+        mock_run_command.return_value = json.dumps(mock_pr_data)
+
+        result = self.github_ops.find_pr_by_branch("test-branch")
+
+        self.assertIsNone(result)
+
+    @patch('src.github.github_operations.run_command')
+    def test_find_pr_by_branch_missing_required_fields_no_url(self, mock_run_command):
+        """Test finding PR by branch with missing 'url' field returns None."""
+        mock_pr_data = [{
+            "number": 123,
+            "title": "Test PR",
+            "headRefName": "test-branch",
+            "baseRefName": "main",
+            "state": "OPEN"
+        }]
+        mock_run_command.return_value = json.dumps(mock_pr_data)
+
+        result = self.github_ops.find_pr_by_branch("test-branch")
+
+        self.assertIsNone(result)
+
+    @patch('src.github.github_operations.log')
+    @patch('src.github.github_operations.run_command')
+    def test_find_pr_by_branch_general_exception(self, mock_run_command, mock_log):
+        """Test finding PR by branch with general exception returns None."""
+        mock_run_command.side_effect = Exception("Network error occurred")
+
+        result = self.github_ops.find_pr_by_branch("test-branch")
+
+        self.assertIsNone(result)
+        # Verify error is logged and sanitized
+        log_calls = [str(call) for call in mock_log.call_args_list]
+        self.assertTrue(any('error' in str(call).lower() for call in log_calls))
+
+    @patch('src.github.github_operations.log')
+    @patch('src.github.github_operations.run_command')
+    def test_find_pr_by_branch_error_message_sanitized(self, mock_run_command, mock_log):
+        """Test that error messages are sanitized in find_pr_by_branch."""
+        mock_run_command.side_effect = Exception("Auth failed with token ghp_1234567890abcdefghijklmnopqrstuvwxyz1234")
+
+        result = self.github_ops.find_pr_by_branch("test-branch")
+
+        self.assertIsNone(result)
+        # Verify token is NOT in the logged error message
+        log_calls = [str(call) for call in mock_log.call_args_list]
+        error_logs = [call for call in log_calls if 'error' in str(call).lower()]
+        self.assertTrue(len(error_logs) > 0)
+        # Token should be masked in all error logs
+        for log_call in error_logs:
+            self.assertNotIn('ghp_1234567890abcdefghijklmnopqrstuvwxyz1234', str(log_call))
 
     @patch('subprocess.run')
     @patch('src.github.github_operations.run_command')
@@ -227,6 +473,234 @@ class TestGitHubOperations(unittest.TestCase):
                 result = self.github_ops.extract_issue_number_from_branch(branch_name)
                 self.assertEqual(result, expected)
 
+    @patch('src.github.github_operations.debug_log')
+    @patch('src.github.github_operations.run_command')
+    def test_get_copilot_workflow_metadata_success(self, mock_run_command, mock_debug_log):
+        """Test getting Copilot workflow run ID and branch successfully."""
+        # Mock issue update time (captures @copilot assignment)
+        mock_issue_data = json.dumps({"updatedAt": "2026-01-09T14:00:00Z"})
+
+        # Mock workflow data (workflow created after issue)
+        mock_workflow_data = json.dumps([
+            {
+                "databaseId": 12345,
+                "status": "completed",
+                "event": "issues",
+                "createdAt": "2026-01-09T15:00:00Z",
+                "conclusion": "success",
+                "headBranch": "copilot/fix-semantic-auth-bug"
+            }
+        ])
+
+        # Return issue data on first call, workflow data on second call
+        mock_run_command.side_effect = [mock_issue_data, mock_workflow_data]
+
+        run_id, head_branch = self.github_ops.get_copilot_workflow_metadata(issue_number=123)
+
+        self.assertEqual(run_id, 12345)
+        self.assertEqual(head_branch, "copilot/fix-semantic-auth-bug")
+
+    @patch('src.github.github_operations.debug_log')
+    @patch('src.github.github_operations.run_command')
+    def test_get_copilot_workflow_metadata_not_found(self, mock_run_command, mock_debug_log):
+        """Test when no Copilot workflow run is found."""
+        # Mock issue update time
+        mock_issue_data = json.dumps({"updatedAt": "2026-01-09T14:00:00Z"})
+
+        # Mock empty workflow list
+        mock_workflow_data = json.dumps([])
+
+        # Return issue data on first call, empty workflow list on second call
+        mock_run_command.side_effect = [mock_issue_data, mock_workflow_data]
+
+        run_id, head_branch = self.github_ops.get_copilot_workflow_metadata(issue_number=999)
+
+        self.assertIsNone(run_id)
+        self.assertIsNone(head_branch)
+
+    @patch('src.github.github_operations.debug_log')
+    @patch('src.github.github_operations.run_command')
+    def test_get_copilot_workflow_metadata_no_head_branch(self, mock_run_command, mock_debug_log):
+        """Test when workflow run exists but has no headBranch."""
+        # Mock issue update time
+        mock_issue_data = json.dumps({"updatedAt": "2026-01-09T14:00:00Z"})
+
+        # Mock workflow data (workflow created after issue, but no headBranch)
+        mock_workflow_data = json.dumps([
+            {
+                "databaseId": 12345,
+                "status": "completed",
+                "event": "issues",
+                "createdAt": "2026-01-09T15:00:00Z",
+                "conclusion": "success"
+                # headBranch is missing
+            }
+        ])
+
+        # Return issue data on first call, workflow data on second call
+        mock_run_command.side_effect = [mock_issue_data, mock_workflow_data]
+
+        run_id, head_branch = self.github_ops.get_copilot_workflow_metadata(issue_number=123)
+
+        self.assertEqual(run_id, 12345)
+        self.assertIsNone(head_branch)
+
+    @patch('src.github.github_operations.debug_log')
+    @patch('src.github.github_operations.run_command')
+    def test_get_copilot_workflow_metadata_json_error(self, mock_run_command, mock_debug_log):
+        """Test handling of JSON decode error."""
+        mock_run_command.return_value = "invalid json{"
+
+        run_id, head_branch = self.github_ops.get_copilot_workflow_metadata(issue_number=123)
+
+        self.assertIsNone(run_id)
+        self.assertIsNone(head_branch)
+
+    @patch('src.github.github_operations.debug_log')
+    @patch('src.github.github_operations.run_command')
+    def test_get_copilot_workflow_metadata_command_error(self, mock_run_command, mock_debug_log):
+        """Test handling of command execution error."""
+        mock_run_command.side_effect = Exception("Command failed")
+
+        run_id, head_branch = self.github_ops.get_copilot_workflow_metadata(issue_number=123)
+
+        self.assertIsNone(run_id)
+        self.assertIsNone(head_branch)
+
+    @patch('src.github.github_operations.debug_log')
+    @patch('src.github.github_operations.run_command')
+    def test_get_copilot_workflow_metadata_multiple_workflows(self, mock_run_command, mock_debug_log):
+        """Test that most recent workflow created after issue is selected when multiple exist."""
+        # Mock issue update time (between the two workflows)
+        mock_issue_data = json.dumps({"updatedAt": "2026-01-09T15:00:00Z"})
+
+        # Mock multiple workflows - one before and one after issue creation
+        mock_workflow_data = json.dumps([
+            {
+                "databaseId": 99999,
+                "status": "completed",
+                "createdAt": "2026-01-09T15:30:00Z",  # Most recent, after issue
+                "headBranch": "copilot/fix-latest-issue"
+            },
+            {
+                "databaseId": 12345,
+                "status": "completed",
+                "createdAt": "2026-01-09T14:00:00Z",  # Older, before issue (should be filtered out)
+                "headBranch": "copilot/fix-older-issue"
+            }
+        ])
+
+        # Return issue data on first call, workflow data on second call
+        mock_run_command.side_effect = [mock_issue_data, mock_workflow_data]
+
+        run_id, head_branch = self.github_ops.get_copilot_workflow_metadata(issue_number=123)
+
+        # Should select the most recent workflow created after the issue (99999)
+        self.assertEqual(run_id, 99999)
+        self.assertEqual(head_branch, "copilot/fix-latest-issue")
+
+    @patch('src.github.github_operations.debug_log')
+    @patch('src.github.github_operations.run_command')
+    def test_get_copilot_workflow_metadata_filters_old_workflows(self, mock_run_command, mock_debug_log):
+        """Test that workflows created before the issue are filtered out.
+
+        This test documents the bug fix for AIML-245 where workflows from unrelated
+        issues were incorrectly matched when processing multiple issues concurrently.
+        """
+        # Mock issue update time (captures @copilot assignment)
+        mock_issue_data = json.dumps({"updatedAt": "2026-01-12T22:01:25Z"})
+
+        # Mock workflow that was created BEFORE the issue (should be filtered out)
+        mock_workflow_data = json.dumps([
+            {
+                "databaseId": 20936246677,
+                "status": "completed",
+                "createdAt": "2026-01-12T21:51:46Z",  # Before issue creation
+                "headBranch": "copilot/fix-different-issue",
+                "conclusion": "success"
+            }
+        ])
+
+        # Return issue data on first call, workflow data on second call
+        mock_run_command.side_effect = [mock_issue_data, mock_workflow_data]
+
+        run_id, head_branch = self.github_ops.get_copilot_workflow_metadata(issue_number=367)
+
+        # Should return None because the only workflow was created before the issue
+        self.assertIsNone(run_id)
+        self.assertIsNone(head_branch)
+
+    @patch('src.github.github_operations.run_command')
+    def test_get_copilot_workflow_metadata_caches_timestamp(self, mock_run_command):
+        """Test that issue timestamps are cached to reduce API calls."""
+        # Mock issue view and workflow runs
+        mock_run_command.side_effect = [
+            # First call: issue view
+            json.dumps({"updatedAt": "2024-01-10T12:00:00Z"}),
+            # First call: workflow runs
+            json.dumps([{
+                "databaseId": 123,
+                "status": "completed",
+                "event": "issues",
+                "createdAt": "2024-01-10T12:05:00Z",
+                "conclusion": "success",
+                "headBranch": "copilot/fix-bug"
+            }])
+        ]
+
+        # First call should fetch from API
+        run_id1, branch1 = self.github_ops.get_copilot_workflow_metadata(456)
+        self.assertEqual(run_id1, 123)
+        self.assertEqual(branch1, "copilot/fix-bug")
+
+        # Verify issue was fetched (2 calls: issue view + workflow runs)
+        self.assertEqual(mock_run_command.call_count, 2)
+
+        # Reset mock to ensure no new calls
+        mock_run_command.reset_mock()
+        mock_run_command.side_effect = [
+            # Second call: only workflow runs (no issue view call expected)
+            json.dumps([{
+                "databaseId": 124,
+                "status": "completed",
+                "event": "issues",
+                "createdAt": "2024-01-10T12:10:00Z",
+                "conclusion": "success",
+                "headBranch": "copilot/fix-another-bug"
+            }])
+        ]
+
+        # Second call should use cached timestamp
+        run_id2, branch2 = self.github_ops.get_copilot_workflow_metadata(456)
+        self.assertEqual(run_id2, 124)
+        self.assertEqual(branch2, "copilot/fix-another-bug")
+
+        # Verify only 1 call (workflow runs, no issue view)
+        self.assertEqual(mock_run_command.call_count, 1)
+
+    @patch('src.github.github_operations.run_command')
+    def test_issue_timestamp_cache_survives_workflow_errors(self, mock_run_command):
+        """Test that cached timestamp is used even when workflow fetch fails."""
+        # First call: success
+        mock_run_command.side_effect = [
+            json.dumps({"updatedAt": "2024-01-10T12:00:00Z"}),
+            json.dumps([{"databaseId": 123, "createdAt": "2024-01-10T12:05:00Z", "headBranch": "test"}])
+        ]
+        run_id1, _ = self.github_ops.get_copilot_workflow_metadata(789)
+        self.assertEqual(run_id1, 123)
+
+        # Second call: workflow fetch fails, but should still use cached timestamp
+        mock_run_command.reset_mock()
+        mock_run_command.side_effect = Exception("API rate limit")
+
+        run_id2, branch2 = self.github_ops.get_copilot_workflow_metadata(789)
+
+        # Should return None due to workflow error, but cache was used
+        self.assertIsNone(run_id2)
+        self.assertIsNone(branch2)
+        # Verify only 1 call was made (workflow fetch failed, no issue view)
+        self.assertEqual(mock_run_command.call_count, 1)
+
     @patch('src.github.github_operations.log')
     @patch('src.github.github_operations.error_exit')
     def test_log_copilot_assignment_error_in_testing_mode(self, mock_error_exit, mock_log):
@@ -281,53 +755,6 @@ class TestGitHubOperations(unittest.TestCase):
         mock_run_command.return_value = "[]"
 
         result = self.github_ops.get_claude_workflow_run_id()
-
-        self.assertIsNone(result)
-
-    @patch('src.github.github_operations.run_command')
-    def test_find_open_pr_for_issue_copilot_branch(self, mock_run_command):
-        """Test finding open PR for issue with Copilot branch pattern."""
-        mock_pr_data = [{
-            "number": 456,
-            "url": "https://github.com/test/repo/pull/456",
-            "title": "[WIP] Fix issue",
-            "headRefName": "copilot/fix-123",
-            "baseRefName": "main",
-            "state": "OPEN"
-        }]
-        mock_run_command.return_value = json.dumps(mock_pr_data)
-
-        result = self.github_ops.find_open_pr_for_issue(123, "Test Issue")
-
-        self.assertIsNotNone(result)
-        self.assertEqual(result["number"], 456)
-
-    @patch('src.github.github_operations.run_command')
-    def test_find_open_pr_for_issue_claude_branch(self, mock_run_command):
-        """Test finding open PR for issue with Claude branch pattern."""
-        # First call for copilot pattern returns empty, second for claude pattern returns PR
-        mock_pr_data = [{
-            "number": 789,
-            "url": "https://github.com/test/repo/pull/789",
-            "title": "Fix: Test Issue",
-            "headRefName": "claude/issue-123-20251211-1430",
-            "baseRefName": "main",
-            "state": "OPEN"
-        }]
-        mock_run_command.side_effect = ["[]", json.dumps(mock_pr_data)]
-
-        result = self.github_ops.find_open_pr_for_issue(123, "Test Issue")
-
-        self.assertIsNotNone(result)
-        self.assertEqual(result["number"], 789)
-
-    @patch('src.github.github_operations.run_command')
-    def test_find_open_pr_for_issue_not_found(self, mock_run_command):
-        """Test finding open PR for issue when none exists."""
-        # All three search patterns return empty
-        mock_run_command.side_effect = ["[]", "[]", "[]"]
-
-        result = self.github_ops.find_open_pr_for_issue(999, "Nonexistent Issue")
 
         self.assertIsNone(result)
 
@@ -486,6 +913,53 @@ class TestGitHubOperations(unittest.TestCase):
         )
 
         self.assertEqual(result, 789)
+
+    @patch('src.github.github_operations.run_command')
+    def test_find_open_pr_for_issue_copilot_branch(self, mock_run_command):
+        """Test finding open PR for issue with Copilot branch pattern."""
+        mock_pr_data = [{
+            "number": 456,
+            "url": "https://github.com/test/repo/pull/456",
+            "title": "[WIP] Fix issue",
+            "headRefName": "copilot/fix-123",
+            "baseRefName": "main",
+            "state": "OPEN"
+        }]
+        mock_run_command.return_value = json.dumps(mock_pr_data)
+
+        result = self.github_ops.find_open_pr_for_issue(123, "Test Issue")
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result["number"], 456)
+
+    @patch('src.github.github_operations.run_command')
+    def test_find_open_pr_for_issue_claude_branch(self, mock_run_command):
+        """Test finding open PR for issue with Claude branch pattern."""
+        # First call for copilot pattern returns empty, second for claude pattern returns PR
+        mock_pr_data = [{
+            "number": 789,
+            "url": "https://github.com/test/repo/pull/789",
+            "title": "Fix: Test Issue",
+            "headRefName": "claude/issue-123-20251211-1430",
+            "baseRefName": "main",
+            "state": "OPEN"
+        }]
+        mock_run_command.side_effect = ["[]", json.dumps(mock_pr_data)]
+
+        result = self.github_ops.find_open_pr_for_issue(123, "Test Issue")
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result["number"], 789)
+
+    @patch('src.github.github_operations.run_command')
+    def test_find_open_pr_for_issue_not_found(self, mock_run_command):
+        """Test finding open PR for issue when none exists."""
+        # All three search patterns return empty
+        mock_run_command.side_effect = ["[]", "[]", "[]"]
+
+        result = self.github_ops.find_open_pr_for_issue(999, "Nonexistent Issue")
+
+        self.assertIsNone(result)
 
     @patch('src.github.github_operations.run_command')
     def test_reset_issue_with_open_pr(self, mock_run_command):
