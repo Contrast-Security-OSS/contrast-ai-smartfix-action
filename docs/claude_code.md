@@ -100,7 +100,7 @@ jobs:
           contrast_api_key: ${{ secrets.CONTRAST_API_KEY }}
 
           # GitHub Configuration
-          github_token: ${{ secrets.PAT_TOKEN }} # Necessary for creating Issues and mentioning Claude Code (@claude). This fine-grained PAT should have: Issues (read-write), Pull requests (read-write), Contents (read-write), Actions (read, optional), and Metadata (read). A best practice is to have a GitHub Organization service account create the PAT (an Organization admin may need to approve it).
+          github_token: ${{ secrets.PAT_TOKEN }} # Necessary for creating Issues and mentioning Claude Code (@claude). This fine-grained PAT should have: Issues (read-write), Pull requests (read-write), Contents (read-write), Actions (read), and Metadata (read). A best practice is to have a GitHub Organization service account create the PAT (an Organization admin may need to approve it).
           base_branch: '${{ github.event.repository.default_branch }}' # This will default to your repo default branch (other common base branches are 'main', 'master' or 'develop')
           coding_agent: 'CLAUDE_CODE' # Specify the use of Claude Code instead of the default SmartFix internal coding agent
 
