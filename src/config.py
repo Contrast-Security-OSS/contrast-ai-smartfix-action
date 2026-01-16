@@ -98,6 +98,7 @@ class Config:
         self.MAX_QA_ATTEMPTS = self._get_validated_int("MAX_QA_ATTEMPTS", default=6, min_val=0, max_val=10)
         self.MAX_OPEN_PRS = self._get_validated_int("MAX_OPEN_PRS", default=5, min_val=0)
         self.MAX_EVENTS_PER_AGENT = self._get_validated_int("MAX_EVENTS_PER_AGENT", default=120, min_val=10, max_val=500)
+        self.MAX_COMMAND_DETECTION_ATTEMPTS = self._get_validated_int("MAX_COMMAND_DETECTION_ATTEMPTS", default=6, min_val=0, max_val=10)
 
         # --- GitHub Configuration ---
         if testing:
