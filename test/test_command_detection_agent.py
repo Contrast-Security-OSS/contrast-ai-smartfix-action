@@ -15,7 +15,10 @@ Tests for CommandDetectionAgent.
 
 import unittest
 from pathlib import Path
-from src.smartfix.domains.agents.command_detection_agent import CommandDetectionAgent
+from src.smartfix.domains.agents.command_detection_agent import (
+    CommandDetectionAgent,
+    MaxAttemptsExceededError
+)
 
 
 class TestCommandDetectionAgent(unittest.TestCase):
@@ -81,22 +84,56 @@ class TestCommandDetectionAgent(unittest.TestCase):
         self.assertIn("mvn: command not found", prompt)
         self.assertIn("maven test", prompt)
 
-    def test_detect_stub_returns_none(self):
-        """Test detect() method stub returns None (implementation pending)."""
+    def test_detect_raises_max_attempts_exceeded(self):
+        """Test detect() raises MaxAttemptsExceededError after max attempts."""
         agent = CommandDetectionAgent(self.repo_root, max_attempts=2)
 
         build_files = ["pom.xml"]
         failed_attempts = []
         remediation_id = "test-remediation-123"
 
-        result = agent.detect(
-            build_files=build_files,
-            failed_attempts=failed_attempts,
-            remediation_id=remediation_id
-        )
+        with self.assertRaises(MaxAttemptsExceededError) as context:
+            agent.detect(
+                build_files=build_files,
+                failed_attempts=failed_attempts,
+                remediation_id=remediation_id
+            )
 
-        # Stub implementation should return None
-        self.assertIsNone(result)
+        # Error message should mention attempts
+        self.assertIn("Could not detect valid build command", str(context.exception))
+        self.assertIn("2 attempts", str(context.exception))
+
+    def test_detect_error_includes_build_files(self):
+        """Test error message includes build files context."""
+        agent = CommandDetectionAgent(self.repo_root, max_attempts=1)
+
+        build_files = ["pom.xml", "build.gradle"]
+        failed_attempts = []
+        remediation_id = "test-remediation-123"
+
+        with self.assertRaises(MaxAttemptsExceededError) as context:
+            agent.detect(build_files, failed_attempts, remediation_id)
+
+        error_msg = str(context.exception)
+        self.assertIn("pom.xml", error_msg)
+        self.assertIn("build.gradle", error_msg)
+
+    def test_detect_error_includes_last_attempt(self):
+        """Test error message includes last failed attempt details."""
+        agent = CommandDetectionAgent(self.repo_root, max_attempts=1)
+
+        build_files = ["pom.xml"]
+        failed_attempts = [
+            {"command": "mvn test", "error": "mvn: command not found"}
+        ]
+        remediation_id = "test-remediation-123"
+
+        with self.assertRaises(MaxAttemptsExceededError) as context:
+            agent.detect(build_files, failed_attempts, remediation_id)
+
+        error_msg = str(context.exception)
+        self.assertIn("Last attempt: mvn test", error_msg)
+        self.assertIn("Last error: mvn: command not found", error_msg)
 
 
 if __name__ == '__main__':

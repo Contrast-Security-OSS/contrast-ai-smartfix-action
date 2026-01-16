@@ -28,6 +28,26 @@ execution failures.
 from pathlib import Path
 
 
+class CommandDetectionError(Exception):
+    """Base exception for command detection errors."""
+    pass
+
+
+class MaxAttemptsExceededError(CommandDetectionError):
+    """Raised when max detection attempts are exhausted without success."""
+    pass
+
+
+class AgentExecutionError(CommandDetectionError):
+    """Raised when the LLM agent fails to execute properly."""
+    pass
+
+
+class ValidationError(CommandDetectionError):
+    """Raised when a detected command fails validation."""
+    pass
+
+
 class CommandDetectionAgent:
     """
     Agent that uses LLM to detect build/test commands through iterative refinement.
@@ -106,9 +126,8 @@ class CommandDetectionAgent:
 
             # TODO: Add to attempt_history and continue loop if failed
 
-        # TODO (beads-9tk): Raise ConfigurationError with helpful message
-        # "Failed to detect build command after {max_attempts} attempts"
-        return None
+        # Max attempts exhausted - raise error with helpful context
+        self._raise_max_attempts_error(build_files, attempt_history)
 
     def _build_iteration_prompt(
         self,
@@ -152,3 +171,37 @@ class CommandDetectionAgent:
         )
 
         return "".join(prompt_parts)
+
+    def _raise_max_attempts_error(
+        self,
+        build_files: list[str],
+        failed_attempts: list[dict[str, str]]
+    ) -> None:
+        """
+        Raise MaxAttemptsExceededError with helpful context.
+
+        Args:
+            build_files: List of build system marker files found
+            failed_attempts: History of failed command attempts with errors
+        """
+        error_parts = [
+            f"Could not detect valid build command after {self.max_attempts} attempts.\n"
+        ]
+
+        # Add build files context
+        if build_files:
+            error_parts.append(f"\nBuild files found: {', '.join(build_files)}\n")
+
+        # Add last attempt details if available
+        if failed_attempts:
+            last_attempt = failed_attempts[-1]
+            error_parts.append(f"\nLast attempt: {last_attempt['command']}")
+            error_parts.append(f"\nLast error: {last_attempt['error']}\n")
+
+        # Add helpful suggestion
+        error_parts.append(
+            "\nPlease set BUILD_COMMAND environment variable manually.\n"
+            "See documentation for supported build commands."
+        )
+
+        raise MaxAttemptsExceededError("".join(error_parts))
