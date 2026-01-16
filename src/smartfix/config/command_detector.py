@@ -30,6 +30,21 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 
+def _is_safe_make_target(target: str) -> bool:
+    """
+    Validate that a make target name is safe to use in a command.
+
+    Only allows alphanumeric characters, underscores, hyphens, and dots.
+
+    Args:
+        target: Make target name to validate
+
+    Returns:
+        True if target name is safe, False otherwise
+    """
+    return bool(re.match(r'^[a-zA-Z0-9_.-]+$', target))
+
+
 def inspect_makefile_targets(makefile_path: Path) -> List[str]:
     """
     Extract target names from a Makefile.
@@ -61,8 +76,13 @@ def inspect_makefile_targets(makefile_path: Path) -> List[str]:
                 match = re.match(r'^([a-zA-Z_][a-zA-Z0-9_-]*)\s*:', line)
                 if match:
                     target = match.group(1)
-                    found_targets.append(target)
-    except (IOError, UnicodeDecodeError):
+                    # Validate target name for safety (C1 fix)
+                    if _is_safe_make_target(target):
+                        found_targets.append(target)
+    except FileNotFoundError:
+        return []
+    except (IOError, PermissionError, UnicodeDecodeError, OSError):
+        # C2/C3 fix: Comprehensive error handling
         return []
 
     # Sort: priority targets first, then alphabetically
@@ -252,41 +272,55 @@ def generate_format_command_candidates(
     return candidates
 
 
-def _test_command_safely(command: str, repo_root: Path, timeout: int = 30) -> Tuple[bool, str]:
+def _validate_command_exists(command: str, repo_root: Path, timeout: int = 5) -> bool:
     """
-    Test a command safely without calling error_exit().
+    Check if a command exists without running build operations.
 
-    This is used for detection - we want to try multiple candidates without
-    terminating the program if one fails.
+    Tests command availability using --version or --help flags instead of
+    executing the actual build/test command. This is safer and faster.
 
     Args:
-        command: Command string to test
+        command: Command string to validate (e.g., "mvn clean install")
         repo_root: Directory to run command in
         timeout: Timeout in seconds
 
     Returns:
-        Tuple of (success, output)
+        True if command is available, False otherwise
     """
+    import shlex
+
     try:
-        result = subprocess.run(
-            command,
-            cwd=repo_root,
-            shell=True,
-            check=False,
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            errors='replace',
-            timeout=timeout
-        )
-        output = result.stdout + result.stderr
-        return (result.returncode == 0, output)
-    except subprocess.TimeoutExpired:
-        return (False, f"Command timed out after {timeout}s")
-    except FileNotFoundError:
-        return (False, "Command not found")
-    except Exception as e:
-        return (False, f"Error running command: {str(e)}")
+        # Extract base command (first token)
+        tokens = shlex.split(command)
+        if not tokens:
+            return False
+
+        base_cmd = tokens[0]
+
+        # Test with version/help flags (don't actually run builds)
+        test_flags = ['--version', '--help', '-v', '-h']
+
+        for flag in test_flags:
+            try:
+                result = subprocess.run(
+                    [base_cmd, flag],
+                    cwd=repo_root,
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    encoding='utf-8',
+                    errors='replace',
+                    timeout=timeout
+                )
+                # If command exists and responds to version/help, it's valid
+                if result.returncode == 0 or result.returncode == 1:
+                    return True
+            except (subprocess.TimeoutExpired, FileNotFoundError):
+                continue
+
+        return False
+    except Exception:
+        return False
 
 
 def detect_package_manager(repo_root: Path) -> Optional[str]:
@@ -317,22 +351,22 @@ def detect_build_command(
     project_dir: Optional[Path] = None
 ) -> Optional[str]:
     """
-    Detect build/test command by testing candidates.
+    Detect build/test command by validating candidate availability.
 
-    Generates candidates and tests each by running it. Returns first successful command.
+    Generates candidates and tests each with --version flag to verify
+    the command exists. Does NOT actually run builds during detection.
 
     Args:
         repo_root: Repository root directory
         project_dir: Optional subdirectory for monorepo projects
 
     Returns:
-        First successful build command or None
+        First available build command or None
     """
     candidates = generate_build_command_candidates(repo_root, project_dir)
 
     for candidate in candidates:
-        success, output = _test_command_safely(candidate, repo_root)
-        if success:
+        if _validate_command_exists(candidate, repo_root):
             return candidate
 
     return None
@@ -343,23 +377,22 @@ def detect_format_command(
     project_dir: Optional[Path] = None
 ) -> Optional[str]:
     """
-    Detect format command by testing candidates.
+    Detect format command by validating candidate availability.
 
-    Generates candidates and tests each. Returns first successful command.
-    Uses non-fatal testing (doesn't error_exit on failure).
+    Generates candidates and tests each with --version flag to verify
+    the command exists. Does NOT actually run formatters during detection.
 
     Args:
         repo_root: Repository root directory
         project_dir: Optional subdirectory for monorepo projects
 
     Returns:
-        First successful format command or None
+        First available format command or None
     """
     candidates = generate_format_command_candidates(repo_root, project_dir)
 
     for candidate in candidates:
-        success, output = _test_command_safely(candidate, repo_root)
-        if success:
+        if _validate_command_exists(candidate, repo_root):
             return candidate
 
     return None
