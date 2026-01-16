@@ -31,6 +31,9 @@ from src.smartfix.config.command_validator import (
     validate_command,
     CommandValidationError,
 )
+from src.smartfix.domains.agents.sub_agent_executor import SubAgentExecutor
+from src.smartfix.domains.workflow.build_runner import run_build_command
+from src.build_output_analyzer import extract_build_errors
 
 
 class CommandDetectionError(Exception):
@@ -92,8 +95,8 @@ class CommandDetectionAgent:
         """
         Detect build command through iterative LLM refinement.
 
-        Implements iteration loop with error feedback. Full LLM integration,
-        command validation, and error handling will be added in subsequent beads.
+        Implements iteration loop with error feedback. Calls LLM agent,
+        validates suggestions, tests commands, and refines based on failures.
 
         Args:
             build_files: List of build system marker files found
@@ -102,42 +105,47 @@ class CommandDetectionAgent:
 
         Returns:
             Valid build command string, or None if detection fails
-
-        Integration points (to be implemented in other beads):
-            - LLM agent execution (beads-7nf)
-            - Command validation (beads-ec6)
-            - Error extraction (extract_build_errors integration)
-            - Error messages (beads-9tk)
         """
         # Track attempt history for this detection session
         attempt_history = list(failed_attempts)
+
+        # Create SubAgentExecutor for LLM calls
+        executor = SubAgentExecutor()
 
         # Iteration loop with max_attempts enforcement
         for _ in range(self.max_attempts):
             # Build prompt for current iteration
             prompt = self._build_iteration_prompt(build_files, attempt_history)
 
-            # TODO (beads-7nf): LLM agent execution with SubAgentExecutor
-            # suggested_command = self._call_llm_agent(prompt, self.repo_root, remediation_id)
+            # Call LLM agent to get suggested command
+            suggested_command = executor.execute_detection(prompt)
 
-            # Validate suggested command (beads-ec6)
-            # try:
-            #     validate_command("BUILD_COMMAND", suggested_command)
-            # except CommandValidationError as e:
-            #     # Add validation error to attempt history
-            #     attempt_history.append({
-            #         "command": suggested_command,
-            #         "error": f"Command validation failed: {str(e)}"
-            #     })
-            #     continue  # Skip to next iteration
+            # Validate suggested command
+            try:
+                validate_command("BUILD_COMMAND", suggested_command)
+            except CommandValidationError as e:
+                # Add validation error to attempt history
+                attempt_history.append({
+                    "command": suggested_command,
+                    "error": f"Command validation failed: {str(e)}"
+                })
+                continue  # Skip to next iteration
 
-            # TODO: Test command execution with run_build_command()
-            # success, output = run_build_command(suggested_command, self.repo_root)
+            # Test command execution
+            success, output = run_build_command(suggested_command, self.repo_root, remediation_id)
 
-            # TODO: Extract errors with extract_build_errors()
-            # error_summary = extract_build_errors(output)
+            if success:
+                # Command works! Return it
+                return suggested_command
 
-            # TODO: Add to attempt_history and continue loop if failed
+            # Extract errors for next iteration
+            error_summary = extract_build_errors(output)
+
+            # Add to attempt_history and continue loop
+            attempt_history.append({
+                "command": suggested_command,
+                "error": error_summary
+            })
 
         # Max attempts exhausted - raise error with helpful context
         self._raise_max_attempts_error(build_files, attempt_history)

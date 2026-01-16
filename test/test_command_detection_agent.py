@@ -14,6 +14,7 @@ Tests for CommandDetectionAgent.
 """
 
 import unittest
+from unittest.mock import Mock, patch, call
 from pathlib import Path
 from src.smartfix.domains.agents.command_detection_agent import (
     CommandDetectionAgent,
@@ -84,8 +85,14 @@ class TestCommandDetectionAgent(unittest.TestCase):
         self.assertIn("mvn: command not found", prompt)
         self.assertIn("maven test", prompt)
 
-    def test_detect_raises_max_attempts_exceeded(self):
+    @patch('src.smartfix.domains.agents.command_detection_agent.SubAgentExecutor')
+    def test_detect_raises_max_attempts_exceeded(self, mock_executor_class):
         """Test detect() raises MaxAttemptsExceededError after max attempts."""
+        # Mock executor to return invalid command that fails validation
+        mock_executor = Mock()
+        mock_executor_class.return_value = mock_executor
+        mock_executor.execute_detection.return_value = "invalid"
+
         agent = CommandDetectionAgent(self.repo_root, max_attempts=2)
 
         build_files = ["pom.xml"]
@@ -103,8 +110,14 @@ class TestCommandDetectionAgent(unittest.TestCase):
         self.assertIn("Could not detect valid build command", str(context.exception))
         self.assertIn("2 attempts", str(context.exception))
 
-    def test_detect_error_includes_build_files(self):
+    @patch('src.smartfix.domains.agents.command_detection_agent.SubAgentExecutor')
+    def test_detect_error_includes_build_files(self, mock_executor_class):
         """Test error message includes build files context."""
+        # Mock executor to return invalid command
+        mock_executor = Mock()
+        mock_executor_class.return_value = mock_executor
+        mock_executor.execute_detection.return_value = "invalid"
+
         agent = CommandDetectionAgent(self.repo_root, max_attempts=1)
 
         build_files = ["pom.xml", "build.gradle"]
@@ -118,8 +131,14 @@ class TestCommandDetectionAgent(unittest.TestCase):
         self.assertIn("pom.xml", error_msg)
         self.assertIn("build.gradle", error_msg)
 
-    def test_detect_error_includes_last_attempt(self):
+    @patch('src.smartfix.domains.agents.command_detection_agent.SubAgentExecutor')
+    def test_detect_error_includes_last_attempt(self, mock_executor_class):
         """Test error message includes last failed attempt details."""
+        # Mock executor to return invalid command
+        mock_executor = Mock()
+        mock_executor_class.return_value = mock_executor
+        mock_executor.execute_detection.return_value = "invalid"
+
         agent = CommandDetectionAgent(self.repo_root, max_attempts=1)
 
         build_files = ["pom.xml"]
@@ -132,8 +151,137 @@ class TestCommandDetectionAgent(unittest.TestCase):
             agent.detect(build_files, failed_attempts, remediation_id)
 
         error_msg = str(context.exception)
-        self.assertIn("Last attempt: mvn test", error_msg)
-        self.assertIn("Last error: mvn: command not found", error_msg)
+        self.assertIn("Last attempt:", error_msg)
+        self.assertIn("Last error:", error_msg)
+
+    @patch('src.smartfix.domains.agents.command_detection_agent.run_build_command')
+    @patch('src.smartfix.domains.agents.command_detection_agent.validate_command')
+    @patch('src.smartfix.domains.agents.command_detection_agent.SubAgentExecutor')
+    def test_detect_successful_on_first_attempt(self, mock_executor_class, mock_validate, mock_run_build):
+        """Test successful detection on first LLM attempt."""
+        # Setup mocks
+        mock_executor = Mock()
+        mock_executor_class.return_value = mock_executor
+        mock_executor.execute_detection.return_value = "mvn test"
+
+        mock_validate.return_value = None  # No validation errors
+        mock_run_build.return_value = (True, "Build successful")
+
+        # Execute
+        agent = CommandDetectionAgent(self.repo_root, max_attempts=3)
+        result = agent.detect(
+            build_files=["pom.xml"],
+            failed_attempts=[],
+            remediation_id="test-123"
+        )
+
+        # Verify
+        self.assertEqual(result, "mvn test")
+        mock_executor.execute_detection.assert_called_once()
+        mock_validate.assert_called_once_with("BUILD_COMMAND", "mvn test")
+        mock_run_build.assert_called_once()
+
+    @patch('src.smartfix.domains.agents.command_detection_agent.run_build_command')
+    @patch('src.smartfix.domains.agents.command_detection_agent.validate_command')
+    @patch('src.smartfix.domains.agents.command_detection_agent.SubAgentExecutor')
+    def test_detect_retries_on_validation_failure(self, mock_executor_class, mock_validate, mock_run_build):
+        """Test agent retries when validation fails."""
+        # Setup mocks - first command fails validation, second succeeds
+        mock_executor = Mock()
+        mock_executor_class.return_value = mock_executor
+        mock_executor.execute_detection.side_effect = [
+            "rm -rf /",  # Invalid command
+            "mvn test"   # Valid command
+        ]
+
+        from src.smartfix.config.command_validator import CommandValidationError
+        mock_validate.side_effect = [
+            CommandValidationError("Dangerous command"),  # First fails
+            None  # Second passes
+        ]
+        mock_run_build.return_value = (True, "Build successful")
+
+        # Execute
+        agent = CommandDetectionAgent(self.repo_root, max_attempts=3)
+        result = agent.detect(
+            build_files=["pom.xml"],
+            failed_attempts=[],
+            remediation_id="test-123"
+        )
+
+        # Verify - should have called LLM twice
+        self.assertEqual(result, "mvn test")
+        self.assertEqual(mock_executor.execute_detection.call_count, 2)
+        # Second call should include first failed attempt in prompt
+        second_call_prompt = mock_executor.execute_detection.call_args_list[1][0][0]
+        self.assertIn("rm -rf /", second_call_prompt)
+        self.assertIn("Dangerous command", second_call_prompt)
+
+    @patch('src.smartfix.domains.agents.command_detection_agent.extract_build_errors')
+    @patch('src.smartfix.domains.agents.command_detection_agent.run_build_command')
+    @patch('src.smartfix.domains.agents.command_detection_agent.validate_command')
+    @patch('src.smartfix.domains.agents.command_detection_agent.SubAgentExecutor')
+    def test_detect_retries_on_build_failure(self, mock_executor_class, mock_validate, mock_run_build, mock_extract_errors):
+        """Test agent retries when build command fails."""
+        # Setup mocks - first command fails build, second succeeds
+        mock_executor = Mock()
+        mock_executor_class.return_value = mock_executor
+        mock_executor.execute_detection.side_effect = [
+            "mvn clean",   # Wrong command
+            "mvn test"     # Correct command
+        ]
+
+        mock_validate.return_value = None
+        mock_run_build.side_effect = [
+            (False, "Error: No tests found"),  # First fails
+            (True, "Tests passed")             # Second succeeds
+        ]
+        mock_extract_errors.return_value = "No tests found"
+
+        # Execute
+        agent = CommandDetectionAgent(self.repo_root, max_attempts=3)
+        result = agent.detect(
+            build_files=["pom.xml"],
+            failed_attempts=[],
+            remediation_id="test-123"
+        )
+
+        # Verify - should have called LLM twice
+        self.assertEqual(result, "mvn test")
+        self.assertEqual(mock_executor.execute_detection.call_count, 2)
+        # Second call should include first failed attempt with build error
+        second_call_prompt = mock_executor.execute_detection.call_args_list[1][0][0]
+        self.assertIn("mvn clean", second_call_prompt)
+        self.assertIn("No tests found", second_call_prompt)
+
+    @patch('src.smartfix.domains.agents.command_detection_agent.run_build_command')
+    @patch('src.smartfix.domains.agents.command_detection_agent.validate_command')
+    @patch('src.smartfix.domains.agents.command_detection_agent.SubAgentExecutor')
+    def test_detect_exhausts_max_attempts(self, mock_executor_class, mock_validate, mock_run_build):
+        """Test agent raises error after exhausting max attempts."""
+        # Setup mocks - all attempts fail validation
+        mock_executor = Mock()
+        mock_executor_class.return_value = mock_executor
+        mock_executor.execute_detection.return_value = "invalid command"
+
+        from src.smartfix.config.command_validator import CommandValidationError
+        mock_validate.side_effect = CommandValidationError("Invalid")
+
+        # Execute
+        agent = CommandDetectionAgent(self.repo_root, max_attempts=2)
+
+        with self.assertRaises(MaxAttemptsExceededError) as context:
+            agent.detect(
+                build_files=["pom.xml"],
+                failed_attempts=[],
+                remediation_id="test-123"
+            )
+
+        # Verify - should have tried exactly max_attempts times
+        self.assertEqual(mock_executor.execute_detection.call_count, 2)
+        error_msg = str(context.exception)
+        self.assertIn("2 attempts", error_msg)
+        self.assertIn("invalid command", error_msg)
 
 
 if __name__ == '__main__':
