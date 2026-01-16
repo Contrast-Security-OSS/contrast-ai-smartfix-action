@@ -3,7 +3,7 @@
 import unittest
 import os
 from unittest.mock import patch
-from src.config import get_config, reset_config, ConfigurationError
+from src.config import get_config, reset_config
 
 
 class TestConfigIntegration(unittest.TestCase):

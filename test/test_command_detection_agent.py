@@ -14,7 +14,7 @@ Tests for CommandDetectionAgent.
 """
 
 import unittest
-from unittest.mock import Mock, patch, call
+from unittest.mock import Mock, patch
 from pathlib import Path
 from src.smartfix.domains.agents.command_detection_agent import (
     CommandDetectionAgent,

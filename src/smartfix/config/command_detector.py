@@ -27,7 +27,7 @@ and Makefile inspection. Provides deterministic detection layer.
 import re
 import subprocess
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
 from src.smartfix.config.command_validator import (
     validate_command,
