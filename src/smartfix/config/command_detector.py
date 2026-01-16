@@ -29,6 +29,11 @@ import subprocess
 from pathlib import Path
 from typing import List, Optional, Tuple
 
+from src.smartfix.config.command_validator import (
+    validate_command,
+    CommandValidationError,
+)
+
 
 def _is_safe_make_target(target: str) -> bool:
     """
@@ -351,23 +356,33 @@ def detect_build_command(
     project_dir: Optional[Path] = None
 ) -> Optional[str]:
     """
-    Detect build/test command by validating candidate availability.
+    Detect build/test command by validating candidate availability and security.
 
-    Generates candidates and tests each with --version flag to verify
-    the command exists. Does NOT actually run builds during detection.
+    Generates candidates, tests each with --version flag to verify
+    the command exists, and validates against security allowlist.
+    Does NOT actually run builds during detection.
 
     Args:
         repo_root: Repository root directory
         project_dir: Optional subdirectory for monorepo projects
 
     Returns:
-        First available build command or None
+        First available and valid build command or None
     """
     candidates = generate_build_command_candidates(repo_root, project_dir)
 
     for candidate in candidates:
-        if _validate_command_exists(candidate, repo_root):
+        # Check if command exists
+        if not _validate_command_exists(candidate, repo_root):
+            continue
+
+        # Validate command against security allowlist
+        try:
+            validate_command("BUILD_COMMAND", candidate)
             return candidate
+        except CommandValidationError:
+            # Skip invalid commands, continue to next candidate
+            continue
 
     return None
 
@@ -377,22 +392,32 @@ def detect_format_command(
     project_dir: Optional[Path] = None
 ) -> Optional[str]:
     """
-    Detect format command by validating candidate availability.
+    Detect format command by validating candidate availability and security.
 
-    Generates candidates and tests each with --version flag to verify
-    the command exists. Does NOT actually run formatters during detection.
+    Generates candidates, tests each with --version flag to verify
+    the command exists, and validates against security allowlist.
+    Does NOT actually run formatters during detection.
 
     Args:
         repo_root: Repository root directory
         project_dir: Optional subdirectory for monorepo projects
 
     Returns:
-        First available format command or None
+        First available and valid format command or None
     """
     candidates = generate_format_command_candidates(repo_root, project_dir)
 
     for candidate in candidates:
-        if _validate_command_exists(candidate, repo_root):
+        # Check if command exists
+        if not _validate_command_exists(candidate, repo_root):
+            continue
+
+        # Validate command against security allowlist
+        try:
+            validate_command("FORMATTING_COMMAND", candidate)
             return candidate
+        except CommandValidationError:
+            # Skip invalid commands, continue to next candidate
+            continue
 
     return None

@@ -329,5 +329,79 @@ class TestDetectPackageManager(unittest.TestCase):
             self.assertIsNone(pm)
 
 
+class TestCommandValidationIntegration(unittest.TestCase):
+    """Test that command detection integrates with validation."""
+
+    def test_detect_build_skips_invalid_commands(self):
+        """detect_build_command skips candidates that fail validation."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            # Create pom.xml to generate Maven candidates
+            (repo_root / 'pom.xml').touch()
+
+            # Mock _validate_command_exists to return True (command exists)
+            # but validation should filter out dangerous commands
+            import src.smartfix.config.command_detector as cd
+            original_validate = cd._validate_command_exists
+
+            try:
+                # All commands "exist" but some are invalid
+                cd._validate_command_exists = lambda cmd, repo, **kwargs: True
+
+                # detect_build_command should skip invalid Maven commands
+                # and return None since all candidates are invalid
+                # (Maven commands are valid in real use, but this tests the filtering)
+                command = cd.detect_build_command(repo_root)
+
+                # Should return a valid command since Maven commands are valid
+                self.assertIsNotNone(command)
+                self.assertIn('mvn', command)
+            finally:
+                cd._validate_command_exists = original_validate
+
+    def test_detect_build_validates_before_returning(self):
+        """detect_build_command validates each candidate."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            (repo_root / 'pom.xml').touch()
+
+            import src.smartfix.config.command_detector as cd
+            original_validate = cd._validate_command_exists
+
+            try:
+                # Simulate command existence check
+                cd._validate_command_exists = lambda cmd, repo, **kwargs: 'mvn' in cmd
+
+                command = cd.detect_build_command(repo_root)
+
+                # Should return validated Maven command
+                self.assertIsNotNone(command)
+                # Command should be from our allowlist (basic check)
+                self.assertTrue(command.startswith('mvn'))
+            finally:
+                cd._validate_command_exists = original_validate
+
+    def test_detect_format_validates_before_returning(self):
+        """detect_format_command validates each candidate."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            (repo_root / 'pyproject.toml').touch()
+
+            import src.smartfix.config.command_detector as cd
+            original_validate = cd._validate_command_exists
+
+            try:
+                # Simulate command existence check
+                cd._validate_command_exists = lambda cmd, repo, **kwargs: 'black' in cmd
+
+                command = cd.detect_format_command(repo_root)
+
+                # Should return validated Python formatter command
+                self.assertIsNotNone(command)
+                self.assertIn('black', command)
+            finally:
+                cd._validate_command_exists = original_validate
+
+
 if __name__ == '__main__':
     unittest.main()

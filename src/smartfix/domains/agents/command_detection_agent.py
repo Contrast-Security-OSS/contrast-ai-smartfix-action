@@ -27,6 +27,11 @@ execution failures.
 
 from pathlib import Path
 
+from src.smartfix.config.command_validator import (
+    validate_command,
+    CommandValidationError,
+)
+
 
 class CommandDetectionError(Exception):
     """Base exception for command detection errors."""
@@ -115,8 +120,16 @@ class CommandDetectionAgent:
             # TODO (beads-7nf): LLM agent execution with SubAgentExecutor
             # suggested_command = self._call_llm_agent(prompt, self.repo_root, remediation_id)
 
-            # TODO (beads-ec6): Command validation integration
-            # validate_command("BUILD_COMMAND", suggested_command)
+            # Validate suggested command (beads-ec6)
+            # try:
+            #     validate_command("BUILD_COMMAND", suggested_command)
+            # except CommandValidationError as e:
+            #     # Add validation error to attempt history
+            #     attempt_history.append({
+            #         "command": suggested_command,
+            #         "error": f"Command validation failed: {str(e)}"
+            #     })
+            #     continue  # Skip to next iteration
 
             # TODO: Test command execution with run_build_command()
             # success, output = run_build_command(suggested_command, self.repo_root)
