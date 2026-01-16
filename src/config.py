@@ -55,6 +55,15 @@ class Config:
         self.VERSION = "v1.0.11"
         self.USER_AGENT = f"contrast-smart-fix {self.VERSION}"
 
+        # --- Paths (initialized early for use in command detection) ---
+        if testing:
+            # For tests, default to /tmp if GITHUB_WORKSPACE not set
+            self.REPO_ROOT = Path(self._get_env_var("GITHUB_WORKSPACE", required=False, default="/tmp")).resolve()
+        else:
+            self.REPO_ROOT = Path(self._get_env_var("GITHUB_WORKSPACE", required=True)).resolve()
+
+        self.SCRIPT_DIR = Path(__file__).parent.resolve()
+
         # --- Core Settings ---
         self.DEBUG_MODE = self._get_bool_env("DEBUG_MODE", default=False)
 
@@ -82,16 +91,32 @@ class Config:
         if testing and "BUILD_COMMAND" not in env and is_build_command_required:
             self.BUILD_COMMAND = "echo 'Test build command'"
         else:
-            self.BUILD_COMMAND = self._get_env_var("BUILD_COMMAND", required=is_build_command_required)
+            self.BUILD_COMMAND = self._get_env_var("BUILD_COMMAND", required=False)
+
+            # Auto-detect if not provided
+            if not self.BUILD_COMMAND and not testing:
+                self.BUILD_COMMAND = self._auto_detect_build_command()
+
+                # If detection failed and command is required, raise error
+                if not self.BUILD_COMMAND and is_build_command_required:
+                    raise ConfigurationError(
+                        "BUILD_COMMAND is required but not provided and could not be auto-detected. "
+                        "Please set BUILD_COMMAND environment variable or ensure project has "
+                        "recognizable build system markers (pom.xml, build.gradle, package.json, etc.)"
+                    )
 
         # Validate BUILD_COMMAND if present
-        if not testing:
+        if not testing and self.BUILD_COMMAND:
             self._validate_command("BUILD_COMMAND", self.BUILD_COMMAND)
 
         self.FORMATTING_COMMAND = self._get_env_var("FORMATTING_COMMAND", required=False)
 
+        # Auto-detect formatting command if not provided (optional, never required)
+        if not self.FORMATTING_COMMAND and not testing:
+            self.FORMATTING_COMMAND = self._auto_detect_format_command()
+
         # Validate FORMATTING_COMMAND if present
-        if not testing:
+        if not testing and self.FORMATTING_COMMAND:
             self._validate_command("FORMATTING_COMMAND", self.FORMATTING_COMMAND)
 
         # --- Validated and normalized settings ---
@@ -154,15 +179,6 @@ class Config:
         self.VULNERABILITY_SEVERITIES = self._parse_and_validate_severities(
             self._get_env_var("VULNERABILITY_SEVERITIES", required=False, default='["CRITICAL", "HIGH"]')
         )
-
-        # --- Paths ---
-        if testing:
-            # For tests, default to /tmp if GITHUB_WORKSPACE not set
-            self.REPO_ROOT = Path(self._get_env_var("GITHUB_WORKSPACE", required=False, default="/tmp")).resolve()
-        else:
-            self.REPO_ROOT = Path(self._get_env_var("GITHUB_WORKSPACE", required=True)).resolve()
-
-        self.SCRIPT_DIR = Path(__file__).parent.resolve()
 
         if not testing:
             self._log_initial_settings()
@@ -237,6 +253,74 @@ class Config:
             )
             # Convert CommandValidationError to ConfigurationError
             raise ConfigurationError(str(e)) from e
+
+    def _auto_detect_build_command(self) -> Optional[str]:
+        """
+        Auto-detect build command using deterministic detection.
+
+        Returns:
+            Detected build command or None if detection fails
+        """
+        from src.smartfix.config.command_detector import detect_build_command
+
+        try:
+            detected = detect_build_command(
+                repo_root=self.REPO_ROOT,
+                project_dir=None  # TODO: Add project_dir support for monorepos
+            )
+
+            if detected:
+                _log_config_message(
+                    f"Auto-detected BUILD_COMMAND: {detected}",
+                    is_error=False
+                )
+            else:
+                _log_config_message(
+                    "Could not auto-detect BUILD_COMMAND from project structure",
+                    is_error=True
+                )
+
+            return detected
+        except Exception as e:
+            _log_config_message(
+                f"Build command auto-detection failed: {str(e)}",
+                is_error=True
+            )
+            return None
+
+    def _auto_detect_format_command(self) -> Optional[str]:
+        """
+        Auto-detect format command using deterministic detection.
+
+        Returns:
+            Detected format command or None if detection fails
+        """
+        from src.smartfix.config.command_detector import detect_format_command
+
+        try:
+            detected = detect_format_command(
+                repo_root=self.REPO_ROOT,
+                project_dir=None  # TODO: Add project_dir support for monorepos
+            )
+
+            if detected:
+                _log_config_message(
+                    f"Auto-detected FORMATTING_COMMAND: {detected}",
+                    is_error=False
+                )
+            else:
+                _log_config_message(
+                    "Could not auto-detect FORMATTING_COMMAND (optional)",
+                    is_error=False
+                )
+
+            return detected
+        except Exception as e:
+            _log_config_message(
+                f"Format command auto-detection failed: {str(e)}",
+                is_error=False
+            )
+            return None
 
     def _get_coding_agent(self) -> str:
         from src.smartfix.shared.coding_agents import CodingAgents
