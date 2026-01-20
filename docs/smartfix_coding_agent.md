@@ -316,7 +316,7 @@ SmartFix collects telemetry data to help improve the service and diagnose issues
 ## Best Practices & Recommendations
 
 * **Leverage Auto-Detection:** SmartFix can automatically detect build and format commands for most common build systems (Maven, Gradle, npm, pytest, etc.). You typically don't need to specify `build_command` or `formatting_command` manually. See [Supported Build Systems](./supported-build-systems.md) for the full list. If auto-detection fails, you can always override it manually.
-* **Ensure the Build Command Runs Tests:** Whether auto-detected or manually specified, make sure your build command runs your test suite. This allows SmartFix to catch and fix any tests that may fail due to its changes. It also allows it to run the security tests it creates, if that option is enabled.
+* **Ensure the Build Command Runs Tests:** If manually specified, make sure your build command runs your test suite. This allows SmartFix to catch and fix any tests that may fail due to its changes. It also allows it to run the security tests it creates, if that option is enabled.  If SmartFix auto-detects the build command, it will attempt to run any tests available.
 * **Review PRs Thoroughly:** Always carefully review the code changes proposed by SmartFix before merging.
 * **Monitor Action Runs:** Regularly check the GitHub Action logs for successful runs and any reported issues.
 * **Use Recommended LLMs:** For the best experience, Contrast recommends using the Anthropic Claude Sonnet 4.5 model.
