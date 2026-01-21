@@ -25,6 +25,7 @@ project structure and iteratively refining suggestions based on
 execution failures.
 """
 
+import logging
 from pathlib import Path
 
 from src.smartfix.config.command_validator import (
@@ -34,6 +35,9 @@ from src.smartfix.config.command_validator import (
 from src.smartfix.domains.agents.sub_agent_executor import SubAgentExecutor
 from src.smartfix.domains.workflow.build_runner import run_build_command
 from src.build_output_analyzer import extract_build_errors
+
+
+logger = logging.getLogger(__name__)
 
 
 class CommandDetectionError(Exception):
@@ -147,8 +151,9 @@ class CommandDetectionAgent:
                 "error": error_summary
             })
 
-        # Max attempts exhausted - raise error with helpful context
-        self._raise_max_attempts_error(build_files, attempt_history)
+        # Max attempts exhausted - log warning and return None
+        self._log_max_attempts_exhausted(build_files, attempt_history)
+        return None
 
     def _build_iteration_prompt(
         self,
@@ -193,36 +198,35 @@ class CommandDetectionAgent:
 
         return "".join(prompt_parts)
 
-    def _raise_max_attempts_error(
+    def _log_max_attempts_exhausted(
         self,
         build_files: list[str],
         failed_attempts: list[dict[str, str]]
     ) -> None:
         """
-        Raise MaxAttemptsExceededError with helpful context.
+        Log warning when max detection attempts are exhausted.
 
         Args:
             build_files: List of build system marker files found
             failed_attempts: History of failed command attempts with errors
         """
-        error_parts = [
-            f"Could not detect valid build command after {self.max_attempts} attempts.\n"
+        # Build warning message with context
+        warning_parts = [
+            f"Phase 2 LLM detection exhausted {self.max_attempts} attempts without finding valid build command."
         ]
 
         # Add build files context
         if build_files:
-            error_parts.append(f"\nBuild files found: {', '.join(build_files)}\n")
+            warning_parts.append(f"Build files found: {', '.join(build_files)}")
 
-        # Add last attempt details if available
+        # Add attempt count
         if failed_attempts:
+            warning_parts.append(f"Tried {len(failed_attempts)} command(s)")
+
+            # Add last attempt details for debugging
             last_attempt = failed_attempts[-1]
-            error_parts.append(f"\nLast attempt: {last_attempt['command']}")
-            error_parts.append(f"\nLast error: {last_attempt['error']}\n")
+            warning_parts.append(f"Last attempt: {last_attempt['command']}")
+            warning_parts.append(f"Last error: {last_attempt['error'][:200]}...")  # Truncate long errors
 
-        # Add helpful suggestion
-        error_parts.append(
-            "\nPlease set BUILD_COMMAND environment variable manually.\n"
-            "See documentation for supported build commands."
-        )
-
-        raise MaxAttemptsExceededError("".join(error_parts))
+        # Log as warning
+        logger.warning(" | ".join(warning_parts))

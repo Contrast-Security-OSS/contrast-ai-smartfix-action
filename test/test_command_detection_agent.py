@@ -16,10 +16,7 @@ Tests for CommandDetectionAgent.
 import unittest
 from unittest.mock import Mock, patch
 from pathlib import Path
-from src.smartfix.domains.agents.command_detection_agent import (
-    CommandDetectionAgent,
-    MaxAttemptsExceededError
-)
+from src.smartfix.domains.agents.command_detection_agent import CommandDetectionAgent
 
 
 class TestCommandDetectionAgent(unittest.TestCase):
@@ -86,8 +83,8 @@ class TestCommandDetectionAgent(unittest.TestCase):
         self.assertIn("maven test", prompt)
 
     @patch('src.smartfix.domains.agents.command_detection_agent.SubAgentExecutor')
-    def test_detect_raises_max_attempts_exceeded(self, mock_executor_class):
-        """Test detect() raises MaxAttemptsExceededError after max attempts."""
+    def test_detect_returns_none_after_max_attempts(self, mock_executor_class):
+        """Test detect() returns None after max attempts exhausted."""
         # Mock executor to return invalid command that fails validation
         mock_executor = Mock()
         mock_executor_class.return_value = mock_executor
@@ -99,20 +96,20 @@ class TestCommandDetectionAgent(unittest.TestCase):
         failed_attempts = []
         remediation_id = "test-remediation-123"
 
-        with self.assertRaises(MaxAttemptsExceededError) as context:
-            agent.detect(
-                build_files=build_files,
-                failed_attempts=failed_attempts,
-                remediation_id=remediation_id
-            )
+        # Should return None when max attempts exhausted
+        result = agent.detect(
+            build_files=build_files,
+            failed_attempts=failed_attempts,
+            remediation_id=remediation_id
+        )
 
-        # Error message should mention attempts
-        self.assertIn("Could not detect valid build command", str(context.exception))
-        self.assertIn("2 attempts", str(context.exception))
+        # Should return None instead of raising exception
+        self.assertIsNone(result)
 
+    @patch('src.smartfix.domains.agents.command_detection_agent.logger')
     @patch('src.smartfix.domains.agents.command_detection_agent.SubAgentExecutor')
-    def test_detect_error_includes_build_files(self, mock_executor_class):
-        """Test error message includes build files context."""
+    def test_detect_logs_build_files_on_exhaustion(self, mock_executor_class, mock_logger):
+        """Test logging includes build files context when exhausted."""
         # Mock executor to return invalid command
         mock_executor = Mock()
         mock_executor_class.return_value = mock_executor
@@ -124,16 +121,20 @@ class TestCommandDetectionAgent(unittest.TestCase):
         failed_attempts = []
         remediation_id = "test-remediation-123"
 
-        with self.assertRaises(MaxAttemptsExceededError) as context:
-            agent.detect(build_files, failed_attempts, remediation_id)
+        result = agent.detect(build_files, failed_attempts, remediation_id)
 
-        error_msg = str(context.exception)
-        self.assertIn("pom.xml", error_msg)
-        self.assertIn("build.gradle", error_msg)
+        # Should return None
+        self.assertIsNone(result)
+        # Should log warning with build files
+        mock_logger.warning.assert_called_once()
+        warning_msg = mock_logger.warning.call_args[0][0]
+        self.assertIn("pom.xml", warning_msg)
+        self.assertIn("build.gradle", warning_msg)
 
+    @patch('src.smartfix.domains.agents.command_detection_agent.logger')
     @patch('src.smartfix.domains.agents.command_detection_agent.SubAgentExecutor')
-    def test_detect_error_includes_last_attempt(self, mock_executor_class):
-        """Test error message includes last failed attempt details."""
+    def test_detect_logs_last_attempt_details(self, mock_executor_class, mock_logger):
+        """Test logging includes last failed attempt details when exhausted."""
         # Mock executor to return invalid command
         mock_executor = Mock()
         mock_executor_class.return_value = mock_executor
@@ -147,12 +148,15 @@ class TestCommandDetectionAgent(unittest.TestCase):
         ]
         remediation_id = "test-remediation-123"
 
-        with self.assertRaises(MaxAttemptsExceededError) as context:
-            agent.detect(build_files, failed_attempts, remediation_id)
+        result = agent.detect(build_files, failed_attempts, remediation_id)
 
-        error_msg = str(context.exception)
-        self.assertIn("Last attempt:", error_msg)
-        self.assertIn("Last error:", error_msg)
+        # Should return None
+        self.assertIsNone(result)
+        # Should log warning with last attempt details
+        mock_logger.warning.assert_called_once()
+        warning_msg = mock_logger.warning.call_args[0][0]
+        self.assertIn("Last attempt:", warning_msg)
+        self.assertIn("Last error:", warning_msg)
 
     @patch('src.smartfix.domains.agents.command_detection_agent.run_build_command')
     @patch('src.smartfix.domains.agents.command_detection_agent.validate_command')
@@ -254,11 +258,12 @@ class TestCommandDetectionAgent(unittest.TestCase):
         self.assertIn("mvn clean", second_call_prompt)
         self.assertIn("No tests found", second_call_prompt)
 
+    @patch('src.smartfix.domains.agents.command_detection_agent.logger')
     @patch('src.smartfix.domains.agents.command_detection_agent.run_build_command')
     @patch('src.smartfix.domains.agents.command_detection_agent.validate_command')
     @patch('src.smartfix.domains.agents.command_detection_agent.SubAgentExecutor')
-    def test_detect_exhausts_max_attempts(self, mock_executor_class, mock_validate, mock_run_build):
-        """Test agent raises error after exhausting max attempts."""
+    def test_detect_exhausts_max_attempts(self, mock_executor_class, mock_validate, mock_run_build, mock_logger):
+        """Test agent returns None and logs after exhausting max attempts."""
         # Setup mocks - all attempts fail validation
         mock_executor = Mock()
         mock_executor_class.return_value = mock_executor
@@ -270,18 +275,21 @@ class TestCommandDetectionAgent(unittest.TestCase):
         # Execute
         agent = CommandDetectionAgent(self.repo_root, max_attempts=2)
 
-        with self.assertRaises(MaxAttemptsExceededError) as context:
-            agent.detect(
-                build_files=["pom.xml"],
-                failed_attempts=[],
-                remediation_id="test-123"
-            )
+        result = agent.detect(
+            build_files=["pom.xml"],
+            failed_attempts=[],
+            remediation_id="test-123"
+        )
 
         # Verify - should have tried exactly max_attempts times
         self.assertEqual(mock_executor.execute_detection.call_count, 2)
-        error_msg = str(context.exception)
-        self.assertIn("2 attempts", error_msg)
-        self.assertIn("invalid command", error_msg)
+        # Should return None
+        self.assertIsNone(result)
+        # Should log warning with attempt details
+        mock_logger.warning.assert_called_once()
+        warning_msg = mock_logger.warning.call_args[0][0]
+        self.assertIn("2 attempts", warning_msg)
+        self.assertIn("invalid command", warning_msg)
 
 
 if __name__ == '__main__':
