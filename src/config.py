@@ -93,17 +93,11 @@ class Config:
         else:
             self.BUILD_COMMAND = self._get_env_var("BUILD_COMMAND", required=False)
 
-            # Auto-detect if not provided
-            if not self.BUILD_COMMAND and not testing:
+            # Auto-detect if not provided AND required
+            # Skip detection entirely when BUILD_COMMAND not needed
+            if not self.BUILD_COMMAND and not testing and is_build_command_required:
+                # Orchestrator always returns valid string (real command or no-op fallback)
                 self.BUILD_COMMAND = self._auto_detect_build_command()
-
-                # If detection failed and command is required, raise error
-                if not self.BUILD_COMMAND and is_build_command_required:
-                    raise ConfigurationError(
-                        "BUILD_COMMAND is required but not provided and could not be auto-detected. "
-                        "Please set BUILD_COMMAND environment variable or ensure project has "
-                        "recognizable build system markers (pom.xml, build.gradle, package.json, etc.)"
-                    )
 
         # Validate BUILD_COMMAND if present
         if not testing and self.BUILD_COMMAND:
@@ -254,47 +248,56 @@ class Config:
             # Convert CommandValidationError to ConfigurationError
             raise ConfigurationError(str(e)) from e
 
-    def _auto_detect_build_command(self) -> Optional[str]:
+    def _auto_detect_build_command(self) -> str:
         """
-        Auto-detect build command using deterministic detection.
+        Auto-detect build command using two-phase detection with fallback.
+
+        Uses orchestrator to coordinate Phase 1 (deterministic), Phase 2 (LLM),
+        and Phase 3 (no-op fallback). Always returns a valid command string.
 
         Returns:
-            Detected build command or None if detection fails
+            Detected build command or no-op fallback
         """
-        from src.smartfix.config.command_detector import detect_build_command
+        from src.smartfix.config.command_detection_orchestrator import (
+            detect_build_command_with_fallback,
+            NO_OP_BUILD_COMMAND
+        )
+
+        # Read MAX_COMMAND_DETECTION_ATTEMPTS early (before it's set as attribute)
+        max_llm_attempts = self._get_validated_int(
+            "MAX_COMMAND_DETECTION_ATTEMPTS",
+            default=6,
+            min_val=0,
+            max_val=10
+        )
 
         try:
-            # detect_build_command now returns (command, failed_attempts) tuple
-            detected, failures = detect_build_command(
+            command = detect_build_command_with_fallback(
                 repo_root=self.REPO_ROOT,
                 project_dir=None,  # TODO: Add project_dir support for monorepos
+                max_llm_attempts=max_llm_attempts,
                 remediation_id="config-init"
             )
 
-            if detected:
+            # Log result (orchestrator logs phase transitions, we log final result)
+            if command == NO_OP_BUILD_COMMAND:
                 _log_config_message(
-                    f"Auto-detected BUILD_COMMAND: {detected}",
-                    is_error=False
+                    "Using no-op fallback for BUILD_COMMAND (detection did not find valid command)",
+                    is_warning=True
                 )
             else:
-                if failures:
-                    _log_config_message(
-                        f"Could not auto-detect BUILD_COMMAND: tested {len(failures)} candidate(s), all failed",
-                        is_error=True
-                    )
-                else:
-                    _log_config_message(
-                        "Could not auto-detect BUILD_COMMAND from project structure",
-                        is_error=True
-                    )
+                _log_config_message(
+                    f"Auto-detected BUILD_COMMAND: {command}",
+                    is_error=False
+                )
 
-            return detected
+            return command
         except Exception as e:
             _log_config_message(
-                f"Build command auto-detection failed: {str(e)}",
+                f"Build command auto-detection failed unexpectedly: {str(e)}. Using no-op fallback.",
                 is_error=True
             )
-            return None
+            return NO_OP_BUILD_COMMAND
 
     def _auto_detect_format_command(self) -> Optional[str]:
         """

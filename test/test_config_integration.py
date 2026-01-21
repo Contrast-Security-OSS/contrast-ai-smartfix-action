@@ -278,18 +278,19 @@ class TestCommandAutoDetection(unittest.TestCase):
         os.environ.update(self.original_env)
         reset_config()
 
-    @patch('src.smartfix.config.command_detector.detect_build_command')
+    @patch('src.smartfix.config.command_detection_orchestrator.detect_build_command_with_fallback')
     def test_auto_detects_build_command_when_not_provided(self, mock_detect):
-        """Config auto-detects BUILD_COMMAND when not in environment."""
-        # detect_build_command now returns (command, failures) tuple
-        mock_detect.return_value = ('mvn test', [])
+        """Config auto-detects BUILD_COMMAND when not in environment and required."""
+        # Orchestrator returns string (not tuple)
+        mock_detect.return_value = 'mvn test'
 
         # Don't set BUILD_COMMAND env var (make auto-detection necessary)
         if 'BUILD_COMMAND' in os.environ:
             del os.environ['BUILD_COMMAND']
 
-        # Set RUN_TASK to something other than generate_fix to make BUILD_COMMAND optional
-        os.environ['RUN_TASK'] = 'merge'
+        # Set RUN_TASK to generate_fix and CODING_AGENT to SMARTFIX to make BUILD_COMMAND required
+        os.environ['RUN_TASK'] = 'generate_fix'
+        os.environ['CODING_AGENT'] = 'SMARTFIX'
 
         reset_config()
         config = get_config(testing=False)  # Use non-testing mode to enable auto-detection
@@ -319,7 +320,7 @@ class TestCommandAutoDetection(unittest.TestCase):
         # Should have detected command
         self.assertEqual(config.FORMATTING_COMMAND, 'black .')
 
-    @patch('src.smartfix.config.command_detector.detect_build_command')
+    @patch('src.smartfix.config.command_detection_orchestrator.detect_build_command_with_fallback')
     def test_skips_detection_when_build_command_provided(self, mock_detect):
         """Config uses provided BUILD_COMMAND instead of auto-detecting."""
         os.environ['BUILD_COMMAND'] = 'npm test'
@@ -345,29 +346,30 @@ class TestCommandAutoDetection(unittest.TestCase):
         # Should use provided command
         self.assertEqual(config.FORMATTING_COMMAND, 'prettier --write .')
 
-    @patch('src.smartfix.config.command_detector.detect_build_command')
-    def test_detection_fallback_to_none_when_fails(self, mock_detect):
-        """Config falls back to None when detection returns None."""
-        mock_detect.return_value = None  # Detection fails
-
+    @patch('src.smartfix.config.command_detection_orchestrator.detect_build_command_with_fallback')
+    def test_detection_skipped_when_not_required(self, mock_detect):
+        """Config skips detection entirely when BUILD_COMMAND not required."""
         if 'BUILD_COMMAND' in os.environ:
             del os.environ['BUILD_COMMAND']
 
-        # Set RUN_TASK to make BUILD_COMMAND optional
+        # Set RUN_TASK to make BUILD_COMMAND optional (not generate_fix)
         os.environ['RUN_TASK'] = 'merge'
 
         reset_config()
         config = get_config(testing=False)
 
-        # Should have tried detection
-        mock_detect.assert_called_once()
-        # BUILD_COMMAND should be None since detection failed
+        # Should NOT have called detection (not required)
+        mock_detect.assert_not_called()
+        # BUILD_COMMAND should be None since not provided and not required
         self.assertIsNone(config.BUILD_COMMAND)
 
-    @patch('src.smartfix.config.command_detector.detect_build_command')
-    def test_detection_failure_raises_error_when_required(self, mock_detect):
-        """Config raises error when detection fails for required command."""
-        mock_detect.return_value = None  # Detection fails
+    @patch('src.smartfix.config.command_detection_orchestrator.detect_build_command_with_fallback')
+    def test_detection_uses_noop_fallback_when_required(self, mock_detect):
+        """Config uses no-op fallback when orchestrator returns it (no error raised)."""
+        from src.smartfix.config.command_detection_orchestrator import NO_OP_BUILD_COMMAND
+
+        # Orchestrator returns no-op fallback (detection failed both phases)
+        mock_detect.return_value = NO_OP_BUILD_COMMAND
 
         if 'BUILD_COMMAND' in os.environ:
             del os.environ['BUILD_COMMAND']
@@ -378,24 +380,25 @@ class TestCommandAutoDetection(unittest.TestCase):
 
         reset_config()
 
-        # Should raise SystemExit (get_config catches ConfigurationError and exits)
-        with self.assertRaises(SystemExit) as context:
-            get_config(testing=False)
+        # Should NOT raise error (orchestrator handles fallback)
+        config = get_config(testing=False)
 
-        # Exit code should be 1
-        self.assertEqual(context.exception.code, 1)
+        # BUILD_COMMAND should be the no-op fallback
+        self.assertEqual(config.BUILD_COMMAND, NO_OP_BUILD_COMMAND)
 
     @patch('src.config.Config._validate_command')
-    @patch('src.smartfix.config.command_detector.detect_build_command')
+    @patch('src.smartfix.config.command_detection_orchestrator.detect_build_command_with_fallback')
     def test_detected_commands_are_validated(self, mock_detect, mock_validate):
         """Detected commands are validated against allowlist."""
-        # detect_build_command now returns (command, failures) tuple
-        mock_detect.return_value = ('mvn test', [])
+        # Orchestrator returns string (not tuple)
+        mock_detect.return_value = 'mvn test'
 
         if 'BUILD_COMMAND' in os.environ:
             del os.environ['BUILD_COMMAND']
 
-        os.environ['RUN_TASK'] = 'merge'
+        # Set RUN_TASK to generate_fix and CODING_AGENT to SMARTFIX to make detection required
+        os.environ['RUN_TASK'] = 'generate_fix'
+        os.environ['CODING_AGENT'] = 'SMARTFIX'
 
         reset_config()
         config = get_config(testing=False)
