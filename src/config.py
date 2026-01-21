@@ -264,9 +264,11 @@ class Config:
         from src.smartfix.config.command_detector import detect_build_command
 
         try:
-            detected = detect_build_command(
+            # detect_build_command now returns (command, failed_attempts) tuple
+            detected, failures = detect_build_command(
                 repo_root=self.REPO_ROOT,
-                project_dir=None  # TODO: Add project_dir support for monorepos
+                project_dir=None,  # TODO: Add project_dir support for monorepos
+                remediation_id="config-init"
             )
 
             if detected:
@@ -275,10 +277,16 @@ class Config:
                     is_error=False
                 )
             else:
-                _log_config_message(
-                    "Could not auto-detect BUILD_COMMAND from project structure",
-                    is_error=True
-                )
+                if failures:
+                    _log_config_message(
+                        f"Could not auto-detect BUILD_COMMAND: tested {len(failures)} candidate(s), all failed",
+                        is_error=True
+                    )
+                else:
+                    _log_config_message(
+                        "Could not auto-detect BUILD_COMMAND from project structure",
+                        is_error=True
+                    )
 
             return detected
         except Exception as e:

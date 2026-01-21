@@ -340,24 +340,26 @@ class TestCommandValidationIntegration(unittest.TestCase):
             (repo_root / 'pom.xml').touch()
 
             # Mock _validate_command_exists to return True (command exists)
-            # but validation should filter out dangerous commands
+            # and mock run_build_command to simulate successful build
             import src.smartfix.config.command_detector as cd
             original_validate = cd._validate_command_exists
+            original_run_build = cd.run_build_command
 
             try:
-                # All commands "exist" but some are invalid
+                # All commands "exist" and builds succeed
                 cd._validate_command_exists = lambda cmd, repo, **kwargs: True
+                cd.run_build_command = lambda cmd, repo, rem_id: (True, "Build succeeded")
 
-                # detect_build_command should skip invalid Maven commands
-                # and return None since all candidates are invalid
-                # (Maven commands are valid in real use, but this tests the filtering)
-                command = cd.detect_build_command(repo_root)
+                # detect_build_command returns (command, failures) tuple
+                command, failures = cd.detect_build_command(repo_root)
 
                 # Should return a valid command since Maven commands are valid
                 self.assertIsNotNone(command)
                 self.assertIn('mvn', command)
+                self.assertEqual(len(failures), 0)  # No failures when build succeeds
             finally:
                 cd._validate_command_exists = original_validate
+                cd.run_build_command = original_run_build
 
     def test_detect_build_validates_before_returning(self):
         """detect_build_command validates each candidate."""
@@ -367,12 +369,14 @@ class TestCommandValidationIntegration(unittest.TestCase):
 
             import src.smartfix.config.command_detector as cd
             original_validate = cd._validate_command_exists
+            original_run_build = cd.run_build_command
 
             try:
-                # Simulate command existence check
+                # Simulate command existence check and successful builds
                 cd._validate_command_exists = lambda cmd, repo, **kwargs: 'mvn' in cmd
+                cd.run_build_command = lambda cmd, repo, rem_id: (True, "Build succeeded")
 
-                command = cd.detect_build_command(repo_root)
+                command, failures = cd.detect_build_command(repo_root)
 
                 # Should return validated Maven command
                 self.assertIsNotNone(command)
@@ -380,6 +384,7 @@ class TestCommandValidationIntegration(unittest.TestCase):
                 self.assertTrue(command.startswith('mvn'))
             finally:
                 cd._validate_command_exists = original_validate
+                cd.run_build_command = original_run_build
 
     def test_detect_format_validates_before_returning(self):
         """detect_format_command validates each candidate."""

@@ -281,7 +281,8 @@ class TestCommandAutoDetection(unittest.TestCase):
     @patch('src.smartfix.config.command_detector.detect_build_command')
     def test_auto_detects_build_command_when_not_provided(self, mock_detect):
         """Config auto-detects BUILD_COMMAND when not in environment."""
-        mock_detect.return_value = 'mvn test'
+        # detect_build_command now returns (command, failures) tuple
+        mock_detect.return_value = ('mvn test', [])
 
         # Don't set BUILD_COMMAND env var (make auto-detection necessary)
         if 'BUILD_COMMAND' in os.environ:
@@ -388,7 +389,8 @@ class TestCommandAutoDetection(unittest.TestCase):
     @patch('src.smartfix.config.command_detector.detect_build_command')
     def test_detected_commands_are_validated(self, mock_detect, mock_validate):
         """Detected commands are validated against allowlist."""
-        mock_detect.return_value = 'mvn test'
+        # detect_build_command now returns (command, failures) tuple
+        mock_detect.return_value = ('mvn test', [])
 
         if 'BUILD_COMMAND' in os.environ:
             del os.environ['BUILD_COMMAND']

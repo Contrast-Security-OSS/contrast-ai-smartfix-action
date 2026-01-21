@@ -81,37 +81,51 @@ def detect_build_command_with_fallback(
         "echo 'No build command detected - using no-op'"  # Fallback
     """
     # Phase 1: Deterministic Detection
-    # Fast, file marker-based detection with security validation
+    # File marker-based detection with actual build testing
     logger.info("Starting Phase 1: Deterministic build command detection")
 
     try:
-        phase1_result = detect_build_command(repo_root, project_dir)
+        phase1_command, phase1_failures = detect_build_command(
+            repo_root,
+            project_dir,
+            remediation_id
+        )
     except Exception as e:
         logger.error(f"Phase 1 detection failed with exception: {e}")
-        phase1_result = None
+        phase1_command = None
+        phase1_failures = []
 
-    if phase1_result:
+    if phase1_command:
         # Phase 1 succeeded - return detected command
-        logger.info(f"Phase 1 succeeded: Detected BUILD_COMMAND: {phase1_result}")
-        return phase1_result
+        logger.info(f"Phase 1 succeeded: Detected BUILD_COMMAND: {phase1_command}")
+        return phase1_command
 
-    # Phase 1 failed - log and proceed to Phase 2
-    logger.warning("Phase 1 failed: Could not auto-detect BUILD_COMMAND from project structure")
+    # Phase 1 failed - log failure count and proceed to Phase 2
+    if phase1_failures:
+        logger.warning(
+            f"Phase 1 failed: Tested {len(phase1_failures)} candidate(s), all failed. "
+            "Proceeding to Phase 2 with failure history."
+        )
+    else:
+        logger.warning("Phase 1 failed: No suitable build commands found in project structure")
 
     # Phase 2: LLM-based detection
     # TODO: Implement Phase 2 LLM detection integration
-    # This will be implemented in beads contrast-ai-smartfix-action-6dp and 9yb
-    #
-    # When bead 6dp completes, Phase 1 will return (command, failed_attempts) tuple
-    # The failed_attempts history should be passed to Phase 2 for context
+    # This will be implemented in bead contrast-ai-smartfix-action-9yb
     #
     # When implemented, this will:
     # 1. Collect build_files from project structure
     # 2. Initialize CommandDetectionAgent with max_llm_attempts and remediation_id
-    # 3. Run iterative LLM detection with error feedback from Phase 1 failures
-    # 4. Return detected command or None after max_attempts
+    # 3. Pass phase1_failures to agent.detect() as failed_attempts parameter
+    # 4. Run iterative LLM detection with error feedback from Phase 1 + Phase 2 attempts
+    # 5. Return detected command or None after max_attempts
     logger.info("Starting Phase 2: LLM-based build command detection")
     phase2_result = None  # Placeholder for Phase 2 implementation
+
+    # When Phase 2 is implemented, it will receive phase1_failures:
+    # phase2_result = CommandDetectionAgent(
+    #     repo_root, project_dir, max_llm_attempts
+    # ).detect(build_files, phase1_failures, remediation_id)
 
     if phase2_result:
         # Phase 2 succeeded - return LLM-detected command

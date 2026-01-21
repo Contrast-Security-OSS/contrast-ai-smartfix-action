@@ -27,12 +27,14 @@ and Makefile inspection. Provides deterministic detection layer.
 import re
 import subprocess
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple, Dict
 
 from src.smartfix.config.command_validator import (
     validate_command,
     CommandValidationError,
 )
+from src.smartfix.domains.workflow.build_runner import run_build_command
+from src.build_output_analyzer import extract_build_errors
 
 
 def _is_safe_make_target(target: str) -> bool:
@@ -353,38 +355,70 @@ def detect_package_manager(repo_root: Path) -> Optional[str]:
 
 def detect_build_command(
     repo_root: Path,
-    project_dir: Optional[Path] = None
-) -> Optional[str]:
+    project_dir: Optional[Path] = None,
+    remediation_id: str = "phase1-detection"
+) -> Tuple[Optional[str], List[Dict[str, str]]]:
     """
-    Detect build/test command by validating candidate availability and security.
+    Detect build/test command by testing candidates with actual build execution.
 
-    Generates candidates, tests each with --version flag to verify
-    the command exists, and validates against security allowlist.
-    Does NOT actually run builds during detection.
+    Generates candidates based on project markers, validates security,
+    and runs actual builds to verify commands work. Returns first successful
+    command or None, plus history of failed attempts for Phase 2.
 
     Args:
         repo_root: Repository root directory
         project_dir: Optional subdirectory for monorepo projects
+        remediation_id: For error tracking and telemetry (default: "phase1-detection")
 
     Returns:
-        First available and valid build command or None
+        Tuple of (command, failed_attempts) where:
+        - command: First working build command or None if all fail
+        - failed_attempts: List of dicts with 'command' and 'error' keys for failures
     """
     candidates = generate_build_command_candidates(repo_root, project_dir)
+    failed_attempts: List[Dict[str, str]] = []
 
     for candidate in candidates:
-        # Check if command exists
+        # Check if command exists with --version (fast pre-check)
         if not _validate_command_exists(candidate, repo_root):
+            # Don't add to failed_attempts - tool not installed isn't a build failure
             continue
 
         # Validate command against security allowlist
         try:
             validate_command("BUILD_COMMAND", candidate)
-            return candidate
-        except CommandValidationError:
-            # Skip invalid commands, continue to next candidate
+        except CommandValidationError as e:
+            # Add validation failure to history for Phase 2
+            failed_attempts.append({
+                "command": candidate,
+                "error": f"Security validation failed: {str(e)}"
+            })
             continue
 
-    return None
+        # Run actual build to verify command works
+        try:
+            success, output = run_build_command(candidate, repo_root, remediation_id)
+
+            if success:
+                # Command works! Return it immediately
+                return candidate, failed_attempts
+
+            # Build failed - extract errors and add to history
+            error_summary = extract_build_errors(output)
+            failed_attempts.append({
+                "command": candidate,
+                "error": error_summary
+            })
+        except Exception as e:
+            # Unexpected error during build execution
+            failed_attempts.append({
+                "command": candidate,
+                "error": f"Build execution error: {str(e)}"
+            })
+            continue
+
+    # All candidates failed - return None with full failure history
+    return None, failed_attempts
 
 
 def detect_format_command(
