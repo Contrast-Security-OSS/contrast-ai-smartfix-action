@@ -4,22 +4,54 @@ SmartFix can automatically detect and run build/test commands for the following 
 
 ## How Command Detection Works
 
-SmartFix uses a two-phase approach:
+SmartFix uses a **three-phase detection approach** with automatic fallback:
 
-1. **Auto-Detection Phase**: SmartFix looks for marker files and automatically generates a prioritized list of common commands for detected build systems
-2. **LLM Enhancement Phase**: If auto-detection fails or the LLM determines a different command is more appropriate, it can suggest alternative commands from the same ecosystem
+### Phase 1: Deterministic Detection (Fast, File-Based)
+SmartFix looks for marker files (e.g., `pom.xml`, `package.json`) and generates a prioritized list of common commands for detected build systems. Each candidate command is:
+1. Validated against the security allowlist
+2. Checked for tool installation (`mvn --version`, etc.)
+3. **Actually executed** to verify it works in your project
 
-All commands (auto-detected or LLM-suggested) must pass **security validation** against an allowlist of approved executables and patterns. See [Command Validation](./command-validation.md) for security details.
+The first command that passes all checks is used immediately.
+
+### Phase 2: LLM-Based Detection (Iterative, Context-Aware)
+If Phase 1 fails (no marker files, tools missing, or all builds fail), SmartFix uses an LLM agent to:
+1. Analyze your project structure and any Phase 1 failure history
+2. Suggest alternative commands from the validated ecosystem tools
+3. Iterate up to 6 times with error feedback to find a working command
+
+The LLM agent has access to failure messages and can adapt suggestions based on what didn't work.
+
+### Phase 3: No-Op Fallback (Always Safe)
+If both Phase 1 and Phase 2 fail, SmartFix uses a no-op command:
+```bash
+echo 'No build command detected - using no-op'
+```
+
+This ensures SmartFix never fails due to build detection issues—it gracefully degrades to skip build validation when necessary.
+
+### When Detection is Skipped
+
+Build command detection is **automatically skipped** when:
+- `RUN_TASK` is set to `merge` (merge workflows don't need builds)
+- `CODING_AGENT` is not `SMARTFIX` (other agents handle their own builds)
+- `BUILD_COMMAND` is manually provided (respects user override)
+
+In these cases, SmartFix uses the provided command or skips build validation entirely.
+
+### Security Validation
+
+All commands (Phase 1 auto-detected, Phase 2 LLM-suggested, or manually specified) must pass **security validation** against an allowlist of approved executables and patterns. See [Command Validation](./command-validation.md) for security details.
 
 ### Auto-Detected vs. Validated Commands
 
-- **Auto-Detected Commands** (listed below): Commands SmartFix will automatically try based on marker files
-- **Validated Commands**: A broader set of ecosystem tools the LLM may suggest, all validated by the security allowlist
+- **Auto-Detected Commands** (Phase 1, listed below): Commands SmartFix will automatically try based on marker files
+- **Validated Commands** (Phase 2, broader set): Ecosystem tools the LLM may suggest, all validated by the security allowlist
 
 For example:
-- Maven: Auto-detects `mvn test`, but allows `mvn verify`, `mvn clean install`, `mvnw`, etc.
-- Node.js: Auto-detects `npm test`, but allows `yarn test`, `pnpm test`, `bun test`, `npx jest`, etc.
-- Python: Auto-detects `pytest`, but allows `python -m pytest`, `poetry run pytest`, `tox`, etc.
+- Maven: Phase 1 tries `mvn test`, Phase 2 may suggest `mvn verify`, `mvn clean install`, `mvnw`, etc.
+- Node.js: Phase 1 tries `npm test`, Phase 2 may suggest `yarn test`, `pnpm test`, `bun test`, `npx jest`, etc.
+- Python: Phase 1 tries `pytest`, Phase 2 may suggest `python -m pytest`, `poetry run pytest`, `tox`, etc.
 
 **See the [full list of allowed executables](../src/smartfix/config/command_validator.py#L38-L74) in the validator source code.**
 
@@ -161,13 +193,23 @@ SmartFix can also auto-detect formatting commands:
 
 ## Detection Priority
 
-When multiple marker files are present, SmartFix generates candidates from all detected build systems and tests them in the order they appear. During auto-detection, the first command that:
+### Phase 1 Priority (Deterministic)
+When multiple marker files are present, SmartFix generates candidates from all detected build systems and tests them in priority order. The first command that:
 1. Passes security validation (allowlist check)
-2. Exists on the system (tool is installed)
+2. Has the tool installed on the system (`mvn --version` succeeds)
+3. **Successfully executes** in your project (build passes)
 
-...will be used.
+...is used immediately without trying Phase 2.
 
-If auto-detection fails, the LLM may suggest alternative commands from the validated ecosystem tools.
+### Phase 2 Fallback (LLM-Based)
+If Phase 1 fails (no working commands found), the LLM agent:
+1. Receives all Phase 1 failure messages for context
+2. Suggests alternative commands from validated ecosystem tools
+3. Iterates up to 6 times, adapting suggestions based on error feedback
+4. Returns first successful command or None after exhausting attempts
+
+### Phase 3 Fallback (No-Op)
+If both Phase 1 and Phase 2 fail, SmartFix uses the no-op fallback command to gracefully degrade rather than failing the remediation.
 
 ## Monorepo Support
 
