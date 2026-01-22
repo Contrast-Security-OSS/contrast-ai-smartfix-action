@@ -408,5 +408,196 @@ class TestCommandValidationIntegration(unittest.TestCase):
                 cd._validate_command_exists = original_validate
 
 
+class TestDetectBuildCommand(unittest.TestCase):
+    """Test detect_build_command Phase 1 detection logic."""
+
+    def test_calls_run_build_command(self):
+        """Verify detect_build_command calls run_build_command for valid candidates."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            (repo_root / 'pom.xml').touch()
+
+            import src.smartfix.config.command_detector as cd
+            from unittest.mock import patch
+
+            with patch.object(cd, '_validate_command_exists', return_value=True), \
+                 patch.object(cd, 'validate_command'), \
+                 patch.object(cd, 'run_build_command') as mock_run_build:
+                # Mock successful build
+                mock_run_build.return_value = (True, "Build succeeded")
+
+                command, failures = cd.detect_build_command(repo_root)
+
+                # Verify run_build_command was called
+                self.assertTrue(mock_run_build.called)
+                # Verify it was called with a Maven command
+                call_args = mock_run_build.call_args[0]
+                self.assertIn('mvn', call_args[0])
+                self.assertEqual(call_args[1], repo_root)
+                self.assertEqual(call_args[2], "phase1-detection")  # Default remediation_id
+
+    def test_returns_command_and_empty_failures_on_success(self):
+        """Verify successful detection returns (command, empty_list)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            (repo_root / 'pom.xml').touch()
+
+            import src.smartfix.config.command_detector as cd
+            from unittest.mock import patch
+
+            with patch.object(cd, '_validate_command_exists', return_value=True), \
+                 patch.object(cd, 'validate_command'), \
+                 patch.object(cd, 'run_build_command', return_value=(True, "Build succeeded")):
+
+                command, failures = cd.detect_build_command(repo_root)
+
+                # Should return command on success
+                self.assertIsNotNone(command)
+                self.assertIn('mvn', command)
+                # Failures list should be empty since first command succeeded
+                self.assertEqual(len(failures), 0)
+
+    def test_returns_none_and_failure_history_when_all_fail(self):
+        """Verify all failures returns (None, failure_history)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            (repo_root / 'pom.xml').touch()
+
+            import src.smartfix.config.command_detector as cd
+            from unittest.mock import patch
+
+            with patch.object(cd, '_validate_command_exists', return_value=True), \
+                 patch.object(cd, 'validate_command'), \
+                 patch.object(cd, 'run_build_command', return_value=(False, "Build failed: test error")), \
+                 patch.object(cd, 'extract_build_errors', return_value="test error"):
+
+                command, failures = cd.detect_build_command(repo_root)
+
+                # Should return None when all fail
+                self.assertIsNone(command)
+                # Should have failure history
+                self.assertGreater(len(failures), 0)
+                # Each failure should have command and error
+                for failure in failures:
+                    self.assertIn('command', failure)
+                    self.assertIn('error', failure)
+                    self.assertIn('mvn', failure['command'])
+
+    def test_validation_failures_are_skipped(self):
+        """Verify validation failures are skipped and don't stop iteration."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            # Create markers for both Maven and Gradle
+            (repo_root / 'pom.xml').touch()
+            (repo_root / 'build.gradle').touch()
+
+            import src.smartfix.config.command_detector as cd
+            from unittest.mock import patch
+            from src.smartfix.config.command_validator import CommandValidationError
+
+            def mock_validate(cmd_type, cmd):
+                # Fail Maven, allow Gradle
+                if 'mvn' in cmd:
+                    raise CommandValidationError("Maven not allowed")
+
+            with patch.object(cd, '_validate_command_exists', return_value=True), \
+                 patch.object(cd, 'validate_command', side_effect=mock_validate), \
+                 patch.object(cd, 'run_build_command', return_value=(True, "Build succeeded")):
+
+                command, failures = cd.detect_build_command(repo_root)
+
+                # Should skip Maven and try Gradle
+                self.assertIsNotNone(command)
+                self.assertTrue(command.startswith('./gradlew') or command.startswith('gradle'))
+                # Should have Maven validation failures in history
+                self.assertGreater(len(failures), 0)
+                maven_failures = [f for f in failures if 'mvn' in f['command']]
+                self.assertGreater(len(maven_failures), 0)
+                # Check validation failure recorded
+                self.assertIn('Security validation failed', maven_failures[0]['error'])
+
+    def test_returns_none_with_no_marker_files(self):
+        """Verify empty directory returns (None, empty_list)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            # No marker files created
+
+            import src.smartfix.config.command_detector as cd
+
+            command, failures = cd.detect_build_command(repo_root)
+
+            # Should return None when no candidates
+            self.assertIsNone(command)
+            # Should have empty failure list (no candidates to fail)
+            self.assertEqual(len(failures), 0)
+
+    def test_skips_commands_when_tool_not_installed(self):
+        """Verify commands are skipped when tool not installed."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            (repo_root / 'pom.xml').touch()
+
+            import src.smartfix.config.command_detector as cd
+            from unittest.mock import patch
+
+            # Simulate Maven not installed
+            with patch.object(cd, '_validate_command_exists', return_value=False):
+
+                command, failures = cd.detect_build_command(repo_root)
+
+                # Should return None when tools not installed
+                self.assertIsNone(command)
+                # Should have empty failures (tool not installed isn't a failure)
+                self.assertEqual(len(failures), 0)
+
+    def test_handles_exception_during_build_execution(self):
+        """Verify exceptions during build are caught and recorded."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            (repo_root / 'pom.xml').touch()
+
+            import src.smartfix.config.command_detector as cd
+            from unittest.mock import patch
+
+            def mock_run_that_raises(cmd, repo, rem_id):
+                raise RuntimeError("Unexpected build error")
+
+            with patch.object(cd, '_validate_command_exists', return_value=True), \
+                 patch.object(cd, 'validate_command'), \
+                 patch.object(cd, 'run_build_command', side_effect=mock_run_that_raises):
+
+                command, failures = cd.detect_build_command(repo_root)
+
+                # Should return None when all builds raise exceptions
+                self.assertIsNone(command)
+                # Should have failure history with exception info
+                self.assertGreater(len(failures), 0)
+                # Check exception is recorded
+                self.assertIn('Build execution error', failures[0]['error'])
+                self.assertIn('Unexpected build error', failures[0]['error'])
+
+    def test_mocks_run_build_command_to_avoid_slow_builds(self):
+        """Verify all tests mock run_build_command to avoid slow builds."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            (repo_root / 'pom.xml').touch()
+
+            import src.smartfix.config.command_detector as cd
+            from unittest.mock import patch, MagicMock
+
+            mock_run = MagicMock(return_value=(True, "Mocked output"))
+
+            with patch.object(cd, '_validate_command_exists', return_value=True), \
+                 patch.object(cd, 'validate_command'), \
+                 patch.object(cd, 'run_build_command', mock_run):
+
+                command, failures = cd.detect_build_command(repo_root)
+
+                # Verify run_build_command was mocked (called but didn't actually run)
+                self.assertTrue(mock_run.called)
+                # Verify command returned
+                self.assertIsNotNone(command)
+
+
 if __name__ == '__main__':
     unittest.main()
