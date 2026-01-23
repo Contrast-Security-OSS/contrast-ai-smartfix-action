@@ -314,12 +314,37 @@ class TestAwsBedrockValidation(unittest.TestCase):
         env['USE_CONTRAST_LLM'] = 'false'
         env['AGENT_MODEL'] = 'bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0'
         env['AWS_REGION_NAME'] = 'us-east-1'
-        env['AWS_ACCESS_KEY_ID'] = 'test-access-key'
-        env['AWS_SECRET_ACCESS_KEY'] = 'test-secret-key'
+        env['AWS_BEARER_TOKEN_BEDROCK'] = 'test-bearer-token-abc123'
 
         # Should NOT raise an error
         config = Config(env=env, testing=False)
         self.assertEqual(config.AGENT_MODEL, 'bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0')
+
+    def test_error_when_bearer_token_is_empty(self):
+        """Should raise ConfigurationError when AWS_BEARER_TOKEN_BEDROCK is empty."""
+        env = self._get_base_env()
+        env['USE_CONTRAST_LLM'] = 'false'
+        env['AGENT_MODEL'] = 'bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0'
+        env['AWS_REGION_NAME'] = 'us-east-1'
+        env['AWS_BEARER_TOKEN_BEDROCK'] = ''  # Empty bearer token
+
+        with self.assertRaises(ConfigurationError) as context:
+            Config(env=env, testing=False)
+
+        self.assertIn('AWS credentials are required', str(context.exception))
+
+    def test_error_when_bearer_token_is_whitespace(self):
+        """Should raise ConfigurationError when AWS_BEARER_TOKEN_BEDROCK is only whitespace."""
+        env = self._get_base_env()
+        env['USE_CONTRAST_LLM'] = 'false'
+        env['AGENT_MODEL'] = 'bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0'
+        env['AWS_REGION_NAME'] = 'us-east-1'
+        env['AWS_BEARER_TOKEN_BEDROCK'] = '   '  # Only whitespace
+
+        with self.assertRaises(ConfigurationError) as context:
+            Config(env=env, testing=False)
+
+        self.assertIn('AWS credentials are required', str(context.exception))
 
     def test_valid_config_with_eu_region(self):
         """Should pass validation with eu-west-2 region."""
