@@ -392,11 +392,14 @@ class Config:
             return
 
         # Check that AWS credentials are present when using Bedrock
-        # Exclude AWS_BEARER_TOKEN_BEDROCK and AWS_REGION_NAME as they may be empty from action.yml
-        has_aws_credentials = any(
-            key.startswith('AWS_') and key not in ('AWS_BEARER_TOKEN_BEDROCK', 'AWS_REGION_NAME')
+        # Check for either bearer token OR IAM credentials
+        has_bearer_token = bool(self.env.get('AWS_BEARER_TOKEN_BEDROCK', '').strip())
+        has_iam_credentials = any(
+            key.startswith('AWS_') and key not in ('AWS_BEARER_TOKEN_BEDROCK', 'AWS_REGION_NAME') and self.env.get(key, '').strip()
             for key in self.env.keys()
         )
+        has_aws_credentials = has_bearer_token or has_iam_credentials
+
         if not has_aws_credentials:
             raise ConfigurationError(
                 "Error: AWS credentials are required when using Bedrock models.\n"
