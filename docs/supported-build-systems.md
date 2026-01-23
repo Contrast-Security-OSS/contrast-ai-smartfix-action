@@ -41,7 +41,11 @@ In these cases, SmartFix uses the provided command or skips build validation ent
 
 ### Security Validation
 
-All commands (Phase 1 auto-detected, Phase 2 LLM-suggested, or manually specified) must pass **security validation** against an allowlist of approved executables and patterns. See [Command Validation](./command-validation.md) for security details.
+**Auto-detected** (Phase 1) and **LLM-suggested** (Phase 2) commands must pass **security validation** against an allowlist of approved executables and patterns.
+
+**Manually specified commands** (via `BUILD_COMMAND` or `FORMATTING_COMMAND` inputs) are **trusted as safe** and skip validation since they come from humans who control the GitHub Actions workflow configuration.
+
+See [Command Validation](./command-validation.md) for security details.
 
 ### Auto-Detected vs. Validated Commands
 
@@ -252,7 +256,7 @@ See [Command Validation](./command-validation.md) for complete security details.
 
 ## Manual Override
 
-If auto-detection doesn't work for your project, you can manually specify commands using environment variables. **All manually specified commands are still subject to security validation.**
+If auto-detection doesn't work for your project, you can manually specify commands using environment variables. **Manually specified commands are trusted as safe and skip security validation** since they come from humans who control the GitHub Actions workflow configuration.
 
 ```yaml
 env:
@@ -266,6 +270,6 @@ env:
 - Poetry with pytest: `BUILD_COMMAND: "poetry run pytest -v"`
 - Custom make target: `BUILD_COMMAND: "make integration-test"`
 
-Manual commands must use [validated executables](../src/smartfix/config/command_validator.py#L38-L74) and pass all security checks.
+You can use any command you want in manual overrides - there are no restrictions since you control the workflow configuration.
 
 See [Troubleshooting](./troubleshooting-command-detection.md) for common issues and solutions.
