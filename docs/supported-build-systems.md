@@ -271,5 +271,3 @@ env:
 - Custom make target: `BUILD_COMMAND: "make integration-test"`
 
 You can use any command you want in manual overrides - there are no restrictions since you control the workflow configuration.
-
-See [Troubleshooting](./troubleshooting-command-detection.md) for common issues and solutions.

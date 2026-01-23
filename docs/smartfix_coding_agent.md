@@ -326,7 +326,7 @@ SmartFix collects telemetry data to help improve the service and diagnose issues
 * **Q: Can I use SmartFix if I don't use Contrast Assess?**
   * A: No, SmartFix relies on vulnerability data from Contrast Assess. In the future we plan to expand to include more.
 * **Q: Do I need to specify `build_command`?**
-  * A: Usually no! SmartFix automatically detects build commands for common build systems (Maven, Gradle, npm, pytest, .NET, PHP, etc.). If auto-detection doesn't work for your project, you can manually specify `build_command`. See [Supported Build Systems](./supported-build-systems.md) for the full list of supported systems, and [Troubleshooting](./troubleshooting-command-detection.md) if auto-detection fails.
+  * A: Usually no! SmartFix automatically detects build commands for common build systems (Maven, Gradle, npm, pytest, .NET, PHP, etc.). If auto-detection doesn't work for your project, you can manually specify `build_command`. See [Supported Build Systems](./supported-build-systems.md) for the full list of supported systems.
 * **Q: How often does SmartFix run?**
   * A: This is determined by the `schedule` trigger in your GitHub Actions workflow file. You can customize it.
 * **Q: What happens if the AI cannot generate a fix?**
