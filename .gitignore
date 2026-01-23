@@ -201,6 +201,7 @@ plan.zip
 .beads/beads.left.jsonl
 .beads/beads.left.meta.json
 .beads/.local_version
+.beads/.bv.lock
 .beads/*.db
 .beads/*.db-*
 
