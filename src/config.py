@@ -18,6 +18,7 @@
 #
 
 import os
+import re
 import sys
 import json
 from pathlib import Path
@@ -134,11 +135,19 @@ class Config:
         self.USE_CONTRAST_LLM = self._get_bool_env("USE_CONTRAST_LLM", default=True)
         self.ENABLE_ANTHROPIC_PROMPT_CACHING = self._get_bool_env("ENABLE_ANTHROPIC_PROMPT_CACHING", default=True)
 
+        # --- LLM Retry Configuration ---
+        self.LLM_MAX_RETRIES = self._get_validated_int("LLM_MAX_RETRIES", default=7, min_val=1)
+        self.LLM_INITIAL_RETRY_DELAY_SECONDS = self._get_validated_int("LLM_INITIAL_RETRY_DELAY_SECONDS", default=1, min_val=1)
+        self.LLM_RETRY_MULTIPLIER = self._get_validated_int("LLM_RETRY_MULTIPLIER", default=2, min_val=2)
+
         # Update agent model for Contrast LLM if no explicit model was set
         if (is_smartfix_coding_agent
                 and self.USE_CONTRAST_LLM
                 and self._get_env_var("AGENT_MODEL", required=False) is None):
             self.AGENT_MODEL = "contrast/claude-sonnet-4-5"
+
+        # Validate AWS Bedrock configuration if applicable
+        self._validate_aws_bedrock_config()
 
         # --- Vulnerability Configuration ---
         self.VULNERABILITY_SEVERITIES = self._parse_and_validate_severities(
@@ -267,6 +276,80 @@ class Config:
         except json.JSONDecodeError:
             _log_config_message(f"Error parsing vulnerability_severities JSON: {json_str}. Using default.", is_error=True)
             return default_severities
+
+    def _validate_aws_bedrock_config(self) -> None:
+        """Validate AWS Bedrock configuration when using Bedrock models.
+
+        This prevents cryptic IDNA encoding errors when AWS region is missing
+        or contains invalid characters. Without this validation, users would see:
+        'UnicodeError: encoding with 'idna' codec failed (UnicodeError: label empty or too long)'
+        which is very difficult to debug.
+        """
+        # Only validate for generate_fix task
+        if self.RUN_TASK != "generate_fix":
+            return
+
+        model_lower = self.AGENT_MODEL.lower() if self.AGENT_MODEL else ""
+
+        # Only validate if using Bedrock models (not Contrast LLM)
+        if self.USE_CONTRAST_LLM or "bedrock/" not in model_lower:
+            return
+
+        # Check that AWS credentials are present when using Bedrock
+        # Check for either bearer token OR IAM credentials
+        has_bearer_token = bool(self.env.get('AWS_BEARER_TOKEN_BEDROCK', '').strip())
+        has_iam_credentials = any(
+            key.startswith('AWS_') and key not in ('AWS_BEARER_TOKEN_BEDROCK', 'AWS_REGION_NAME') and self.env.get(key, '').strip()
+            for key in self.env.keys()
+        )
+        has_aws_credentials = has_bearer_token or has_iam_credentials
+
+        if not has_aws_credentials:
+            raise ConfigurationError(
+                "Error: AWS credentials are required when using Bedrock models.\n"
+                "You must set either:\n"
+                "  - AWS IAM credentials (such as AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN)\n"
+                "  - AWS Other Tokens (AWS_BEARER_TOKEN_BEDROCK)\n"
+                f"Current model: {self.AGENT_MODEL}"
+            )
+
+        # Check for AWS_REGION_NAME (what LiteLLM expects)
+        # action.yml sets this from inputs.aws_region or env.AWS_REGION
+        aws_region = self.env.get('AWS_REGION_NAME', '').strip()
+
+        if not aws_region:
+            raise ConfigurationError(
+                "Error: aws_region is required when using Bedrock models.\n"
+                "Set the 'aws_region' input in your workflow (e.g., aws_region: 'us-east-1').\n"
+                "This is required for both AWS IAM credentials and AWS Bearer Token authentication."
+            )
+
+        # Validate region format - just catch obvious mistakes like quotes or special chars
+        # Allow only lowercase letters, numbers, and hyphens (flexible for future regions)
+        if not re.match(r'^[a-z][a-z0-9-]*[a-z0-9]$', aws_region):
+            raise ConfigurationError(
+                f"Error: Invalid aws_region format: '{aws_region}'\n"
+                "Region should contain only lowercase letters, numbers, and hyphens.\n"
+                "Check for quotes, spaces, or uppercase letters in your configuration."
+            )
+
+        # Normalize the region value in the environment so LiteLLM gets the trimmed value
+        # This fixes cases where whitespace was present in the original input
+        if self.env.get('AWS_REGION_NAME', '') != aws_region:
+            os.environ['AWS_REGION_NAME'] = aws_region
+
+        # Check for AWS credentials (either bearer token OR IAM credentials)
+        has_bearer_token = bool(self.env.get('AWS_BEARER_TOKEN_BEDROCK', '').strip())
+        has_access_key = bool(self.env.get('AWS_ACCESS_KEY_ID', '').strip())
+        has_secret_key = bool(self.env.get('AWS_SECRET_ACCESS_KEY', '').strip())
+
+        if not has_bearer_token and not (has_access_key and has_secret_key):
+            raise ConfigurationError(
+                "Error: AWS credentials required for Bedrock models.\n"
+                "Provide either:\n"
+                "  1. AWS_BEARER_TOKEN_BEDROCK (via aws_bearer_token_bedrock input), OR\n"
+                "  2. AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables"
+            )
 
     def _log_initial_settings(self):
         if not self.DEBUG_MODE:

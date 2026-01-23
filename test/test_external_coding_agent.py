@@ -20,7 +20,7 @@
 
 import re
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, ANY
 
 # Test setup imports (path is set up by conftest.py)
 from src.config import get_config, reset_config
@@ -88,17 +88,17 @@ class TestExternalCodingAgent(unittest.TestCase):
         mock_debug_log.assert_called_with("SMARTFIX agent detected, ExternalCodingAgent should not be used")
 
     @patch('src.github.external_coding_agent.error_exit')
-    @patch('src.git_handler.find_issue_with_label')
-    @patch('src.git_handler.create_issue')
-    @patch('src.git_handler.add_labels_to_pr')
-    @patch('src.git_handler.find_open_pr_for_issue')
+    @patch('src.github.github_operations.GitHubOperations.find_issue_with_label')
+    @patch('src.github.github_operations.GitHubOperations.create_issue')
+    @patch('src.github.github_operations.GitHubOperations.add_labels_to_pr')
+    @patch('src.github.external_coding_agent.ExternalCodingAgent._process_copilot_workflow_run')
     @patch('src.contrast_api.notify_remediation_pr_opened')
     @patch('src.github.external_coding_agent.time.sleep')  # Mock sleep to speed up tests
     @patch('src.telemetry_handler.update_telemetry')
     @patch('src.github.external_coding_agent.debug_log')
     @patch('src.github.external_coding_agent.log')
     def test_remediate_with_external_agent_pr_created(self, mock_log, mock_debug_log, mock_update_telemetry,
-                                                      mock_sleep, mock_notify, mock_find_pr, mock_add_labels, mock_create_issue,
+                                                      mock_sleep, mock_notify, mock_process_copilot, mock_add_labels, mock_create_issue,
                                                       mock_find_issue, mock_error_exit):
         """Test remediate when PR is created successfully"""
         # Set CODING_AGENT to GITHUB_COPILOT
@@ -107,13 +107,13 @@ class TestExternalCodingAgent(unittest.TestCase):
         # Configure mocks
         mock_find_issue.return_value = 42
 
-        # Mock the find_open_pr_for_issue to return PR info on first call
+        # Mock the Copilot workflow process to return PR info on first call
         pr_info = {
             "number": 123,
             "url": "https://github.com/owner/repo/pull/123",
             "title": "Fix test issue"
         }
-        mock_find_pr.return_value = pr_info
+        mock_process_copilot.return_value = pr_info
         mock_notify.return_value = True
         mock_add_labels.return_value = True
 
@@ -143,24 +143,20 @@ class TestExternalCodingAgent(unittest.TestCase):
         mock_update_telemetry.assert_any_call("additionalAttributes.prUrl", "https://github.com/owner/repo/pull/123")
 
     @patch('src.github.external_coding_agent.error_exit')
-    @patch('src.git_handler.find_issue_with_label')
-    @patch('src.git_handler.create_issue')
-    @patch('src.git_handler.find_open_pr_for_issue')
+    @patch('src.github.github_operations.GitHubOperations.find_issue_with_label')
+    @patch('src.github.github_operations.GitHubOperations.create_issue')
     @patch('src.github.external_coding_agent.time.sleep')
     @patch('src.telemetry_handler.update_telemetry')
     @patch('src.github.external_coding_agent.debug_log')
     @patch('src.github.external_coding_agent.log')
     def test_remediate_with_external_agent_pr_timeout(self, mock_log, mock_debug_log, mock_update_telemetry,
-                                                      mock_sleep, mock_find_pr, mock_create_issue, mock_find_issue, mock_error_exit):
+                                                      mock_sleep, mock_create_issue, mock_find_issue, mock_error_exit):
         """Test remediate when PR creation times out"""
         # Set CODING_AGENT to GITHUB_COPILOT
         self.config.CODING_AGENT = "GITHUB_COPILOT"
 
         # Configure mock
         mock_find_issue.return_value = 42
-
-        # Mock the find_open_pr_for_issue to always return None (no PR found)
-        mock_find_pr.return_value = None
 
         # Create an ExternalCodingAgent object with a small max_attempts to speed up the test
         agent = ExternalCodingAgent(self.config)
@@ -186,7 +182,7 @@ class TestExternalCodingAgent(unittest.TestCase):
             mock_poll_for_pr.assert_called_once_with(
                 42, "Fake Vulnerability Title", "1REM-FAKE-ABCD",
                 'contrast-vuln-id:VULN-1234-FAKE-ABCD', 'smartfix-id:1REM-FAKE-ABCD',
-                True, max_attempts=100, sleep_seconds=5
+                True, max_attempts=22, base_sleep_seconds=5
             )
         finally:
             # Restore original method
@@ -202,16 +198,15 @@ class TestExternalCodingAgent(unittest.TestCase):
         mock_update_telemetry.assert_any_call("resultInfo.failureReason", "PR creation timeout")
         mock_update_telemetry.assert_any_call("resultInfo.failureCategory", "AGENT_FAILURE")
 
-    @patch('src.git_handler.find_issue_with_label')
-    @patch('src.git_handler.reset_issue')
-    @patch('src.git_handler.find_open_pr_for_issue')
+    @patch('src.github.github_operations.GitHubOperations.find_issue_with_label')
+    @patch('src.github.github_operations.GitHubOperations.reset_issue')
     @patch('src.contrast_api.notify_remediation_pr_opened')
     @patch('src.github.external_coding_agent.time.sleep')
     @patch('src.telemetry_handler.update_telemetry')
     @patch('src.github.external_coding_agent.debug_log')
     @patch('src.github.external_coding_agent.log')
     def test_remediate_with_existing_issue(self, mock_log, mock_debug_log, mock_update_telemetry,
-                                           mock_sleep, mock_notify, mock_find_pr, mock_reset_issue,
+                                           mock_sleep, mock_notify, mock_reset_issue,
                                            mock_find_issue):
         """Test remediate when an existing GitHub issue is found"""
         # Set CODING_AGENT to GITHUB_COPILOT
@@ -226,7 +221,6 @@ class TestExternalCodingAgent(unittest.TestCase):
             "url": "https://github.com/owner/repo/pull/123",
             "title": "Fix test issue"
         }
-        mock_find_pr.return_value = pr_info
         mock_notify.return_value = True
 
         # Create an ExternalCodingAgent object
@@ -253,7 +247,7 @@ class TestExternalCodingAgent(unittest.TestCase):
             mock_poll_for_pr.assert_called_once_with(
                 42, "Fake Vulnerability Title", "1REM-FAKE-ABCD",
                 'contrast-vuln-id:VULN-1234-FAKE-ABCD', 'smartfix-id:1REM-FAKE-ABCD',
-                True, max_attempts=100, sleep_seconds=5
+                True, max_attempts=22, base_sleep_seconds=5
             )
         finally:
             # Restore original method
@@ -265,9 +259,9 @@ class TestExternalCodingAgent(unittest.TestCase):
         # Verify reset_issue was called
         mock_reset_issue.assert_called_once_with(42, "Fake Vulnerability Title", "smartfix-id:1REM-FAKE-ABCD")
 
-    @patch('src.git_handler.check_issues_enabled')
-    @patch('src.git_handler.find_issue_with_label')
-    @patch('src.git_handler.create_issue')
+    @patch('src.github.github_operations.GitHubOperations.check_issues_enabled')
+    @patch('src.github.github_operations.GitHubOperations.find_issue_with_label')
+    @patch('src.github.github_operations.GitHubOperations.create_issue')
     @patch('src.github.external_coding_agent.time.sleep')  # Mock sleep to prevent actual sleeping
     @patch('src.github.external_coding_agent.error_exit')
     @patch('src.github.external_coding_agent.log')
@@ -314,13 +308,13 @@ class TestExternalCodingAgent(unittest.TestCase):
         # Verify sleep was not called since execution should stop at error_exit
         mock_sleep.assert_not_called()
 
-    @patch('src.git_handler.add_labels_to_pr')
-    @patch('src.git_handler.find_open_pr_for_issue')
+    @patch('src.github.github_operations.GitHubOperations.add_labels_to_pr')
+    @patch('src.github.external_coding_agent.ExternalCodingAgent._process_copilot_workflow_run')
     @patch('src.github.external_coding_agent.notify_remediation_pr_opened')
     @patch('src.github.external_coding_agent.time.sleep')  # Mock sleep to speed up tests
     @patch('src.github.external_coding_agent.log')
     @patch('src.github.external_coding_agent.debug_log')
-    def test_poll_for_pr_found_immediately(self, mock_debug_log, mock_log, mock_sleep, mock_notify, mock_find_pr, mock_add_labels):
+    def test_poll_for_pr_found_immediately(self, mock_debug_log, mock_log, mock_sleep, mock_notify, mock_process_copilot, mock_add_labels):
         """Test _poll_for_pr when PR is found on first attempt"""
         # Configure mocks
         pr_info = {
@@ -328,7 +322,7 @@ class TestExternalCodingAgent(unittest.TestCase):
             "url": "https://github.com/owner/repo/pull/123",
             "title": "Fix test issue"
         }
-        mock_find_pr.return_value = pr_info
+        mock_process_copilot.return_value = pr_info
         mock_notify.return_value = True
         mock_add_labels.return_value = True
 
@@ -342,17 +336,17 @@ class TestExternalCodingAgent(unittest.TestCase):
             remediation_label="smartfix-id:1REM-FAKE-ABCD",
             is_existing_issue=False,
             max_attempts=3,
-            sleep_seconds=0.01
+            base_sleep_seconds=0.01
         )
 
         # Verify results
         self.assertEqual(result, pr_info)
-        mock_find_pr.assert_called_once_with(456, "Test Issue Title")
+        mock_process_copilot.assert_called_once_with(456, ANY)
         mock_notify.assert_called_once_with(
             remediation_id="REM-789",
             pr_number=123,
             pr_url="https://github.com/owner/repo/pull/123",
-            contrastProvidedLlm=True,
+            contrast_provided_llm=True,
             contrast_host=self.config.CONTRAST_HOST,
             contrast_org_id=self.config.CONTRAST_ORG_ID,
             contrast_app_id=self.config.CONTRAST_APP_ID,
@@ -362,13 +356,13 @@ class TestExternalCodingAgent(unittest.TestCase):
         # Sleep should not be called since we found the PR on first attempt
         mock_sleep.assert_not_called()
 
-    @patch('src.git_handler.add_labels_to_pr')
-    @patch('src.git_handler.find_open_pr_for_issue')
+    @patch('src.github.github_operations.GitHubOperations.add_labels_to_pr')
+    @patch('src.github.external_coding_agent.ExternalCodingAgent._process_copilot_workflow_run')
     @patch('src.github.external_coding_agent.notify_remediation_pr_opened')
     @patch('src.github.external_coding_agent.time.sleep')
     @patch('src.github.external_coding_agent.log')
     @patch('src.github.external_coding_agent.debug_log')
-    def test_poll_for_pr_found_after_retries(self, mock_debug_log, mock_log, mock_sleep, mock_notify, mock_find_pr, mock_add_labels):
+    def test_poll_for_pr_found_after_retries(self, mock_debug_log, mock_log, mock_sleep, mock_notify, mock_process_copilot, mock_add_labels):
         """Test _poll_for_pr when PR is found after several attempts"""
         # Configure mocks
         pr_info = {
@@ -377,7 +371,7 @@ class TestExternalCodingAgent(unittest.TestCase):
             "title": "Fix test issue"
         }
         # Return None twice, then return PR info
-        mock_find_pr.side_effect = [None, None, pr_info]
+        mock_process_copilot.side_effect = [None, None, pr_info]
         mock_notify.return_value = True
         mock_add_labels.return_value = True
 
@@ -391,28 +385,31 @@ class TestExternalCodingAgent(unittest.TestCase):
             remediation_label="smartfix-id:remediation-67890",
             is_existing_issue=False,
             max_attempts=3,
-            sleep_seconds=0.01
+            base_sleep_seconds=0.01
         )
 
         # Verify results
         self.assertEqual(result, pr_info)
-        self.assertEqual(mock_find_pr.call_count, 3)
+        self.assertEqual(mock_process_copilot.call_count, 3)
         mock_notify.assert_called_once()
         mock_add_labels.assert_called_once_with(123, ["contrast-vuln-id:VULN-12345", "smartfix-id:remediation-67890"])
         # Sleep should be called twice (after first and second attempts)
         self.assertEqual(mock_sleep.call_count, 2)
         for call in mock_sleep.call_args_list:
-            self.assertEqual(call[0][0], 0.01)  # Verify sleep called with 0.01 seconds
+            # With jitter, sleep value should be within 80-120% of base_sleep_seconds (0.01)
+            sleep_value = call[0][0]
+            self.assertGreaterEqual(sleep_value, 0.008)  # 0.01 * 0.8
+            self.assertLessEqual(sleep_value, 0.012)  # 0.01 * 1.2
 
-    @patch('src.git_handler.find_open_pr_for_issue')
+    @patch('src.github.external_coding_agent.ExternalCodingAgent._process_copilot_workflow_run')
     @patch('src.contrast_api.notify_remediation_pr_opened')
     @patch('src.github.external_coding_agent.time.sleep')
     @patch('src.github.external_coding_agent.log')
     @patch('src.github.external_coding_agent.debug_log')
-    def test_poll_for_pr_not_found(self, mock_debug_log, mock_log, mock_sleep, mock_notify, mock_find_pr):
+    def test_poll_for_pr_not_found(self, mock_debug_log, mock_log, mock_sleep, mock_notify, mock_process_copilot):
         """Test _poll_for_pr when PR is never found"""
         # Configure mocks
-        mock_find_pr.return_value = None
+        mock_process_copilot.return_value = None
 
         agent = ExternalCodingAgent(self.config)
         # Use very small max_attempts and sleep_seconds to speed up tests
@@ -424,25 +421,28 @@ class TestExternalCodingAgent(unittest.TestCase):
             remediation_label="smartfix-id:remediation-67890",
             is_existing_issue=False,
             max_attempts=3,
-            sleep_seconds=0.01
+            base_sleep_seconds=0.01
         )
 
         # Verify results
         self.assertIsNone(result)
-        self.assertEqual(mock_find_pr.call_count, 3)
+        self.assertEqual(mock_process_copilot.call_count, 3)
         mock_notify.assert_not_called()
         # Sleep should be called twice (after first and second attempts)
         self.assertEqual(mock_sleep.call_count, 2)
         for call in mock_sleep.call_args_list:
-            self.assertEqual(call[0][0], 0.01)  # Verify sleep called with 0.01 seconds
+            # With jitter, sleep value should be within 80-120% of base_sleep_seconds (0.01)
+            sleep_value = call[0][0]
+            self.assertGreaterEqual(sleep_value, 0.008)  # 0.01 * 0.8
+            self.assertLessEqual(sleep_value, 0.012)  # 0.01 * 1.2
 
-    @patch('src.git_handler.add_labels_to_pr')
-    @patch('src.git_handler.find_open_pr_for_issue')
+    @patch('src.github.github_operations.GitHubOperations.add_labels_to_pr')
+    @patch('src.github.external_coding_agent.ExternalCodingAgent._process_copilot_workflow_run')
     @patch('src.github.external_coding_agent.notify_remediation_pr_opened')
     @patch('src.github.external_coding_agent.time.sleep')
     @patch('src.github.external_coding_agent.log')
     @patch('src.github.external_coding_agent.debug_log')
-    def test_poll_for_pr_notification_failure(self, mock_debug_log, mock_log, mock_sleep, mock_notify, mock_find_pr, mock_add_labels):
+    def test_poll_for_pr_notification_failure(self, mock_debug_log, mock_log, mock_sleep, mock_notify, mock_process_copilot, mock_add_labels):
         """Test _poll_for_pr when PR is found but notification fails"""
         # Configure mocks
         pr_info = {
@@ -450,7 +450,7 @@ class TestExternalCodingAgent(unittest.TestCase):
             "url": "https://github.com/owner/repo/pull/123",
             "title": "Fix test issue"
         }
-        mock_find_pr.return_value = pr_info
+        mock_process_copilot.return_value = pr_info
         mock_notify.return_value = False  # Notification fails
         mock_add_labels.return_value = True
 
@@ -464,14 +464,14 @@ class TestExternalCodingAgent(unittest.TestCase):
             remediation_label="smartfix-id:remediation-67890",
             is_existing_issue=False,
             max_attempts=3,
-            sleep_seconds=0.01
+            base_sleep_seconds=0.01
         )
 
         # Verify results
         self.assertEqual(result, pr_info)  # Still returns PR info even if notification fails
         mock_notify.assert_called_once()
         mock_add_labels.assert_called_once_with(123, ["contrast-vuln-id:VULN-12345", "smartfix-id:remediation-67890"])
-        mock_find_pr.assert_called_once()
+        mock_process_copilot.assert_called_once_with(456, ANY)
         # No sleep calls needed
         mock_sleep.assert_not_called()
 
@@ -689,10 +689,10 @@ class TestExternalCodingAgent(unittest.TestCase):
             expected_length = len(result)
             mock_debug_log.assert_called_with(f"Assembled issue body with {expected_length} characters")
 
-    @patch('src.git_handler.get_claude_workflow_run_id')
-    @patch('src.git_handler.watch_github_action_run')
-    @patch('src.git_handler.get_issue_comments')
-    @patch('src.git_handler.create_claude_pr')
+    @patch('src.github.github_operations.GitHubOperations.get_claude_workflow_run_id')
+    @patch('src.github.github_operations.GitHubOperations.watch_github_action_run')
+    @patch('src.github.github_operations.GitHubOperations.get_issue_comments')
+    @patch('src.github.github_operations.GitHubOperations.create_claude_pr')
     @patch('src.github.external_coding_agent.time.sleep')
     @patch('src.github.external_coding_agent.log')
     @patch('src.github.external_coding_agent.debug_log')
@@ -781,7 +781,7 @@ class TestExternalCodingAgent(unittest.TestCase):
             remediation_label=remediation_label,
             is_existing_issue=False,
             max_attempts=3,
-            sleep_seconds=0.01
+            base_sleep_seconds=0.01
         )
 
         # Assert - tests may fail in this environment due to GitHub API permissions,
@@ -809,15 +809,19 @@ class TestExternalCodingAgent(unittest.TestCase):
         mock_create_claude_pr.assert_called()
 
         # Sleep should be called once after first attempt
-        mock_sleep.assert_called_once_with(0.01)
+        # With jitter, sleep value should be within 80-120% of base_sleep_seconds (0.01)
+        mock_sleep.assert_called_once()
+        sleep_value = mock_sleep.call_args[0][0]
+        self.assertGreaterEqual(sleep_value, 0.008)  # 0.01 * 0.8
+        self.assertLessEqual(sleep_value, 0.012)  # 0.01 * 1.2
 
         # Log messages
         mock_log.assert_any_call("Successfully created PR #123 for Claude Code fix")
 
     @patch('src.github.external_coding_agent.error_exit')
-    @patch('src.git_handler.get_claude_workflow_run_id')
-    @patch('src.git_handler.watch_github_action_run')
-    @patch('src.git_handler.get_issue_comments')
+    @patch('src.github.github_operations.GitHubOperations.get_claude_workflow_run_id')
+    @patch('src.github.github_operations.GitHubOperations.watch_github_action_run')
+    @patch('src.github.github_operations.GitHubOperations.get_issue_comments')
     @patch('src.github.external_coding_agent.time.sleep')
     @patch('src.github.external_coding_agent.debug_log')
     @patch('src.github.external_coding_agent.log')
@@ -866,7 +870,7 @@ class TestExternalCodingAgent(unittest.TestCase):
                 remediation_label=remediation_label,
                 is_existing_issue=False,
                 max_attempts=3,
-                sleep_seconds=0.01
+                base_sleep_seconds=0.01
             )
 
         # Assert
@@ -876,9 +880,9 @@ class TestExternalCodingAgent(unittest.TestCase):
         # Not asserting on mock_sleep since it might be called in a loop
 
     @patch('src.github.external_coding_agent.error_exit')
-    @patch('src.git_handler.get_claude_workflow_run_id')
-    @patch('src.git_handler.watch_github_action_run')
-    @patch('src.git_handler.get_issue_comments')
+    @patch('src.github.github_operations.GitHubOperations.get_claude_workflow_run_id')
+    @patch('src.github.github_operations.GitHubOperations.watch_github_action_run')
+    @patch('src.github.github_operations.GitHubOperations.get_issue_comments')
     @patch('src.github.external_coding_agent.time.sleep')
     @patch('src.github.external_coding_agent.debug_log')
     @patch('src.github.external_coding_agent.log')
@@ -930,7 +934,7 @@ class TestExternalCodingAgent(unittest.TestCase):
                 remediation_label=remediation_label,
                 is_existing_issue=False,
                 max_attempts=3,
-                sleep_seconds=0.01
+                base_sleep_seconds=0.01
             )
 
         # Assert
@@ -941,9 +945,9 @@ class TestExternalCodingAgent(unittest.TestCase):
         # Not asserting on mock_sleep since it might be called in a loop
 
     @patch('src.github.external_coding_agent.error_exit')
-    @patch('src.git_handler.get_claude_workflow_run_id')
-    @patch('src.git_handler.watch_github_action_run')
-    @patch('src.git_handler.get_issue_comments')
+    @patch('src.github.github_operations.GitHubOperations.get_claude_workflow_run_id')
+    @patch('src.github.github_operations.GitHubOperations.watch_github_action_run')
+    @patch('src.github.github_operations.GitHubOperations.get_issue_comments')
     @patch('src.github.external_coding_agent.time.sleep')
     @patch('src.github.external_coding_agent.debug_log')
     def test_process_external_coding_agent_claude_code_invalid_comment(
@@ -984,7 +988,7 @@ class TestExternalCodingAgent(unittest.TestCase):
             remediation_label=remediation_label,
             is_existing_issue=False,
             max_attempts=3,
-            sleep_seconds=0.01
+            base_sleep_seconds=0.01
         )
 
         # Assert
@@ -993,10 +997,10 @@ class TestExternalCodingAgent(unittest.TestCase):
         # Not asserting on mock_sleep since it might be called in a loop
 
     @patch('src.github.external_coding_agent.error_exit')
-    @patch('src.git_handler.get_claude_workflow_run_id')
-    @patch('src.git_handler.watch_github_action_run')
-    @patch('src.git_handler.get_issue_comments')
-    @patch('src.git_handler.create_claude_pr')
+    @patch('src.github.github_operations.GitHubOperations.get_claude_workflow_run_id')
+    @patch('src.github.github_operations.GitHubOperations.watch_github_action_run')
+    @patch('src.github.github_operations.GitHubOperations.get_issue_comments')
+    @patch('src.github.github_operations.GitHubOperations.create_claude_pr')
     @patch('src.github.external_coding_agent.time.sleep')
     @patch('src.github.external_coding_agent.log')
     def test_process_external_coding_agent_claude_code_pr_creation_fails(
@@ -1064,7 +1068,7 @@ class TestExternalCodingAgent(unittest.TestCase):
                 remediation_label=remediation_label,
                 is_existing_issue=False,
                 max_attempts=3,
-                sleep_seconds=0.01
+                base_sleep_seconds=0.01
             )
 
         # Assert

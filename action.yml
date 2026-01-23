@@ -57,7 +57,7 @@ inputs:
     description: 'AWS Bedrock API Bearer Token (alternative to AWS IAM credentials)'
     required: false
   aws_region:
-    description: 'AWS Region for Bedrock (required when using aws_bearer_token_bedrock)'
+    description: 'AWS Region for Bedrock (required for ALL Bedrock authentication methods: IAM credentials or bearer token)'
     required: false
   azure_api_key:
     description: 'Azure API Key for Azure OpenAI'
@@ -88,9 +88,9 @@ inputs:
     required: false
     default: '["CRITICAL", "HIGH"]'
   run_task:
-    description: 'Specifies the task for the action to perform. "generate_fix" (default) runs main.py, "merge" runs merge_handler.py.'
+    description: '[DEPRECATED] This input is now automatically determined. Setting this will be ignored.'
     required: false
-    default: 'generate_fix'
+    default: 'auto'
   enable_full_telemetry:
     description: 'Enable full telemetry, including potentially sensitive data. Defaults to true.'
     required: false
@@ -331,6 +331,41 @@ runs:
         where gh >nul 2>nul || (echo ERROR: GitHub CLI not found in PATH after installation. && exit /b 1)
         gh --version || (echo ERROR: GitHub CLI verification failed. GitHub CLI is required for this action. && exit /b 1)
 
+    - name: Determine Task To Run
+      id: determine-run-task
+      shell: bash
+      run: |
+        event_name="${{ github.event_name }}"
+        pr_action="${{ github.event.action }}"
+        pr_merged="${{ github.event.pull_request.merged }}"
+        pr_head_ref=$(echo "${{ github.event.pull_request.head.ref }}" | tr '[:upper:]' '[:lower:]')
+
+        # Check if this is a SmartFix-generated branch
+        is_smartfix_branch="false"
+        if [[ "$pr_head_ref" =~ ^smartfix/remediation- ]] || \
+           [[ "$pr_head_ref" =~ ^copilot/fix- ]] || \
+           [[ "$pr_head_ref" =~ ^claude/issue- ]]; then
+          is_smartfix_branch="true"
+        fi
+
+        if [[ "$event_name" == "pull_request" ]] && \
+           [[ "$pr_action" == "closed" ]] && \
+           [[ "$pr_merged" == "true" ]] && \
+           [[ "$is_smartfix_branch" == "true" ]]; then
+          echo "run_task=merge" >> $GITHUB_OUTPUT
+        elif [[ "$event_name" == "pull_request" ]] && \
+             [[ "$pr_action" == "closed" ]] && \
+             [[ "$pr_merged" == "false" ]] && \
+             [[ "$is_smartfix_branch" == "true" ]]; then
+          echo "run_task=closed" >> $GITHUB_OUTPUT
+        else
+          echo "run_task=generate_fix" >> $GITHUB_OUTPUT
+        fi
+        echo "Determined run_task: $(cat $GITHUB_OUTPUT | grep run_task | cut -d'=' -f2)"
+        echo ""
+        echo "✅ Determine task to run complete"
+        echo ""
+
     - name: Setup complete
       shell: bash
       run: |
@@ -345,11 +380,11 @@ runs:
         echo ""
         echo "================================================================"
         # Cross-platform compatible script execution
-        if [ "${{ inputs.run_task }}" = "merge" ]; then
+        if [ "${{ steps.determine-run-task.outputs.run_task }}" = "merge" ]; then
           echo "🚀 STARTING CONTRAST AI SMARTFIX (Task: merge)"
           echo "================================================================"
           PYTHONPATH="${{ github.action_path }}" python "${{ github.action_path }}/src/merge_handler.py"
-        elif [ "${{ inputs.run_task }}" = "closed" ]; then
+        elif [ "${{ steps.determine-run-task.outputs.run_task }}" = "closed" ]; then
           echo "🚀 STARTING CONTRAST AI SMARTFIX (Task: closed)"
           echo "================================================================"
           PYTHONPATH="${{ github.action_path }}" python "${{ github.action_path }}/src/closed_handler.py"
@@ -389,7 +424,7 @@ runs:
         ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
         # --- AWS Bedrock API Bearer Token (LiteLLM) ---
         AWS_BEARER_TOKEN_BEDROCK: ${{ inputs.aws_bearer_token_bedrock }}
-        AWS_REGION_NAME: ${{ inputs.aws_region }}
+        AWS_REGION_NAME: ${{ inputs.aws_region || env.AWS_REGION }}
         # --- Azure Credentials for Azure OpenAI (LiteLLM) ---
         AZURE_API_KEY: ${{ inputs.azure_api_key }}
         AZURE_API_BASE: ${{ inputs.azure_api_base }}
@@ -406,7 +441,7 @@ runs:
         # --- Vulnerability Configuration ---
         VULNERABILITY_SEVERITIES: ${{ inputs.vulnerability_severities }}
         # --- Run Task ---
-        RUN_TASK: ${{ inputs.run_task }}
+        RUN_TASK: ${{ steps.determine-run-task.outputs.run_task }}
         # --- Telemetry Configuration ---
         ENABLE_FULL_TELEMETRY: ${{ inputs.enable_full_telemetry }}
         # --- Coding Agent ---

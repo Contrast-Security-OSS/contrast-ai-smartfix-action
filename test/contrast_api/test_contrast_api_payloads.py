@@ -101,7 +101,7 @@ class TestContrastApiPayloads(unittest.TestCase):
         self.assertEqual(payload['maxPullRequests'], 5)
         self.assertEqual(payload['severities'], ['HIGH', 'CRITICAL'])
 
-    @patch.dict('os.environ', {'USE_CONTRAST_LLM': 'false'})
+    @patch.dict('os.environ', {'USE_CONTRAST_LLM': 'false', 'AGENT_MODEL': 'anthropic/claude-sonnet-4-5'})
     @patch('src.contrast_api.requests.post')
     def test_get_vulnerability_with_prompts_payload_includes_contrast_provided_llm_false(self, mock_post):
         """Test that get_vulnerability_with_prompts includes contrastProvidedLlm=false in payload when USE_CONTRAST_LLM is false."""

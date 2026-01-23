@@ -27,11 +27,12 @@ When the `@claude` handle is mentioned in the title of a SmartFix-created GitHub
     * Install the [Claude Code GitHub App](https://github.com/apps/claude) on your GitHub repository.
     * Copy the [claude.yml](https://github.com/anthropics/claude-code-action/blob/main/examples/claude.yml) workflow file example into your GitHub repository
 * GitHub repository with **Issues** enabled
-* GitHub Personal Access Token (PAT) with:
-    * `meta` (read permissions)
-    * `actions` (read permissions)
-    * `pulls` (read-write permissions)
-    * `issues` (read-write permissions)
+* GitHub Personal Access Token (fine-grained PAT) with:
+    * **Issues**: Read and write (required to create issues and add labels)
+    * **Pull requests**: Read and write (required to create PRs and add labels)
+    * **Contents**: Read and write (required to push code changes for PRs)
+    * **Actions**: Read (optional, for monitoring workflow status)
+    * **Metadata**: Read (automatically included with all fine-grained PATs)
   * **Suggestion:** Set up a GitHub service account and use that to make the PAT for more explicit tracking of SmartFix's work in GitHub.
 * **Contrast API Credentials:** You will need your Contrast Host, Organization ID, Application ID, Authorization Key, and API Key.
 * **LLM Access:** Ensure that you have access to one of our recommended LLMs for use with SmartFix.  If using an AWS Bedrock model, please see Amazon's User Guide on [model access](https://docs.aws.amazon.com/bedrock/latest/userguide/model-access-modify.html).
@@ -65,10 +66,9 @@ on:
   workflow_dispatch: # Allows manual triggering
 
 jobs:
-  generate_fixes:
-    name: Generate Fixes
+  run_smartfix:
+    name: SmartFix
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     steps:
       # When using Claude Code, it is unnecessary to authenticate with an LLM API from this step.
       # You must authenticate with your LLM provider in the claude.yml workflow file instead.
@@ -78,7 +78,18 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Run Contrast AI SmartFix - Generate Fixes Action
+      - name: Determine SmartFix Job Type
+        id: determine_job_name
+        shell: bash
+        run: |
+          if [[ "${{ github.event.pull_request.merged }}" == "true" ]]; then
+            echo "job_name=Notify Contrast on PR Merge" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event.pull_request.merged }}" == "false" ]]; then
+            echo "job_name=Handle PR Close" >> $GITHUB_OUTPUT
+          else
+            echo "job_name=Run Contrast AI SmartFix - Generate Fixes" >> $GITHUB_OUTPUT
+          fi
+      - name: ${{ steps.determine_job_name.outputs.job_name }}
         uses: Contrast-Security-OSS/contrast-ai-smartfix-action@v1 # Replace with the latest version
         with:
           # Contrast Configuration
@@ -89,64 +100,13 @@ jobs:
           contrast_api_key: ${{ secrets.CONTRAST_API_KEY }}
 
           # GitHub Configuration
-          github_token: ${{ secrets.PAT_TOKEN }} # Necessary for creating Issues and mentioning Claude Code (@claude). This token should have read permission for metadata, read permissions on actions and read-write permission for issues and pulls. A best practice is to have an GitHub Organization service account create the PAT (an Organization admin may need to approve it)
+          github_token: ${{ secrets.PAT_TOKEN }} # Necessary for creating Issues and mentioning Claude Code (@claude). This fine-grained PAT should have: Issues (read-write), Pull requests (read-write), Contents (read-write), Actions (read), and Metadata (read). A best practice is to have a GitHub Organization service account create the PAT (an Organization admin may need to approve it).
           base_branch: '${{ github.event.repository.default_branch }}' # This will default to your repo default branch (other common base branches are 'main', 'master' or 'develop')
           coding_agent: 'CLAUDE_CODE' # Specify the use of Claude Code instead of the default SmartFix internal coding agent
 
           # Other Optional Inputs (see action.yml for defaults and more options)
           # max_open_prs: 5 # This is the maximum limit for the number of PRs that SmartFix will have open at single time
 
-  handle_pr_merge:
-    name: Handle PR Merge
-    runs-on: ubuntu-latest
-    if: github.event.pull_request.merged == true && contains(github.event.pull_request.head.ref, 'claude/issue-')
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Notify Contrast on PR Merge
-        uses: Contrast-Security-OSS/contrast-ai-smartfix-action@v1 # Replace with the latest version
-        with:
-          run_task: merge
-          coding_agent: 'CLAUDE_CODE'
-          # --- GitHub Token ---
-          github_token: ${{ secrets.PAT_TOKEN }}
-          # --- Contrast API Credentials ---
-          contrast_host: ${{ vars.CONTRAST_HOST }}
-          contrast_org_id: ${{ vars.CONTRAST_ORG_ID }}
-          contrast_app_id: ${{ vars.CONTRAST_APP_ID }}
-          contrast_authorization_key: ${{ secrets.CONTRAST_AUTHORIZATION_KEY }}
-          contrast_api_key: ${{ secrets.CONTRAST_API_KEY }}
-        env:
-          GITHUB_EVENT_PATH: ${{ github.event_path }}
-
-  handle_pr_closed:
-    name: Handle PR Close
-    runs-on: ubuntu-latest
-    if: github.event.pull_request.merged == false && contains(github.event.pull_request.head.ref, 'claude/issue-')
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Notify Contrast on PR Closed
-        uses: Contrast-Security-OSS/contrast-ai-smartfix-action@v1 # Replace with the latest version
-        with:
-          run_task: closed
-          coding_agent: 'CLAUDE_CODE'
-          # --- GitHub Token ---
-          github_token: ${{ secrets.PAT_TOKEN }}
-          # --- Contrast API Credentials ---
-          contrast_host: ${{ vars.CONTRAST_HOST }}
-          contrast_org_id: ${{ vars.CONTRAST_ORG_ID }}
-          contrast_app_id: ${{ vars.CONTRAST_APP_ID }}
-          contrast_authorization_key: ${{ secrets.CONTRAST_AUTHORIZATION_KEY }}
-          contrast_api_key: ${{ secrets.CONTRAST_API_KEY }}
-        env:
-          GITHUB_EVENT_PATH: ${{ github.event_path }}
 ```
 
 **Important:**
@@ -242,7 +202,7 @@ SmartFix collects telemetry data to help improve the service and diagnose issues
   * Ensure the that the repository / organization has GitHub Issues enabled and that the Claude Code GitHub App has been installed on the repository
   * Check the GitHub Action logs for specific error messages from the Claude Code agent.
 * **PR Creation Failures:**
-  * Ensure the `PAT_token` has the necessary permissions to create and read Actions, Issues and PRs in the repository.
+  * Ensure the `PAT_token` has the necessary permissions (Issues: read-write, Pull requests: read-write, Contents: read-write, Actions: read, Metadata: read).
   * Check for branch protection rules that might prevent PR creation.
 * **No Fixes Generated:**
   * Confirm there are eligible CRITICAL or HIGH severity vulnerabilities in Contrast Assess for the configured `contrast_app_id`. SmartFix only attempts to fix vulnerabilities that are in the REPORTED state.

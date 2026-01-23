@@ -12,13 +12,19 @@ Key Components:
 # Import classes for easy access
 try:
     from .external_coding_agent import ExternalCodingAgent  # noqa: F401
-
     __all__ = [
         "ExternalCodingAgent",
     ]
 except ImportError:
     # During development, dependencies may not be available
     __all__ = []
+
+# Import GitHub operations separately to avoid circular imports
+try:
+    from .github_operations import GitHubOperations  # noqa: F401
+    __all__.append("GitHubOperations")
+except ImportError:
+    pass
 
 # TODO: Add other GitHub components as they are implemented:
 # - GitHubScmProvider

@@ -55,10 +55,9 @@ permissions:
   pull-requests: write
 
 jobs:
-  generate_fixes:
-    name: Generate Fixes
+  run_smartfix:
+    name: SmartFix
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     steps:
       # For Claude via AWS Bedrock with IAM credentials (Option A - Recommended)
       # This step can be omitted if using another LLM provider or using Bedrock API keys (Option B).
@@ -81,7 +80,18 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Run Contrast AI SmartFix - Generate Fixes Action
+      - name: Determine SmartFix Job Type
+        id: determine_job_name
+        shell: bash
+        run: |
+          if [[ "${{ github.event.pull_request.merged }}" == "true" ]]; then
+            echo "job_name=Notify Contrast on PR Merge" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event.pull_request.merged }}" == "false" ]]; then
+            echo "job_name=Handle PR Close" >> $GITHUB_OUTPUT
+          else
+            echo "job_name=Run Contrast AI SmartFix - Generate Fixes" >> $GITHUB_OUTPUT
+          fi
+      - name: ${{ steps.determine_job_name.outputs.job_name }}
         uses: Contrast-Security-OSS/contrast-ai-smartfix-action@v1 # Replace with the latest version
         with:
           # Contrast Configuration
@@ -118,55 +128,6 @@ jobs:
           # formatting_command: 'mvn spotless:apply' # Or the command appropriate for your project to correct the formatting of SmartFix's changes.  This ensures that SmartFix follows your coding standards.
           # max_open_prs: 5 # This is the maximum limit for the number of PRs that SmartFix will have open at single time
 
-  handle_pr_merge:
-    name: Handle PR Merge
-    runs-on: ubuntu-latest
-    if: github.event.pull_request.merged == true && contains(github.event.pull_request.head.ref, 'smartfix/remediation-')
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Notify Contrast on PR Merge
-        uses: Contrast-Security-OSS/contrast-ai-smartfix-action@v1 # Replace with the latest version
-        with:
-          run_task: merge
-          # --- GitHub Token ---
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          # --- Contrast API Credentials ---
-          contrast_host: ${{ vars.CONTRAST_HOST }}
-          contrast_org_id: ${{ vars.CONTRAST_ORG_ID }}
-          contrast_app_id: ${{ vars.CONTRAST_APP_ID }}
-          contrast_authorization_key: ${{ secrets.CONTRAST_AUTHORIZATION_KEY }}
-          contrast_api_key: ${{ secrets.CONTRAST_API_KEY }}
-        env:
-          GITHUB_EVENT_PATH: ${{ github.event_path }}
-
-  handle_pr_closed:
-    name: Handle PR Close
-    runs-on: ubuntu-latest
-    if: github.event.pull_request.merged == false && contains(github.event.pull_request.head.ref, 'smartfix/remediation-')
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Notify Contrast on PR Closed
-        uses: Contrast-Security-OSS/contrast-ai-smartfix-action@v1 # Replace with the latest version
-        with:
-          run_task: closed
-          # --- GitHub Token ---
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          # --- Contrast API Credentials ---
-          contrast_host: ${{ vars.CONTRAST_HOST }}
-          contrast_org_id: ${{ vars.CONTRAST_ORG_ID }}
-          contrast_app_id: ${{ vars.CONTRAST_APP_ID }}
-          contrast_authorization_key: ${{ secrets.CONTRAST_AUTHORIZATION_KEY }}
-          contrast_api_key: ${{ secrets.CONTRAST_API_KEY }}
-        env:
-          GITHUB_EVENT_PATH: ${{ github.event_path }}
 ```
 
 **Important:**
@@ -305,7 +266,7 @@ The following are key inputs for the SmartFix GitHub Action using SmartFix Codin
 | `enable_anthropic_prompt_caching` | Enable Anthropic prompt caching for supported models (bedrock/claude and anthropic/claude). Set to 'false' if your platform doesn't support prompt caching. | No | `true` |
 | `anthropic_api_key` | Anthropic API key (if using direct Anthropic API). | No |  |
 | `aws_bearer_token_bedrock` | AWS Bedrock API Bearer Token (alternative to IAM credentials). Use with caution - less secure than IAM. | No |  |
-| `aws_region` | AWS Region for Bedrock (required when using `aws_bearer_token_bedrock`). | No |  |
+| `aws_region` | AWS Region for Bedrock (required for all Bedrock auth methods: IAM or bearer token). | No |  |
 | `gemini_api_key` | Gemini API key (if using Gemini). | No |  |
 | `build_command` | Command to build the application (for QA). | Yes, for generating fixes |  |
 | `formatting_command` | Command to format code. | No |  |

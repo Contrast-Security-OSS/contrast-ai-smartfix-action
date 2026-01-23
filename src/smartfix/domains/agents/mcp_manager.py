@@ -81,7 +81,7 @@ class MCPToolsetManager:
 
         # NPM configuration
         self.npm_cache_path = '/tmp/.npm-cache'
-        self.mcp_package = '@modelcontextprotocol/server-filesystem@2025.1.14'
+        self.mcp_package = '@modelcontextprotocol/server-filesystem@2025.11.25'
 
     async def get_tools(self, target_folder: Path, remediation_id: str) -> MCPToolset:
         """

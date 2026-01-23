@@ -24,10 +24,13 @@ When assigned to a SmartFix-created GitHub Issue describing a Contrast-discovere
 * **GitHub:** Your project must be hosted on GitHub and use GitHub Actions.  In the GitHub repository's Settings, enable the Actions > General > Workflow Permissions checkbox for "Allow GitHub Actions to create and approve pull requests".
 * **GitHub Copilot Requirements:**
   * GitHub repository with **Issues** and **GitHub Copilot** enabled
-  * GitHub Personal Access Token (PAT) with:
-    * `meta` (read permissions)
-    * `pulls` (read-write permissions)
-    * `issues` (read-write permissions)
+  * GitHub Personal Access Token (fine-grained PAT) with:
+    * **Actions**: Read (required to monitor workflow runs)
+    * **Contents**: Read and write (required to push code changes for PRs)
+    * **Issues**: Read and write (required to create issues and add labels)
+    * **Metadata**: Read (automatically included with all fine-grained PATs)
+    * **Pull requests**: Read and write (required to create PRs and add labels)
+    * **Workflows**: Read and write (required to trigger and monitor GitHub Copilot's workflow execution)
   * **Suggestion:** Set up a GitHub service account and use that to make the PAT for more explicit tracking of SmartFix's work in GitHub.
 * **Contrast API Credentials:** You will need your Contrast Host, Organization ID, Application ID, Authorization Key, and API Key.
 
@@ -60,10 +63,9 @@ on:
   workflow_dispatch: # Allows manual triggering
 
 jobs:
-  generate_fixes:
-    name: Generate Fixes
+  run_smartfix:
+    name: SmartFix
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     steps:
       # When using GitHub Copilot, it is unnecessary to authenticate with an LLM API
 
@@ -72,7 +74,18 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Run Contrast AI SmartFix - Generate Fixes Action
+      - name: Determine SmartFix Job Type
+        id: determine_job_name
+        shell: bash
+        run: |
+          if [[ "${{ github.event.pull_request.merged }}" == "true" ]]; then
+            echo "job_name=Notify Contrast on PR Merge" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event.pull_request.merged }}" == "false" ]]; then
+            echo "job_name=Handle PR Close" >> $GITHUB_OUTPUT
+          else
+            echo "job_name=Run Contrast AI SmartFix - Generate Fixes" >> $GITHUB_OUTPUT
+          fi
+      - name: ${{ steps.determine_job_name.outputs.job_name }}
         uses: Contrast-Security-OSS/contrast-ai-smartfix-action@v1 # Replace with the latest version
         with:
           # Contrast Configuration
@@ -83,62 +96,13 @@ jobs:
           contrast_api_key: ${{ secrets.CONTRAST_API_KEY }}
 
           # GitHub Configuration
-          github_token: ${{ secrets.PAT_TOKEN }} # Necessary for creating Issues and assigning to Copilot.  This token should have read permission for metadata and read-write permission for issues and pulls.  A best practice is to have an GitHub Organization service account create the PAT (an Organization admin may need to approve it)
+          github_token: ${{ secrets.PAT_TOKEN }} # Necessary for creating Issues and assigning to Copilot. This fine-grained PAT should have: Actions (read), Contents (read-write), Issues (read-write), Metadata (read), Pull requests (read-write), and Workflows (read-write). A best practice is to have a GitHub Organization service account create the PAT (an Organization admin may need to approve it).
           base_branch: '${{ github.event.repository.default_branch }}' # This will default to your repo default branch (other common base branches are 'main', 'master' or 'develop')
           coding_agent: 'GITHUB_COPILOT' # Specify the use of GitHub Copilot instead of the default SmartFix internal coding agent
 
           # Other Optional Inputs (see action.yml for defaults and more options)
           # max_open_prs: 5 # This is the maximum limit for the number of PRs that SmartFix will have open at single time
 
-  handle_pr_merge:
-    name: Handle PR Merge
-    runs-on: ubuntu-latest
-    if: github.event.pull_request.merged == true && contains(github.event.pull_request.head.ref, 'copilot/fix-')
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Notify Contrast on PR Merge
-        uses: Contrast-Security-OSS/contrast-ai-smartfix-action@v1 # Replace with the latest version
-        with:
-          run_task: merge
-          # --- GitHub Token ---
-          github_token: ${{ secrets.PAT_TOKEN }}
-          # --- Contrast API Credentials ---
-          contrast_host: ${{ vars.CONTRAST_HOST }}
-          contrast_org_id: ${{ vars.CONTRAST_ORG_ID }}
-          contrast_app_id: ${{ vars.CONTRAST_APP_ID }}
-          contrast_authorization_key: ${{ secrets.CONTRAST_AUTHORIZATION_KEY }}
-          contrast_api_key: ${{ secrets.CONTRAST_API_KEY }}
-        env:
-          GITHUB_EVENT_PATH: ${{ github.event_path }}
-
-  handle_pr_closed:
-    name: Handle PR Close
-    runs-on: ubuntu-latest
-    if: github.event.pull_request.merged == false && contains(github.event.pull_request.head.ref, 'copilot/fix-')
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Notify Contrast on PR Closed
-        uses: Contrast-Security-OSS/contrast-ai-smartfix-action@v1 # Replace with the latest version
-        with:
-          run_task: closed
-          # --- GitHub Token ---
-          github_token: ${{ secrets.PAT_TOKEN }}
-          # --- Contrast API Credentials ---
-          contrast_host: ${{ vars.CONTRAST_HOST }}
-          contrast_org_id: ${{ vars.CONTRAST_ORG_ID }}
-          contrast_app_id: ${{ vars.CONTRAST_APP_ID }}
-          contrast_authorization_key: ${{ secrets.CONTRAST_AUTHORIZATION_KEY }}
-          contrast_api_key: ${{ secrets.CONTRAST_API_KEY }}
-        env:
-          GITHUB_EVENT_PATH: ${{ github.event_path }}
 ```
 
 **Important:**
@@ -234,7 +198,7 @@ SmartFix collects telemetry data to help improve the service and diagnose issues
   * Ensure the that the repository / organization has GitHub Issues enabled and that GitHub Copilot has a seat available
   * Check the GitHub Action logs for specific error messages from the GitHub Copilot agent.
 * **PR Creation Failures:**
-  * Ensure the `PAT_token` has the necessary permissions to create and read Issues and PRs in the repository.
+  * Ensure the `PAT_token` has the necessary permissions (Actions: read, Contents: read-write, Issues: read-write, Metadata: read, Pull requests: read-write, Workflows: read-write).
   * Check for branch protection rules that might prevent PR creation.
 * **No Fixes Generated:**
   * Confirm there are eligible CRITICAL or HIGH severity vulnerabilities in Contrast Assess for the configured `contrast_app_id`. SmartFix only attempts to fix vulnerabilities that are in the REPORTED state.

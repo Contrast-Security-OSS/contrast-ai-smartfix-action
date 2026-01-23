@@ -32,10 +32,9 @@ permissions:
   pull-requests: write
 
 jobs:
-  generate_fixes:
-    name: Generate Fixes
+  run_smartfix:
+    name: SmartFix
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     steps:
       # --- Authenticating if using an LLM from AWS Bedrock ---
       # Option A: Configure AWS Credentials using IAM (Recommended for production)
@@ -56,7 +55,18 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Run Contrast AI SmartFix - Generate Fixes Action
+      - name: Determine SmartFix Job Type
+        id: determine_job_name
+        shell: bash
+        run: |
+          if [[ "${{ github.event.pull_request.merged }}" == "true" ]]; then
+            echo "job_name=Notify Contrast on PR Merge" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event.pull_request.merged }}" == "false" ]]; then
+            echo "job_name=Handle PR Close" >> $GITHUB_OUTPUT
+          else
+            echo "job_name=Run Contrast AI SmartFix - Generate Fixes" >> $GITHUB_OUTPUT
+          fi
+      - name: ${{ steps.determine_job_name.outputs.job_name }}
         uses: Contrast-Security-OSS/contrast-ai-smartfix-action@v1
         with:
           # --- Max Open PRs ---
@@ -90,59 +100,11 @@ jobs:
           # azure_api_key: ${{ secrets.AZURE_API_KEY }}
           # azure_api_base: ${{ secrets.AZURE_API_BASE }}
           # azure_api_version: ${{ secrets.AZURE_API_VERSION }}
+
           # --- Agent Configuration (Required if not using Contrast LLM) ---
           agent_model: ${{ vars.AGENT_MODEL || 'bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0' }}
+
           # Other Optional Inputs (see action.yml for defaults and more options)
           # formatting_command: 'mvn spotless:apply' # Or the command appropriate for your project to correct the formatting of SmartFix\'s changes.  This ensures that SmartFix follows your coding standards.
           # max_open_prs: 5 # This is the maximum limit for the number of PRs that SmartFix will have open at single time
           # enable_full_telemetry: 'false' # Set to false to disable full telemetry
-
-  handle_pr_merge:
-    name: Handle PR Merge
-    runs-on: ubuntu-latest
-    if: github.event.pull_request.merged == true && contains(join(github.event.pull_request.labels.*.name), 'contrast-vuln-id:VULN-')
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Notify Contrast on PR Merge
-        uses: Contrast-Security-OSS/contrast-ai-smartfix-action@v1
-        with:
-          run_task: merge
-          # --- GitHub Token ---
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          # --- Contrast API Credentials ---
-          contrast_host: ${{ vars.CONTRAST_HOST }}
-          contrast_org_id: ${{ vars.CONTRAST_ORG_ID }}
-          contrast_app_id: ${{ vars.CONTRAST_APP_ID }}
-          contrast_authorization_key: ${{ secrets.CONTRAST_AUTHORIZATION_KEY }}
-          contrast_api_key: ${{ secrets.CONTRAST_API_KEY }}
-        env:
-          GITHUB_EVENT_PATH: ${{ github.event_path }}
-
-  handle_pr_closed:
-    name: Handle PR Close
-    runs-on: ubuntu-latest
-    if: github.event.pull_request.merged == false && contains(join(github.event.pull_request.labels.*.name), 'contrast-vuln-id:VULN-')
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Notify Contrast on PR Closed
-        uses: Contrast-Security-OSS/contrast-ai-smartfix-action@v1
-        with:
-          run_task: closed
-          # --- GitHub Token ---
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          # --- Contrast API Credentials ---
-          contrast_host: ${{ vars.CONTRAST_HOST }}
-          contrast_org_id: ${{ vars.CONTRAST_ORG_ID }}
-          contrast_app_id: ${{ vars.CONTRAST_APP_ID }}
-          contrast_authorization_key: ${{ secrets.CONTRAST_AUTHORIZATION_KEY }}
-          contrast_api_key: ${{ secrets.CONTRAST_API_KEY }}
-        env:
-          GITHUB_EVENT_PATH: ${{ github.event_path }}

@@ -25,7 +25,9 @@ class TestConfigIntegration(unittest.TestCase):
             'CONTRAST_ORG_ID': 'test-org-id',
             'CONTRAST_APP_ID': 'test-app-id',
             'CONTRAST_AUTHORIZATION_KEY': 'test-auth-key',
-            'CONTRAST_API_KEY': 'test-api-key'
+            'CONTRAST_API_KEY': 'test-api-key',
+            # Use non-Bedrock model to avoid AWS validation when USE_CONTRAST_LLM=false
+            'AGENT_MODEL': 'anthropic/claude-sonnet-4-5'
         }
 
         os.environ.update(self.env_vars)
@@ -87,6 +89,9 @@ class TestConfigIntegration(unittest.TestCase):
         """Test that SMARTFIX coding agent works with USE_CONTRAST_LLM=True."""
         os.environ['CODING_AGENT'] = 'SMARTFIX'
         os.environ['USE_CONTRAST_LLM'] = 'true'
+        # Remove AGENT_MODEL to test default behavior with Contrast LLM
+        if 'AGENT_MODEL' in os.environ:
+            del os.environ['AGENT_MODEL']
         reset_config()
 
         config = get_config(testing=True)
