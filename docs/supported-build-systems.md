@@ -8,11 +8,11 @@ SmartFix uses a **three-phase detection approach** with automatic fallback:
 
 ### Phase 1: Deterministic Detection (Fast, File-Based)
 SmartFix looks for marker files (e.g., `pom.xml`, `package.json`) and generates a prioritized list of common commands for detected build systems. Each candidate command is:
-1. Validated against the security allowlist
-2. Checked for tool installation (`mvn --version`, etc.)
+1. Quickly filtered by checking if the tool exists (`mvn --version`, etc.) - skipped if tool not installed
+2. Validated against the security allowlist
 3. **Actually executed** to verify it works in your project
 
-The first command that passes all checks is used immediately.
+The first command that successfully builds your project is used immediately.
 
 ### Phase 2: LLM-Based Detection (Iterative, Context-Aware)
 If Phase 1 fails (no marker files, tools missing, or all builds fail), SmartFix uses an LLM agent to:
@@ -195,11 +195,11 @@ SmartFix can also auto-detect formatting commands:
 
 ### Phase 1 Priority (Deterministic)
 When multiple marker files are present, SmartFix generates candidates from all detected build systems and tests them in priority order. The first command that:
-1. Passes security validation (allowlist check)
-2. Has the tool installed on the system (`mvn --version` succeeds)
-3. **Successfully executes** in your project (build passes)
+1. Has the tool installed on the system (quick `mvn --version` check - just a pre-filter)
+2. Passes security validation (allowlist check)
+3. **Successfully executes** in your project (actual build must pass)
 
-...is used immediately without trying Phase 2.
+...is used immediately without trying Phase 2. The `--version` check is just a fast way to skip tools that aren't installed; the real validation is running the actual build.
 
 ### Phase 2 Fallback (LLM-Based)
 If Phase 1 fails (no working commands found), the LLM agent:
