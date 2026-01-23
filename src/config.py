@@ -87,6 +87,9 @@ class Config:
 
         # --- Build and Formatting Configuration ---
         is_build_command_required = self.RUN_TASK == "generate_fix" and is_smartfix_coding_agent
+        # Initialize MAX_COMMAND_DETECTION_ATTEMPTS early (needed by _auto_detect_build_command)
+        self.MAX_COMMAND_DETECTION_ATTEMPTS = self._get_validated_int("MAX_COMMAND_DETECTION_ATTEMPTS", default=6, min_val=0, max_val=10)
+
         # Make BUILD_COMMAND optional in tests
         if testing and "BUILD_COMMAND" not in env and is_build_command_required:
             self.BUILD_COMMAND = "echo 'Test build command'"
@@ -117,7 +120,6 @@ class Config:
         self.MAX_QA_ATTEMPTS = self._get_validated_int("MAX_QA_ATTEMPTS", default=6, min_val=0, max_val=10)
         self.MAX_OPEN_PRS = self._get_validated_int("MAX_OPEN_PRS", default=5, min_val=0)
         self.MAX_EVENTS_PER_AGENT = self._get_validated_int("MAX_EVENTS_PER_AGENT", default=120, min_val=10, max_val=500)
-        self.MAX_COMMAND_DETECTION_ATTEMPTS = self._get_validated_int("MAX_COMMAND_DETECTION_ATTEMPTS", default=6, min_val=0, max_val=10)
 
         # --- GitHub Configuration ---
         if testing:
@@ -263,19 +265,11 @@ class Config:
             NO_OP_BUILD_COMMAND
         )
 
-        # Read MAX_COMMAND_DETECTION_ATTEMPTS early (before it's set as attribute)
-        max_llm_attempts = self._get_validated_int(
-            "MAX_COMMAND_DETECTION_ATTEMPTS",
-            default=6,
-            min_val=0,
-            max_val=10
-        )
-
         try:
             command = detect_build_command_with_fallback(
                 repo_root=self.REPO_ROOT,
                 project_dir=None,  # TODO: Add project_dir support for monorepos
-                max_llm_attempts=max_llm_attempts,
+                max_llm_attempts=self.MAX_COMMAND_DETECTION_ATTEMPTS,
                 remediation_id="config-init"
             )
 
