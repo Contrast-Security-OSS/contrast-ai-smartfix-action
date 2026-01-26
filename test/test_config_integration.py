@@ -405,8 +405,8 @@ class TestCommandAutoDetection(unittest.TestCase):
 
         # Detection should be called
         mock_detect.assert_called_once()
-        # Validation should be called with the detected command (among other calls)
-        mock_validate.assert_any_call('BUILD_COMMAND', 'mvn test')
+        # Validation should be called with the detected command and ai_detected source
+        mock_validate.assert_any_call('BUILD_COMMAND', 'mvn test', source='ai_detected')
         # Config should have the validated command
         self.assertEqual(config.BUILD_COMMAND, 'mvn test')
 

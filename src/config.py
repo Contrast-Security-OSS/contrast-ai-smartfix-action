@@ -101,20 +101,30 @@ class Config:
             if not self.BUILD_COMMAND and not testing and is_build_command_required:
                 # Orchestrator always returns valid string (real command or no-op fallback)
                 self.BUILD_COMMAND = self._auto_detect_build_command()
+                # Mark as auto-detected for proper validation
+                self._build_command_source = "ai_detected"
+            else:
+                # Command from environment/config (trusted source)
+                self._build_command_source = "config"
 
         # Validate BUILD_COMMAND if present
         if not testing and self.BUILD_COMMAND:
-            self._validate_command("BUILD_COMMAND", self.BUILD_COMMAND)
+            self._validate_command("BUILD_COMMAND", self.BUILD_COMMAND, source=self._build_command_source)
 
         self.FORMATTING_COMMAND = self._get_env_var("FORMATTING_COMMAND", required=False)
 
         # Auto-detect formatting command if not provided (optional, never required)
         if not self.FORMATTING_COMMAND and not testing:
             self.FORMATTING_COMMAND = self._auto_detect_format_command()
+            # Mark as auto-detected for proper validation
+            self._format_command_source = "ai_detected"
+        else:
+            # Command from environment/config (trusted source)
+            self._format_command_source = "config"
 
         # Validate FORMATTING_COMMAND if present
         if not testing and self.FORMATTING_COMMAND:
-            self._validate_command("FORMATTING_COMMAND", self.FORMATTING_COMMAND)
+            self._validate_command("FORMATTING_COMMAND", self.FORMATTING_COMMAND, source=self._format_command_source)
 
         # --- Validated and normalized settings ---
         self.MAX_QA_ATTEMPTS = self._get_validated_int("MAX_QA_ATTEMPTS", default=6, min_val=0, max_val=10)

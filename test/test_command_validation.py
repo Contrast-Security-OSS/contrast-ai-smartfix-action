@@ -86,6 +86,13 @@ class TestAllowedCommands(unittest.TestCase):
         for cmd in valid_commands:
             validate_command("BUILD_COMMAND", cmd)  # Should not raise
 
+    def test_noop_fallback_command(self):
+        """Test that the no-op fallback command passes validation."""
+        from src.smartfix.config.command_detection_orchestrator import NO_OP_BUILD_COMMAND
+        # The no-op fallback is returned when detection fails
+        # It must pass validation since it goes through ai_detected source
+        validate_command("BUILD_COMMAND", NO_OP_BUILD_COMMAND)  # Should not raise
+
 
 class TestCommandChaining(unittest.TestCase):
     """Test commands with operators."""
