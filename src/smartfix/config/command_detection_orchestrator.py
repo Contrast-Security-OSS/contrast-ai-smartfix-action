@@ -33,7 +33,6 @@ from pathlib import Path
 from typing import Optional
 
 from src.smartfix.config.command_detector import detect_build_command
-from src.smartfix.domains.agents.command_detection_agent import CommandDetectionAgent
 
 
 logger = logging.getLogger(__name__)
@@ -143,6 +142,10 @@ def detect_build_command_with_fallback(
     logger.info("Starting Phase 2: LLM-based build command detection")
 
     try:
+        # Lazy import to avoid circular dependency
+        # (config → orchestrator → CommandDetectionAgent → sub_agent_executor → config)
+        from src.smartfix.domains.agents.command_detection_agent import CommandDetectionAgent
+
         build_files = _collect_build_files(repo_root, project_dir)
 
         if build_files:
