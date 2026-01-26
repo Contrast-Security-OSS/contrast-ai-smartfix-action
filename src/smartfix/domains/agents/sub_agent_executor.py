@@ -488,16 +488,17 @@ class SubAgentExecutor:
             debug_log(f"Could not retrieve statistics: {e}")
             return 0, 0.0
 
-    def execute_detection(self, prompt: str) -> str:
+    def execute_detection(self, prompt: str, target_folder: Path, remediation_id: str) -> str:
         """
-        Execute command detection using LLM.
+        Execute command detection using LLM with filesystem access.
 
-        Simplified execution for command detection that doesn't require
-        the full agent framework or MCP tools. Synchronously calls the LLM
-        to analyze project structure and suggest build commands.
+        Creates a full agent with filesystem MCP tools to allow the agent to
+        explore build files and project structure when suggesting commands.
 
         Args:
             prompt: The detection prompt with project structure and error history
+            target_folder: Path to the project folder for filesystem access
+            remediation_id: Remediation ID for error tracking
 
         Returns:
             str: The suggested command from the LLM
@@ -506,17 +507,22 @@ class SubAgentExecutor:
             AgentExecutionError: If LLM call fails
         """
         # Run the async implementation synchronously
-        return asyncio.run(self._execute_detection_async(prompt))
+        return asyncio.run(self._execute_detection_async(prompt, target_folder, remediation_id))
 
-    async def _execute_detection_async(self, prompt: str) -> str:
+    async def _execute_detection_async(self, prompt: str, target_folder: Path, remediation_id: str) -> str:
         """
         Async implementation of command detection.
 
-        Creates a minimal LLM model instance and makes a direct completion call
-        without the overhead of the full agent framework.
+        Creates a full agent with filesystem MCP tools to allow exploration
+        of build files and project structure when suggesting commands.
         """
         # System prompt for command detection
         system_prompt = """You are a build command detection expert. Your task is to analyze project structure and error messages to suggest appropriate build/test commands.
+
+You have access to filesystem tools to explore the project. Use them to:
+- Read build configuration files (pom.xml, package.json, build.gradle, etc.)
+- Check for wrapper scripts (mvnw, gradlew)
+- Understand the project structure and dependencies
 
 Rules:
 - Respond with ONLY the command, no explanations or markdown
@@ -528,35 +534,35 @@ Rules:
 - The command must be safe and from the standard build tool set"""
 
         try:
-            # Create a minimal model instance without MCP tools
-            if hasattr(self.config, 'USE_CONTRAST_LLM') and self.config.USE_CONTRAST_LLM:
-                setup_contrast_provider()
-                model_instance = SmartFixLiteLlm(
-                    model=CONTRAST_CLAUDE_SONNET_4_5,
-                    temperature=0.0,  # Deterministic for command detection
-                    extra_headers={
-                        "Api-Key": f"{self.config.CONTRAST_API_KEY}",
-                        "Authorization": f"{self.config.CONTRAST_AUTHORIZATION_KEY}",
-                    }
-                )
-            else:
-                model_instance = SmartFixLiteLlm(
-                    model=self.config.AGENT_MODEL,
-                    temperature=0.0,  # Deterministic for command detection
-                )
-
-            # Make direct completion call
-            response = await model_instance.acompletion(
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": prompt}
-                ]
+            # Create a detection agent with filesystem access
+            agent = await self.create_agent(
+                target_folder=target_folder,
+                remediation_id=remediation_id,
+                session_id="command-detection",
+                agent_type="detection",
+                system_prompt=system_prompt
             )
 
-            # Extract the command from the response
-            suggested_command = response.choices[0].message.content.strip()
+            if not agent:
+                raise RuntimeError("Failed to create detection agent")
+
+            # Create runner and session for the agent
+            from google.adk.agents import Runner
+            runner = Runner(agent)
+            session = runner.create_session()
+
+            # Execute the agent with the detection prompt
+            response = await self.execute_agent(
+                runner=runner,
+                agent=agent,
+                session=session,
+                user_query=prompt,
+                remediation_id=remediation_id,
+                agent_type="detection"
+            )
 
             # Clean up any markdown code blocks if present
+            suggested_command = response.strip()
             if suggested_command.startswith("```"):
                 lines = suggested_command.split("\n")
                 # Remove first and last lines (the ``` markers)

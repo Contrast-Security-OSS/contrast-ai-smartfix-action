@@ -217,7 +217,7 @@ class TestCommandDetectionAgent(unittest.TestCase):
         self.assertEqual(result, "mvn test")
         self.assertEqual(mock_executor.execute_detection.call_count, 2)
         # Second call should include first failed attempt in prompt
-        second_call_prompt = mock_executor.execute_detection.call_args_list[1][0][0]
+        second_call_prompt = mock_executor.execute_detection.call_args_list[1][1]['prompt']
         self.assertIn("rm -rf /", second_call_prompt)
         self.assertIn("Dangerous command", second_call_prompt)
 
@@ -254,7 +254,7 @@ class TestCommandDetectionAgent(unittest.TestCase):
         self.assertEqual(result, "mvn test")
         self.assertEqual(mock_executor.execute_detection.call_count, 2)
         # Second call should include first failed attempt with build error
-        second_call_prompt = mock_executor.execute_detection.call_args_list[1][0][0]
+        second_call_prompt = mock_executor.execute_detection.call_args_list[1][1]['prompt']
         self.assertIn("mvn clean", second_call_prompt)
         self.assertIn("No tests found", second_call_prompt)
 
@@ -315,7 +315,8 @@ class TestCommandDetectionAgent(unittest.TestCase):
 
         # Verify Phase 1 failures are in first LLM prompt
         mock_executor.execute_detection.assert_called_once()
-        first_prompt = mock_executor.execute_detection.call_args[0][0]
+        # execute_detection now takes (prompt, target_folder, remediation_id)
+        first_prompt = mock_executor.execute_detection.call_args[1]['prompt']
         self.assertIn("Previous attempts", first_prompt)
         self.assertIn("mvn test", first_prompt)
         self.assertIn("mvn: command not found", first_prompt)
@@ -363,14 +364,14 @@ class TestCommandDetectionAgent(unittest.TestCase):
 
         # Verify validation failure was added to history
         # Check second prompt includes validation failure
-        second_prompt = mock_executor.execute_detection.call_args_list[1][0][0]
+        second_prompt = mock_executor.execute_detection.call_args_list[1][1]['prompt']
         self.assertIn("rm -rf /", second_prompt)
         self.assertIn("Command validation failed", second_prompt)
         self.assertIn("Dangerous command", second_prompt)
 
         # Verify build failure was also added to history
         # Check third prompt includes both failures with consistent formatting
-        third_prompt = mock_executor.execute_detection.call_args_list[2][0][0]
+        third_prompt = mock_executor.execute_detection.call_args_list[2][1]['prompt']
         self.assertIn("rm -rf /", third_prompt)
         self.assertIn("mvn clean", third_prompt)
         # Verify consistent error format for both types of failures
@@ -429,7 +430,7 @@ class TestCommandDetectionAgent(unittest.TestCase):
         # Should still attempt detection (LLM might know what to do)
         mock_executor.execute_detection.assert_called_once()
         # Prompt should handle empty build_files gracefully
-        first_prompt = mock_executor.execute_detection.call_args[0][0]
+        first_prompt = mock_executor.execute_detection.call_args[1]['prompt']
         self.assertIn("Build system files detected", first_prompt)
         # Should return None after exhausting attempts with invalid command
         self.assertIsNone(result)

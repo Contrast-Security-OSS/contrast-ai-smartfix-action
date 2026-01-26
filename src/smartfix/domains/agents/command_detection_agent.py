@@ -121,8 +121,12 @@ class CommandDetectionAgent:
             # Build prompt for current iteration
             prompt = self._build_iteration_prompt(build_files, attempt_history)
 
-            # Call LLM agent to get suggested command
-            suggested_command = executor.execute_detection(prompt)
+            # Call LLM agent to get suggested command (with filesystem access)
+            suggested_command = executor.execute_detection(
+                prompt=prompt,
+                target_folder=self.repo_root,
+                remediation_id=remediation_id
+            )
 
             # Validate suggested command
             try:
