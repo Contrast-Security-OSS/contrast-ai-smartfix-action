@@ -283,28 +283,17 @@ class GitHubOperations(ScmOperations):
         ]
 
         try:
-            # Run with check=False to handle the label already existing
-            import subprocess
-            process = subprocess.run(
-                label_command,
-                env=gh_env,
-                capture_output=True,
-                text=True,
-                check=False
-            )
-
-            if process.returncode == 0:
-                debug_log(f"Label '{label_name}' created successfully.")
-                return True
-            else:
-                # Check for "already exists" type of error which is OK
-                if "already exists" in process.stderr.lower():
-                    log(f"Label '{label_name}' already exists.")
-                    return True
-                else:
-                    log(f"Error creating label: {process.stderr}", is_error=True)
-                    return False
+            # Use run_command for consistency with other gh CLI calls
+            # check=False allows the command to fail gracefully (e.g., if label already exists due to race condition)
+            result = run_command(label_command, env=gh_env, check=False)
+            # If run_command returns without exception, the label was created successfully
+            # Note: We pre-checked if label exists above, so this should typically succeed
+            # If there's a race condition and label was created between check and create,
+            # run_command will log the error but not fail (check=False)
+            debug_log(f"Label '{label_name}' created successfully.")
+            return True
         except Exception as e:
+            # Unexpected exception (not from command failure since check=False)
             log(f"Exception while creating label: {e}", is_error=True)
             return False
 

@@ -399,11 +399,13 @@ class TestGitHubOperations(unittest.TestCase):
     @patch('src.github.github_operations.run_command')
     def test_add_labels_to_pr_success(self, mock_run_command, mock_subprocess_run):
         """Test adding labels to PR successfully."""
-        # Mock ensure_label checking for existing labels
+        # Mock ensure_label checking and creating labels
         mock_run_command.side_effect = [
-            json.dumps([]),  # First label doesn't exist
-            json.dumps([]),  # Second label doesn't exist
-            "Success"  # Final add labels command
+            json.dumps([]),  # Check if label1 exists (doesn't)
+            "Created",       # Create label1
+            json.dumps([]),  # Check if label2 exists (doesn't)
+            "Created",       # Create label2
+            "Success"        # Final add labels command
         ]
         mock_subprocess_run.return_value = MagicMock(returncode=0)
 
@@ -416,18 +418,14 @@ class TestGitHubOperations(unittest.TestCase):
         """Test adding labels to PR with failure."""
         # Mock ensure_label succeeding (label list + create), but final add_labels failing
         mock_run_command.side_effect = [
-            json.dumps([]),  # Label check for label1
-            None  # Add labels command fails (raises exception)
+            json.dumps([]),  # Check if label1 exists (doesn't)
+            "Created",       # Create label1
+            Exception("Failed to add labels")  # Final add labels command fails
         ]
         mock_subprocess_run.return_value = MagicMock(returncode=0)
 
-        # The final add_labels command should raise an exception and be caught
-        with patch('src.github.github_operations.run_command', side_effect=[
-            json.dumps([]),  # Label check
-            Exception("Failed to add labels")  # Final command fails
-        ]):
-            result = self.github_ops.add_labels_to_pr(123, ["label1"])
-            self.assertFalse(result)
+        result = self.github_ops.add_labels_to_pr(123, ["label1"])
+        self.assertFalse(result)
 
     @patch('src.github.github_operations.run_command')
     def test_get_issue_comments_all(self, mock_run_command):
@@ -900,7 +898,9 @@ class TestGitHubOperations(unittest.TestCase):
         mock_run_command.side_effect = [
             "[]",  # check_issues_enabled
             json.dumps([]),  # ensure_label for vuln (check)
+            "Created",       # ensure_label for vuln (create)
             json.dumps([]),  # ensure_label for remediation (check)
+            "Created",       # ensure_label for remediation (create)
             "https://github.com/test/repo/issues/789"  # create issue
         ]
         mock_subprocess_run.return_value = MagicMock(returncode=0)
@@ -998,14 +998,17 @@ class TestGitHubOperations(unittest.TestCase):
         # 1. check_issues_enabled
         # 2. find_open_pr_for_issue (no PR)
         # 3. get current labels
-        # 4. ensure_label (check)
-        # 5. add label command
-        # 6. comment command
+        # 4. remove old label
+        # 5. ensure_label (check)
+        # 6. ensure_label (create)
+        # 7. add new label command
+        # 8. comment command
         mock_run_command.side_effect = [
             "[]",  # check_issues_enabled
             json.dumps({"labels": [{"name": "smartfix-id:old-rem"}]}),  # get labels
             "Success",  # remove old label
             json.dumps([]),  # ensure_label check
+            "Created",  # ensure_label create
             "Success",  # add new label
             "Comment added"  # add comment
         ]
