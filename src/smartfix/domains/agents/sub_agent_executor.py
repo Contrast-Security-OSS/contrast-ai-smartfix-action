@@ -70,6 +70,23 @@ class SubAgentExecutor:
         self.max_events = max_events or self.config.MAX_EVENTS_PER_AGENT
         self.mcp_manager = MCPToolsetManager()
 
+    def _load_command_detection_prompt(self) -> str:
+        """
+        Load command detection system prompt from file.
+
+        Returns:
+            str: System prompt for command detection agent
+        """
+        prompt_path = Path(__file__).parent / "prompts" / "command_detection_system_prompt.txt"
+        try:
+            with open(prompt_path, 'r', encoding='utf-8') as f:
+                return f.read()
+        except FileNotFoundError:
+            # Fallback to basic prompt if file not found
+            log(f"Warning: Command detection prompt file not found at {prompt_path}", is_error=True)
+            return """You are a build command detection expert. Analyze project structure and suggest appropriate build/test commands.
+Respond with ONLY the command, no explanations."""
+
     async def create_agent(
         self,
         target_folder: Path,
@@ -516,22 +533,8 @@ class SubAgentExecutor:
         Creates a full agent with filesystem MCP tools to allow exploration
         of build files and project structure when suggesting commands.
         """
-        # System prompt for command detection
-        system_prompt = """You are a build command detection expert. Your task is to analyze project structure and error messages to suggest appropriate build/test commands.
-
-You have access to filesystem tools to explore the project. Use them to:
-- Read build configuration files (pom.xml, package.json, build.gradle, etc.)
-- Check for wrapper scripts (mvnw, gradlew)
-- Understand the project structure and dependencies
-
-Rules:
-- Respond with ONLY the command, no explanations or markdown
-- Use standard commands: mvn test, npm test, pytest, ./gradlew test, dotnet test, etc.
-- For Maven: prefer ./mvnw over mvn if wrapper exists
-- For Gradle: prefer ./gradlew over gradle if wrapper exists
-- For Node.js: use npm ci && npm test (or yarn/pnpm equivalent)
-- Consider previous failures and adjust your suggestion accordingly
-- The command must be safe and from the standard build tool set"""
+        # Load comprehensive system prompt from file
+        system_prompt = self._load_command_detection_prompt()
 
         try:
             # Create a detection agent with filesystem access
