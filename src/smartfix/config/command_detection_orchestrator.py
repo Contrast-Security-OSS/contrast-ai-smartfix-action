@@ -33,12 +33,41 @@ from pathlib import Path
 from typing import Optional
 
 from src.smartfix.config.command_detector import detect_build_command
+from src.smartfix.domains.agents.command_detection_agent import CommandDetectionAgent
 
 
 logger = logging.getLogger(__name__)
 
 # No-op build command constant for when detection fails
 NO_OP_BUILD_COMMAND = "echo 'No build command detected - using no-op'"
+
+
+def _collect_build_files(repo_root: Path, project_dir: Optional[Path] = None) -> list[str]:
+    """
+    Collect build configuration files from the project for LLM analysis.
+
+    Args:
+        repo_root: Repository root directory
+        project_dir: Optional subdirectory for monorepo projects
+
+    Returns:
+        List of relative paths to build configuration files
+    """
+    search_dir = project_dir if project_dir else repo_root
+    build_files = []
+
+    markers = [
+        'pom.xml', 'build.gradle', 'build.gradle.kts', 'package.json',
+        'Makefile', 'pytest.ini', 'setup.py', 'pyproject.toml'
+    ]
+
+    for marker in markers:
+        marker_path = search_dir / marker
+        if marker_path.exists():
+            rel_path = marker_path.relative_to(repo_root)
+            build_files.append(str(rel_path))
+
+    return build_files
 
 
 def detect_build_command_with_fallback(
@@ -110,22 +139,31 @@ def detect_build_command_with_fallback(
         logger.warning("Phase 1 failed: No suitable build commands found in project structure")
 
     # Phase 2: LLM-based detection
-    # TODO: Implement Phase 2 LLM detection integration
-    # This will be implemented in bead contrast-ai-smartfix-action-9yb
-    #
-    # When implemented, this will:
-    # 1. Collect build_files from project structure
-    # 2. Initialize CommandDetectionAgent with max_llm_attempts and remediation_id
-    # 3. Pass phase1_failures to agent.detect() as failed_attempts parameter
-    # 4. Run iterative LLM detection with error feedback from Phase 1 + Phase 2 attempts
-    # 5. Return detected command or None after max_attempts
+    # Use LLM agent with filesystem access to analyze project and refine commands
     logger.info("Starting Phase 2: LLM-based build command detection")
-    phase2_result = None  # Placeholder for Phase 2 implementation
 
-    # When Phase 2 is implemented, it will receive phase1_failures:
-    # phase2_result = CommandDetectionAgent(
-    #     repo_root, project_dir, max_llm_attempts
-    # ).detect(build_files, phase1_failures, remediation_id)
+    try:
+        build_files = _collect_build_files(repo_root, project_dir)
+
+        if build_files:
+            logger.info(f"Collected {len(build_files)} build file(s) for LLM analysis: {build_files}")
+        else:
+            logger.warning("No build files found - LLM will explore filesystem directly")
+
+        detection_agent = CommandDetectionAgent(
+            repo_root=repo_root,
+            project_dir=project_dir,
+            max_attempts=max_llm_attempts
+        )
+
+        phase2_result = detection_agent.detect(
+            build_files=build_files,
+            failed_attempts=phase1_failures,
+            remediation_id=remediation_id
+        )
+    except Exception as e:
+        logger.error(f"Phase 2 detection failed with exception: {e}")
+        phase2_result = None
 
     if phase2_result:
         # Phase 2 succeeded - return LLM-detected command
