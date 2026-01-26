@@ -285,7 +285,7 @@ class GitHubOperations(ScmOperations):
         try:
             # Use run_command for consistency with other gh CLI calls
             # check=False allows the command to fail gracefully (e.g., if label already exists due to race condition)
-            result = run_command(label_command, env=gh_env, check=False)
+            run_command(label_command, env=gh_env, check=False)
             # If run_command returns without exception, the label was created successfully
             # Note: We pre-checked if label exists above, so this should typically succeed
             # If there's a race condition and label was created between check and create,
