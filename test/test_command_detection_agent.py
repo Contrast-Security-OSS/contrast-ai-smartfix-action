@@ -106,9 +106,9 @@ class TestCommandDetectionAgent(unittest.TestCase):
         # Should return None instead of raising exception
         self.assertIsNone(result)
 
-    @patch('src.smartfix.domains.agents.command_detection_agent.logger')
+    @patch('src.smartfix.domains.agents.command_detection_agent.log')
     @patch('src.smartfix.domains.agents.command_detection_agent.SubAgentExecutor')
-    def test_detect_logs_build_files_on_exhaustion(self, mock_executor_class, mock_logger):
+    def test_detect_logs_build_files_on_exhaustion(self, mock_executor_class, mock_log):
         """Test logging includes build files context when exhausted."""
         # Mock executor to return invalid command
         mock_executor = Mock()
@@ -126,14 +126,17 @@ class TestCommandDetectionAgent(unittest.TestCase):
         # Should return None
         self.assertIsNone(result)
         # Should log warning with build files
-        mock_logger.warning.assert_called_once()
-        warning_msg = mock_logger.warning.call_args[0][0]
+        # Find the warning call (with is_warning=True)
+        warning_calls = [call for call in mock_log.call_args_list
+                         if len(call[0]) > 0 and "pom.xml" in call[0][0]]
+        self.assertTrue(len(warning_calls) > 0)
+        warning_msg = warning_calls[0][0][0]
         self.assertIn("pom.xml", warning_msg)
         self.assertIn("build.gradle", warning_msg)
 
-    @patch('src.smartfix.domains.agents.command_detection_agent.logger')
+    @patch('src.smartfix.domains.agents.command_detection_agent.log')
     @patch('src.smartfix.domains.agents.command_detection_agent.SubAgentExecutor')
-    def test_detect_logs_last_attempt_details(self, mock_executor_class, mock_logger):
+    def test_detect_logs_last_attempt_details(self, mock_executor_class, mock_log):
         """Test logging includes last failed attempt details when exhausted."""
         # Mock executor to return invalid command
         mock_executor = Mock()
@@ -153,8 +156,11 @@ class TestCommandDetectionAgent(unittest.TestCase):
         # Should return None
         self.assertIsNone(result)
         # Should log warning with last attempt details
-        mock_logger.warning.assert_called_once()
-        warning_msg = mock_logger.warning.call_args[0][0]
+        # Find the warning call (with is_warning=True)
+        warning_calls = [call for call in mock_log.call_args_list
+                         if len(call[0]) > 0 and "Last attempt:" in call[0][0]]
+        self.assertTrue(len(warning_calls) > 0)
+        warning_msg = warning_calls[0][0][0]
         self.assertIn("Last attempt:", warning_msg)
         self.assertIn("Last error:", warning_msg)
 
@@ -258,11 +264,11 @@ class TestCommandDetectionAgent(unittest.TestCase):
         self.assertIn("mvn clean", second_call_prompt)
         self.assertIn("No tests found", second_call_prompt)
 
-    @patch('src.smartfix.domains.agents.command_detection_agent.logger')
+    @patch('src.smartfix.domains.agents.command_detection_agent.log')
     @patch('src.smartfix.domains.agents.command_detection_agent.run_build_command')
     @patch('src.smartfix.domains.agents.command_detection_agent.validate_command')
     @patch('src.smartfix.domains.agents.command_detection_agent.SubAgentExecutor')
-    def test_detect_exhausts_max_attempts(self, mock_executor_class, mock_validate, mock_run_build, mock_logger):
+    def test_detect_exhausts_max_attempts(self, mock_executor_class, mock_validate, mock_run_build, mock_log):
         """Test agent returns None and logs after exhausting max attempts."""
         # Setup mocks - all attempts fail validation
         mock_executor = Mock()
@@ -286,8 +292,11 @@ class TestCommandDetectionAgent(unittest.TestCase):
         # Should return None
         self.assertIsNone(result)
         # Should log warning with attempt details
-        mock_logger.warning.assert_called_once()
-        warning_msg = mock_logger.warning.call_args[0][0]
+        # Find the warning call (with is_warning=True)
+        warning_calls = [call for call in mock_log.call_args_list
+                         if len(call[0]) > 0 and "2 attempts" in call[0][0]]
+        self.assertTrue(len(warning_calls) > 0)
+        warning_msg = warning_calls[0][0][0]
         self.assertIn("2 attempts", warning_msg)
         self.assertIn("invalid command", warning_msg)
 

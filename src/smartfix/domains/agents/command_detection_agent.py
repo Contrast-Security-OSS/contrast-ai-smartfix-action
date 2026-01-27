@@ -25,7 +25,6 @@ project structure and iteratively refining suggestions based on
 execution failures.
 """
 
-import logging
 from pathlib import Path
 
 from src.smartfix.config.command_validator import (
@@ -35,9 +34,7 @@ from src.smartfix.config.command_validator import (
 from src.smartfix.domains.agents.sub_agent_executor import SubAgentExecutor
 from src.smartfix.domains.workflow.build_runner import run_build_command
 from src.build_output_analyzer import extract_build_errors
-
-
-logger = logging.getLogger(__name__)
+from src.utils import log
 
 
 class CommandDetectionError(Exception):
@@ -233,4 +230,4 @@ class CommandDetectionAgent:
             warning_parts.append(f"Last error: {last_attempt['error'][:200]}...")  # Truncate long errors
 
         # Log as warning
-        logger.warning(" | ".join(warning_parts))
+        log(" | ".join(warning_parts), is_warning=True)

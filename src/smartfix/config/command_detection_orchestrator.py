@@ -28,14 +28,11 @@ Coordinates two-phase detection approach:
 Always returns a command string - never None or raises exceptions.
 """
 
-import logging
 from pathlib import Path
 from typing import Optional
 
 from src.smartfix.config.command_detector import detect_build_command
-
-
-logger = logging.getLogger(__name__)
+from src.utils import log
 
 # No-op build command constant for when detection fails
 NO_OP_BUILD_COMMAND = "echo 'No build command detected - using no-op'"
@@ -110,7 +107,7 @@ def detect_build_command_with_fallback(
     """
     # Phase 1: Deterministic Detection
     # File marker-based detection with actual build testing
-    logger.info("Starting Phase 1: Deterministic build command detection")
+    log("Starting Phase 1: Deterministic build command detection")
 
     try:
         phase1_command, phase1_failures = detect_build_command(
@@ -119,27 +116,28 @@ def detect_build_command_with_fallback(
             remediation_id
         )
     except Exception as e:
-        logger.error(f"Phase 1 detection failed with exception: {e}")
+        log(f"Phase 1 detection failed with exception: {e}", is_error=True)
         phase1_command = None
         phase1_failures = []
 
     if phase1_command:
         # Phase 1 succeeded - return detected command
-        logger.info(f"Phase 1 succeeded: Detected BUILD_COMMAND: {phase1_command}")
+        log(f"Phase 1 succeeded: Detected BUILD_COMMAND: {phase1_command}")
         return phase1_command
 
     # Phase 1 failed - log failure count and proceed to Phase 2
     if phase1_failures:
-        logger.warning(
+        log(
             f"Phase 1 failed: Tested {len(phase1_failures)} candidate(s), all failed. "
-            "Proceeding to Phase 2 with failure history."
+            "Proceeding to Phase 2 with failure history.",
+            is_warning=True
         )
     else:
-        logger.warning("Phase 1 failed: No suitable build commands found in project structure")
+        log("Phase 1 failed: No suitable build commands found in project structure", is_warning=True)
 
     # Phase 2: LLM-based detection
     # Use LLM agent with filesystem access to analyze project and refine commands
-    logger.info("Starting Phase 2: LLM-based build command detection")
+    log("Starting Phase 2: LLM-based build command detection")
 
     try:
         # Lazy import to avoid circular dependency
@@ -149,9 +147,9 @@ def detect_build_command_with_fallback(
         build_files = _collect_build_files(repo_root, project_dir)
 
         if build_files:
-            logger.info(f"Collected {len(build_files)} build file(s) for LLM analysis: {build_files}")
+            log(f"Collected {len(build_files)} build file(s) for LLM analysis: {build_files}")
         else:
-            logger.warning("No build files found - LLM will explore filesystem directly")
+            log("No build files found - LLM will explore filesystem directly", is_warning=True)
 
         detection_agent = CommandDetectionAgent(
             repo_root=repo_root,
@@ -165,17 +163,18 @@ def detect_build_command_with_fallback(
             remediation_id=remediation_id
         )
     except Exception as e:
-        logger.error(f"Phase 2 detection failed with exception: {e}")
+        log(f"Phase 2 detection failed with exception: {e}", is_error=True)
         phase2_result = None
 
     if phase2_result:
         # Phase 2 succeeded - return LLM-detected command
-        logger.info(f"Phase 2 succeeded: Detected BUILD_COMMAND: {phase2_result}")
+        log(f"Phase 2 succeeded: Detected BUILD_COMMAND: {phase2_result}")
         return phase2_result
 
     # Both phases failed - return no-op fallback
     # This ensures callers always get a valid command string
-    logger.warning(
-        f"Both detection phases failed. Using no-op fallback: {NO_OP_BUILD_COMMAND}"
+    log(
+        f"Both detection phases failed. Using no-op fallback: {NO_OP_BUILD_COMMAND}",
+        is_warning=True
     )
     return NO_OP_BUILD_COMMAND
