@@ -30,7 +30,6 @@ import re
 from pathlib import Path
 from typing import Optional
 
-from src.config import get_config
 from src.utils import debug_log, log, error_exit, tail_string
 from src.smartfix.shared.failure_categories import FailureCategory
 import src.telemetry_handler as telemetry_handler
@@ -66,6 +65,9 @@ class SubAgentExecutor:
         Args:
             max_events: Maximum events per agent execution (defaults to config value)
         """
+        # Lazy import to avoid circular dependency with config module
+        from src.config import get_config
+
         self.config = get_config()
         self.max_events = max_events or self.config.MAX_EVENTS_PER_AGENT
         self.mcp_manager = MCPToolsetManager()

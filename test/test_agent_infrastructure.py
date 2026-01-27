@@ -165,7 +165,7 @@ class TestSubAgentExecutor(unittest.TestCase):
 
     @patch('src.smartfix.domains.agents.sub_agent_executor.SmartFixLlmAgent')
     @patch('src.smartfix.domains.agents.sub_agent_executor.SmartFixLiteLlm')
-    @patch('src.smartfix.domains.agents.sub_agent_executor.get_config')
+    @patch('src.config.get_config')
     def test_create_agent_success(self, mock_get_config, mock_litellm, mock_agent):
         """Test successful agent creation."""
         # Mock config
@@ -197,7 +197,7 @@ class TestSubAgentExecutor(unittest.TestCase):
 
     @patch('src.smartfix.domains.agents.sub_agent_executor.SmartFixLlmAgent')
     @patch('src.smartfix.domains.agents.sub_agent_executor.SmartFixLiteLlm')
-    @patch('src.smartfix.domains.agents.sub_agent_executor.get_config')
+    @patch('src.config.get_config')
     def test_create_agent_with_contrast_llm(self, mock_get_config, mock_litellm, mock_agent):
         """Test agent creation with Contrast LLM configuration."""
         # Mock config with Contrast LLM enabled
@@ -239,7 +239,7 @@ class TestSubAgentExecutor(unittest.TestCase):
         self.assertEqual(headers['x-contrast-llm-session-id'], 'session-456')
 
     @patch('src.smartfix.domains.agents.sub_agent_executor.error_exit')
-    @patch('src.smartfix.domains.agents.sub_agent_executor.get_config')
+    @patch('src.config.get_config')
     def test_create_agent_no_mcp_tools(self, mock_get_config, mock_error_exit):
         """Test agent creation fails when no MCP tools available."""
         # Mock config
@@ -260,7 +260,7 @@ class TestSubAgentExecutor(unittest.TestCase):
         mock_error_exit.assert_called()
 
     @patch('src.smartfix.domains.agents.sub_agent_executor.error_exit')
-    @patch('src.smartfix.domains.agents.sub_agent_executor.get_config')
+    @patch('src.config.get_config')
     def test_create_agent_no_system_prompt(self, mock_get_config, mock_error_exit):
         """Test agent creation fails when no system prompt provided."""
         # Mock config
