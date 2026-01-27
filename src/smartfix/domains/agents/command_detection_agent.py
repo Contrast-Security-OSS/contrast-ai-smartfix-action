@@ -31,7 +31,6 @@ from src.smartfix.config.command_validator import (
     validate_command,
     CommandValidationError,
 )
-from src.smartfix.domains.agents.sub_agent_executor import SubAgentExecutor
 from src.smartfix.domains.workflow.build_runner import run_build_command
 from src.build_output_analyzer import extract_build_errors
 from src.utils import log
@@ -109,6 +108,9 @@ class CommandDetectionAgent:
         """
         # Track attempt history for this detection session
         attempt_history = list(failed_attempts)
+
+        # Lazy import to avoid circular dependency with config module
+        from src.smartfix.domains.agents.sub_agent_executor import SubAgentExecutor
 
         # Create SubAgentExecutor for LLM calls
         executor = SubAgentExecutor()
