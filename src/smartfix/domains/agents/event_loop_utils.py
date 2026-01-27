@@ -29,7 +29,6 @@ import logging
 import platform
 from pathlib import Path
 
-from src.config import get_config
 from src.utils import debug_log, log, error_exit
 from src.smartfix.shared.failure_categories import FailureCategory
 
@@ -192,6 +191,9 @@ async def _run_agent_internal_with_prompts(
     Returns:
         str: Summary from the agent execution
     """
+    # Lazy import to avoid circular dependency with config module
+    from src.config import get_config
+
     config = get_config()
     debug_log(f"Using Agent Model ID: {config.AGENT_MODEL}")
 
