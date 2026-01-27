@@ -32,8 +32,6 @@ from pathlib import Path
 from src.utils import debug_log, log, error_exit
 from src.smartfix.shared.failure_categories import FailureCategory
 
-from .sub_agent_executor import SubAgentExecutor, ADK_AVAILABLE
-
 # Conditional imports
 try:
     from google.adk.artifacts.in_memory_artifact_service import InMemoryArtifactService
@@ -191,8 +189,9 @@ async def _run_agent_internal_with_prompts(
     Returns:
         str: Summary from the agent execution
     """
-    # Lazy import to avoid circular dependency with config module
+    # Lazy imports to avoid circular dependency with config and agents modules
     from src.config import get_config
+    from .sub_agent_executor import SubAgentExecutor, ADK_AVAILABLE
 
     config = get_config()
     debug_log(f"Using Agent Model ID: {config.AGENT_MODEL}")
