@@ -113,8 +113,10 @@ class Config:
 
         self.FORMATTING_COMMAND = self._get_env_var("FORMATTING_COMMAND", required=False)
 
-        # Auto-detect formatting command if not provided (optional, never required)
-        if not self.FORMATTING_COMMAND and not testing:
+        # Auto-detect formatting command if not provided AND formatting is needed
+        # Only needed for generate_fix task
+        is_format_command_needed = self.RUN_TASK == "generate_fix" and is_smartfix_coding_agent
+        if not self.FORMATTING_COMMAND and not testing and is_format_command_needed:
             self.FORMATTING_COMMAND = self._auto_detect_format_command()
             # Mark as auto-detected for proper validation
             self._format_command_source = "ai_detected"

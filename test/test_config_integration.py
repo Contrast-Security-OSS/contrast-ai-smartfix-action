@@ -302,15 +302,16 @@ class TestCommandAutoDetection(unittest.TestCase):
 
     @patch('src.smartfix.config.command_detector.detect_format_command')
     def test_auto_detects_format_command_when_not_provided(self, mock_detect):
-        """Config auto-detects FORMATTING_COMMAND when not in environment."""
+        """Config auto-detects FORMATTING_COMMAND when not in environment and required."""
         mock_detect.return_value = 'black .'
 
         # Don't set FORMATTING_COMMAND env var
         if 'FORMATTING_COMMAND' in os.environ:
             del os.environ['FORMATTING_COMMAND']
 
-        # Set RUN_TASK to something other than generate_fix
-        os.environ['RUN_TASK'] = 'merge'
+        # Set RUN_TASK to generate_fix and CODING_AGENT to SMARTFIX to make detection needed
+        os.environ['RUN_TASK'] = 'generate_fix'
+        os.environ['CODING_AGENT'] = 'SMARTFIX'
 
         reset_config()
         config = get_config(testing=False)  # Use non-testing mode to enable auto-detection
@@ -418,7 +419,8 @@ class TestCommandAutoDetection(unittest.TestCase):
         if 'FORMATTING_COMMAND' in os.environ:
             del os.environ['FORMATTING_COMMAND']
 
-        os.environ['RUN_TASK'] = 'merge'
+        os.environ['RUN_TASK'] = 'generate_fix'
+        os.environ['CODING_AGENT'] = 'SMARTFIX'
 
         reset_config()
         config = get_config(testing=False)
@@ -431,7 +433,7 @@ class TestCommandAutoDetection(unittest.TestCase):
         self.assertIsNotNone(config.REPO_ROOT)
         # Verify other config is intact
         self.assertEqual(config.BASE_BRANCH, 'main')
-        self.assertEqual(config.RUN_TASK, 'merge')
+        self.assertEqual(config.RUN_TASK, 'generate_fix')
 
 
 if __name__ == '__main__':
