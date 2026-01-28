@@ -82,7 +82,7 @@ class TestCommandDetectionAgent(unittest.TestCase):
         self.assertIn("mvn: command not found", prompt)
         self.assertIn("maven test", prompt)
 
-    @patch('src.smartfix.domains.agents.command_detection_agent.SubAgentExecutor')
+    @patch('src.smartfix.domains.agents.sub_agent_executor.SubAgentExecutor')
     def test_detect_returns_none_after_max_attempts(self, mock_executor_class):
         """Test detect() returns None after max attempts exhausted."""
         # Mock executor to return invalid command that fails validation
@@ -107,7 +107,7 @@ class TestCommandDetectionAgent(unittest.TestCase):
         self.assertIsNone(result)
 
     @patch('src.smartfix.domains.agents.command_detection_agent.log')
-    @patch('src.smartfix.domains.agents.command_detection_agent.SubAgentExecutor')
+    @patch('src.smartfix.domains.agents.sub_agent_executor.SubAgentExecutor')
     def test_detect_logs_build_files_on_exhaustion(self, mock_executor_class, mock_log):
         """Test logging includes build files context when exhausted."""
         # Mock executor to return invalid command
@@ -135,7 +135,7 @@ class TestCommandDetectionAgent(unittest.TestCase):
         self.assertIn("build.gradle", warning_msg)
 
     @patch('src.smartfix.domains.agents.command_detection_agent.log')
-    @patch('src.smartfix.domains.agents.command_detection_agent.SubAgentExecutor')
+    @patch('src.smartfix.domains.agents.sub_agent_executor.SubAgentExecutor')
     def test_detect_logs_last_attempt_details(self, mock_executor_class, mock_log):
         """Test logging includes last failed attempt details when exhausted."""
         # Mock executor to return invalid command
@@ -166,7 +166,7 @@ class TestCommandDetectionAgent(unittest.TestCase):
 
     @patch('src.smartfix.domains.agents.command_detection_agent.run_build_command')
     @patch('src.smartfix.domains.agents.command_detection_agent.validate_command')
-    @patch('src.smartfix.domains.agents.command_detection_agent.SubAgentExecutor')
+    @patch('src.smartfix.domains.agents.sub_agent_executor.SubAgentExecutor')
     def test_detect_successful_on_first_attempt(self, mock_executor_class, mock_validate, mock_run_build):
         """Test successful detection on first LLM attempt."""
         # Setup mocks
@@ -193,7 +193,7 @@ class TestCommandDetectionAgent(unittest.TestCase):
 
     @patch('src.smartfix.domains.agents.command_detection_agent.run_build_command')
     @patch('src.smartfix.domains.agents.command_detection_agent.validate_command')
-    @patch('src.smartfix.domains.agents.command_detection_agent.SubAgentExecutor')
+    @patch('src.smartfix.domains.agents.sub_agent_executor.SubAgentExecutor')
     def test_detect_retries_on_validation_failure(self, mock_executor_class, mock_validate, mock_run_build):
         """Test agent retries when validation fails."""
         # Setup mocks - first command fails validation, second succeeds
@@ -230,7 +230,7 @@ class TestCommandDetectionAgent(unittest.TestCase):
     @patch('src.smartfix.domains.agents.command_detection_agent.extract_build_errors')
     @patch('src.smartfix.domains.agents.command_detection_agent.run_build_command')
     @patch('src.smartfix.domains.agents.command_detection_agent.validate_command')
-    @patch('src.smartfix.domains.agents.command_detection_agent.SubAgentExecutor')
+    @patch('src.smartfix.domains.agents.sub_agent_executor.SubAgentExecutor')
     def test_detect_retries_on_build_failure(self, mock_executor_class, mock_validate, mock_run_build, mock_extract_errors):
         """Test agent retries when build command fails."""
         # Setup mocks - first command fails build, second succeeds
@@ -267,7 +267,7 @@ class TestCommandDetectionAgent(unittest.TestCase):
     @patch('src.smartfix.domains.agents.command_detection_agent.log')
     @patch('src.smartfix.domains.agents.command_detection_agent.run_build_command')
     @patch('src.smartfix.domains.agents.command_detection_agent.validate_command')
-    @patch('src.smartfix.domains.agents.command_detection_agent.SubAgentExecutor')
+    @patch('src.smartfix.domains.agents.sub_agent_executor.SubAgentExecutor')
     def test_detect_exhausts_max_attempts(self, mock_executor_class, mock_validate, mock_run_build, mock_log):
         """Test agent returns None and logs after exhausting max attempts."""
         # Setup mocks - all attempts fail validation
@@ -300,7 +300,7 @@ class TestCommandDetectionAgent(unittest.TestCase):
         self.assertIn("2 attempts", warning_msg)
         self.assertIn("invalid command", warning_msg)
 
-    @patch('src.smartfix.domains.agents.command_detection_agent.SubAgentExecutor')
+    @patch('src.smartfix.domains.agents.sub_agent_executor.SubAgentExecutor')
     def test_phase1_failures_appear_in_first_prompt(self, mock_executor_class):
         """Test Phase 1 failure history is included in first LLM prompt."""
         # Setup mocks
@@ -334,7 +334,7 @@ class TestCommandDetectionAgent(unittest.TestCase):
 
     @patch('src.smartfix.domains.agents.command_detection_agent.run_build_command')
     @patch('src.smartfix.domains.agents.command_detection_agent.validate_command')
-    @patch('src.smartfix.domains.agents.command_detection_agent.SubAgentExecutor')
+    @patch('src.smartfix.domains.agents.sub_agent_executor.SubAgentExecutor')
     def test_validation_failures_added_to_history(self, mock_executor_class, mock_validate, mock_run_build):
         """Test failures (both validation and build) are added to attempt_history for subsequent iterations.
 
@@ -390,7 +390,7 @@ class TestCommandDetectionAgent(unittest.TestCase):
 
     @patch('src.smartfix.domains.agents.command_detection_agent.run_build_command')
     @patch('src.smartfix.domains.agents.command_detection_agent.validate_command')
-    @patch('src.smartfix.domains.agents.command_detection_agent.SubAgentExecutor')
+    @patch('src.smartfix.domains.agents.sub_agent_executor.SubAgentExecutor')
     def test_run_build_command_called_with_correct_parameters(self, mock_executor_class, mock_validate, mock_run_build):
         """Test run_build_command is called with correct parameters."""
         # Setup mocks
@@ -415,7 +415,7 @@ class TestCommandDetectionAgent(unittest.TestCase):
         mock_run_build.assert_called_once_with("mvn test", repo_root, remediation_id)
         self.assertEqual(result, "mvn test")
 
-    @patch('src.smartfix.domains.agents.command_detection_agent.SubAgentExecutor')
+    @patch('src.smartfix.domains.agents.sub_agent_executor.SubAgentExecutor')
     def test_empty_build_files_handled_correctly(self, mock_executor_class):
         """Test agent handles empty build_files list correctly.
 
