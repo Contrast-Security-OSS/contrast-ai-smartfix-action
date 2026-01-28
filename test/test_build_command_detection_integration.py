@@ -21,6 +21,7 @@ Unlike unit tests, these tests use real temporary directories with
 actual build files to test the complete integration.
 """
 
+import os
 import unittest
 import tempfile
 import shutil
@@ -38,6 +39,17 @@ class TestBuildCommandDetectionIntegration(unittest.TestCase):
 
     def setUp(self):
         """Set up temporary directory for each test."""
+        # Set required environment variables for tests that trigger Phase 2
+        os.environ['GITHUB_WORKSPACE'] = tempfile.gettempdir()
+        os.environ['GITHUB_REPOSITORY'] = 'test/repo'
+        os.environ['GITHUB_SERVER_URL'] = 'https://github.com'
+        os.environ['GITHUB_TOKEN'] = 'test-token'
+        os.environ.setdefault('CONTRAST_HOST', 'test.contrastsecurity.com')
+        os.environ.setdefault('CONTRAST_ORG_ID', 'test-org')
+        os.environ.setdefault('CONTRAST_APP_ID', 'test-app')
+        os.environ.setdefault('CONTRAST_AUTHORIZATION_KEY', 'test-auth')
+        os.environ.setdefault('CONTRAST_API_KEY', 'test-api-key')
+
         self.test_dir = tempfile.mkdtemp()
         self.repo_root = Path(self.test_dir)
         self.remediation_id = "integration-test-123"

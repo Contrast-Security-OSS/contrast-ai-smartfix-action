@@ -131,7 +131,7 @@ class MCPToolsetManager:
         except NameError as ne:
             log(f"FATAL: Error initializing MCP Filesystem server (likely ADK setup issue): {ne}", is_error=True)
             log("No filesystem tools available - cannot make code changes.", is_error=True)
-            error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
+            raise RuntimeError(f"Failed to initialize MCP Filesystem server: {ne}") from ne
         except Exception as e:
             log(f"FATAL: Failed to connect to Filesystem MCP server: {str(e)}", is_error=True)
             # Get better error information when possible
@@ -139,7 +139,7 @@ class MCPToolsetManager:
                 import traceback
                 log(f"Error details: {traceback.format_exc()}", is_error=True)
             log("No filesystem tools available - cannot make code changes.", is_error=True)
-            error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
+            raise RuntimeError(f"Failed to connect to Filesystem MCP server: {str(e)}") from e
 
     async def _create_toolset(self, target_folder_str: str) -> MCPToolset:
         """
