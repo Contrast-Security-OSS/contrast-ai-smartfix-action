@@ -137,39 +137,34 @@ def detect_build_command_with_fallback(
 
     # Phase 2: LLM-based detection
     # Use LLM agent with filesystem access to analyze project and refine commands
-    # Skip Phase 2 if we're in Config initialization to avoid infinite recursion
-    if remediation_id == "config-init":
-        log("Skipping Phase 2: Already in Config initialization (preventing recursion)", is_warning=True)
+    log("Starting Phase 2: LLM-based build command detection")
+
+    try:
+        # Lazy import to avoid circular dependency
+        # (config → orchestrator → CommandDetectionAgent → sub_agent_executor → config)
+        from src.smartfix.domains.agents.command_detection_agent import CommandDetectionAgent
+
+        build_files = _collect_build_files(repo_root, project_dir)
+
+        if build_files:
+            log(f"Collected {len(build_files)} build file(s) for LLM analysis: {build_files}")
+        else:
+            log("No build files found - LLM will explore filesystem directly", is_warning=True)
+
+        detection_agent = CommandDetectionAgent(
+            repo_root=repo_root,
+            project_dir=project_dir,
+            max_attempts=max_llm_attempts
+        )
+
+        phase2_result = detection_agent.detect(
+            build_files=build_files,
+            failed_attempts=phase1_failures,
+            remediation_id=remediation_id
+        )
+    except Exception as e:
+        log(f"Phase 2 detection failed with exception: {e}", is_error=True)
         phase2_result = None
-    else:
-        log("Starting Phase 2: LLM-based build command detection")
-
-        try:
-            # Lazy import to avoid circular dependency
-            # (config → orchestrator → CommandDetectionAgent → sub_agent_executor → config)
-            from src.smartfix.domains.agents.command_detection_agent import CommandDetectionAgent
-
-            build_files = _collect_build_files(repo_root, project_dir)
-
-            if build_files:
-                log(f"Collected {len(build_files)} build file(s) for LLM analysis: {build_files}")
-            else:
-                log("No build files found - LLM will explore filesystem directly", is_warning=True)
-
-            detection_agent = CommandDetectionAgent(
-                repo_root=repo_root,
-                project_dir=project_dir,
-                max_attempts=max_llm_attempts
-            )
-
-            phase2_result = detection_agent.detect(
-                build_files=build_files,
-                failed_attempts=phase1_failures,
-                remediation_id=remediation_id
-            )
-        except Exception as e:
-            log(f"Phase 2 detection failed with exception: {e}", is_error=True)
-            phase2_result = None
 
     if phase2_result:
         # Phase 2 succeeded - return LLM-detected command

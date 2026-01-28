@@ -77,3 +77,25 @@ sys.modules['google.adk.models.llm_request'] = mock_models_module.llm_request
 sys.modules['google.adk.models.llm_response'] = mock_models_module.llm_response
 sys.modules['google.genai'] = MagicMock()
 sys.modules['google.genai.types'] = MagicMock()
+
+# === Test Fixture: Reset Config Detection Flag ===
+# Import pytest for fixture creation
+try:
+    import pytest
+
+    @pytest.fixture(autouse=True)
+    def reset_config_detection_flag():
+        """Reset Config._detection_completed flag before each test.
+
+        This ensures that each test can trigger build/format command detection
+        without being blocked by the recursion prevention flag.
+        """
+        from src.config import Config
+        Config._detection_completed = False
+        yield
+        # Cleanup after test (optional, but good practice)
+        Config._detection_completed = False
+except ImportError:
+    # pytest not available (e.g., when running with unittest directly)
+    # Tests using unittest will need to manually reset the flag
+    pass

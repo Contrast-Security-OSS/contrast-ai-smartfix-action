@@ -47,6 +47,10 @@ class Config:
     It reads from environment variables upon instantiation and provides validated
     and typed settings as attributes.
     """
+
+    # Class-level flag to ensure detection only runs once (prevents infinite recursion)
+    _detection_completed = False
+
     def __init__(self, env: Dict[str, str] = os.environ, testing: bool = False):
         self.env = env
         self.testing = testing
@@ -99,10 +103,21 @@ class Config:
             # Auto-detect if not provided AND required
             # Skip detection entirely when BUILD_COMMAND not needed
             if not self.BUILD_COMMAND and not testing and is_build_command_required:
-                # Orchestrator always returns valid string (real command or no-op fallback)
-                self.BUILD_COMMAND = self._auto_detect_build_command()
-                # Mark as auto-detected for proper validation
-                self._build_command_source = "ai_detected"
+                # Only run detection on first initialization (prevents infinite recursion)
+                if not Config._detection_completed:
+                    Config._detection_completed = True
+                    # Orchestrator always returns valid string (real command or no-op fallback)
+                    self.BUILD_COMMAND = self._auto_detect_build_command()
+                    # Mark as auto-detected for proper validation
+                    self._build_command_source = "ai_detected"
+                else:
+                    # Recursion detected: detection already in progress, use no-op fallback
+                    _log_config_message(
+                        "Build command detection already in progress, using no-op fallback",
+                        is_warning=True
+                    )
+                    self.BUILD_COMMAND = "echo 'No build command detected - using no-op'"
+                    self._build_command_source = "ai_detected"
             else:
                 # Command from environment/config (trusted source)
                 self._build_command_source = "config"
@@ -117,9 +132,18 @@ class Config:
         # Only needed for generate_fix task
         is_format_command_needed = self.RUN_TASK == "generate_fix" and is_smartfix_coding_agent
         if not self.FORMATTING_COMMAND and not testing and is_format_command_needed:
-            self.FORMATTING_COMMAND = self._auto_detect_format_command()
-            # Mark as auto-detected for proper validation
-            self._format_command_source = "ai_detected"
+            # Only run detection if BUILD_COMMAND detection hasn't triggered recursion
+            if not Config._detection_completed or self._build_command_source == "ai_detected":
+                self.FORMATTING_COMMAND = self._auto_detect_format_command()
+                # Mark as auto-detected for proper validation
+                self._format_command_source = "ai_detected"
+            else:
+                # Recursion detected: skip formatting detection
+                _log_config_message(
+                    "Format command detection skipped (recursion detected)",
+                    is_warning=True
+                )
+                self._format_command_source = "config"
         else:
             # Command from environment/config (trusted source)
             self._format_command_source = "config"
@@ -507,3 +531,5 @@ def reset_config():
     """For testing purposes only. Resets the config singleton."""
     global _config_instance
     _config_instance = None
+    # Also reset the detection flag to allow fresh detection in tests
+    Config._detection_completed = False
