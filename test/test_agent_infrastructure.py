@@ -145,7 +145,7 @@ class TestSubAgentExecutor(unittest.TestCase):
 
     def test_initialization_default_max_events(self):
         """Test SubAgentExecutor initialization with default max_events."""
-        with patch('src.smartfix.domains.agents.sub_agent_executor.get_config') as mock_config:
+        with patch('src.config.get_config') as mock_config:
             config_mock = MagicMock()
             config_mock.MAX_EVENTS_PER_AGENT = 100
             mock_config.return_value = config_mock
@@ -158,7 +158,7 @@ class TestSubAgentExecutor(unittest.TestCase):
 
     def test_initialization_custom_max_events(self):
         """Test SubAgentExecutor initialization with custom max_events."""
-        with patch('src.smartfix.domains.agents.sub_agent_executor.get_config'):
+        with patch('src.config.get_config'):
             executor = SubAgentExecutor(max_events=50)
 
             self.assertEqual(executor.max_events, 50)
