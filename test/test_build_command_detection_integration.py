@@ -39,6 +39,14 @@ class TestBuildCommandDetectionIntegration(unittest.TestCase):
 
     def setUp(self):
         """Set up temporary directory for each test."""
+        # Store original values to restore in tearDown
+        self._original_env = {
+            'GITHUB_WORKSPACE': os.environ.get('GITHUB_WORKSPACE'),
+            'GITHUB_REPOSITORY': os.environ.get('GITHUB_REPOSITORY'),
+            'GITHUB_SERVER_URL': os.environ.get('GITHUB_SERVER_URL'),
+            'GITHUB_TOKEN': os.environ.get('GITHUB_TOKEN'),
+        }
+
         # Set required environment variables for tests that trigger Phase 2
         os.environ['GITHUB_WORKSPACE'] = tempfile.gettempdir()
         os.environ['GITHUB_REPOSITORY'] = 'test/repo'
@@ -55,8 +63,15 @@ class TestBuildCommandDetectionIntegration(unittest.TestCase):
         self.remediation_id = "integration-test-123"
 
     def tearDown(self):
-        """Clean up temporary directory after each test."""
+        """Clean up temporary directory and restore environment variables."""
         shutil.rmtree(self.test_dir, ignore_errors=True)
+
+        # Restore original environment variables
+        for key, value in self._original_env.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
 
     def _create_file(self, relative_path: str, content: str = ""):
         """Helper to create a file with content in test directory."""
