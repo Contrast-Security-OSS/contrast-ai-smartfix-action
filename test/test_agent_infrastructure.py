@@ -11,6 +11,8 @@ from unittest.mock import MagicMock, patch, AsyncMock
 from pathlib import Path
 import asyncio
 import sys
+import os
+import tempfile
 
 # Mock ADK imports before importing our modules to prevent import errors
 # These mocks must be set before importing the modules that depend on them
@@ -25,6 +27,18 @@ from src.smartfix.domains.agents.sub_agent_executor import SubAgentExecutor  # n
 
 class TestMCPToolsetManager(unittest.TestCase):
     """Test cases for MCPToolsetManager."""
+
+    def setUp(self):
+        """Set up required environment variables for tests."""
+        os.environ['GITHUB_WORKSPACE'] = tempfile.gettempdir()
+        os.environ['GITHUB_REPOSITORY'] = 'test/repo'
+        os.environ['GITHUB_SERVER_URL'] = 'https://github.com'
+        os.environ['GITHUB_TOKEN'] = 'test-token'
+        os.environ.setdefault('CONTRAST_HOST', 'test.contrastsecurity.com')
+        os.environ.setdefault('CONTRAST_ORG_ID', 'test-org')
+        os.environ.setdefault('CONTRAST_APP_ID', 'test-app')
+        os.environ.setdefault('CONTRAST_AUTHORIZATION_KEY', 'test-auth')
+        os.environ.setdefault('CONTRAST_API_KEY', 'test-api-key')
 
     def test_initialization_default_platform(self):
         """Test MCPToolsetManager initialization with default platform."""
@@ -102,8 +116,7 @@ class TestMCPToolsetManager(unittest.TestCase):
         self.assertEqual(result, mock_toolset)
 
     @patch('src.smartfix.domains.agents.mcp_manager.MCPToolset')
-    @patch('src.smartfix.domains.agents.mcp_manager.error_exit')
-    def test_get_tools_failure(self, mock_error_exit, mock_toolset_class):
+    def test_get_tools_failure(self, mock_toolset_class):
         """Test get_tools failure handling."""
         # Make get_tools raise an exception
         mock_toolset = MagicMock()
@@ -113,10 +126,12 @@ class TestMCPToolsetManager(unittest.TestCase):
         manager = MCPToolsetManager()
         target_folder = Path('/test/folder')
 
-        asyncio.run(manager.get_tools(target_folder, 'test-remediation-id'))
+        # Verify RuntimeError is raised when MCP connection fails
+        with self.assertRaises(RuntimeError) as context:
+            asyncio.run(manager.get_tools(target_folder, 'test-remediation-id'))
 
-        # Verify error_exit was called
-        mock_error_exit.assert_called()
+        # Verify error message contains expected text
+        self.assertIn('Failed to connect to Filesystem MCP server', str(context.exception))
 
     @patch('subprocess.run')
     def test_clear_npm_cache_success(self, mock_subprocess):
