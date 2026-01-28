@@ -10,17 +10,10 @@ import unittest
 from unittest.mock import MagicMock, patch, AsyncMock
 from pathlib import Path
 import asyncio
-import sys
 import os
 import tempfile
 
-# Mock ADK imports before importing our modules to prevent import errors
-# These mocks must be set before importing the modules that depend on them
-sys.modules['google.adk.agents'] = MagicMock()
-sys.modules['google.adk.tools.mcp_tool.mcp_toolset'] = MagicMock()
-sys.modules['google.genai'] = MagicMock()
-sys.modules['google.genai.types'] = MagicMock()
-
+# ADK mocks are set up globally in conftest.py before any imports
 from src.smartfix.domains.agents.mcp_manager import MCPToolsetManager  # noqa: E402
 from src.smartfix.domains.agents.sub_agent_executor import SubAgentExecutor  # noqa: E402
 
