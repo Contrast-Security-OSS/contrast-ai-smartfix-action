@@ -27,11 +27,58 @@ the extension logic without complex ADK dependencies.
 
 import unittest
 import json
+import sys
 from unittest.mock import Mock, patch, MagicMock
 
+# Mock ADK imports before importing our modules to prevent import errors
+# Create a mock LlmAgent class that can be inherited from
+class MockLlmAgent:
+    """Mock base class for LlmAgent to allow SmartFixLlmAgent to inherit properly."""
+    def __init__(self, *args, **kwargs):
+        self.name = kwargs.get('name', 'mock-agent')
+        self.model = kwargs.get('model')
+
+    @property
+    def canonical_model(self):
+        """Return the model, mimicking LlmAgent behavior."""
+        return self.model
+
+# Create comprehensive mock hierarchy for google.adk to prevent __init__.py import errors
+mock_llm_agent_module = MagicMock()
+mock_llm_agent_module.Agent = MagicMock
+
+mock_agents_module = MagicMock()
+mock_agents_module.llm_agent = mock_llm_agent_module
+mock_agents_module.LlmAgent = MockLlmAgent
+
+mock_models_module = MagicMock()
+mock_models_module.lite_llm = MagicMock()
+mock_models_module.lite_llm.LiteLlm = MagicMock
+mock_models_module.lite_llm._get_completion_inputs = MagicMock()
+mock_models_module.llm_request = MagicMock()
+mock_models_module.llm_request.LlmRequest = MagicMock
+mock_models_module.llm_response = MagicMock()
+mock_models_module.llm_response.LlmResponse = MagicMock
+
+mock_adk = MagicMock()
+mock_adk.agents = mock_agents_module
+mock_adk.models = mock_models_module
+
+# Set up all the module mocks to prevent import errors
+sys.modules['google'] = MagicMock()
+sys.modules['google.adk'] = mock_adk
+sys.modules['google.adk.agents'] = mock_agents_module
+sys.modules['google.adk.agents.llm_agent'] = mock_llm_agent_module
+sys.modules['google.adk.models'] = mock_models_module
+sys.modules['google.adk.models.lite_llm'] = mock_models_module.lite_llm
+sys.modules['google.adk.models.llm_request'] = mock_models_module.llm_request
+sys.modules['google.adk.models.llm_response'] = mock_models_module.llm_response
+sys.modules['google.genai'] = MagicMock()
+sys.modules['google.genai.types'] = MagicMock()
+
 # Test setup imports (path is set up by conftest.py)
-from src.smartfix.extensions.smartfix_llm_agent import SmartFixLlmAgent
-from src.smartfix.extensions.smartfix_litellm import SmartFixLiteLlm
+from src.smartfix.extensions.smartfix_llm_agent import SmartFixLlmAgent  # noqa: E402
+from src.smartfix.extensions.smartfix_litellm import SmartFixLiteLlm  # noqa: E402
 
 
 class TestSmartFixLlmAgentFunctionality(unittest.TestCase):
