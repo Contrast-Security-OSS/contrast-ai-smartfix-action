@@ -42,9 +42,6 @@ ADK_AVAILABLE = False
 
 try:
     from google.adk.agents import Agent
-    from google.adk.artifacts.in_memory_artifact_service import InMemoryArtifactService
-    from google.adk.runners import Runner
-    from google.adk.sessions import InMemorySessionService
     from src.smartfix.extensions.smartfix_litellm import SmartFixLiteLlm
     from src.smartfix.extensions.smartfix_llm_agent import SmartFixLlmAgent
     from google.genai import types as genai_types
@@ -514,8 +511,7 @@ Respond with ONLY the command, no explanations."""
         """
         Execute command detection using LLM with filesystem access.
 
-        Creates a full agent with filesystem MCP tools to allow the agent to
-        explore build files and project structure when suggesting commands.
+        Uses the same agent execution infrastructure as fix/qa agents to avoid code duplication.
 
         Args:
             prompt: The detection prompt with project structure and error history
@@ -535,62 +531,21 @@ Respond with ONLY the command, no explanations."""
         litellm.turn_off_message_logging = True
         litellm.callbacks = []
 
-        # Use event loop wrapper for proper cleanup (prevents asyncio errors during shutdown)
-        from .event_loop_utils import _run_agent_in_event_loop
-        return _run_agent_in_event_loop(
-            self._execute_detection_async,
-            prompt,
-            target_folder,
-            remediation_id
-        )
-
-    async def _execute_detection_async(self, prompt: str, target_folder: Path, remediation_id: str) -> str:
-        """
-        Async implementation of command detection.
-
-        Creates a full agent with filesystem MCP tools to allow exploration
-        of build files and project structure when suggesting commands.
-        """
-        # Load comprehensive system prompt from file
+        # Load detection-specific system prompt
         system_prompt = self._load_command_detection_prompt()
 
+        # Use the same code path as fix/qa agents
+        from .event_loop_utils import _run_agent_in_event_loop, _run_agent_internal_with_prompts
+
         try:
-            # Create a detection agent with filesystem access
-            agent = await self.create_agent(
-                target_folder=target_folder,
-                remediation_id=remediation_id,
-                session_id="command-detection",
+            response = _run_agent_in_event_loop(
+                _run_agent_internal_with_prompts,
                 agent_type="detection",
-                system_prompt=system_prompt
-            )
-
-            if not agent:
-                raise RuntimeError("Failed to create detection agent")
-
-            # Create session service, artifacts service, and runner (matching fix agent pattern)
-            session_service = InMemorySessionService()
-            artifacts_service = InMemoryArtifactService()
-            app_name = 'contrast_detection_app'
-            session = await session_service.create_session(
-                state={},
-                app_name=app_name,
-                user_id='github_action_detection'
-            )
-            runner = Runner(
-                app_name=app_name,
-                agent=agent,
-                artifact_service=artifacts_service,
-                session_service=session_service,
-            )
-
-            # Execute the agent with the detection prompt
-            response = await self.execute_agent(
-                runner=runner,
-                agent=agent,
-                session=session,
-                user_query=prompt,
+                repo_root=target_folder,
+                query=prompt,
+                system_prompt=system_prompt,
                 remediation_id=remediation_id,
-                agent_type="detection"
+                session_id="command-detection"
             )
 
             # Clean up any markdown code blocks if present
