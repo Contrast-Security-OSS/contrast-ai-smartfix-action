@@ -44,6 +44,45 @@ except ImportError:
 MAX_PENDING_TASKS = 100
 
 
+def _configure_cleanup_logging():
+    """Configure logging to suppress benign asyncio and MCP cleanup errors."""
+    # Suppress anyio error logging
+    anyio_logger = logging.getLogger("anyio")
+    anyio_logger.setLevel(logging.CRITICAL)
+
+    # Suppress MCP client/stdio error logging
+    mcp_logger = logging.getLogger("mcp.client.stdio")
+    mcp_logger.setLevel(logging.CRITICAL)
+
+    # Silence the task exception was never retrieved warnings
+    asyncio_logger = logging.getLogger("asyncio")
+    asyncio_logger.setLevel(logging.CRITICAL)
+
+    # Add a comprehensive filter to specifically ignore common cancel scope and cleanup errors
+    class AsyncioCleanupFilter(logging.Filter):
+        def filter(self, record):
+            message = record.getMessage()
+            # Filter out common cleanup errors
+            if any(pattern in message for pattern in [
+                "exit cancel scope in a different task",
+                "Task exception was never retrieved",
+                "unhandled errors in a TaskGroup",
+                "GeneratorExit",
+                "CancelledError",
+                "asyncio.exceptions",
+                "BaseExceptionGroup"
+            ]):
+                return False
+            return True
+
+    # Apply the filter to multiple loggers
+    cleanup_filter = AsyncioCleanupFilter()
+    anyio_logger.addFilter(cleanup_filter)
+    asyncio_logger.addFilter(cleanup_filter)
+    if mcp_logger:
+        mcp_logger.addFilter(cleanup_filter)
+
+
 def _run_agent_in_event_loop(coroutine_func, *args, **kwargs):
     """
     Wrapper function to run an async coroutine in a controlled event loop.
@@ -57,6 +96,9 @@ def _run_agent_in_event_loop(coroutine_func, *args, **kwargs):
         The result returned by the coroutine
     """
     result = None
+
+    # Configure logging to suppress asyncio and anyio errors that typically occur during cleanup
+    _configure_cleanup_logging()
 
     # Platform-specific setup
     is_windows = platform.system() == 'Windows'
