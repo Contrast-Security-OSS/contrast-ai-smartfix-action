@@ -160,6 +160,54 @@ class CommandDetectionAgent:
 
         return "\n".join(lines)
 
+    def _annotate_build_file(self, file: str) -> str:
+        """
+        Add annotation explaining what a build file means.
+
+        Args:
+            file: Build file path
+
+        Returns:
+            Annotation string (e.g., " (Maven build configuration)")
+        """
+        if file.endswith('pom.xml'):
+            return " (Maven build configuration)"
+        elif file.endswith('build.gradle') or file.endswith('build.gradle.kts'):
+            return " (Gradle build configuration)"
+        elif file.endswith('package.json'):
+            return " (npm/Node.js project)"
+        elif file == 'Makefile':
+            return " (Make build configuration)"
+        elif file.endswith('build.xml'):
+            return " (Ant build configuration)"
+        elif file.endswith('.csproj') or file.endswith('.sln'):
+            return " (C#/.NET project)"
+        elif file == 'pyproject.toml' or file == 'setup.py':
+            return " (Python project)"
+        return ""
+
+    def _explain_command_rationale(self, command: str) -> str:
+        """
+        Explain why a command was tried based on its content.
+
+        Args:
+            command: The command string
+
+        Returns:
+            Explanation string or empty if not applicable
+        """
+        if 'mvn' in command:
+            return "*Why tried:* Standard Maven test command\n\n"
+        elif 'gradle' in command:
+            return "*Why tried:* Standard Gradle test command\n\n"
+        elif 'npm test' in command:
+            return "*Why tried:* Standard npm test script\n\n"
+        elif 'pytest' in command:
+            return "*Why tried:* Standard Python pytest command\n\n"
+        elif 'make' in command:
+            return "*Why tried:* Standard Make test target\n\n"
+        return ""
+
     def detect(
         self,
         build_files: list[str],
@@ -262,21 +310,7 @@ class CommandDetectionAgent:
             prompt_parts.append("Phase 1 (pattern-based detection) found these build system files:\n")
             for file in build_files:
                 prompt_parts.append(f"- `{file}`")
-                # Add context about what this file means
-                if file.endswith('pom.xml'):
-                    prompt_parts.append(" (Maven build configuration)")
-                elif file.endswith('build.gradle') or file.endswith('build.gradle.kts'):
-                    prompt_parts.append(" (Gradle build configuration)")
-                elif file.endswith('package.json'):
-                    prompt_parts.append(" (npm/Node.js project)")
-                elif file == 'Makefile':
-                    prompt_parts.append(" (Make build configuration)")
-                elif file.endswith('build.xml'):
-                    prompt_parts.append(" (Ant build configuration)")
-                elif file.endswith('.csproj') or file.endswith('.sln'):
-                    prompt_parts.append(" (C#/.NET project)")
-                elif file == 'pyproject.toml' or file == 'setup.py':
-                    prompt_parts.append(" (Python project)")
+                prompt_parts.append(self._annotate_build_file(file))
                 prompt_parts.append("\n")
             prompt_parts.append("\n")
         else:
@@ -293,20 +327,7 @@ class CommandDetectionAgent:
             for i, attempt in enumerate(failed_attempts, 1):
                 prompt_parts.append(f"### Attempt {i}\n")
                 prompt_parts.append(f"**Command tried:** `{attempt['command']}`\n\n")
-
-                # Explain why this command was tried (if we can infer from the command)
-                cmd = attempt['command']
-                if 'mvn' in cmd:
-                    prompt_parts.append("*Why tried:* Standard Maven test command\n\n")
-                elif 'gradle' in cmd:
-                    prompt_parts.append("*Why tried:* Standard Gradle test command\n\n")
-                elif 'npm test' in cmd:
-                    prompt_parts.append("*Why tried:* Standard npm test script\n\n")
-                elif 'pytest' in cmd:
-                    prompt_parts.append("*Why tried:* Standard Python pytest command\n\n")
-                elif 'make' in cmd:
-                    prompt_parts.append("*Why tried:* Standard Make test target\n\n")
-
+                prompt_parts.append(self._explain_command_rationale(attempt['command']))
                 prompt_parts.append(f"**Error encountered:**\n```\n{attempt['error']}\n```\n\n")
 
         # Add instructions
