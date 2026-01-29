@@ -77,7 +77,7 @@ class TestCommandDetectionAgent(unittest.TestCase):
         prompt = agent._build_iteration_prompt(build_files, failed_attempts)
 
         # Should include failed attempt history
-        self.assertIn("Previous attempts", prompt)
+        self.assertIn("Failed Command Attempts", prompt)
         self.assertIn("mvn test", prompt)
         self.assertIn("mvn: command not found", prompt)
         self.assertIn("maven test", prompt)
@@ -326,7 +326,7 @@ class TestCommandDetectionAgent(unittest.TestCase):
         mock_executor.execute_detection.assert_called_once()
         # execute_detection now takes (prompt, target_folder, remediation_id)
         first_prompt = mock_executor.execute_detection.call_args[1]['prompt']
-        self.assertIn("Previous attempts", first_prompt)
+        self.assertIn("Failed Command Attempts", first_prompt)
         self.assertIn("mvn test", first_prompt)
         self.assertIn("mvn: command not found", first_prompt)
         self.assertIn("gradle test", first_prompt)
@@ -385,8 +385,8 @@ class TestCommandDetectionAgent(unittest.TestCase):
         self.assertIn("mvn clean", third_prompt)
         # Verify consistent error format for both types of failures
         self.assertIn("Attempt", third_prompt)
-        self.assertIn("Command:", third_prompt)
-        self.assertIn("Error:", third_prompt)
+        self.assertIn("Command tried:", third_prompt)
+        self.assertIn("Error encountered:", third_prompt)
 
     @patch('src.smartfix.domains.agents.command_detection_agent.run_build_command')
     @patch('src.smartfix.domains.agents.command_detection_agent.validate_command')
@@ -440,7 +440,8 @@ class TestCommandDetectionAgent(unittest.TestCase):
         mock_executor.execute_detection.assert_called_once()
         # Prompt should handle empty build_files gracefully
         first_prompt = mock_executor.execute_detection.call_args[1]['prompt']
-        self.assertIn("Build system files detected", first_prompt)
+        self.assertIn("Build System Detection", first_prompt)
+        self.assertIn("Phase 1 did not find any standard build system files", first_prompt)
         # Should return None after exhausting attempts with invalid command
         self.assertIsNone(result)
 
