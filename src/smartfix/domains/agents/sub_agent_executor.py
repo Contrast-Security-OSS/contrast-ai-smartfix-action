@@ -42,6 +42,9 @@ ADK_AVAILABLE = False
 
 try:
     from google.adk.agents import Agent
+    from google.adk.artifacts.in_memory_artifact_service import InMemoryArtifactService
+    from google.adk.runners import Runner
+    from google.adk.sessions import InMemorySessionService
     from src.smartfix.extensions.smartfix_litellm import SmartFixLiteLlm
     from src.smartfix.extensions.smartfix_llm_agent import SmartFixLlmAgent
     from google.genai import types as genai_types
@@ -551,10 +554,21 @@ Respond with ONLY the command, no explanations."""
             if not agent:
                 raise RuntimeError("Failed to create detection agent")
 
-            # Create runner and session for the agent
-            from google.adk.runners import Runner
-            runner = Runner(agent)
-            session = runner.create_session()
+            # Create session service, artifacts service, and runner (matching fix agent pattern)
+            session_service = InMemorySessionService()
+            artifacts_service = InMemoryArtifactService()
+            app_name = 'contrast_detection_app'
+            session = await session_service.create_session(
+                state={},
+                app_name=app_name,
+                user_id='github_action_detection'
+            )
+            runner = Runner(
+                app_name=app_name,
+                agent=agent,
+                artifact_service=artifacts_service,
+                session_service=session_service,
+            )
 
             # Execute the agent with the detection prompt
             response = await self.execute_agent(
