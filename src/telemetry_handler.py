@@ -297,6 +297,9 @@ def add_log_message(message: str):
 
 def add_agent_event(event_data: dict):
     """Appends a new agent event to the agentEvents list."""
+    # Guard against calling before telemetry is initialized (e.g., during Config init)
+    if not _telemetry_data or "agentEvents" not in _telemetry_data:
+        return  # Silently skip - telemetry will be initialized later
     _telemetry_data["agentEvents"].append(event_data)
 
 
