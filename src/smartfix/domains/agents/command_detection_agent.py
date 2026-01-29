@@ -87,12 +87,13 @@ class CommandDetectionAgent:
         self.project_dir = project_dir
         self.max_attempts = max_attempts
 
-    def _get_directory_tree(self, max_depth: int = 3) -> str:
+    def _get_directory_tree(self, max_depth: int = 3, max_chars: int = 8000) -> str:
         """
         Generate a directory tree view of the project.
 
         Args:
             max_depth: Maximum directory depth to show
+            max_chars: Maximum characters to include (prevents context blowout)
 
         Returns:
             String representation of directory tree, or error message
@@ -107,13 +108,21 @@ class CommandDetectionAgent:
                 timeout=5
             )
             if result.returncode == 0:
-                return result.stdout
+                tree_output = result.stdout
+                # Truncate if too large to avoid blowing out context
+                if len(tree_output) > max_chars:
+                    tree_output = tree_output[:max_chars] + f"\n... [truncated, {len(tree_output) - max_chars} chars omitted]"
+                return tree_output
         except (FileNotFoundError, subprocess.TimeoutExpired):
             pass
 
         # Fallback: Generate simple tree manually
         try:
-            return self._generate_simple_tree(self.repo_root, max_depth)
+            tree_output = self._generate_simple_tree(self.repo_root, max_depth)
+            # Truncate if too large
+            if len(tree_output) > max_chars:
+                tree_output = tree_output[:max_chars] + f"\n... [truncated, {len(tree_output) - max_chars} chars omitted]"
+            return tree_output
         except Exception as e:
             debug_log(f"Failed to generate directory tree: {e}")
             return "[Directory tree unavailable]"
