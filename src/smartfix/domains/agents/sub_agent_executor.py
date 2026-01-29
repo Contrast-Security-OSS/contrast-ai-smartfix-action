@@ -528,6 +528,13 @@ Respond with ONLY the command, no explanations."""
         Raises:
             AgentExecutionError: If LLM call fails
         """
+        # Disable LiteLLM's async logging to prevent event loop binding issues
+        # The detection agent runs in a fresh event loop, and LiteLLM's LoggingWorker
+        # creates Queue objects bound to event loops, causing RuntimeError if the loop changes
+        import litellm
+        litellm.turn_off_message_logging = True
+        litellm.callbacks = []
+
         # Use event loop wrapper for proper cleanup (prevents asyncio errors during shutdown)
         from .event_loop_utils import _run_agent_in_event_loop
         return _run_agent_in_event_loop(
