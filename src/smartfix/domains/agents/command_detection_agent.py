@@ -25,7 +25,6 @@ project structure and iteratively refining suggestions based on
 execution failures.
 """
 
-import subprocess
 from pathlib import Path
 
 from src.smartfix.config.command_validator import (
@@ -35,6 +34,7 @@ from src.smartfix.config.command_validator import (
 from src.smartfix.domains.workflow.build_runner import run_build_command
 from src.build_output_analyzer import extract_build_errors
 from src.utils import log, debug_log
+from .directory_tree_utils import get_directory_tree
 
 
 class CommandDetectionError(Exception):
@@ -87,87 +87,6 @@ class CommandDetectionAgent:
         self.project_dir = project_dir
         self.max_attempts = max_attempts
 
-    def _get_directory_tree(self, max_depth: int = 3, max_chars: int = 8000) -> str:
-        """
-        Generate a directory tree view of the project.
-
-        Args:
-            max_depth: Maximum directory depth to show
-            max_chars: Maximum characters to include (prevents context blowout)
-
-        Returns:
-            String representation of directory tree, or error message
-        """
-        try:
-            # Try using tree command if available
-            result = subprocess.run(
-                ['tree', '-L', str(max_depth), '-I', 'node_modules|.git|__pycache__|*.pyc|.pytest_cache|.venv|venv|target|build|dist'],
-                cwd=self.repo_root,
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
-            if result.returncode == 0:
-                tree_output = result.stdout
-                # Truncate if too large to avoid blowing out context
-                if len(tree_output) > max_chars:
-                    tree_output = tree_output[:max_chars] + f"\n... [truncated, {len(tree_output) - max_chars} chars omitted]"
-                return tree_output
-        except (FileNotFoundError, subprocess.TimeoutExpired):
-            pass
-
-        # Fallback: Generate simple tree manually
-        try:
-            tree_output = self._generate_simple_tree(self.repo_root, max_depth)
-            # Truncate if too large
-            if len(tree_output) > max_chars:
-                tree_output = tree_output[:max_chars] + f"\n... [truncated, {len(tree_output) - max_chars} chars omitted]"
-            return tree_output
-        except Exception as e:
-            debug_log(f"Failed to generate directory tree: {e}")
-            return "[Directory tree unavailable]"
-
-    def _generate_simple_tree(self, path: Path, max_depth: int, current_depth: int = 0, prefix: str = "") -> str:
-        """
-        Generate a simple directory tree manually.
-
-        Args:
-            path: Directory to traverse
-            max_depth: Maximum depth to traverse
-            current_depth: Current recursion depth
-            prefix: Prefix for tree formatting
-
-        Returns:
-            String representation of directory tree
-        """
-        if current_depth >= max_depth:
-            return ""
-
-        lines = []
-        try:
-            # Get items, skip hidden and common build directories
-            items = sorted([
-                item for item in path.iterdir()
-                if not item.name.startswith('.')
-                and item.name not in {'node_modules', '__pycache__', 'target', 'build', 'dist', '.venv', 'venv'}
-            ])
-
-            for i, item in enumerate(items):
-                is_last = i == len(items) - 1
-                current_prefix = "└── " if is_last else "├── "
-                lines.append(f"{prefix}{current_prefix}{item.name}")
-
-                # Recurse into directories
-                if item.is_dir() and current_depth < max_depth - 1:
-                    extension = "    " if is_last else "│   "
-                    subtree = self._generate_simple_tree(item, max_depth, current_depth + 1, prefix + extension)
-                    if subtree:
-                        lines.append(subtree)
-
-        except PermissionError:
-            pass
-
-        return "\n".join(lines)
 
     def _annotate_build_file(self, file: str) -> str:
         """
@@ -308,7 +227,7 @@ class CommandDetectionAgent:
 
         # Add directory tree for high-level overview
         prompt_parts.append("## Project Directory Structure\n\n")
-        tree = self._get_directory_tree(max_depth=3)
+        tree = get_directory_tree(self.repo_root, max_depth=3)
         prompt_parts.append("```\n")
         prompt_parts.append(tree)
         prompt_parts.append("\n```\n\n")
