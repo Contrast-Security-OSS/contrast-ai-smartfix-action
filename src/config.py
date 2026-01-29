@@ -51,7 +51,7 @@ class Config:
     # Class-level flag to ensure detection only runs once (prevents infinite recursion)
     _detection_completed = False
 
-    def __init__(self, env: Dict[str, str] = os.environ, testing: bool = False):
+    def __init__(self, env: Dict[str, str] = os.environ, testing: bool = False):  # noqa: C901
         self.env = env
         self.testing = testing
 

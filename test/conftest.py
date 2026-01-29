@@ -20,7 +20,7 @@ sys.path.insert(0, str(test_dir))
 # Set up comprehensive ADK mocks BEFORE any test files import ADK modules.
 # This ensures all tests use the same mock hierarchy and prevents import errors.
 
-# Create a mock LlmAgent class that can be inherited from
+
 class MockLlmAgent:
     """Mock base class for LlmAgent to allow SmartFixLlmAgent to inherit properly."""
     def __init__(self, *args, **kwargs):
@@ -31,6 +31,7 @@ class MockLlmAgent:
     def canonical_model(self):
         """Return the model, mimicking LlmAgent behavior."""
         return self.model
+
 
 # Create comprehensive mock hierarchy for google.adk to prevent __init__.py import errors
 mock_llm_agent_module = MagicMock()

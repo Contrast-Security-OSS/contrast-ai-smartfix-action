@@ -31,8 +31,7 @@ import warnings
 from pathlib import Path
 from typing import List, Optional
 
-from src.utils import debug_log, log, error_exit
-from src.smartfix.shared.failure_categories import FailureCategory
+from src.utils import debug_log, log
 
 # Suppress Python warnings before importing libraries that might trigger them
 warnings.filterwarnings('ignore', category=UserWarning)
