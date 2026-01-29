@@ -33,7 +33,7 @@ from src.smartfix.config.command_validator import (
 )
 from src.smartfix.domains.workflow.build_runner import run_build_command
 from src.build_output_analyzer import extract_build_errors
-from src.utils import log, debug_log
+from src.utils import log
 from .directory_tree_utils import get_directory_tree
 
 
@@ -86,7 +86,6 @@ class CommandDetectionAgent:
         self.repo_root = repo_root
         self.project_dir = project_dir
         self.max_attempts = max_attempts
-
 
     def _annotate_build_file(self, file: str) -> str:
         """
