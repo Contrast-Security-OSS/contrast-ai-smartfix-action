@@ -47,9 +47,20 @@ def run_build_command(command: str, repo_root: Path, remediation_id: str) -> Tup
     """
     log(f"\n--- Running Build Command: {command} ---")
     try:
-        # Use shell=True if the command might contain shell operators like &&, ||, > etc.
-        # Be cautious with shell=True if the command comes from untrusted input.
-        # Here, it's from an environment variable, assumed to be controlled.
+        # Note: shell=True is required for command chaining (&&, ||, |) which is
+        # explicitly supported for user convenience and taught to the LLM Phase 2
+        # detection agent (e.g., "npm ci && npm test").
+        #
+        # Security is enforced via validate_command() in command_validator.py which:
+        # - Blocks command substitution: $(...)` backticks
+        # - Blocks variable expansion: ${...}
+        # - Blocks dangerous patterns: eval, exec, | sh, | bash, curl ... |
+        # - Blocks dangerous operations: ; rm, rm -rf, > /dev/...
+        # - Allows safe shell operators: &&, ||, | (to non-shell commands)
+        #
+        # Trust boundary:
+        # - User-provided commands (action.yml): Trusted, skip validation
+        # - AI-detected commands (Phase 1/2): Validated before execution
         result = subprocess.run(
             command,
             cwd=repo_root,

@@ -49,7 +49,7 @@ class Config:
     """
 
     # Class-level flag to ensure detection only runs once (prevents infinite recursion)
-    _detection_completed = False
+    _detection_started = False
 
     def __init__(self, env: Dict[str, str] = os.environ, testing: bool = False):  # noqa: C901
         self.env = env
@@ -104,8 +104,8 @@ class Config:
             # Skip detection entirely when BUILD_COMMAND not needed
             if not self.BUILD_COMMAND and not testing and is_build_command_required:
                 # Only run detection on first initialization (prevents infinite recursion)
-                if not Config._detection_completed:
-                    Config._detection_completed = True
+                if not Config._detection_started:
+                    Config._detection_started = True
                     # Orchestrator always returns valid string (real command or no-op fallback)
                     self.BUILD_COMMAND = self._auto_detect_build_command()
                     # Mark as auto-detected for proper validation
@@ -133,7 +133,7 @@ class Config:
         is_format_command_needed = self.RUN_TASK == "generate_fix" and is_smartfix_coding_agent
         if not self.FORMATTING_COMMAND and not testing and is_format_command_needed:
             # Only run detection if BUILD_COMMAND detection hasn't triggered recursion
-            if not Config._detection_completed or self._build_command_source == "ai_detected":
+            if not Config._detection_started or self._build_command_source == "ai_detected":
                 self.FORMATTING_COMMAND = self._auto_detect_format_command()
                 # Mark as auto-detected for proper validation
                 self._format_command_source = "ai_detected"
@@ -532,4 +532,4 @@ def reset_config():
     global _config_instance
     _config_instance = None
     # Also reset the detection flag to allow fresh detection in tests
-    Config._detection_completed = False
+    Config._detection_started = False
