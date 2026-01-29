@@ -552,7 +552,7 @@ Respond with ONLY the command, no explanations."""
                 raise RuntimeError("Failed to create detection agent")
 
             # Create runner and session for the agent
-            from google.adk.agents import Runner
+            from google.adk.runners import Runner
             runner = Runner(agent)
             session = runner.create_session()
 
