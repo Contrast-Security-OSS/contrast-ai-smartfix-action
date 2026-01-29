@@ -548,12 +548,22 @@ Respond with ONLY the command, no explanations."""
                 session_id="command-detection"
             )
 
-            # Clean up any markdown code blocks if present
+            # Extract the command from the response
+            # The LLM sometimes includes explanatory text despite instructions to the contrary
+            # The command is always the last non-empty line
             suggested_command = response.strip()
+
+            # Clean up markdown code blocks if present
             if suggested_command.startswith("```"):
                 lines = suggested_command.split("\n")
                 # Remove first and last lines (the ``` markers)
                 suggested_command = "\n".join(lines[1:-1]) if len(lines) > 2 else suggested_command
+
+            # Extract last non-empty line (the actual command)
+            # This handles cases where the LLM includes explanatory text before the command
+            lines = [line.strip() for line in suggested_command.split("\n") if line.strip()]
+            if lines:
+                suggested_command = lines[-1]
 
             return suggested_command.strip()
 
