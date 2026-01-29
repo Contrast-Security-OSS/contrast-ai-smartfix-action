@@ -25,6 +25,7 @@ project structure and iteratively refining suggestions based on
 execution failures.
 """
 
+import subprocess
 from pathlib import Path
 
 from src.smartfix.config.command_validator import (
@@ -33,7 +34,7 @@ from src.smartfix.config.command_validator import (
 )
 from src.smartfix.domains.workflow.build_runner import run_build_command
 from src.build_output_analyzer import extract_build_errors
-from src.utils import log
+from src.utils import log, debug_log
 
 
 class CommandDetectionError(Exception):
@@ -85,6 +86,79 @@ class CommandDetectionAgent:
         self.repo_root = repo_root
         self.project_dir = project_dir
         self.max_attempts = max_attempts
+
+    def _get_directory_tree(self, max_depth: int = 3) -> str:
+        """
+        Generate a directory tree view of the project.
+
+        Args:
+            max_depth: Maximum directory depth to show
+
+        Returns:
+            String representation of directory tree, or error message
+        """
+        try:
+            # Try using tree command if available
+            result = subprocess.run(
+                ['tree', '-L', str(max_depth), '-I', 'node_modules|.git|__pycache__|*.pyc|.pytest_cache|.venv|venv|target|build|dist'],
+                cwd=self.repo_root,
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            if result.returncode == 0:
+                return result.stdout
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+
+        # Fallback: Generate simple tree manually
+        try:
+            return self._generate_simple_tree(self.repo_root, max_depth)
+        except Exception as e:
+            debug_log(f"Failed to generate directory tree: {e}")
+            return "[Directory tree unavailable]"
+
+    def _generate_simple_tree(self, path: Path, max_depth: int, current_depth: int = 0, prefix: str = "") -> str:
+        """
+        Generate a simple directory tree manually.
+
+        Args:
+            path: Directory to traverse
+            max_depth: Maximum depth to traverse
+            current_depth: Current recursion depth
+            prefix: Prefix for tree formatting
+
+        Returns:
+            String representation of directory tree
+        """
+        if current_depth >= max_depth:
+            return ""
+
+        lines = []
+        try:
+            # Get items, skip hidden and common build directories
+            items = sorted([
+                item for item in path.iterdir()
+                if not item.name.startswith('.')
+                and item.name not in {'node_modules', '__pycache__', 'target', 'build', 'dist', '.venv', 'venv'}
+            ])
+
+            for i, item in enumerate(items):
+                is_last = i == len(items) - 1
+                current_prefix = "└── " if is_last else "├── "
+                lines.append(f"{prefix}{current_prefix}{item.name}")
+
+                # Recurse into directories
+                if item.is_dir() and current_depth < max_depth - 1:
+                    extension = "    " if is_last else "│   "
+                    subtree = self._generate_simple_tree(item, max_depth, current_depth + 1, prefix + extension)
+                    if subtree:
+                        lines.append(subtree)
+
+        except PermissionError:
+            pass
+
+        return "\n".join(lines)
 
     def detect(
         self,
@@ -175,28 +249,76 @@ class CommandDetectionAgent:
         """
         prompt_parts = []
 
-        # Add project structure context
-        prompt_parts.append("## Project Structure\n")
-        prompt_parts.append("Build system files detected:\n")
-        for file in build_files:
-            prompt_parts.append(f"- {file}\n")
-        prompt_parts.append("\n")
+        # Add directory tree for high-level overview
+        prompt_parts.append("## Project Directory Structure\n\n")
+        tree = self._get_directory_tree(max_depth=3)
+        prompt_parts.append("```\n")
+        prompt_parts.append(tree)
+        prompt_parts.append("\n```\n\n")
 
-        # Add failed attempt history if any
+        # Add build system files with context
+        prompt_parts.append("## Build System Detection\n\n")
+        if build_files:
+            prompt_parts.append("Phase 1 (pattern-based detection) found these build system files:\n")
+            for file in build_files:
+                prompt_parts.append(f"- `{file}`")
+                # Add context about what this file means
+                if file.endswith('pom.xml'):
+                    prompt_parts.append(" (Maven build configuration)")
+                elif file.endswith('build.gradle') or file.endswith('build.gradle.kts'):
+                    prompt_parts.append(" (Gradle build configuration)")
+                elif file.endswith('package.json'):
+                    prompt_parts.append(" (npm/Node.js project)")
+                elif file == 'Makefile':
+                    prompt_parts.append(" (Make build configuration)")
+                elif file.endswith('build.xml'):
+                    prompt_parts.append(" (Ant build configuration)")
+                elif file.endswith('.csproj') or file.endswith('.sln'):
+                    prompt_parts.append(" (C#/.NET project)")
+                elif file == 'pyproject.toml' or file == 'setup.py':
+                    prompt_parts.append(" (Python project)")
+                prompt_parts.append("\n")
+            prompt_parts.append("\n")
+        else:
+            prompt_parts.append("Phase 1 did not find any standard build system files.\n\n")
+
+        # Add failed attempt history with better context
         if failed_attempts:
-            prompt_parts.append("## Previous attempts\n")
-            prompt_parts.append("The following commands have already been tried and failed:\n\n")
+            prompt_parts.append("## Failed Command Attempts\n\n")
+            prompt_parts.append(
+                "Phase 1 automatically tried standard commands based on detected build files. "
+                "All attempts failed. You need to analyze WHY they failed and suggest a corrected command.\n\n"
+            )
 
             for i, attempt in enumerate(failed_attempts, 1):
                 prompt_parts.append(f"### Attempt {i}\n")
-                prompt_parts.append(f"Command: `{attempt['command']}`\n")
-                prompt_parts.append(f"Error: {attempt['error']}\n\n")
+                prompt_parts.append(f"**Command tried:** `{attempt['command']}`\n\n")
+
+                # Explain why this command was tried (if we can infer from the command)
+                cmd = attempt['command']
+                if 'mvn' in cmd:
+                    prompt_parts.append("*Why tried:* Standard Maven test command\n\n")
+                elif 'gradle' in cmd:
+                    prompt_parts.append("*Why tried:* Standard Gradle test command\n\n")
+                elif 'npm test' in cmd:
+                    prompt_parts.append("*Why tried:* Standard npm test script\n\n")
+                elif 'pytest' in cmd:
+                    prompt_parts.append("*Why tried:* Standard Python pytest command\n\n")
+                elif 'make' in cmd:
+                    prompt_parts.append("*Why tried:* Standard Make test target\n\n")
+
+                prompt_parts.append(f"**Error encountered:**\n```\n{attempt['error']}\n```\n\n")
 
         # Add instructions
-        prompt_parts.append("## Task\n")
+        prompt_parts.append("## Your Task\n\n")
         prompt_parts.append(
-            "Suggest a build/test command that will successfully run tests "
-            "based on the project structure and error patterns above.\n"
+            "Based on the directory structure, build system files, and error patterns above, "
+            "suggest a corrected build/test command.\n\n"
+            "Consider:\n"
+            "- Is this a monorepo? (multiple build files in subdirectories may need -f or -p flags)\n"
+            "- Are there wrapper scripts? (./gradlew vs gradle, ./mvnw vs mvn)\n"
+            "- Does the error indicate missing dependencies, wrong directory, or configuration issues?\n"
+            "- What specific adjustments would fix the errors shown above?\n"
         )
 
         return "".join(prompt_parts)
