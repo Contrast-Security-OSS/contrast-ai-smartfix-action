@@ -107,14 +107,20 @@ class TestBuildCommandDetectionIntegration(unittest.TestCase):
         # Should have called run_build_command (Phase 1 validates by running)
         mock_run_build.assert_called_once()
 
+    @patch('src.smartfix.domains.agents.sub_agent_executor.SubAgentExecutor')
     @patch('src.smartfix.config.command_detector._validate_command_exists')
-    def test_missing_tools_triggers_phase2_and_fallback(self, mock_validate):
+    def test_missing_tools_triggers_phase2_and_fallback(self, mock_validate, mock_executor_class):
         """Missing tools: Phase 1 skips candidates, Phase 2 placeholder, returns no-op."""
         # Create Maven project but tools not installed
         self._create_file('pom.xml', '<project><artifactId>test</artifactId></project>')
 
         # Mock: all tools missing (_validate_command_exists returns False)
         mock_validate.return_value = False
+
+        # Mock Phase 2 LLM agent to return None (detection failure)
+        mock_executor = MagicMock()
+        mock_executor_class.return_value = mock_executor
+        mock_executor.execute_detection.return_value = None
 
         # Run orchestrator
         result = detect_build_command_with_fallback(
@@ -123,19 +129,25 @@ class TestBuildCommandDetectionIntegration(unittest.TestCase):
         )
 
         # Phase 1 should skip all candidates (tools missing)
-        # Phase 2 placeholder returns None
+        # Phase 2 returns None (mocked)
         # Should fallback to NO_OP
         self.assertEqual(result, NO_OP_BUILD_COMMAND)
 
         # Should have checked for tool existence multiple times
         self.assertGreater(mock_validate.call_count, 0)
 
-    def test_no_markers_triggers_phase2_and_fallback(self):
+    @patch('src.smartfix.domains.agents.sub_agent_executor.SubAgentExecutor')
+    def test_no_markers_triggers_phase2_and_fallback(self, mock_executor_class):
         """No build markers: Phase 1 finds nothing, Phase 2 placeholder, returns no-op."""
         # Empty directory with no build markers
         # (no pom.xml, build.gradle, package.json, Makefile, etc.)
         self._create_file('README.md', '# Test Project')
         self._create_file('src/code.py', 'print("hello")')
+
+        # Mock Phase 2 LLM agent to return None (detection failure)
+        mock_executor = MagicMock()
+        mock_executor_class.return_value = mock_executor
+        mock_executor.execute_detection.return_value = None
 
         # Run orchestrator
         result = detect_build_command_with_fallback(
@@ -144,13 +156,17 @@ class TestBuildCommandDetectionIntegration(unittest.TestCase):
         )
 
         # Phase 1 should find no candidates
-        # Phase 2 placeholder returns None
+        # Phase 2 returns None (mocked)
         # Should fallback to NO_OP
         self.assertEqual(result, NO_OP_BUILD_COMMAND)
 
+        # Verify Phase 2 was called since Phase 1 found nothing
+        mock_executor.execute_detection.assert_called_once()
+
+    @patch('src.smartfix.domains.agents.sub_agent_executor.SubAgentExecutor')
     @patch('src.smartfix.config.command_detector.run_build_command')
     @patch('subprocess.run')
-    def test_complete_failure_uses_noop_fallback(self, mock_subprocess, mock_run_build):
+    def test_complete_failure_uses_noop_fallback(self, mock_subprocess, mock_run_build, mock_executor_class):
         """Complete failure: All Phase 1 candidates fail, Phase 2 placeholder, returns no-op."""
         # Create Maven project
         self._create_file('pom.xml', '<project><artifactId>test</artifactId></project>')
@@ -160,6 +176,11 @@ class TestBuildCommandDetectionIntegration(unittest.TestCase):
 
         # Mock: all builds fail (Phase 1 exhausts all candidates)
         mock_run_build.return_value = (False, "Build failed: compilation error")
+
+        # Mock Phase 2 LLM agent to return None (detection failure)
+        mock_executor = MagicMock()
+        mock_executor_class.return_value = mock_executor
+        mock_executor.execute_detection.return_value = None
 
         # Run orchestrator
         result = detect_build_command_with_fallback(
