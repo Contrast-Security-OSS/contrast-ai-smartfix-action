@@ -528,8 +528,14 @@ Respond with ONLY the command, no explanations."""
         Raises:
             AgentExecutionError: If LLM call fails
         """
-        # Run the async implementation synchronously
-        return asyncio.run(self._execute_detection_async(prompt, target_folder, remediation_id))
+        # Use event loop wrapper for proper cleanup (prevents asyncio errors during shutdown)
+        from .event_loop_utils import _run_agent_in_event_loop
+        return _run_agent_in_event_loop(
+            self._execute_detection_async,
+            prompt,
+            target_folder,
+            remediation_id
+        )
 
     async def _execute_detection_async(self, prompt: str, target_folder: Path, remediation_id: str) -> str:
         """
