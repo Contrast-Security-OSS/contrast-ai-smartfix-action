@@ -17,7 +17,7 @@
 # #L%
 #
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from src.config import get_config
 from src.smartfix.shared.llm_providers import LlmProvider
