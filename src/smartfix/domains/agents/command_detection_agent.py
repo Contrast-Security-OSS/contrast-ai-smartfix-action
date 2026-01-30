@@ -263,9 +263,10 @@ class CommandDetectionAgent:
             "Based on the directory structure, build system files, and error patterns above, "
             "suggest a corrected build/test command.\n\n"
             "Consider:\n"
-            "- Is this a monorepo? (multiple build files in subdirectories may need -f or -p flags)\n"
+            "- Does the error indicate wrong directory? (e.g., 'No pom.xml found', 'No package.json')\n"
+            "  If so, check for build files in subdirectories and use path flags (-f, -p, --prefix)\n"
             "- Are there wrapper scripts? (./gradlew vs gradle, ./mvnw vs mvn)\n"
-            "- Does the error indicate missing dependencies, wrong directory, or configuration issues?\n"
+            "- Does the error indicate missing dependencies or configuration issues?\n"
             "- What specific adjustments would fix the errors shown above?\n"
         )
 

@@ -304,7 +304,7 @@ class Config:
         try:
             command = detect_build_command_with_fallback(
                 repo_root=self.REPO_ROOT,
-                project_dir=None,  # TODO: Add project_dir support for monorepos
+                project_dir=None,  # NOTE: Will need update when monorepo support is implemented
                 max_llm_attempts=self.MAX_COMMAND_DETECTION_ATTEMPTS,
                 remediation_id="config-init"
             )
@@ -341,7 +341,7 @@ class Config:
         try:
             detected = detect_format_command(
                 repo_root=self.REPO_ROOT,
-                project_dir=None  # TODO: Add project_dir support for monorepos
+                project_dir=None  # NOTE: Will need update when monorepo support is implemented
             )
 
             if detected:
