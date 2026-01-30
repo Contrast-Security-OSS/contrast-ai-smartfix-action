@@ -1,4 +1,4 @@
-"""Test H2 finding: Verify python -c flag is blocked"""
+"""Test that dangerous interpreter flags are blocked (python -c, node -e, ruby -e, perl -e)"""
 import unittest
 from src.smartfix.config.command_validator import (
     validate_command,
