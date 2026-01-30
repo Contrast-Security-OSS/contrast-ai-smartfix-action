@@ -124,8 +124,9 @@ class TestMCPToolsetManager(unittest.TestCase):
 
         self.assertEqual(result, mock_toolset)
 
+    @patch('src.smartfix.domains.agents.mcp_manager.error_exit')
     @patch('src.smartfix.domains.agents.mcp_manager.MCPToolset')
-    def test_get_tools_failure(self, mock_toolset_class):
+    def test_get_tools_failure(self, mock_toolset_class, mock_error_exit):
         """Test get_tools failure handling."""
         # Make get_tools raise an exception
         mock_toolset = MagicMock()
@@ -135,12 +136,11 @@ class TestMCPToolsetManager(unittest.TestCase):
         manager = MCPToolsetManager()
         target_folder = Path('/test/folder')
 
-        # Verify RuntimeError is raised when MCP connection fails
-        with self.assertRaises(RuntimeError) as context:
-            asyncio.run(manager.get_tools(target_folder, 'test-remediation-id'))
+        # Call get_tools and verify error_exit is called
+        asyncio.run(manager.get_tools(target_folder, 'test-remediation-id'))
 
-        # Verify error message contains expected text
-        self.assertIn('Failed to connect to Filesystem MCP server', str(context.exception))
+        # Verify error_exit was called with correct parameters
+        mock_error_exit.assert_called_once_with('test-remediation-id', 'AGENT_FAILURE')
 
     @patch('subprocess.run')
     def test_clear_npm_cache_success(self, mock_subprocess):
