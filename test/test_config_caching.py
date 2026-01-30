@@ -1,7 +1,6 @@
 """Test config caching - verify detection only runs once per process"""
 import unittest
-from unittest.mock import patch, MagicMock
-import os
+from unittest.mock import patch
 
 
 class TestConfigCaching(unittest.TestCase):
@@ -45,9 +44,11 @@ class TestConfigCaching(unittest.TestCase):
                 self.assertIs(config2, config3)
 
                 # Detection should only be called ONCE despite 3 get_config() calls
-                self.assertEqual(mock_detect.call_count, 1,
+                self.assertEqual(
+                    mock_detect.call_count, 1,
                     f"Detection was called {mock_detect.call_count} times, expected 1. "
-                    "Singleton pattern ensures detection only runs once per process.")
+                    "Singleton pattern ensures detection only runs once per process."
+                )
 
     def test_singleton_returns_same_instance(self):
         """Verify get_config() returns the same instance every time."""
@@ -73,8 +74,10 @@ class TestConfigCaching(unittest.TestCase):
 
             # All instances should be the exact same object
             for instance in instances[1:]:
-                self.assertIs(instances[0], instance,
-                    "get_config() should return the same singleton instance every time.")
+                self.assertIs(
+                    instances[0], instance,
+                    "get_config() should return the same singleton instance every time."
+                )
 
 
 if __name__ == '__main__':
