@@ -73,9 +73,6 @@ SmartFix detects build systems by looking for marker files in your project:
 
 **Also Validated:** `mvn` (any Maven goal), `mvnw` (Maven wrapper), `ant`, `sbt`, `junit`, `testng`
 
-**Monorepo Support:**
-- Uses `-f` flag: `mvn -f path/to/pom.xml test`
-
 ### Gradle (Java/Kotlin)
 **Marker Files:** `build.gradle` or `build.gradle.kts`
 
@@ -86,9 +83,6 @@ SmartFix detects build systems by looking for marker files in your project:
 - `gradle test` (fallback if no wrapper)
 
 **Also Validated:** `gradlew`, `gradle` (any Gradle task), `ant`, `sbt`, Java test frameworks
-
-**Monorepo Support:**
-- Uses `-p` flag: `./gradlew -p path/to/subdir test`
 
 ### Python
 **Marker Files:** `pytest.ini`, `setup.py`, or `pyproject.toml`
@@ -109,9 +103,6 @@ SmartFix detects build systems by looking for marker files in your project:
 - `npm run test`
 
 **Also Validated:** `yarn`, `pnpm`, `bun`, `npx`, `node`, `jest`, `mocha`, `jasmine`, `karma`, `ava`, `vitest`, `nyc`
-
-**Monorepo Support:**
-- Uses `--prefix` flag: `npm --prefix path/to/subdir test`
 
 ### PHP
 **Marker File:** `composer.json`
@@ -215,14 +206,7 @@ If Phase 1 fails (no working commands found), the LLM agent:
 ### Phase 3 Fallback (No-Op)
 If both Phase 1 and Phase 2 fail, SmartFix uses the no-op fallback command to gracefully degrade rather than failing the remediation.
 
-## Monorepo Support
-
-SmartFix automatically adapts commands for monorepo structures by:
-- **Maven**: Using `-f path/to/pom.xml` instead of `cd`
-- **Gradle**: Using `-p path/to/subdir` instead of `cd`
-- **npm**: Using `--prefix path/to/subdir` instead of `cd`
-
-This ensures commands run from the repository root while targeting the correct subdirectory.
+**Future Enhancement:** Automatic detection of subdirectory build files with appropriate path flags is planned but not yet available.
 
 ## Package Manager Detection
 
