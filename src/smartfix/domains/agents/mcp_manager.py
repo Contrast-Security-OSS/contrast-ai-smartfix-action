@@ -31,7 +31,8 @@ import warnings
 from pathlib import Path
 from typing import List, Optional
 
-from src.utils import debug_log, log
+from src.utils import debug_log, log, error_exit
+from src.smartfix.shared.failure_categories import FailureCategory
 
 # Suppress Python warnings before importing libraries that might trigger them
 warnings.filterwarnings('ignore', category=UserWarning)
@@ -130,7 +131,7 @@ class MCPToolsetManager:
         except NameError as ne:
             log(f"FATAL: Error initializing MCP Filesystem server (likely ADK setup issue): {ne}", is_error=True)
             log("No filesystem tools available - cannot make code changes.", is_error=True)
-            raise RuntimeError(f"Failed to initialize MCP Filesystem server: {ne}") from ne
+            error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
         except Exception as e:
             log(f"FATAL: Failed to connect to Filesystem MCP server: {str(e)}", is_error=True)
             # Get better error information when possible
@@ -138,7 +139,7 @@ class MCPToolsetManager:
                 import traceback
                 log(f"Error details: {traceback.format_exc()}", is_error=True)
             log("No filesystem tools available - cannot make code changes.", is_error=True)
-            raise RuntimeError(f"Failed to connect to Filesystem MCP server: {str(e)}") from e
+            error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
 
     async def _create_toolset(self, target_folder_str: str) -> MCPToolset:
         """
