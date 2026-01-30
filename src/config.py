@@ -27,7 +27,7 @@ from typing import Optional, Any, Dict, List
 from src.smartfix.config.command_validator import validate_command, CommandValidationError
 
 
-def _log_config_message(message: str, is_error: bool = False, is_warning: bool = False):
+def _log_config_message(message: str, is_error: bool = False, is_warning: bool = False) -> None:
     """A minimal logger for use only within the config module before full logging is set up."""
     # This function should have no dependencies on other project modules
     if is_error or is_warning:
@@ -51,7 +51,7 @@ class Config:
     # Class-level flag to ensure detection only runs once (prevents infinite recursion)
     _detection_started = False
 
-    def __init__(self, env: Dict[str, str] = os.environ, testing: bool = False):  # noqa: C901
+    def __init__(self, env: Dict[str, str] = os.environ, testing: bool = False) -> None:  # noqa: C901
         self.env = env
         self.testing = testing
 
@@ -239,7 +239,7 @@ class Config:
             _log_config_message(f"Invalid value for {var_name}. Using default: {default}", is_warning=True)
             return default
 
-    def _check_contrast_config_values_exist(self):
+    def _check_contrast_config_values_exist(self) -> None:
         if not all([self.CONTRAST_HOST, self.CONTRAST_ORG_ID, self.CONTRAST_APP_ID, self.CONTRAST_AUTHORIZATION_KEY, self.CONTRAST_API_KEY]):
             raise ConfigurationError("Error: Missing one or more Contrast API configuration variables (HOST, ORG_ID, APP_ID, AUTH_KEY, API_KEY).")
 
@@ -477,7 +477,7 @@ class Config:
                 "  2. AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables"
             )
 
-    def _log_initial_settings(self):
+    def _log_initial_settings(self) -> None:
         if not self.DEBUG_MODE:
             return
         _log_config_message(f"Repository Root: {self.REPO_ROOT}")
@@ -527,7 +527,7 @@ def get_config(testing: bool = False) -> Config:
     return _config_instance
 
 
-def reset_config():
+def reset_config() -> None:
     """For testing purposes only. Resets the config singleton."""
     global _config_instance
     _config_instance = None

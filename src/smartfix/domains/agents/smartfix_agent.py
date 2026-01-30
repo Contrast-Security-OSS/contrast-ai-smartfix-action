@@ -31,7 +31,7 @@ class SmartFixAgent(CodingAgentStrategy):
     All configuration is provided through RemediationContext - no direct config coupling.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize SmartFixAgent. Configuration comes from RemediationContext."""
         pass
 
@@ -258,7 +258,7 @@ class SmartFixAgent(CodingAgentStrategy):
 
         return agent_summary_str
 
-    def _extract_analytics_data(self, agent_summary_str: str):
+    def _extract_analytics_data(self, agent_summary_str: str) -> None:
         """Extract analytics data from agent response and update telemetry."""
         analytics_match = re.search(r"<analytics>(.*?)</analytics>", agent_summary_str, re.DOTALL)
         if not analytics_match:

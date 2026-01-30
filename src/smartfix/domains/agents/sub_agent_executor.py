@@ -58,7 +58,7 @@ class SubAgentExecutor:
     for Fix and QA agents operating under the SmartFixAgent orchestrator.
     """
 
-    def __init__(self, max_events: int = None):
+    def __init__(self, max_events: int = None) -> None:
         """
         Initialize sub-agent executor with configuration.
 
@@ -369,7 +369,7 @@ Respond with ONLY the command, no explanations."""
 
         return None
 
-    def _process_function_calls(self, event, agent_type: str, agent_tool_calls_telemetry: list):
+    def _process_function_calls(self, event, agent_type: str, agent_tool_calls_telemetry: list) -> None:
         """Process function calls from event."""
         calls = event.get_function_calls()
         if calls:
@@ -383,7 +383,7 @@ Respond with ONLY the command, no explanations."""
                     "result": "CALLING",
                 })
 
-    def _process_function_responses(self, event, agent_type: str, agent_tool_calls_telemetry: list):
+    def _process_function_responses(self, event, agent_type: str, agent_tool_calls_telemetry: list) -> None:
         """Process function responses from event."""
         responses = event.get_function_responses()
         if responses:

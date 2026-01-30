@@ -17,6 +17,8 @@
 # #L%
 #
 
+from typing import Any, Dict, Optional
+
 from src.config import get_config
 from src.smartfix.shared.llm_providers import LlmProvider
 
@@ -27,7 +29,7 @@ _pre_init_log_buffer = []  # Temporary buffer for logs before full initializatio
 _telemetry_initialized = False  # Flag to indicate if initialize_telemetry has run
 
 
-def reset_vuln_specific_telemetry():
+def reset_vuln_specific_telemetry() -> None:
     """
     Resets vulnerability-specific telemetry fields to None or empty states.
     This should be called when starting analysis for a new vulnerability.
@@ -47,7 +49,7 @@ def reset_vuln_specific_telemetry():
     _telemetry_data["additionalAttributes"]["remediationId"] = None
 
 
-def initialize_telemetry():
+def initialize_telemetry() -> None:
     """
     Initializes the telemetry data structure with default and placeholder values.
     This should be called once at the beginning of the main script.
@@ -110,7 +112,7 @@ def initialize_telemetry():
     _telemetry_initialized = True
 
 
-def _ensure_json_serializable(obj):
+def _ensure_json_serializable(obj) -> Any:
     """Helper function to make sure all values are JSON serializable."""
     if isinstance(obj, dict):
         return {k: _ensure_json_serializable(v) for k, v in obj.items()}
@@ -125,7 +127,7 @@ def _ensure_json_serializable(obj):
         return str(obj)
 
 
-def _truncate_text(text, max_length, keep_end=False):
+def _truncate_text(text, max_length, keep_end=False) -> str:
     """Helper function to truncate a string to a maximum size."""
     if not text or len(text) <= max_length:
         return text
@@ -138,7 +140,7 @@ def _truncate_text(text, max_length, keep_end=False):
         return f"{text[:max_length-50]}...[truncated, {len(text) - max_length} chars removed]"
 
 
-def _truncate_large_text_fields(obj, max_length=1500):
+def _truncate_large_text_fields(obj, max_length=1500) -> Any:
     """Helper function to truncate large text fields within nested structures."""
     if isinstance(obj, dict):
         for key, value in obj.items():
@@ -158,7 +160,7 @@ def _truncate_large_text_fields(obj, max_length=1500):
     return obj
 
 
-def _apply_field_specific_limits(telemetry_copy, field_limits):
+def _apply_field_specific_limits(telemetry_copy, field_limits) -> None:
     """Apply field-specific size limits to telemetry data."""
     # Special handling for aiSummaryReport - it gets its own smaller size limit
     if "resultInfo" in telemetry_copy and "aiSummaryReport" in telemetry_copy["resultInfo"]:
@@ -172,7 +174,7 @@ def _apply_field_specific_limits(telemetry_copy, field_limits):
     _truncate_large_text_fields(telemetry_copy, field_limits["defaultTextLength"])
 
 
-def _filter_sensitive_data(telemetry_copy, config):
+def _filter_sensitive_data(telemetry_copy, config) -> None:
     """Filter sensitive data based on ENABLE_FULL_TELEMETRY setting."""
     if not config.ENABLE_FULL_TELEMETRY:
         # When full telemetry is disabled:
@@ -188,7 +190,7 @@ def _filter_sensitive_data(telemetry_copy, config):
             telemetry_copy["additionalAttributes"].pop("fullLog", None)
 
 
-def _create_debug_output(telemetry_copy, config):
+def _create_debug_output(telemetry_copy, config) -> None:
     """Create debug output with size information."""
     import json
     import copy
@@ -218,7 +220,7 @@ def _create_debug_output(telemetry_copy, config):
     # debug_log(json.dumps(debug_copy, indent=2, default=str))
 
 
-def get_telemetry_data():
+def get_telemetry_data() -> Dict[str, Any]:
     """
     Returns a copy of the current telemetry data object that is JSON serializable.
 
@@ -258,7 +260,7 @@ def get_telemetry_data():
     return telemetry_copy
 
 
-def update_telemetry(key_path: str, value):
+def update_telemetry(key_path: str, value) -> None:
     """
     Updates a specific field in the telemetry data using a dot-separated key path.
     Example: update_telemetry("vulnInfo.vulnId", "CVE-1234")
@@ -275,7 +277,7 @@ def update_telemetry(key_path: str, value):
             data_ptr = data_ptr[key]
 
 
-def add_log_message(message: str):
+def add_log_message(message: str) -> None:
     """
     Appends a message to the fullLog in telemetry or to a pre-init buffer.
     Ensures messages are separated by newlines in the log.
@@ -295,7 +297,7 @@ def add_log_message(message: str):
             _telemetry_data["additionalAttributes"]["fullLog"] = message
 
 
-def add_agent_event(event_data: dict):
+def add_agent_event(event_data: dict) -> None:
     """Appends a new agent event to the agentEvents list."""
     # Guard against calling before telemetry is initialized (e.g., during Config init)
     if not _telemetry_data or "agentEvents" not in _telemetry_data:

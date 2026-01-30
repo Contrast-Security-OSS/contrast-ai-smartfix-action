@@ -28,6 +28,7 @@ import asyncio
 import logging
 import platform
 from pathlib import Path
+from typing import Any
 
 from src.utils import debug_log, log, error_exit
 from src.smartfix.shared.failure_categories import FailureCategory
@@ -44,7 +45,7 @@ except ImportError:
 MAX_PENDING_TASKS = 100
 
 
-def _configure_cleanup_logging():
+def _configure_cleanup_logging() -> None:
     """Configure logging to suppress benign asyncio and MCP cleanup errors."""
     # Suppress anyio error logging
     anyio_logger = logging.getLogger("anyio")
@@ -60,7 +61,7 @@ def _configure_cleanup_logging():
 
     # Add a comprehensive filter to specifically ignore common cancel scope and cleanup errors
     class AsyncioCleanupFilter(logging.Filter):
-        def filter(self, record):
+        def filter(self, record) -> bool:
             message = record.getMessage()
             # Filter out common cleanup errors
             if any(pattern in message for pattern in [
@@ -83,7 +84,7 @@ def _configure_cleanup_logging():
         mcp_logger.addFilter(cleanup_filter)
 
 
-def _run_agent_in_event_loop(coroutine_func, *args, **kwargs):
+def _run_agent_in_event_loop(coroutine_func, *args, **kwargs) -> Any:
     """
     Wrapper function to run an async coroutine in a controlled event loop.
     Handles proper setup and cleanup of the event loop and tasks.
@@ -280,7 +281,7 @@ async def _run_agent_internal_with_prompts(
 
     # Add a comprehensive filter to specifically ignore common cancel scope and cleanup errors
     class AsyncioCleanupFilter(logging.Filter):
-        def filter(self, record):
+        def filter(self, record) -> bool:
             message = record.getMessage()
             # Filter out common cleanup errors
             if any(pattern in message for pattern in [

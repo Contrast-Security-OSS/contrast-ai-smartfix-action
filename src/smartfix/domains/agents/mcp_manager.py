@@ -60,7 +60,7 @@ class MCPToolsetManager:
     timeouts, and npm cache management.
     """
 
-    def __init__(self, platform_name: Optional[str] = None):
+    def __init__(self, platform_name: Optional[str] = None) -> None:
         """
         Initialize MCP toolset manager with platform-specific configuration.
 

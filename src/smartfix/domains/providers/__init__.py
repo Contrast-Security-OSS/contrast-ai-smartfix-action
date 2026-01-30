@@ -6,7 +6,7 @@ from src.utils import normalize_host
 CONTRAST_CLAUDE_SONNET_4_5 = "contrast/claude-sonnet-4-5"
 
 
-def setup_contrast_provider():
+def setup_contrast_provider() -> None:
     """Setup Contrast Bedrock proxy as a custom provider."""
     # Lazy import to avoid circular dependency with config module
     from src.config import get_config
