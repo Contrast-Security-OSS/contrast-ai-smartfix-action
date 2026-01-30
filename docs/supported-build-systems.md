@@ -1,6 +1,6 @@
 # Supported Build Systems
 
-SmartFix can automatically detect and run build/test commands for the following build systems.
+SmartFix can automatically detect and run build/test commands.
 
 ## How Command Detection Works
 

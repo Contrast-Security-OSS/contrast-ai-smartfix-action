@@ -2,7 +2,7 @@
 # #%L
 # Contrast AI SmartFix
 # %%
-# Copyright (C) 2025 Contrast Security, Inc.
+# Copyright (C) 2026 Contrast Security, Inc.
 # %%
 # Contact: support@contrastsecurity.com
 # License: Commercial
