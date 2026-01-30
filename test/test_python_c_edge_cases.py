@@ -1,4 +1,4 @@
-"""Test edge cases for H2 - various python -c invocations"""
+"""Test edge cases for python -c validation in various contexts"""
 import unittest
 from src.smartfix.config.command_validator import (
     validate_command,
@@ -6,8 +6,8 @@ from src.smartfix.config.command_validator import (
 )
 
 
-class TestH2EdgeCases(unittest.TestCase):
-    """Test edge cases for python -c validation."""
+class TestPythonCEdgeCases(unittest.TestCase):
+    """Test edge cases for python -c validation in chains, pipes, and redirects."""
 
     def test_python_c_in_chain(self):
         """python -c should be blocked even in command chain."""

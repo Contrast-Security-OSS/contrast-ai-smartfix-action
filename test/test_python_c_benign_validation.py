@@ -1,4 +1,4 @@
-"""Simple test to verify H2 finding about python -c validation"""
+"""Test that python -c validation blocks benign code (without other dangerous patterns)"""
 import unittest
 from src.smartfix.config.command_validator import (
     validate_command,
@@ -6,7 +6,7 @@ from src.smartfix.config.command_validator import (
 )
 
 
-class TestH2PythonCSimple(unittest.TestCase):
+class TestPythonCBenignValidation(unittest.TestCase):
     """Test python -c with benign code (no other dangerous patterns)."""
 
     def test_python_c_simple_blocked(self):
@@ -25,7 +25,7 @@ class TestH2PythonCSimple(unittest.TestCase):
 
         error_msg = str(cm.exception).lower()
         print(f"\nError for 'python3 -c': {error_msg[:200]}")
-        # This is the KEY test - does it block python3 -c specifically?
+        # Verify python3 -c is blocked even with benign code
         self.assertIn("dangerous interpreter flag", error_msg)
 
     def test_python3_c_with_imports_blocked(self):
