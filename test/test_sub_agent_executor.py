@@ -2,7 +2,7 @@
 # #%L
 # Contrast AI SmartFix
 # %%
-# Copyright (C) 2025 Contrast Security, Inc.
+# Copyright (C) 2026 Contrast Security, Inc.
 # %%
 # Contact: support@contrastsecurity.com
 # License: Commercial
@@ -44,7 +44,7 @@ class TestSubAgentExecutorInitialization(unittest.TestCase):
         should use config default value.
         """
         # Arrange & Act
-        with patch('src.smartfix.domains.agents.sub_agent_executor.get_config') as mock_config:
+        with patch('src.config.get_config') as mock_config:
             mock_config.return_value = Mock(MAX_EVENTS_PER_AGENT=120)
             executor = SubAgentExecutor()
 
@@ -59,7 +59,7 @@ class TestSubAgentExecutorInitialization(unittest.TestCase):
         should override config default.
         """
         # Arrange & Act
-        with patch('src.smartfix.domains.agents.sub_agent_executor.get_config') as mock_config:
+        with patch('src.config.get_config') as mock_config:
             mock_config.return_value = Mock(MAX_EVENTS_PER_AGENT=120)
             executor = SubAgentExecutor(max_events=50)
 
@@ -76,7 +76,7 @@ class TestSubAgentExecutorStatisticsCollection(unittest.TestCase):
         should extract total tokens and cost correctly.
         """
         # Arrange
-        with patch('src.smartfix.domains.agents.sub_agent_executor.get_config') as mock_config:
+        with patch('src.config.get_config') as mock_config:
             mock_config.return_value = Mock(MAX_EVENTS_PER_AGENT=120)
             executor = SubAgentExecutor()
 
@@ -100,7 +100,7 @@ class TestSubAgentExecutorStatisticsCollection(unittest.TestCase):
         should return the numeric value directly.
         """
         # Arrange
-        with patch('src.smartfix.domains.agents.sub_agent_executor.get_config') as mock_config:
+        with patch('src.config.get_config') as mock_config:
             mock_config.return_value = Mock(MAX_EVENTS_PER_AGENT=120)
             executor = SubAgentExecutor()
 
@@ -124,7 +124,7 @@ class TestSubAgentExecutorStatisticsCollection(unittest.TestCase):
         should return default values (0, 0.0).
         """
         # Arrange
-        with patch('src.smartfix.domains.agents.sub_agent_executor.get_config') as mock_config:
+        with patch('src.config.get_config') as mock_config:
             mock_config.return_value = Mock(MAX_EVENTS_PER_AGENT=120)
             executor = SubAgentExecutor()
 
@@ -149,7 +149,7 @@ class TestSubAgentExecutorContentProcessing(unittest.TestCase):
         should extract and return the message text.
         """
         # Arrange
-        with patch('src.smartfix.domains.agents.sub_agent_executor.get_config') as mock_config:
+        with patch('src.config.get_config') as mock_config:
             mock_config.return_value = Mock(MAX_EVENTS_PER_AGENT=120)
             executor = SubAgentExecutor()
 
@@ -169,7 +169,7 @@ class TestSubAgentExecutorContentProcessing(unittest.TestCase):
         should extract message from parts.
         """
         # Arrange
-        with patch('src.smartfix.domains.agents.sub_agent_executor.get_config') as mock_config:
+        with patch('src.config.get_config') as mock_config:
             mock_config.return_value = Mock(MAX_EVENTS_PER_AGENT=120)
             executor = SubAgentExecutor()
 
@@ -190,7 +190,7 @@ class TestSubAgentExecutorContentProcessing(unittest.TestCase):
         should return None.
         """
         # Arrange
-        with patch('src.smartfix.domains.agents.sub_agent_executor.get_config') as mock_config:
+        with patch('src.config.get_config') as mock_config:
             mock_config.return_value = Mock(MAX_EVENTS_PER_AGENT=120)
             executor = SubAgentExecutor()
 
@@ -213,7 +213,7 @@ class TestSubAgentExecutorAgentCreation(unittest.TestCase):
         should call error_exit with AGENT_FAILURE.
         """
         # Arrange
-        with patch('src.smartfix.domains.agents.sub_agent_executor.get_config') as mock_config, \
+        with patch('src.config.get_config') as mock_config, \
              patch('src.smartfix.domains.agents.sub_agent_executor.error_exit') as mock_error_exit:
             mock_config.return_value = Mock(MAX_EVENTS_PER_AGENT=120)
             # Make error_exit raise SystemExit to stop execution (simulates real behavior)
@@ -245,7 +245,7 @@ class TestSubAgentExecutorAgentCreation(unittest.TestCase):
         should call error_exit with AGENT_FAILURE.
         """
         # Arrange
-        with patch('src.smartfix.domains.agents.sub_agent_executor.get_config') as mock_config, \
+        with patch('src.config.get_config') as mock_config, \
              patch('src.smartfix.domains.agents.sub_agent_executor.error_exit') as mock_error_exit:
             mock_config.return_value = Mock(MAX_EVENTS_PER_AGENT=120)
             # Make error_exit raise SystemExit to stop execution
@@ -276,7 +276,7 @@ class TestSubAgentExecutorAgentCreation(unittest.TestCase):
         should create agent successfully with standard model.
         """
         # Arrange
-        with patch('src.smartfix.domains.agents.sub_agent_executor.get_config') as mock_config, \
+        with patch('src.config.get_config') as mock_config, \
              patch('src.smartfix.domains.agents.sub_agent_executor.SmartFixLiteLlm') as mock_llm_class, \
              patch('src.smartfix.domains.agents.sub_agent_executor.SmartFixLlmAgent') as mock_agent_class:
 
@@ -326,7 +326,7 @@ class TestSubAgentExecutorAgentCreation(unittest.TestCase):
         should create agent with Contrast LLM and custom headers.
         """
         # Arrange
-        with patch('src.smartfix.domains.agents.sub_agent_executor.get_config') as mock_config, \
+        with patch('src.config.get_config') as mock_config, \
              patch('src.smartfix.domains.agents.sub_agent_executor.SmartFixLiteLlm') as mock_llm_class, \
              patch('src.smartfix.domains.agents.sub_agent_executor.SmartFixLlmAgent') as mock_agent_class, \
              patch('src.smartfix.domains.agents.sub_agent_executor.setup_contrast_provider') as mock_setup:
@@ -382,7 +382,7 @@ class TestSubAgentExecutorAgentCreation(unittest.TestCase):
         should call error_exit with INVALID_LLM_CONFIG.
         """
         # Arrange
-        with patch('src.smartfix.domains.agents.sub_agent_executor.get_config') as mock_config, \
+        with patch('src.config.get_config') as mock_config, \
              patch('src.smartfix.domains.agents.sub_agent_executor.SmartFixLiteLlm') as mock_llm_class, \
              patch('src.smartfix.domains.agents.sub_agent_executor.error_exit') as mock_error_exit:
 
@@ -427,7 +427,7 @@ class TestSubAgentExecutorFunctionProcessing(unittest.TestCase):
         should process each call and add to telemetry.
         """
         # Arrange
-        with patch('src.smartfix.domains.agents.sub_agent_executor.get_config') as mock_config:
+        with patch('src.config.get_config') as mock_config:
             mock_config.return_value = Mock(MAX_EVENTS_PER_AGENT=120)
             executor = SubAgentExecutor()
 
@@ -458,7 +458,7 @@ class TestSubAgentExecutorFunctionProcessing(unittest.TestCase):
         should not add anything to telemetry.
         """
         # Arrange
-        with patch('src.smartfix.domains.agents.sub_agent_executor.get_config') as mock_config:
+        with patch('src.config.get_config') as mock_config:
             mock_config.return_value = Mock(MAX_EVENTS_PER_AGENT=120)
             executor = SubAgentExecutor()
 
@@ -479,7 +479,7 @@ class TestSubAgentExecutorFunctionProcessing(unittest.TestCase):
         should mark as SUCCESS in telemetry.
         """
         # Arrange
-        with patch('src.smartfix.domains.agents.sub_agent_executor.get_config') as mock_config:
+        with patch('src.config.get_config') as mock_config:
             mock_config.return_value = Mock(MAX_EVENTS_PER_AGENT=120)
             executor = SubAgentExecutor()
 
@@ -505,7 +505,7 @@ class TestSubAgentExecutorFunctionProcessing(unittest.TestCase):
         should mark as FAILURE in telemetry.
         """
         # Arrange
-        with patch('src.smartfix.domains.agents.sub_agent_executor.get_config') as mock_config:
+        with patch('src.config.get_config') as mock_config:
             mock_config.return_value = Mock(MAX_EVENTS_PER_AGENT=120)
             executor = SubAgentExecutor()
 
@@ -531,7 +531,7 @@ class TestSubAgentExecutorFunctionProcessing(unittest.TestCase):
         should mark as UNKNOWN in telemetry.
         """
         # Arrange
-        with patch('src.smartfix.domains.agents.sub_agent_executor.get_config') as mock_config:
+        with patch('src.config.get_config') as mock_config:
             mock_config.return_value = Mock(MAX_EVENTS_PER_AGENT=120)
             executor = SubAgentExecutor()
 
@@ -561,7 +561,7 @@ class TestSubAgentExecutorExceptionHandling(unittest.TestCase):
         should log at debug level and cleanup event stream without exiting.
         """
         # Arrange
-        with patch('src.smartfix.domains.agents.sub_agent_executor.get_config') as mock_config, \
+        with patch('src.config.get_config') as mock_config, \
              patch('src.smartfix.domains.agents.sub_agent_executor.error_exit') as mock_error_exit:
             mock_config.return_value = Mock(MAX_EVENTS_PER_AGENT=120)
             executor = SubAgentExecutor()
@@ -584,7 +584,7 @@ class TestSubAgentExecutorExceptionHandling(unittest.TestCase):
         should log specific error message and call error_exit.
         """
         # Arrange
-        with patch('src.smartfix.domains.agents.sub_agent_executor.get_config') as mock_config, \
+        with patch('src.config.get_config') as mock_config, \
              patch('src.smartfix.domains.agents.sub_agent_executor.error_exit') as mock_error_exit:
             mock_config.return_value = Mock(
                 MAX_EVENTS_PER_AGENT=120,
@@ -616,7 +616,7 @@ class TestSubAgentExecutorCleanup(unittest.TestCase):
         should call aclose to cleanup.
         """
         # Arrange
-        with patch('src.smartfix.domains.agents.sub_agent_executor.get_config') as mock_config:
+        with patch('src.config.get_config') as mock_config:
             mock_config.return_value = Mock(MAX_EVENTS_PER_AGENT=120)
             executor = SubAgentExecutor()
 
@@ -635,7 +635,7 @@ class TestSubAgentExecutorCleanup(unittest.TestCase):
         should return early without error.
         """
         # Arrange
-        with patch('src.smartfix.domains.agents.sub_agent_executor.get_config') as mock_config:
+        with patch('src.config.get_config') as mock_config:
             mock_config.return_value = Mock(MAX_EVENTS_PER_AGENT=120)
             executor = SubAgentExecutor()
 
@@ -650,7 +650,7 @@ class TestSubAgentExecutorCleanup(unittest.TestCase):
         should handle gracefully without raising.
         """
         # Arrange
-        with patch('src.smartfix.domains.agents.sub_agent_executor.get_config') as mock_config:
+        with patch('src.config.get_config') as mock_config:
             mock_config.return_value = Mock(MAX_EVENTS_PER_AGENT=120)
             executor = SubAgentExecutor()
 
@@ -669,7 +669,7 @@ class TestSubAgentExecutorCleanup(unittest.TestCase):
         should handle gracefully without raising.
         """
         # Arrange
-        with patch('src.smartfix.domains.agents.sub_agent_executor.get_config') as mock_config:
+        with patch('src.config.get_config') as mock_config:
             mock_config.return_value = Mock(MAX_EVENTS_PER_AGENT=120)
             executor = SubAgentExecutor()
 
@@ -681,6 +681,112 @@ class TestSubAgentExecutorCleanup(unittest.TestCase):
         asyncio.run(executor._cleanup_event_stream(mock_stream, timeout=0.1))
 
         # Assert - test passes if no exception raised
+
+
+class TestCommandExtraction(unittest.TestCase):
+    """Test command extraction from execute_detection responses"""
+
+    @patch('src.smartfix.domains.agents.event_loop_utils._run_agent_in_event_loop')
+    @patch('src.config.get_config')
+    def test_extract_command_from_simple_response(self, mock_config, mock_run_agent):
+        """
+        When execute_detection receives a simple command response,
+        should return the command unchanged.
+        """
+        # Arrange
+        mock_config.return_value = Mock(MAX_EVENTS_PER_AGENT=120)
+        executor = SubAgentExecutor()
+        mock_run_agent.return_value = "./mvnw test"
+
+        # Act
+        result = executor.execute_detection(
+            prompt="Test prompt",
+            target_folder=Path("/tmp/test"),
+            remediation_id="test-123"
+        )
+
+        # Assert
+        self.assertEqual(result, "./mvnw test")
+
+    @patch('src.smartfix.domains.agents.event_loop_utils._run_agent_in_event_loop')
+    @patch('src.config.get_config')
+    def test_extract_command_with_explanatory_text(self, mock_config, mock_run_agent):
+        """
+        When execute_detection receives response with explanatory text,
+        should extract only the command (last line).
+        """
+        # Arrange
+        mock_config.return_value = Mock(MAX_EVENTS_PER_AGENT=120)
+        executor = SubAgentExecutor()
+        mock_run_agent.return_value = """I need to analyze the error messages to understand what's happening:
+
+1. **Attempt 1**: The vulnerability-testing module depends on something
+2. **Attempt 4**: After installing the root project, the tests fail
+
+The solution is to run package on the vulnerability-testing module.
+
+./mvnw clean package && ./mvnw -f vulnerability-testing/pom.xml package"""
+
+        # Act
+        result = executor.execute_detection(
+            prompt="Test prompt",
+            target_folder=Path("/tmp/test"),
+            remediation_id="test-123"
+        )
+
+        # Assert
+        self.assertEqual(result, "./mvnw clean package && ./mvnw -f vulnerability-testing/pom.xml package")
+
+    @patch('src.smartfix.domains.agents.event_loop_utils._run_agent_in_event_loop')
+    @patch('src.config.get_config')
+    def test_extract_command_from_markdown_block(self, mock_config, mock_run_agent):
+        """
+        When execute_detection receives command in markdown code block,
+        should extract the command without markers.
+        """
+        # Arrange
+        mock_config.return_value = Mock(MAX_EVENTS_PER_AGENT=120)
+        executor = SubAgentExecutor()
+        mock_run_agent.return_value = """```
+./mvnw test
+```"""
+
+        # Act
+        result = executor.execute_detection(
+            prompt="Test prompt",
+            target_folder=Path("/tmp/test"),
+            remediation_id="test-123"
+        )
+
+        # Assert
+        self.assertEqual(result, "./mvnw test")
+
+    @patch('src.smartfix.domains.agents.event_loop_utils._run_agent_in_event_loop')
+    @patch('src.config.get_config')
+    def test_extract_command_with_blank_lines(self, mock_config, mock_run_agent):
+        """
+        When execute_detection receives response with blank lines,
+        should extract only the last non-empty line.
+        """
+        # Arrange
+        mock_config.return_value = Mock(MAX_EVENTS_PER_AGENT=120)
+        executor = SubAgentExecutor()
+        mock_run_agent.return_value = """Now I understand the issue.
+
+./mvnw clean install && ./mvnw -f vulnerability-testing/pom.xml test
+
+
+"""
+
+        # Act
+        result = executor.execute_detection(
+            prompt="Test prompt",
+            target_folder=Path("/tmp/test"),
+            remediation_id="test-123"
+        )
+
+        # Assert
+        self.assertEqual(result, "./mvnw clean install && ./mvnw -f vulnerability-testing/pom.xml test")
 
 
 if __name__ == '__main__':

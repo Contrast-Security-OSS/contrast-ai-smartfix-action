@@ -160,41 +160,53 @@ class CommandExecutionError(Exception):
         self.stderr = stderr
 
 
-def run_command(command, env=None, check=True):
+def run_command(command, env=None, check=True, shell=False):  # noqa: C901
     """
     Runs a shell command and returns its stdout.
     Prints command, stdout/stderr based on DEBUG_MODE.
     Exits on error if check=True.
 
     Args:
-        command: List of command and arguments to run
+        command: List of command and arguments to run, or string if shell=True
         env: Optional environment variables dictionary
         check: Whether to exit on command failure
+        shell: Whether to run the command through the shell (for operators like &&, ||, etc.)
 
     Returns:
         str: Command stdout output
 
     Raises:
         SystemExit: If check=True and command fails
+
+    Note:
+        Complexity is necessary for proper command execution and error handling.
     """
     try:
         # Show command and options for better debugging
-        options_text = f"Options: check={check}"
+        options_text = f"Options: check={check}, shell={shell}"
         if env and env.get('GITHUB_TOKEN'):
             # Don't print the actual token
             options_text += ", GITHUB_TOKEN=***"
 
         # Mask GITHUB_TOKEN value in command parts
         config = get_config()
-        masked_command = []
-        for part in command:
-            # Note: the gh envvars "GITHUB_ENTERPRISE_TOKEN" and "GITHUB_TOKEN" have the same value as config.GITHUB_TOKEN
-            if config.GITHUB_TOKEN and config.GITHUB_TOKEN in part:
-                masked_command.append(part.replace(config.GITHUB_TOKEN, "***"))
-            else:
-                masked_command.append(part)
+        if shell:
+            # For shell commands, mask token in the string
+            masked_command = command
+            if config.GITHUB_TOKEN and config.GITHUB_TOKEN in command:
+                masked_command = command.replace(config.GITHUB_TOKEN, "***")
+            debug_log(f"::group::Running command: {masked_command}")
+        else:
+            # For list commands, mask token in each part
+            masked_command = []
+            for part in command:
+                # Note: the gh envvars "GITHUB_ENTERPRISE_TOKEN" and "GITHUB_TOKEN" have the same value as config.GITHUB_TOKEN
+                if config.GITHUB_TOKEN and config.GITHUB_TOKEN in part:
+                    masked_command.append(part.replace(config.GITHUB_TOKEN, "***"))
+                else:
+                    masked_command.append(part)
+            debug_log(f"::group::Running command: {' '.join(masked_command)}")
 
-        debug_log(f"::group::Running command: {' '.join(masked_command)}")
         debug_log(f"  {options_text}")
 
         # Merge with current environment to preserve essential variables like PATH
@@ -210,7 +222,8 @@ def run_command(command, env=None, check=True):
             encoding='utf-8',
             errors='replace',
             check=False,  # We'll handle errors ourselves
-            env=full_env
+            env=full_env,
+            shell=shell
         )
 
         debug_log(f"  Return Code: {process.returncode}")
@@ -246,14 +259,15 @@ def run_command(command, env=None, check=True):
                     debug_log(f"  Command stderr:\n---\n{stderr_text}\n---")
 
         if check and process.returncode != 0:
-            error_message_for_log = f"Error: Command failed with return code {process.returncode}: {' '.join(command)}"
+            command_str = command if shell else ' '.join(command)
+            error_message_for_log = f"Error: Command failed with return code {process.returncode}: {command_str}"
             log(error_message_for_log, is_error=True)
             error_details = process.stderr.strip() if process.stderr else "No error output available"
             log(f"Error details: {error_details}", is_error=True)
             raise CommandExecutionError(
-                message=f"Command '{' '.join(command)}' failed with return code {process.returncode}.",
+                message=f"Command '{command_str}' failed with return code {process.returncode}.",
                 return_code=process.returncode,
-                command=' '.join(command),
+                command=command_str,
                 stdout=process.stdout.strip() if process.stdout else None,
                 stderr=error_details
             )

@@ -168,6 +168,273 @@ class TestConfigIntegration(unittest.TestCase):
         self.assertTrue(config.SKIP_WRITING_SECURITY_TEST)
         self.assertFalse(config.ENABLE_FULL_TELEMETRY)
 
+    def test_config_sourced_commands_skip_validation(self):
+        """Test that config-sourced commands skip allowlist validation."""
+        # Set a command that would normally be blocked (dangerous pattern)
+        os.environ['BUILD_COMMAND'] = 'rm -rf /tmp/test && echo "done"'
+        reset_config()
+
+        # Should not raise an error because config-sourced commands skip validation
+        config = get_config(testing=True)
+
+        # Verify the dangerous command was accepted
+        self.assertEqual(config.BUILD_COMMAND, 'rm -rf /tmp/test && echo "done"')
+
+    def test_config_sourced_commands_with_command_substitution(self):
+        """Test that config-sourced commands skip validation even with command substitution."""
+        # Command substitution would normally be blocked
+        os.environ['BUILD_COMMAND'] = 'echo $(date) && npm test'
+        reset_config()
+
+        # Should not raise an error
+        config = get_config(testing=True)
+        self.assertEqual(config.BUILD_COMMAND, 'echo $(date) && npm test')
+
+    def test_config_sourced_commands_with_piping_to_shell(self):
+        """Test that config-sourced commands skip validation even with shell piping."""
+        # Piping to shell would normally be blocked
+        os.environ['BUILD_COMMAND'] = 'curl http://example.com/script.sh | sh'
+        reset_config()
+
+        # Should not raise an error
+        config = get_config(testing=True)
+        self.assertEqual(config.BUILD_COMMAND, 'curl http://example.com/script.sh | sh')
+
+    def test_config_sourced_formatting_command_skips_validation(self):
+        """Test that config-sourced FORMATTING_COMMAND also skips validation."""
+        # Set a formatting command with dangerous pattern
+        os.environ['FORMATTING_COMMAND'] = 'prettier --write src/ && eval "echo test"'
+        reset_config()
+
+        # Should not raise an error
+        config = get_config(testing=True)
+        self.assertEqual(config.FORMATTING_COMMAND, 'prettier --write src/ && eval "echo test"')
+
+    def test_backward_compatibility_default_parameter(self):
+        """Test that existing code works without passing source parameter (backward compatibility)."""
+        # Use a safe command to test backward compatibility
+        os.environ['BUILD_COMMAND'] = 'mvn clean test'
+        reset_config()
+
+        # Should work as before, defaulting to config source
+        config = get_config(testing=True)
+        self.assertEqual(config.BUILD_COMMAND, 'mvn clean test')
+
+    def test_empty_commands_allowed_regardless_of_source(self):
+        """Test that empty/None commands are allowed for both sources."""
+        # Don't set BUILD_COMMAND - it should be None/empty
+        if 'BUILD_COMMAND' in os.environ:
+            del os.environ['BUILD_COMMAND']
+        # Set RUN_TASK to something other than generate_fix to make BUILD_COMMAND optional
+        os.environ['RUN_TASK'] = 'merge'
+        reset_config()
+
+        # Should not raise an error
+        config = get_config(testing=True)
+        # BUILD_COMMAND should be None or empty string
+        self.assertIn(config.BUILD_COMMAND, [None, ''])
+
+    def test_both_build_and_format_commands_skip_validation(self):
+        """Test that both BUILD_COMMAND and FORMATTING_COMMAND skip validation."""
+        os.environ['BUILD_COMMAND'] = 'npm test'
+        os.environ['FORMATTING_COMMAND'] = 'prettier --write .'
+        reset_config()
+
+        # Both commands should be accepted without errors
+        config = get_config(testing=True)
+
+        # Verify both commands are set correctly
+        self.assertEqual(config.BUILD_COMMAND, 'npm test')
+        self.assertEqual(config.FORMATTING_COMMAND, 'prettier --write .')
+
+
+class TestCommandAutoDetection(unittest.TestCase):
+    """Test command auto-detection when commands are not provided."""
+
+    def setUp(self):
+        """Set up test environment."""
+        self.original_env = os.environ.copy()
+
+        # Minimal required env vars (no BUILD_COMMAND or FORMATTING_COMMAND)
+        self.env_vars = {
+            'GITHUB_WORKSPACE': '/tmp',
+            'GITHUB_TOKEN': 'mock-token',
+            'GITHUB_REPOSITORY': 'mock/repo',
+            'BASE_BRANCH': 'main',
+            'CONTRAST_HOST': 'test.contrastsecurity.com',
+            'CONTRAST_ORG_ID': 'test-org-id',
+            'CONTRAST_APP_ID': 'test-app-id',
+            'CONTRAST_AUTHORIZATION_KEY': 'test-auth-key',
+            'CONTRAST_API_KEY': 'test-api-key',
+            'AGENT_MODEL': 'anthropic/claude-sonnet-4-5'
+        }
+
+        os.environ.update(self.env_vars)
+        reset_config()
+
+    def tearDown(self):
+        """Clean up after test."""
+        os.environ.clear()
+        os.environ.update(self.original_env)
+        reset_config()
+
+    @patch('src.smartfix.config.command_detection_orchestrator.detect_build_command_with_fallback')
+    def test_auto_detects_build_command_when_not_provided(self, mock_detect):
+        """Config auto-detects BUILD_COMMAND when not in environment and required."""
+        # Orchestrator returns string (not tuple)
+        mock_detect.return_value = 'mvn test'
+
+        # Don't set BUILD_COMMAND env var (make auto-detection necessary)
+        if 'BUILD_COMMAND' in os.environ:
+            del os.environ['BUILD_COMMAND']
+
+        # Set RUN_TASK to generate_fix and CODING_AGENT to SMARTFIX to make BUILD_COMMAND required
+        os.environ['RUN_TASK'] = 'generate_fix'
+        os.environ['CODING_AGENT'] = 'SMARTFIX'
+
+        reset_config()
+        config = get_config(testing=False)  # Use non-testing mode to enable auto-detection
+
+        # Should have called detection
+        mock_detect.assert_called_once()
+        # Should have detected command
+        self.assertEqual(config.BUILD_COMMAND, 'mvn test')
+
+    @patch('src.smartfix.config.command_detector.detect_format_command')
+    def test_auto_detects_format_command_when_not_provided(self, mock_detect):
+        """Config auto-detects FORMATTING_COMMAND when not in environment and required."""
+        mock_detect.return_value = 'black .'
+
+        # Don't set FORMATTING_COMMAND env var
+        if 'FORMATTING_COMMAND' in os.environ:
+            del os.environ['FORMATTING_COMMAND']
+
+        # Set RUN_TASK to generate_fix and CODING_AGENT to SMARTFIX to make detection needed
+        os.environ['RUN_TASK'] = 'generate_fix'
+        os.environ['CODING_AGENT'] = 'SMARTFIX'
+
+        reset_config()
+        config = get_config(testing=False)  # Use non-testing mode to enable auto-detection
+
+        # Should have called detection
+        mock_detect.assert_called_once()
+        # Should have detected command
+        self.assertEqual(config.FORMATTING_COMMAND, 'black .')
+
+    @patch('src.smartfix.config.command_detection_orchestrator.detect_build_command_with_fallback')
+    def test_skips_detection_when_build_command_provided(self, mock_detect):
+        """Config uses provided BUILD_COMMAND instead of auto-detecting."""
+        os.environ['BUILD_COMMAND'] = 'npm test'
+
+        reset_config()
+        config = get_config(testing=True)
+
+        # Should NOT have called detection
+        mock_detect.assert_not_called()
+        # Should use provided command
+        self.assertEqual(config.BUILD_COMMAND, 'npm test')
+
+    @patch('src.smartfix.config.command_detector.detect_format_command')
+    def test_skips_detection_when_format_command_provided(self, mock_detect):
+        """Config uses provided FORMATTING_COMMAND instead of auto-detecting."""
+        os.environ['FORMATTING_COMMAND'] = 'prettier --write .'
+
+        reset_config()
+        config = get_config(testing=True)
+
+        # Should NOT have called detection
+        mock_detect.assert_not_called()
+        # Should use provided command
+        self.assertEqual(config.FORMATTING_COMMAND, 'prettier --write .')
+
+    @patch('src.smartfix.config.command_detection_orchestrator.detect_build_command_with_fallback')
+    def test_detection_skipped_when_not_required(self, mock_detect):
+        """Config skips detection entirely when BUILD_COMMAND not required."""
+        if 'BUILD_COMMAND' in os.environ:
+            del os.environ['BUILD_COMMAND']
+
+        # Set RUN_TASK to make BUILD_COMMAND optional (not generate_fix)
+        os.environ['RUN_TASK'] = 'merge'
+
+        reset_config()
+        config = get_config(testing=False)
+
+        # Should NOT have called detection (not required)
+        mock_detect.assert_not_called()
+        # BUILD_COMMAND should be None since not provided and not required
+        self.assertIsNone(config.BUILD_COMMAND)
+
+    @patch('src.smartfix.config.command_detection_orchestrator.detect_build_command_with_fallback')
+    def test_detection_uses_noop_fallback_when_required(self, mock_detect):
+        """Config uses no-op fallback when orchestrator returns it (no error raised)."""
+        from src.smartfix.config.command_detection_orchestrator import NO_OP_BUILD_COMMAND
+
+        # Orchestrator returns no-op fallback (detection failed both phases)
+        mock_detect.return_value = NO_OP_BUILD_COMMAND
+
+        if 'BUILD_COMMAND' in os.environ:
+            del os.environ['BUILD_COMMAND']
+
+        # Set RUN_TASK to generate_fix to make BUILD_COMMAND required
+        os.environ['RUN_TASK'] = 'generate_fix'
+        os.environ['CODING_AGENT'] = 'SMARTFIX'
+
+        reset_config()
+
+        # Should NOT raise error (orchestrator handles fallback)
+        config = get_config(testing=False)
+
+        # BUILD_COMMAND should be the no-op fallback
+        self.assertEqual(config.BUILD_COMMAND, NO_OP_BUILD_COMMAND)
+
+    @patch('src.config.Config._validate_command')
+    @patch('src.smartfix.config.command_detection_orchestrator.detect_build_command_with_fallback')
+    def test_detected_commands_are_validated(self, mock_detect, mock_validate):
+        """Detected commands are validated against allowlist."""
+        # Orchestrator returns string (not tuple)
+        mock_detect.return_value = 'mvn test'
+
+        if 'BUILD_COMMAND' in os.environ:
+            del os.environ['BUILD_COMMAND']
+
+        # Set RUN_TASK to generate_fix and CODING_AGENT to SMARTFIX to make detection required
+        os.environ['RUN_TASK'] = 'generate_fix'
+        os.environ['CODING_AGENT'] = 'SMARTFIX'
+
+        reset_config()
+        config = get_config(testing=False)
+
+        # Detection should be called
+        mock_detect.assert_called_once()
+        # Validation should be called with the detected command and ai_detected source
+        mock_validate.assert_any_call('BUILD_COMMAND', 'mvn test', source='ai_detected')
+        # Config should have the validated command
+        self.assertEqual(config.BUILD_COMMAND, 'mvn test')
+
+    @patch('src.smartfix.config.command_detector.detect_format_command')
+    def test_config_state_after_successful_detection(self, mock_detect):
+        """Verify config state after successful auto-detection."""
+        mock_detect.return_value = 'prettier --write .'
+
+        if 'FORMATTING_COMMAND' in os.environ:
+            del os.environ['FORMATTING_COMMAND']
+
+        os.environ['RUN_TASK'] = 'generate_fix'
+        os.environ['CODING_AGENT'] = 'SMARTFIX'
+
+        reset_config()
+        config = get_config(testing=False)
+
+        # Verify detection was called
+        mock_detect.assert_called_once()
+        # Verify config has the command
+        self.assertEqual(config.FORMATTING_COMMAND, 'prettier --write .')
+        # Verify REPO_ROOT is set (needed for detection)
+        self.assertIsNotNone(config.REPO_ROOT)
+        # Verify other config is intact
+        self.assertEqual(config.BASE_BRANCH, 'main')
+        self.assertEqual(config.RUN_TASK, 'generate_fix')
+
 
 if __name__ == '__main__':
     unittest.main()

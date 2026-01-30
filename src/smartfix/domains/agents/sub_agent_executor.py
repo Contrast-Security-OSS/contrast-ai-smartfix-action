@@ -2,7 +2,7 @@
 # #%L
 # Contrast AI SmartFix
 # %%
-# Copyright (C) 2025 Contrast Security, Inc.
+# Copyright (C) 2026 Contrast Security, Inc.
 # %%
 # Contact: support@contrastsecurity.com
 # License: Commercial
@@ -30,7 +30,6 @@ import re
 from pathlib import Path
 from typing import Optional
 
-from src.config import get_config
 from src.utils import debug_log, log, error_exit, tail_string
 from src.smartfix.shared.failure_categories import FailureCategory
 import src.telemetry_handler as telemetry_handler
@@ -59,16 +58,36 @@ class SubAgentExecutor:
     for Fix and QA agents operating under the SmartFixAgent orchestrator.
     """
 
-    def __init__(self, max_events: int = None):
+    def __init__(self, max_events: int = None) -> None:
         """
         Initialize sub-agent executor with configuration.
 
         Args:
             max_events: Maximum events per agent execution (defaults to config value)
         """
+        # Lazy import to avoid circular dependency with config module
+        from src.config import get_config
+
         self.config = get_config()
         self.max_events = max_events or self.config.MAX_EVENTS_PER_AGENT
         self.mcp_manager = MCPToolsetManager()
+
+    def _load_command_detection_prompt(self) -> str:
+        """
+        Load command detection system prompt from file.
+
+        Returns:
+            str: System prompt for command detection agent
+        """
+        prompt_path = Path(__file__).parent / "prompts" / "command_detection_system_prompt.txt"
+        try:
+            with open(prompt_path, 'r', encoding='utf-8') as f:
+                return f.read()
+        except FileNotFoundError:
+            # Fallback to basic prompt if file not found
+            log(f"Warning: Command detection prompt file not found at {prompt_path}", is_error=True)
+            return """You are a build command detection expert. Analyze project structure and suggest appropriate build/test commands.
+Respond with ONLY the command, no explanations."""
 
     async def create_agent(
         self,
@@ -350,7 +369,7 @@ class SubAgentExecutor:
 
         return None
 
-    def _process_function_calls(self, event, agent_type: str, agent_tool_calls_telemetry: list):
+    def _process_function_calls(self, event, agent_type: str, agent_tool_calls_telemetry: list) -> None:
         """Process function calls from event."""
         calls = event.get_function_calls()
         if calls:
@@ -364,7 +383,7 @@ class SubAgentExecutor:
                     "result": "CALLING",
                 })
 
-    def _process_function_responses(self, event, agent_type: str, agent_tool_calls_telemetry: list):
+    def _process_function_responses(self, event, agent_type: str, agent_tool_calls_telemetry: list) -> None:
         """Process function responses from event."""
         responses = event.get_function_responses()
         if responses:
@@ -487,3 +506,67 @@ class SubAgentExecutor:
             # Fallback values if stats retrieval fails
             debug_log(f"Could not retrieve statistics: {e}")
             return 0, 0.0
+
+    def execute_detection(self, prompt: str, target_folder: Path, remediation_id: str) -> str:
+        """
+        Execute command detection using LLM with filesystem access.
+
+        Uses the same agent execution infrastructure as fix/qa agents to avoid code duplication.
+
+        Args:
+            prompt: The detection prompt with project structure and error history
+            target_folder: Path to the project folder for filesystem access
+            remediation_id: Remediation ID for error tracking
+
+        Returns:
+            str: The suggested command from the LLM
+
+        Raises:
+            AgentExecutionError: If LLM call fails
+        """
+        # Disable LiteLLM's async logging to prevent event loop binding issues
+        # The detection agent runs in a fresh event loop, and LiteLLM's LoggingWorker
+        # creates Queue objects bound to event loops, causing RuntimeError if the loop changes
+        import litellm
+        litellm.turn_off_message_logging = True
+        litellm.callbacks = []
+
+        # Load detection-specific system prompt
+        system_prompt = self._load_command_detection_prompt()
+
+        # Use the same code path as fix/qa agents
+        from .event_loop_utils import _run_agent_in_event_loop, _run_agent_internal_with_prompts
+
+        try:
+            response = _run_agent_in_event_loop(
+                _run_agent_internal_with_prompts,
+                agent_type="detection",
+                repo_root=target_folder,
+                query=prompt,
+                system_prompt=system_prompt,
+                remediation_id=remediation_id,
+                session_id="command-detection"
+            )
+
+            # Extract the command from the response
+            # The LLM sometimes includes explanatory text despite instructions to the contrary
+            # The command is always the last non-empty line
+            suggested_command = response.strip()
+
+            # Clean up markdown code blocks if present
+            if suggested_command.startswith("```"):
+                lines = suggested_command.split("\n")
+                # Remove first and last lines (the ``` markers)
+                suggested_command = "\n".join(lines[1:-1]) if len(lines) > 2 else suggested_command
+
+            # Extract last non-empty line (the actual command)
+            # This handles cases where the LLM includes explanatory text before the command
+            lines = [line.strip() for line in suggested_command.split("\n") if line.strip()]
+            if lines:
+                suggested_command = lines[-1]
+
+            return suggested_command.strip()
+
+        except Exception as e:
+            log(f"Error in command detection: {e}", is_error=True)
+            raise RuntimeError(f"Failed to execute command detection: {e}")

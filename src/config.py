@@ -2,7 +2,7 @@
 # #%L
 # Contrast AI SmartFix
 # %%
-# Copyright (C) 2025 Contrast Security, Inc.
+# Copyright (C) 2026 Contrast Security, Inc.
 # %%
 # Contact: support@contrastsecurity.com
 # License: Commercial
@@ -24,8 +24,10 @@ import json
 from pathlib import Path
 from typing import Optional, Any, Dict, List
 
+from src.smartfix.config.command_validator import validate_command, CommandValidationError
 
-def _log_config_message(message: str, is_error: bool = False, is_warning: bool = False):
+
+def _log_config_message(message: str, is_error: bool = False, is_warning: bool = False) -> None:
     """A minimal logger for use only within the config module before full logging is set up."""
     # This function should have no dependencies on other project modules
     if is_error or is_warning:
@@ -45,13 +47,26 @@ class Config:
     It reads from environment variables upon instantiation and provides validated
     and typed settings as attributes.
     """
-    def __init__(self, env: Dict[str, str] = os.environ, testing: bool = False):
+
+    # Class-level flag to ensure detection only runs once (prevents infinite recursion)
+    _detection_started = False
+
+    def __init__(self, env: Dict[str, str] = os.environ, testing: bool = False) -> None:  # noqa: C901
         self.env = env
         self.testing = testing
 
         # --- Preset ---
         self.VERSION = "v1.0.11"
         self.USER_AGENT = f"contrast-smart-fix {self.VERSION}"
+
+        # --- Paths (initialized early for use in command detection) ---
+        if testing:
+            # For tests, default to /tmp if GITHUB_WORKSPACE not set
+            self.REPO_ROOT = Path(self._get_env_var("GITHUB_WORKSPACE", required=False, default="/tmp")).resolve()
+        else:
+            self.REPO_ROOT = Path(self._get_env_var("GITHUB_WORKSPACE", required=True)).resolve()
+
+        self.SCRIPT_DIR = Path(__file__).parent.resolve()
 
         # --- Core Settings ---
         self.DEBUG_MODE = self._get_bool_env("DEBUG_MODE", default=False)
@@ -76,13 +91,66 @@ class Config:
 
         # --- Build and Formatting Configuration ---
         is_build_command_required = self.RUN_TASK == "generate_fix" and is_smartfix_coding_agent
+        # Initialize MAX_COMMAND_DETECTION_ATTEMPTS early (needed by _auto_detect_build_command)
+        self.MAX_COMMAND_DETECTION_ATTEMPTS = self._get_validated_int("MAX_COMMAND_DETECTION_ATTEMPTS", default=6, min_val=0, max_val=10)
+
         # Make BUILD_COMMAND optional in tests
         if testing and "BUILD_COMMAND" not in env and is_build_command_required:
             self.BUILD_COMMAND = "echo 'Test build command'"
         else:
-            self.BUILD_COMMAND = self._get_env_var("BUILD_COMMAND", required=is_build_command_required)
+            self.BUILD_COMMAND = self._get_env_var("BUILD_COMMAND", required=False)
+
+            # Auto-detect if not provided AND required
+            # Skip detection entirely when BUILD_COMMAND not needed
+            if not self.BUILD_COMMAND and not testing and is_build_command_required:
+                # Only run detection on first initialization (prevents infinite recursion)
+                if not Config._detection_started:
+                    Config._detection_started = True
+                    # Orchestrator always returns valid string (real command or no-op fallback)
+                    self.BUILD_COMMAND = self._auto_detect_build_command()
+                    # Mark as auto-detected for proper validation
+                    self._build_command_source = "ai_detected"
+                else:
+                    # Recursion detected: detection already in progress, use no-op fallback
+                    _log_config_message(
+                        "Build command detection already in progress, using no-op fallback",
+                        is_warning=True
+                    )
+                    self.BUILD_COMMAND = "echo 'No build command detected - using no-op'"
+                    self._build_command_source = "ai_detected"
+            else:
+                # Command from environment/config (trusted source)
+                self._build_command_source = "config"
+
+        # Validate BUILD_COMMAND if present
+        if not testing and self.BUILD_COMMAND:
+            self._validate_command("BUILD_COMMAND", self.BUILD_COMMAND, source=self._build_command_source)
 
         self.FORMATTING_COMMAND = self._get_env_var("FORMATTING_COMMAND", required=False)
+
+        # Auto-detect formatting command if not provided AND formatting is needed
+        # Only needed for generate_fix task
+        is_format_command_needed = self.RUN_TASK == "generate_fix" and is_smartfix_coding_agent
+        if not self.FORMATTING_COMMAND and not testing and is_format_command_needed:
+            # Only run detection if BUILD_COMMAND detection hasn't triggered recursion
+            if not Config._detection_started or self._build_command_source == "ai_detected":
+                self.FORMATTING_COMMAND = self._auto_detect_format_command()
+                # Mark as auto-detected for proper validation
+                self._format_command_source = "ai_detected"
+            else:
+                # Recursion detected: skip formatting detection
+                _log_config_message(
+                    "Format command detection skipped (recursion detected)",
+                    is_warning=True
+                )
+                self._format_command_source = "config"
+        else:
+            # Command from environment/config (trusted source)
+            self._format_command_source = "config"
+
+        # Validate FORMATTING_COMMAND if present
+        if not testing and self.FORMATTING_COMMAND:
+            self._validate_command("FORMATTING_COMMAND", self.FORMATTING_COMMAND, source=self._format_command_source)
 
         # --- Validated and normalized settings ---
         self.MAX_QA_ATTEMPTS = self._get_validated_int("MAX_QA_ATTEMPTS", default=6, min_val=0, max_val=10)
@@ -144,15 +212,6 @@ class Config:
             self._get_env_var("VULNERABILITY_SEVERITIES", required=False, default='["CRITICAL", "HIGH"]')
         )
 
-        # --- Paths ---
-        if testing:
-            # For tests, default to /tmp if GITHUB_WORKSPACE not set
-            self.REPO_ROOT = Path(self._get_env_var("GITHUB_WORKSPACE", required=False, default="/tmp")).resolve()
-        else:
-            self.REPO_ROOT = Path(self._get_env_var("GITHUB_WORKSPACE", required=True)).resolve()
-
-        self.SCRIPT_DIR = Path(__file__).parent.resolve()
-
         if not testing:
             self._log_initial_settings()
 
@@ -180,9 +239,129 @@ class Config:
             _log_config_message(f"Invalid value for {var_name}. Using default: {default}", is_warning=True)
             return default
 
-    def _check_contrast_config_values_exist(self):
+    def _check_contrast_config_values_exist(self) -> None:
         if not all([self.CONTRAST_HOST, self.CONTRAST_ORG_ID, self.CONTRAST_APP_ID, self.CONTRAST_AUTHORIZATION_KEY, self.CONTRAST_API_KEY]):
             raise ConfigurationError("Error: Missing one or more Contrast API configuration variables (HOST, ORG_ID, APP_ID, AUTH_KEY, API_KEY).")
+
+    def _validate_command(self, var_name: str, command: Optional[str], source: str = "config") -> None:
+        """
+        Validate a command against the allowlist.
+
+        Args:
+            var_name: Name of the config variable (for error messages)
+            command: Command string to validate (can be None)
+            source: Command source, either "config" (from action.yml, trusted) or
+                   "ai_detected" (generated by AI agent, requires validation).
+                   Default: "config"
+
+        Raises:
+            ConfigurationError: If command fails validation
+
+        Notes:
+            - "config" source: Commands from action.yml inputs are trusted (from humans)
+              and skip allowlist validation
+            - "ai_detected" source: Commands generated by AI agents go through full
+              allowlist validation for security
+        """
+        if not command:
+            # Empty or None commands are allowed (handled by required flag in _get_env_var)
+            return
+
+        # Skip validation for config-sourced commands (from humans via action.yml)
+        if source == "config":
+            _log_config_message(
+                f"{var_name} from action config (trusted source), skipping allowlist validation"
+            )
+            return
+
+        # Validate AI-generated commands through allowlist
+        try:
+            validate_command(var_name, command)
+        except CommandValidationError as e:
+            # Log the validation failure for debugging
+            _log_config_message(
+                f"Command validation failed for {var_name}: {str(e)}",
+                is_error=True
+            )
+            # Convert CommandValidationError to ConfigurationError
+            raise ConfigurationError(str(e)) from e
+
+    def _auto_detect_build_command(self) -> str:
+        """
+        Auto-detect build command using two-phase detection with fallback.
+
+        Uses orchestrator to coordinate Phase 1 (deterministic), Phase 2 (LLM),
+        and Phase 3 (no-op fallback). Always returns a valid command string.
+
+        Returns:
+            Detected build command or no-op fallback
+        """
+        from src.smartfix.config.command_detection_orchestrator import (
+            detect_build_command_with_fallback,
+            NO_OP_BUILD_COMMAND
+        )
+
+        try:
+            command = detect_build_command_with_fallback(
+                repo_root=self.REPO_ROOT,
+                project_dir=None,  # NOTE: Will need update when monorepo support is implemented
+                max_llm_attempts=self.MAX_COMMAND_DETECTION_ATTEMPTS,
+                remediation_id="config-init"
+            )
+
+            # Log result (orchestrator logs phase transitions, we log final result)
+            if command == NO_OP_BUILD_COMMAND:
+                _log_config_message(
+                    "Using no-op fallback for BUILD_COMMAND (detection did not find valid command)",
+                    is_warning=True
+                )
+            else:
+                _log_config_message(
+                    f"Auto-detected BUILD_COMMAND: {command}",
+                    is_error=False
+                )
+
+            return command
+        except Exception as e:
+            _log_config_message(
+                f"Build command auto-detection failed unexpectedly: {str(e)}. Using no-op fallback.",
+                is_error=True
+            )
+            return NO_OP_BUILD_COMMAND
+
+    def _auto_detect_format_command(self) -> Optional[str]:
+        """
+        Auto-detect format command using deterministic detection.
+
+        Returns:
+            Detected format command or None if detection fails
+        """
+        from src.smartfix.config.command_detector import detect_format_command
+
+        try:
+            detected = detect_format_command(
+                repo_root=self.REPO_ROOT,
+                project_dir=None  # NOTE: Will need update when monorepo support is implemented
+            )
+
+            if detected:
+                _log_config_message(
+                    f"Auto-detected FORMATTING_COMMAND: {detected}",
+                    is_error=False
+                )
+            else:
+                _log_config_message(
+                    "Could not auto-detect FORMATTING_COMMAND (optional)",
+                    is_error=False
+                )
+
+            return detected
+        except Exception as e:
+            _log_config_message(
+                f"Format command auto-detection failed: {str(e)}",
+                is_error=False
+            )
+            return None
 
     def _get_coding_agent(self) -> str:
         from src.smartfix.shared.coding_agents import CodingAgents
@@ -243,11 +422,14 @@ class Config:
             return
 
         # Check that AWS credentials are present when using Bedrock
-        # Exclude AWS_BEARER_TOKEN_BEDROCK and AWS_REGION_NAME as they may be empty from action.yml
-        has_aws_credentials = any(
-            key.startswith('AWS_') and key not in ('AWS_BEARER_TOKEN_BEDROCK', 'AWS_REGION_NAME')
+        # Check for either bearer token OR IAM credentials
+        has_bearer_token = bool(self.env.get('AWS_BEARER_TOKEN_BEDROCK', '').strip())
+        has_iam_credentials = any(
+            key.startswith('AWS_') and key not in ('AWS_BEARER_TOKEN_BEDROCK', 'AWS_REGION_NAME') and self.env.get(key, '').strip()
             for key in self.env.keys()
         )
+        has_aws_credentials = has_bearer_token or has_iam_credentials
+
         if not has_aws_credentials:
             raise ConfigurationError(
                 "Error: AWS credentials are required when using Bedrock models.\n"
@@ -295,7 +477,7 @@ class Config:
                 "  2. AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables"
             )
 
-    def _log_initial_settings(self):
+    def _log_initial_settings(self) -> None:
         if not self.DEBUG_MODE:
             return
         _log_config_message(f"Repository Root: {self.REPO_ROOT}")
@@ -345,7 +527,9 @@ def get_config(testing: bool = False) -> Config:
     return _config_instance
 
 
-def reset_config():
+def reset_config() -> None:
     """For testing purposes only. Resets the config singleton."""
     global _config_instance
     _config_instance = None
+    # Also reset the detection flag to allow fresh detection in tests
+    Config._detection_started = False

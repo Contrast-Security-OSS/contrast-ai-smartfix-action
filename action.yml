@@ -183,8 +183,22 @@ runs:
 
         echo Git verification completed successfully
 
-    # Checkout with reduced verbosity
+    # Check if repository is already checked out
+    - name: Check if already in git repository
+      id: check_git
+      shell: bash
+      run: |
+        if git rev-parse --git-dir > /dev/null 2>&1; then
+          echo "already_checked_out=true" >> $GITHUB_OUTPUT
+          echo "Repository already checked out, skipping checkout step"
+        else
+          echo "already_checked_out=false" >> $GITHUB_OUTPUT
+          echo "Repository not checked out, will perform checkout"
+        fi
+
+    # Checkout with reduced verbosity (only if not already checked out)
     - name: Checkout repository
+      if: steps.check_git.outputs.already_checked_out != 'true'
       uses: actions/checkout@v4
       with:
         fetch-depth: 0
