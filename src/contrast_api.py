@@ -75,7 +75,7 @@ def get_sanitized_409_message(response_text: str, credit_info=None) -> tuple[str
     return ("Unable to process request. Please try again or contact Contrast support if the issue persists.", True)
 
 
-def get_vulnerability_with_prompts(contrast_host, contrast_org_id, contrast_app_id, contrast_auth_key, contrast_api_key, max_open_prs, github_repo_url, vulnerability_severities):
+def get_vulnerability_with_prompts(contrast_host, contrast_org_id, contrast_app_id, contrast_auth_key, contrast_api_key, max_open_prs, github_repo_url, vulnerability_severities, credit_info=None):
     """Fetches a vulnerability to process along with pre-populated prompt templates from the new prompt-details endpoint.
 
     Args:
@@ -87,6 +87,7 @@ def get_vulnerability_with_prompts(contrast_host, contrast_org_id, contrast_app_
         max_open_prs: Maximum number of open PRs allowed
         github_repo_url: The GitHub repository URL
         vulnerability_severities: List of severity levels to filter by
+        credit_info: Optional CreditTrackingResponse to determine trial vs credit exhaustion
 
     Returns:
         dict: Contains vulnerability data and prompts, or None if no vulnerability found or error occurred
@@ -134,7 +135,10 @@ def get_vulnerability_with_prompts(contrast_host, contrast_org_id, contrast_app_
             log("No vulnerabilities found that need remediation")
             return None
         elif response.status_code == 409:
-            log("At or over the maximum PR limit")
+            error_msg, is_error = get_sanitized_409_message(response.text, credit_info)
+            log(f"\033[31m{error_msg}\033[0m", is_error=is_error)
+            if is_error:
+                sys.exit(1)
             return None
         elif response.status_code == 200:
             response_json = response.json()
