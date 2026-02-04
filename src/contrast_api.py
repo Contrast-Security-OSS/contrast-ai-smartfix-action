@@ -29,6 +29,52 @@ from src.smartfix.domains.workflow.credit_tracking import CreditTrackingResponse
 config = get_config()
 
 
+def get_sanitized_409_message(response_text: str, credit_info=None) -> tuple[str, bool]:
+    """
+    Return a user-friendly message for 409 responses and whether it's an error condition.
+
+    Args:
+        response_text: The raw response body from the API
+        credit_info: Optional CreditTrackingResponse to determine trial vs credit exhaustion
+
+    Returns:
+        Tuple of (sanitized message, is_error_condition)
+        is_error_condition=True means action should exit with code 1
+        is_error_condition=False means action can exit with code 0 (e.g., PR limit is expected)
+    """
+    from datetime import datetime, timezone
+
+    try:
+        error_data = json.loads(response_text)
+        backend_msg = error_data.get('message', '')
+    except (json.JSONDecodeError, ValueError):
+        backend_msg = response_text
+
+    # PR limit - NOT an error, expected behavior
+    if "Maximum pull request limit" in backend_msg:
+        return ("Maximum pull request limit exceeded", False)
+
+    # Credits exhausted - check if trial expired vs credits used up
+    if "Credits have been exhausted" in backend_msg:
+        if credit_info and credit_info.end_date:
+            try:
+                end_date = datetime.fromisoformat(credit_info.end_date.replace('Z', '+00:00'))
+                now = datetime.now(timezone.utc)
+                if now > end_date:
+                    return ("Your Contrast-provided LLM trial has expired. Please contact your Contrast representative to renew.", True)
+            except (ValueError, AttributeError):
+                # If date parsing fails, fall through to credits exhausted message
+                debug_log(f"Could not parse end_date: {credit_info.end_date}")
+        return ("Your Contrast-provided LLM credits have been exhausted. Please contact your Contrast representative for additional credits.", True)
+
+    # No credit tracking entry
+    if "No active remediation credit tracking" in backend_msg:
+        return ("This organization is not enabled for Contrast-provided LLM. Configure your own LLM provider, or contact your Contrast representative to enable this feature.", True)
+
+    # Generic fallback for unknown 409 errors - IS an error
+    return ("Unable to process request. Please try again or contact Contrast support if the issue persists.", True)
+
+
 def get_vulnerability_with_prompts(contrast_host, contrast_org_id, contrast_app_id, contrast_auth_key, contrast_api_key, max_open_prs, github_repo_url, vulnerability_severities):
     """Fetches a vulnerability to process along with pre-populated prompt templates from the new prompt-details endpoint.
 
