@@ -481,7 +481,7 @@ def notify_remediation_failed(remediation_id: str, failure_category: str, contra
 
 def get_vulnerability_details(contrast_host: str, contrast_org_id: str, contrast_app_id: str,
                               contrast_auth_key: str, contrast_api_key: str, github_repo_url: str,
-                              max_pull_requests: int = 5, severities: list = None) -> dict:
+                              max_pull_requests: int = 5, severities: list = None, credit_info=None) -> dict:
     """Gets vulnerability remediation details from the Contrast API.
 
     Args:
@@ -493,6 +493,7 @@ def get_vulnerability_details(contrast_host: str, contrast_org_id: str, contrast
         github_repo_url: The GitHub repository URL
         max_pull_requests: Maximum number of pull requests (default: 5)
         severities: List of vulnerability severities to filter by (default: ["CRITICAL", "HIGH"])
+        credit_info: Optional CreditTrackingResponse to determine trial vs credit exhaustion
 
     Returns:
         dict: Contains vulnerability remediation details or None if no vulnerability found
@@ -545,7 +546,10 @@ def get_vulnerability_details(contrast_host: str, contrast_org_id: str, contrast
             log("No vulnerabilities found that need remediation")
             return None
         elif response.status_code == 409:
-            log("At or over the maximum PR limit")
+            error_msg, is_error = get_sanitized_409_message(response.text, credit_info)
+            log(f"\033[31m{error_msg}\033[0m", is_error=is_error)
+            if is_error:
+                sys.exit(1)
             return None
         elif response.status_code == 200:
             response_json = response.json()
