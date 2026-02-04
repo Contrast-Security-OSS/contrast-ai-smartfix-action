@@ -69,13 +69,15 @@ def get_sanitized_409_message(response_text: str, credit_info=None) -> tuple[str
 
     # No credit tracking entry
     if "No active remediation credit tracking" in backend_msg:
-        return ("This organization is not enabled for Contrast-provided LLM. Configure your own LLM provider, or contact your Contrast representative to enable this feature.", True)
+        return ("This organization is not enabled for Contrast-provided LLM. Configure your own LLM provider, "
+                "or contact your Contrast representative to enable this feature.", True)
 
     # Generic fallback for unknown 409 errors - IS an error
     return ("Unable to process request. Please try again or contact Contrast support if the issue persists.", True)
 
 
-def get_vulnerability_with_prompts(contrast_host, contrast_org_id, contrast_app_id, contrast_auth_key, contrast_api_key, max_open_prs, github_repo_url, vulnerability_severities, credit_info=None):
+def get_vulnerability_with_prompts(contrast_host, contrast_org_id, contrast_app_id, contrast_auth_key, contrast_api_key,
+                                   max_open_prs, github_repo_url, vulnerability_severities, credit_info=None):
     """Fetches a vulnerability to process along with pre-populated prompt templates from the new prompt-details endpoint.
 
     Args:
