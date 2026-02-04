@@ -100,7 +100,7 @@ From `.github/copilot-instructions.md`:
 
 ## Process Notes
 
-When starting work on a Jira ticket or bead linked to one, create a branch prefixed with the ticket ID first (e.g., `AIML-123-fix-description`). All commits should include the Jira ticket number.
+When starting work on a Jira ticket or bead linked to one, create a branch based on `release_candidate` (not `main`) and prefix it with the ticket ID (e.g., `git checkout -b AIML-123-fix-description origin/release_candidate`). All commits should include the Jira ticket number. PRs should target `release_candidate`.
 
 ## Jira
 
