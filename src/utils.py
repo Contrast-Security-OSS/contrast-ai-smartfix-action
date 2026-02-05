@@ -54,6 +54,12 @@ def tail_string(text: str, max_length: int, prefix: str = "...[Content truncated
 
     return prefix + text[-remaining_length:]
 
+
+# ANSI color codes for terminal output
+RED = '\033[31m'
+YELLOW = '\033[0;33m'
+RESET = '\033[0m'
+
 # Unicode to ASCII fallback mappings for Windows
 
 

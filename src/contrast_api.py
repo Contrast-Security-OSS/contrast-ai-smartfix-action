@@ -22,7 +22,7 @@ import json
 import sys
 from typing import Optional
 from src.config import get_config
-from src.utils import debug_log, log, normalize_host
+from src.utils import debug_log, log, normalize_host, RED, RESET
 from src import telemetry_handler
 from src.smartfix.domains.workflow.credit_tracking import CreditTrackingResponse
 
@@ -138,7 +138,7 @@ def get_vulnerability_with_prompts(contrast_host, contrast_org_id, contrast_app_
             return None
         elif response.status_code == 409:
             error_msg, is_error = get_sanitized_409_message(response.text, credit_info)
-            log(f"\033[31m{error_msg}\033[0m", is_error=is_error)
+            log(f"{RED}{error_msg}{RESET}", is_error=is_error)
             if is_error:
                 sys.exit(1)
             return None
@@ -549,7 +549,7 @@ def get_vulnerability_details(contrast_host: str, contrast_org_id: str, contrast
             return None
         elif response.status_code == 409:
             error_msg, is_error = get_sanitized_409_message(response.text, credit_info)
-            log(f"\033[31m{error_msg}\033[0m", is_error=is_error)
+            log(f"{RED}{error_msg}{RESET}", is_error=is_error)
             if is_error:
                 sys.exit(1)
             return None
