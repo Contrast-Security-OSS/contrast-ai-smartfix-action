@@ -56,7 +56,7 @@ def get_sanitized_409_message(response_text: str, credit_info=None) -> tuple[str
 
     # Credits exhausted - check if trial expired vs credits used up
     if "Credits have been exhausted" in backend_msg:
-        if credit_info and credit_info.end_date:
+        if credit_info and credit_info.end_date and credit_info.end_date.strip():
             try:
                 end_date = datetime.fromisoformat(credit_info.end_date.replace('Z', '+00:00'))
                 now = datetime.now(timezone.utc)
