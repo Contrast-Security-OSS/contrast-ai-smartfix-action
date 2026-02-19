@@ -452,7 +452,7 @@ class SmartFixLiteLlm(LiteLlm):
 
         # Get completion inputs
         messages, tools, response_format, generation_params = (
-            _get_completion_inputs(llm_request)
+            await _get_completion_inputs(llm_request, self.model)
         )
 
         # For Contrast models, ensure we have a system message before role conversion
