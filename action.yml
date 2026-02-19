@@ -212,9 +212,9 @@ runs:
         echo ""
         echo "📦 Installing uv package manager..."
         if [ "$RUNNER_OS" = "Windows" ]; then
-          pip install uv==0.7.15 > uv-install.log || (cat uv-install.log && exit 1)
+          pip install uv==0.10.2 > uv-install.log || (cat uv-install.log && exit 1)
         else
-          pip install uv==0.7.15 > /tmp/uv-install.log || (cat /tmp/uv-install.log && exit 1)
+          pip install uv==0.10.2 > /tmp/uv-install.log || (cat /tmp/uv-install.log && exit 1)
         fi
         echo "✅ uv installed successfully"
 
