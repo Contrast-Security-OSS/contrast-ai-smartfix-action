@@ -221,7 +221,7 @@ jsonschema==4.24.0
     # via litellm
 jsonschema-specifications==2025.4.1
     # via jsonschema
-litellm==1.77.5
+litellm==1.81.10
     # via -r src/requirements.txt
 markupsafe==3.0.2
     # via jinja2
@@ -233,7 +233,7 @@ multidict==6.4.4
     #   yarl
 numpy==2.3.0
     # via shapely
-openai==1.99.8
+openai==2.21.0
     # via litellm
 opentelemetry-api==1.34.0
     # via
