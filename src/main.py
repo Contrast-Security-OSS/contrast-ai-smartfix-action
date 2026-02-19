@@ -365,7 +365,8 @@ def main():  # noqa: C901
             vulnerability_data = contrast_api.get_vulnerability_with_prompts(
                 config.CONTRAST_HOST, config.CONTRAST_ORG_ID, config.CONTRAST_APP_ID,
                 config.CONTRAST_AUTHORIZATION_KEY, config.CONTRAST_API_KEY,
-                max_open_prs_setting, github_repo_url, config.VULNERABILITY_SEVERITIES
+                max_open_prs_setting, github_repo_url, config.VULNERABILITY_SEVERITIES,
+                credit_info=current_credit_info if config.USE_CONTRAST_LLM else None
             )
             log("\n::endgroup::")
 
@@ -403,7 +404,8 @@ def main():  # noqa: C901
             vulnerability_data = contrast_api.get_vulnerability_details(
                 config.CONTRAST_HOST, config.CONTRAST_ORG_ID, config.CONTRAST_APP_ID,
                 config.CONTRAST_AUTHORIZATION_KEY, config.CONTRAST_API_KEY,
-                github_repo_url, max_open_prs_setting, config.VULNERABILITY_SEVERITIES
+                github_repo_url, max_open_prs_setting, config.VULNERABILITY_SEVERITIES,
+                credit_info=current_credit_info if config.USE_CONTRAST_LLM else None
             )
             log("\n::endgroup::")
 
