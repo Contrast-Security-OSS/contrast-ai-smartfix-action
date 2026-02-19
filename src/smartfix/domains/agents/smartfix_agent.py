@@ -491,7 +491,7 @@ class SmartFixAgent(CodingAgentStrategy):
         # Format QA history
         qa_history_section = ""
         if qa_history:
-            qa_history_section = "\n\n".join([f"Previous QA Attempt {i+1}:\n{summary}" for i, summary in enumerate(qa_history)])
+            qa_history_section = "\n\n".join([f"Previous QA Attempt {i + 1}:\n{summary}" for i, summary in enumerate(qa_history)])
 
         # Get processed QA user prompt
         qa_query = context.prompts.get_processed_qa_user_prompt(changed_files, build_output, qa_history_section)
