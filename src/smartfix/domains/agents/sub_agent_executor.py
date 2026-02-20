@@ -24,6 +24,8 @@ Handles low-level sub-agent creation, execution, and event processing for Fix an
 These sub-agents operate under the SmartFixAgent orchestrator.
 """
 
+from __future__ import annotations
+
 import asyncio
 import datetime
 import re
