@@ -49,8 +49,8 @@ try:
     from src.smartfix.extensions.smartfix_llm_agent import SmartFixLlmAgent
     from google.genai import types as genai_types
     ADK_AVAILABLE = True
-except ImportError:
-    pass
+except ImportError as e:
+    log(f"Warning: ADK library import failed: {type(e).__name__}: {e}")
 
 
 class SubAgentExecutor:
