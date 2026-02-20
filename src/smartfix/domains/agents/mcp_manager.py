@@ -24,6 +24,8 @@ Handles connection to MCP servers, toolset creation, and platform-specific
 configuration for filesystem access in agent operations.
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import platform
