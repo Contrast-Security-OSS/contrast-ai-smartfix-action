@@ -30,7 +30,7 @@ from pathlib import Path
 from src.utils import debug_log
 
 
-def get_directory_tree(repo_root: Path, max_depth: int = 3, max_chars: int = 8000) -> str:
+def get_directory_tree(repo_root: Path, max_depth: int = 6, max_chars: int = 10000) -> str:
     """
     Generate a directory tree view of the project.
 
@@ -45,7 +45,7 @@ def get_directory_tree(repo_root: Path, max_depth: int = 3, max_chars: int = 800
     try:
         # Try using tree command if available
         result = subprocess.run(
-            ['tree', '-L', str(max_depth), '-I', 'node_modules|.git|__pycache__|*.pyc|.pytest_cache|.venv|venv|target|build|dist'],
+            ['tree', '-L', str(max_depth), '--dirsfirst', '-I', 'node_modules|.git|__pycache__|*.pyc|.pytest_cache|.venv|venv|target|build|dist'],
             cwd=repo_root,
             capture_output=True,
             text=True,
@@ -90,12 +90,12 @@ def generate_simple_tree(path: Path, max_depth: int, current_depth: int = 0, pre
 
     lines = []
     try:
-        # Get items, skip hidden and common build directories
+        # Get items, skip hidden and common build directories; dirs before files
         items = sorted([
             item for item in path.iterdir()
             if not item.name.startswith('.')
             and item.name not in {'node_modules', '__pycache__', 'target', 'build', 'dist', '.venv', 'venv'}
-        ])
+        ], key=lambda x: (0 if x.is_dir() else 1, x.name))
 
         for i, item in enumerate(items):
             is_last = i == len(items) - 1
@@ -115,7 +115,7 @@ def generate_simple_tree(path: Path, max_depth: int, current_depth: int = 0, pre
     return "\n".join(lines)
 
 
-def get_directory_tree_for_agent_prompt(repo_root: Path, max_depth: int = 3, max_chars: int = 8000) -> str:
+def get_directory_tree_for_agent_prompt(repo_root: Path, max_depth: int = 6, max_chars: int = 10000) -> str:
     """
     Generate a formatted directory tree for inclusion in agent prompts.
 
