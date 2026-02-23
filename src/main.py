@@ -33,7 +33,6 @@ from src.smartfix.shared.coding_agents import CodingAgents
 from src.utils import debug_log, log, error_exit
 from src import telemetry_handler
 from src.version_check import do_version_check
-from src.github_status_check import check_github_status
 from src.smartfix.domains.workflow.session_handler import create_session_handler, QASectionConfig
 from src.smartfix.shared.failure_categories import FailureCategory
 
@@ -246,9 +245,6 @@ def main():  # noqa: C901
     start_time = datetime.now()
     log("--- Starting Contrast AI SmartFix Script ---")
     debug_log(f"Start time: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
-
-    # --- GitHub Status Check ---
-    check_github_status()
 
     # --- Version Check ---
     do_version_check()

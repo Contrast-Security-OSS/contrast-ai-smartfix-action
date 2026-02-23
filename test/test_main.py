@@ -71,10 +71,6 @@ class TestMain(unittest.TestCase):
         mock_response.raise_for_status.return_value = None
         self.mock_requests_get.return_value = mock_response
 
-        # Mock GitHub status check — tested separately in test_github_status_check.py
-        self.github_status_patcher = patch('src.main.check_github_status')
-        self.mock_github_status = self.github_status_patcher.start()
-
         # Mock sys.exit to prevent test termination
         self.exit_patcher = patch('sys.exit')
         self.mock_exit = self.exit_patcher.start()
@@ -86,7 +82,6 @@ class TestMain(unittest.TestCase):
         self.git_patcher.stop()
         self.api_patcher.stop()
         self.requests_patcher.stop()
-        self.github_status_patcher.stop()
         self.exit_patcher.stop()
         reset_config()
 
