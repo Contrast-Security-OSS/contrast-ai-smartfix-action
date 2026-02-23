@@ -135,7 +135,7 @@ def _truncate_text(text, max_length, keep_end=False):
         return f"...[{len(text) - max_length} chars truncated]...\n{text[-max_length:]}"
     else:
         # Keep the beginning of the text (useful for reports/summaries)
-        return f"{text[:max_length-50]}...[truncated, {len(text) - max_length} chars removed]"
+        return f"{text[:max_length - 50]}...[truncated, {len(text) - max_length} chars removed]"
 
 
 def _truncate_large_text_fields(obj, max_length=1500):
