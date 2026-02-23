@@ -291,7 +291,7 @@ class TestSmartfixAgentDirectoryTreeIntegration(unittest.TestCase):
 
     def test_qa_agent_appends_directory_tree_to_query(self):
         """
-        _run_qa_agent should append the directory tree to qa_query
+        _run_qa_agent should append the pre-computed directory tree to qa_query
         before passing it to _run_agent_in_event_loop.
         """
         from src.smartfix.domains.agents.smartfix_agent import SmartFixAgent
@@ -300,13 +300,10 @@ class TestSmartfixAgentDirectoryTreeIntegration(unittest.TestCase):
         context = self._make_context()
         tree_section = "\n\n## Repository Directory Tree\n\n```\n.\n└── src\n```"
 
-        with patch('src.smartfix.domains.agents.smartfix_agent.get_directory_tree_for_agent_prompt',
-                   return_value=tree_section) as mock_tree:
-            with patch('src.smartfix.domains.agents.smartfix_agent._run_agent_in_event_loop',
-                       return_value="qa completed") as mock_run:
-                agent._run_qa_agent(context, "build output", ["src/Foo.java"])
+        with patch('src.smartfix.domains.agents.smartfix_agent._run_agent_in_event_loop',
+                   return_value="qa completed") as mock_run:
+            agent._run_qa_agent(context, "build output", ["src/Foo.java"], directory_tree=tree_section)
 
-        mock_tree.assert_called_once_with(context.repo_config.repo_path)
         actual_prompt = mock_run.call_args[0][3]
         self.assertIn("Review this fix.", actual_prompt)
         self.assertIn(tree_section, actual_prompt)

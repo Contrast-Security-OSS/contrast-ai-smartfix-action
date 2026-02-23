@@ -30,6 +30,13 @@ from pathlib import Path
 from src.utils import debug_log
 
 
+def _truncate_output(text: str, max_chars: int) -> str:
+    """Truncate text to max_chars, appending an informative suffix if truncated."""
+    if len(text) > max_chars:
+        return text[:max_chars] + f"\n... [truncated, {len(text) - max_chars} chars omitted]"
+    return text
+
+
 def get_directory_tree(repo_root: Path, max_depth: int = 6, max_chars: int = 10000) -> str:
     """
     Generate a directory tree view of the project.
@@ -52,21 +59,14 @@ def get_directory_tree(repo_root: Path, max_depth: int = 6, max_chars: int = 100
             timeout=5
         )
         if result.returncode == 0:
-            tree_output = result.stdout
-            # Truncate if too large to avoid blowing out context
-            if len(tree_output) > max_chars:
-                tree_output = tree_output[:max_chars] + f"\n... [truncated, {len(tree_output) - max_chars} chars omitted]"
-            return tree_output
+            return _truncate_output(result.stdout, max_chars)
     except (FileNotFoundError, subprocess.TimeoutExpired):
         pass
 
     # Fallback: Generate simple tree manually
     try:
         tree_output = generate_simple_tree(repo_root, max_depth)
-        # Truncate if too large
-        if len(tree_output) > max_chars:
-            tree_output = tree_output[:max_chars] + f"\n... [truncated, {len(tree_output) - max_chars} chars omitted]"
-        return tree_output
+        return _truncate_output(tree_output, max_chars)
     except Exception as e:
         debug_log(f"Failed to generate directory tree: {e}")
         return "[Directory tree unavailable]"
