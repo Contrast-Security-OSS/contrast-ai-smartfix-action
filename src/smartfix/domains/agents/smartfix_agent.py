@@ -18,6 +18,7 @@ from src import telemetry_handler
 from src.smartfix.domains.scm.git_operations import GitOperations
 
 from .coding_agent import CodingAgentStrategy
+from .directory_tree_utils import get_directory_tree_for_agent_prompt
 from .agent_session import AgentSession
 from src.smartfix.domains.vulnerability import RemediationContext
 
@@ -231,11 +232,13 @@ class SmartFixAgent(CodingAgentStrategy):
 
     def _run_fix_agent_execution(self, context) -> str:
         """Execute the fix agent and return the summary."""
+        directory_tree = get_directory_tree_for_agent_prompt(context.repo_config.repo_path)
+        fix_user_prompt_with_tree = context.prompts.fix_user_prompt + directory_tree
         agent_summary_str = _run_agent_in_event_loop(
             _run_agent_internal_with_prompts,
             'fix',
             context.repo_config.repo_path,
-            context.prompts.fix_user_prompt,
+            fix_user_prompt_with_tree,
             context.prompts.fix_system_prompt,
             context.remediation_id,
             context.session_id
@@ -495,6 +498,8 @@ class SmartFixAgent(CodingAgentStrategy):
 
         # Get processed QA user prompt
         qa_query = context.prompts.get_processed_qa_user_prompt(changed_files, build_output, qa_history_section)
+        directory_tree = get_directory_tree_for_agent_prompt(context.repo_config.repo_path)
+        qa_query_with_tree = qa_query + directory_tree
 
         try:
             # Execute the QA agent
@@ -502,7 +507,7 @@ class SmartFixAgent(CodingAgentStrategy):
                 _run_agent_internal_with_prompts,
                 'qa',
                 context.repo_config.repo_path,
-                qa_query,
+                qa_query_with_tree,
                 context.prompts.qa_system_prompt,
                 context.remediation_id,
                 context.session_id
