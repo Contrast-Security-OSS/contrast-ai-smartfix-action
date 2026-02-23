@@ -25,11 +25,10 @@ SmartFix relies heavily on the GitHub CLI and API; any incident degrades
 results and can produce misleading errors.
 """
 
-import sys
-
 import requests
 
-from src.utils import debug_log, log
+from src.utils import debug_log, log, error_exit
+from src.smartfix.shared.failure_categories import FailureCategory
 
 GITHUB_STATUS_URL = "https://www.githubstatus.com/api/v2/status.json"
 REQUEST_TIMEOUT_SECONDS = 5
@@ -46,6 +45,9 @@ def check_github_status() -> None:
     If the status API itself is unreachable (network error, timeout, etc.)
     the check is skipped and SmartFix continues — we do not add a new failure
     mode for an unavailable status page.
+
+    Uses error_exit() so that the failure is reported back to the Contrast
+    telemetry/remediation service before the process exits.
     """
     try:
         response = requests.get(GITHUB_STATUS_URL, timeout=REQUEST_TIMEOUT_SECONDS)
@@ -67,4 +69,4 @@ def check_github_status() -> None:
     log("SmartFix depends on the GitHub CLI and API. Running during an incident")
     log("can produce incorrect results or misleading errors.")
     log("See https://www.githubstatus.com/ for details and try again once the incident is resolved.")
-    sys.exit(1)
+    error_exit("unknown", FailureCategory.GENERAL_FAILURE.value)
