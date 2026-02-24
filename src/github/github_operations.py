@@ -308,9 +308,50 @@ class GitHubOperations(ScmOperations):
             log(f"Exception while creating label: {e}", is_error=True)
             return False
 
+    def _verify_pr_has_label(self, pr_number: int, label_name: str, gh_env: dict) -> bool:
+        """
+        Verify a PR actually has the expected label via a direct gh pr view query.
+
+        Uses a separate API path from gh pr list to cross-check data consistency.
+        Returns True if verified, False if the label is missing.
+        Returns True (fail open) if the verification query itself fails.
+        """
+        verify_command = [
+            "gh", "pr", "view", str(pr_number),
+            "--repo", self.config.GITHUB_REPOSITORY,
+            "--json", "number,labels,state"
+        ]
+        verify_output = run_command(verify_command, env=gh_env, check=False)
+        if not verify_output:
+            debug_log(f"Verification query for PR #{pr_number} returned no output. Trusting original result.")
+            return True
+
+        try:
+            pr_data = json.loads(verify_output)
+        except json.JSONDecodeError:
+            debug_log(f"Verification query for PR #{pr_number} returned invalid JSON. Trusting original result.")
+            return True
+
+        pr_labels = [label.get("name", "") for label in pr_data.get("labels", [])]
+        if label_name in pr_labels:
+            debug_log(f"Verified: PR #{pr_number} has label '{label_name}'.")
+            return True
+
+        log(
+            f"GitHub data inconsistency detected: gh pr list reported PR #{pr_number} "
+            f"for label '{label_name}', but gh pr view shows labels: {pr_labels}. "
+            f"This may indicate a GitHub API issue — see https://www.githubstatus.com/",
+            is_warning=True
+        )
+        return False
+
     def check_pr_status_for_label(self, label_name: str) -> str:
         """
         Checks GitHub for OPEN or MERGED PRs with the given label.
+
+        When a PR is found, a verification query cross-checks the result through
+        a different API path (gh pr view) to detect stale or incorrect data that
+        GitHub may return during incidents.
 
         Returns:
             str: 'OPEN', 'MERGED', or 'NONE'
@@ -324,14 +365,18 @@ class GitHubOperations(ScmOperations):
             "--repo", self.config.GITHUB_REPOSITORY,
             "--label", label_name,
             "--state", "open",
-            "--limit", "1",  # We only need to know if at least one exists
-            "--json", "number"  # Requesting JSON output
+            "--limit", "1",
+            "--json", "number"
         ]
-        open_pr_output = run_command(open_pr_command, env=gh_env, check=False)  # Don't exit if command fails (e.g., no PRs found)
+        open_pr_output = run_command(open_pr_command, env=gh_env, check=False)
         try:
-            if open_pr_output and json.loads(open_pr_output):  # Check if output is not empty and contains JSON data
-                debug_log(f"Found OPEN PR for label {label_name}.")
-                return "OPEN"
+            open_prs = json.loads(open_pr_output) if open_pr_output else []
+            if open_prs:
+                pr_number = open_prs[0]["number"]
+                if self._verify_pr_has_label(pr_number, label_name, gh_env):
+                    debug_log(f"Found OPEN PR #{pr_number} for label {label_name} (verified).")
+                    return "OPEN"
+                # Verification failed — fall through to merged check
         except json.JSONDecodeError:
             log("Could not parse JSON output from gh pr list (open): Invalid JSON format", is_error=True)
 
@@ -346,9 +391,13 @@ class GitHubOperations(ScmOperations):
         ]
         merged_pr_output = run_command(merged_pr_command, env=gh_env, check=False)
         try:
-            if merged_pr_output and json.loads(merged_pr_output):
-                debug_log(f"Found MERGED PR for label {label_name}.")
-                return "MERGED"
+            merged_prs = json.loads(merged_pr_output) if merged_pr_output else []
+            if merged_prs:
+                pr_number = merged_prs[0]["number"]
+                if self._verify_pr_has_label(pr_number, label_name, gh_env):
+                    debug_log(f"Found MERGED PR #{pr_number} for label {label_name} (verified).")
+                    return "MERGED"
+                # Verification failed — fall through to NONE
         except json.JSONDecodeError:
             log("Could not parse JSON output from gh pr list (merged): Invalid JSON format", is_error=True)
 

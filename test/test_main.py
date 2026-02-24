@@ -170,7 +170,7 @@ class TestMain(unittest.TestCase):
 
                     # Verify the vulnerability was skipped both times
                     self.assertIn("Skipping vulnerability TEST-VULN-UUID-123", output)
-                    self.assertIn("Already skipped TEST-VULN-UUID-123 before, breaking loop", output)
+                    self.assertIn("TEST-VULN-UUID-123 was re-suggested after being skipped", output)
 
                     # Verify the loop broke cleanly
                     self.assertIn("No vulnerabilities were processed in this run", output)

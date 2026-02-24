@@ -121,9 +121,10 @@ class TestGitHubOperations(unittest.TestCase):
     @patch('src.github.github_operations.run_command')
     def test_check_pr_status_for_label_open(self, mock_run_command):
         """Test checking PR status for label (open state)."""
-        mock_run_command.return_value = json.dumps([
-            {"number": 123}
-        ])
+        mock_run_command.side_effect = [
+            json.dumps([{"number": 123}]),  # gh pr list finds open PR
+            json.dumps({"number": 123, "labels": [{"name": "test-label"}], "state": "OPEN"}),  # verification confirms
+        ]
 
         result = self.github_ops.check_pr_status_for_label("test-label")
         self.assertEqual(result, "OPEN")
@@ -1111,15 +1112,103 @@ class TestGitHubOperations(unittest.TestCase):
     @patch('src.github.github_operations.run_command')
     def test_check_pr_status_for_label_merged(self, mock_run_command):
         """Test checking PR status for label (merged state)."""
-        # First call (open) returns empty, second call (merged) returns PR
         mock_run_command.side_effect = [
             json.dumps([]),  # No open PRs
-            json.dumps([{"number": 789}])  # Merged PR found
+            json.dumps([{"number": 789}]),  # Merged PR found
+            json.dumps({"number": 789, "labels": [{"name": "test-label"}], "state": "MERGED"}),  # verification confirms
         ]
 
         result = self.github_ops.check_pr_status_for_label("test-label")
 
         self.assertEqual(result, "MERGED")
+
+    # --- PR Data Verification Tests ---
+
+    @patch('src.github.github_operations.log')
+    @patch('src.github.github_operations.run_command')
+    def test_check_pr_status_verifies_open_pr_with_second_query(self, mock_run_command, mock_log):
+        """When gh pr list returns an open PR, a verification query confirms it exists."""
+        mock_run_command.side_effect = [
+            json.dumps([{"number": 42}]),  # gh pr list says PR #42 is open
+            json.dumps({"number": 42, "labels": [{"name": "test-label"}], "state": "OPEN"}),  # gh pr view confirms
+        ]
+
+        result = self.github_ops.check_pr_status_for_label("test-label")
+
+        self.assertEqual(result, "OPEN")
+        # Should have made 2 run_command calls: list + verify
+        self.assertEqual(mock_run_command.call_count, 2)
+
+    @patch('src.github.github_operations.log')
+    @patch('src.github.github_operations.run_command')
+    def test_check_pr_status_returns_none_when_verification_fails(self, mock_run_command, mock_log):
+        """When gh pr list returns a PR but verification shows it doesn't have the label, return NONE."""
+        mock_run_command.side_effect = [
+            json.dumps([{"number": 42}]),  # gh pr list says PR #42 is open
+            json.dumps({"number": 42, "labels": [{"name": "other-label"}], "state": "OPEN"}),  # verification: wrong label
+            json.dumps([]),  # merged check returns empty
+        ]
+
+        result = self.github_ops.check_pr_status_for_label("test-label")
+
+        self.assertEqual(result, "NONE")
+
+    @patch('src.github.github_operations.log')
+    @patch('src.github.github_operations.run_command')
+    def test_check_pr_status_logs_warning_on_data_inconsistency(self, mock_run_command, mock_log):
+        """When verification detects a data mismatch, a warning is logged."""
+        mock_run_command.side_effect = [
+            json.dumps([{"number": 42}]),  # gh pr list says PR #42 is open
+            json.dumps({"number": 42, "labels": [{"name": "other-label"}], "state": "OPEN"}),  # no matching label
+            json.dumps([]),  # merged check returns empty
+        ]
+
+        self.github_ops.check_pr_status_for_label("test-label")
+
+        logged_text = " ".join(str(c) for c in mock_log.call_args_list)
+        self.assertIn("inconsistency", logged_text.lower())
+
+    @patch('src.github.github_operations.log')
+    @patch('src.github.github_operations.run_command')
+    def test_check_pr_status_falls_through_when_verification_query_fails(self, mock_run_command, mock_log):
+        """If the verification query itself fails, trust the original result (fail open)."""
+        mock_run_command.side_effect = [
+            json.dumps([{"number": 42}]),  # gh pr list says PR #42 is open
+            None,  # verification query fails (returns None)
+        ]
+
+        result = self.github_ops.check_pr_status_for_label("test-label")
+
+        # Should trust original result when verification is unavailable
+        self.assertEqual(result, "OPEN")
+
+    @patch('src.github.github_operations.log')
+    @patch('src.github.github_operations.run_command')
+    def test_check_pr_status_verifies_merged_pr(self, mock_run_command, mock_log):
+        """Merged PR results are also verified with a second query."""
+        mock_run_command.side_effect = [
+            json.dumps([]),  # no open PRs
+            json.dumps([{"number": 99}]),  # gh pr list says PR #99 is merged
+            json.dumps({"number": 99, "labels": [{"name": "test-label"}], "state": "MERGED"}),  # verified
+        ]
+
+        result = self.github_ops.check_pr_status_for_label("test-label")
+
+        self.assertEqual(result, "MERGED")
+
+    @patch('src.github.github_operations.log')
+    @patch('src.github.github_operations.run_command')
+    def test_check_pr_status_merged_verification_mismatch_returns_none(self, mock_run_command, mock_log):
+        """When merged PR verification fails, return NONE."""
+        mock_run_command.side_effect = [
+            json.dumps([]),  # no open PRs
+            json.dumps([{"number": 99}]),  # gh pr list says merged PR exists
+            json.dumps({"number": 99, "labels": [], "state": "MERGED"}),  # verification: no labels
+        ]
+
+        result = self.github_ops.check_pr_status_for_label("test-label")
+
+        self.assertEqual(result, "NONE")
 
     @patch('src.github.github_operations.run_command')
     def test_get_issue_comments_no_comments(self, mock_run_command):
