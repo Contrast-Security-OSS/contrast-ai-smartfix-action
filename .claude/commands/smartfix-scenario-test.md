@@ -15,7 +15,7 @@ Run a full SmartFix scenario test against a real test repo, then AI-review each 
 
 ## What This Skill Does
 
-1. **Runs automation (steps 1–6)** via `scripts/smartfix-scenario-test.sh --skip-cleanup`, which:
+1. **Runs automation (steps 1–6)** via `test/scripts/smartfix-scenario-test.sh --skip-cleanup`, which:
    - Pins the test repo's workflow file to the feature branch
    - Closes any open SmartFix PRs
    - Waits for triggered runs to settle
@@ -37,7 +37,7 @@ Parse `$ARGUMENTS` to extract `--branch`, `--repo`, and `--workflow` values. All
 ### Step 1: Run the automation script
 
 ```bash
-./scripts/smartfix-scenario-test.sh \
+./test/scripts/smartfix-scenario-test.sh \
   --branch <BRANCH> \
   --repo <REPO> \
   --workflow <WORKFLOW> \

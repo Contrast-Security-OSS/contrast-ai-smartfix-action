@@ -2,7 +2,7 @@
 # smartfix-scenario-test.sh — Run a SmartFix scenario test against a real repo.
 #
 # Usage:
-#   ./scripts/smartfix-scenario-test.sh \
+#   ./test/scripts/smartfix-scenario-test.sh \
 #     --branch AIML-493_add-medium-to-default-severities \
 #     --repo JacobMagesHaskinsContrast/employee-management \
 #     --workflow contrast-ai-smartfix-aws-smartfix.yml
