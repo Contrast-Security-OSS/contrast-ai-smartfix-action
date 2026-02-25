@@ -157,12 +157,14 @@ ok "Workflow file pinned to @$BRANCH (was @$ORIGINAL_REF)"
 
 info "Step 2: Closing open SmartFix PRs in $REPO ..."
 
+SMARTFIX_BRANCH_RE="^(smartfix/remediation-|copilot/fix-|claude/issue-)"
+
 OPEN_PRS=$(gh pr list \
   --repo "$REPO" \
   --state open \
-  --label "contrast-vuln-id" \
-  --json number,title \
-  --jq '.[] | "\(.number)\t\(.title)"' 2>/dev/null || true)
+  --limit 100 \
+  --json number,title,headRefName \
+  --jq ".[] | select(.headRefName | test(\"$SMARTFIX_BRANCH_RE\")) | \"\(.number)\t\(.title)\"" 2>/dev/null || true)
 
 if [[ -z "$OPEN_PRS" ]]; then
   ok "No open SmartFix PRs found."
@@ -289,17 +291,17 @@ echo ""
 NEW_PRS_DISPLAY=$(gh pr list \
   --repo "$REPO" \
   --state open \
-  --label "contrast-vuln-id" \
-  --json number,title,url,createdAt \
-  --jq ".[] | select(.createdAt >= \"$RUN_STARTED_AT\") | \"  PR #\(.number): \(.title)\n  URL: \(.url)\n\"" \
+  --limit 100 \
+  --json number,title,url,createdAt,headRefName \
+  --jq ".[] | select((.headRefName | test(\"$SMARTFIX_BRANCH_RE\")) and (.createdAt >= \"$RUN_STARTED_AT\")) | \"  PR #\(.number): \(.title)\n  URL: \(.url)\n\"" \
   2>/dev/null || true)
 
 NEW_PR_NUMBERS=$(gh pr list \
   --repo "$REPO" \
   --state open \
-  --label "contrast-vuln-id" \
-  --json number,createdAt \
-  --jq "[.[] | select(.createdAt >= \"$RUN_STARTED_AT\") | .number]" \
+  --limit 100 \
+  --json number,createdAt,headRefName \
+  --jq "[.[] | select((.headRefName | test(\"$SMARTFIX_BRANCH_RE\")) and (.createdAt >= \"$RUN_STARTED_AT\")) | .number]" \
   2>/dev/null || echo "[]")
 
 if [[ -z "$NEW_PRS_DISPLAY" ]]; then
