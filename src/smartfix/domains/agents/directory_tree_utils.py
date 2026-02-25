@@ -52,7 +52,7 @@ def get_directory_tree(repo_root: Path, max_depth: int = 6, max_chars: int = 100
     try:
         # Try using tree command if available
         result = subprocess.run(
-            ['tree', '-L', str(max_depth), '--dirsfirst', '-I', 'node_modules|.git|__pycache__|*.pyc|.pytest_cache|.venv|venv|target|build|dist'],
+            ['tree', '-L', str(max_depth), '--dirsfirst', '-I', 'node_modules|.*|__pycache__|*.pyc|venv|target|build|dist'],
             cwd=repo_root,
             capture_output=True,
             text=True,

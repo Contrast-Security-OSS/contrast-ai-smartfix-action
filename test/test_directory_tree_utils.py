@@ -57,6 +57,21 @@ class TestGetDirectoryTree(unittest.TestCase):
         call_args = mock_run.call_args
         self.assertIn('tree', call_args[0][0])
 
+    def test_tree_cli_excludes_dotfiles_and_build_dirs(self):
+        """The tree -I pattern uses .* to exclude all dotfiles/dotdirs and common build directories."""
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "tree output"
+
+        with patch('subprocess.run', return_value=mock_result) as mock_run:
+            get_directory_tree(Path('/some/repo'), max_depth=3)
+
+        cmd = mock_run.call_args[0][0]
+        exclusion_pattern = cmd[cmd.index('-I') + 1]
+        self.assertIn('.*', exclusion_pattern)
+        self.assertIn('node_modules', exclusion_pattern)
+        self.assertIn('target', exclusion_pattern)
+
     def test_tree_cli_nonzero_returncode_falls_back_to_python(self):
         """When tree CLI returns non-zero, falls back to generate_simple_tree."""
         mock_result = MagicMock()
