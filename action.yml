@@ -86,7 +86,7 @@ inputs:
   vulnerability_severities:
     description: 'Array of vulnerability severity levels to process (allowed: CRITICAL, HIGH, MEDIUM, LOW, NOTE)'
     required: false
-    default: '["CRITICAL", "HIGH"]'
+    default: '["CRITICAL", "HIGH", "MEDIUM"]'
   run_task:
     description: '[DEPRECATED] This input is now automatically determined. Setting this will be ignored.'
     required: false

@@ -151,7 +151,7 @@ class Config:
 
         # --- Vulnerability Configuration ---
         self.VULNERABILITY_SEVERITIES = self._parse_and_validate_severities(
-            self._get_env_var("VULNERABILITY_SEVERITIES", required=False, default='["CRITICAL", "HIGH"]')
+            self._get_env_var("VULNERABILITY_SEVERITIES", required=False, default='["CRITICAL", "HIGH", "MEDIUM"]')
         )
 
         # --- Paths ---
@@ -254,7 +254,7 @@ class Config:
             return CodingAgents.SMARTFIX.name
 
     def _parse_and_validate_severities(self, json_str: Optional[str]) -> List[str]:
-        default_severities = ["CRITICAL", "HIGH"]
+        default_severities = ["CRITICAL", "HIGH", "MEDIUM"]
         valid_severities = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "NOTE"]
         try:
             if not json_str:
