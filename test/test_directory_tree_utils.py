@@ -183,16 +183,22 @@ class TestGenerateSimpleTree(unittest.TestCase):
         self.assertIn("a", result)
         self.assertNotIn("deep_file.py", result)
 
-    def test_skips_hidden_directories(self):
-        """Directories starting with '.' are excluded."""
+    def test_skips_hidden_directories_and_files(self):
+        """Files and directories starting with '.' are excluded."""
         with TemporaryDirectory() as tmpdir:
             (Path(tmpdir) / ".git").mkdir()
             (Path(tmpdir) / ".venv").mkdir()
+            (Path(tmpdir) / ".gitignore").touch()
+            (Path(tmpdir) / ".env").touch()
             (Path(tmpdir) / "src").mkdir()
+            (Path(tmpdir) / "main.py").touch()
             result = generate_simple_tree(Path(tmpdir), max_depth=2)
         self.assertNotIn(".git", result)
         self.assertNotIn(".venv", result)
+        self.assertNotIn(".gitignore", result)
+        self.assertNotIn(".env", result)
         self.assertIn("src", result)
+        self.assertIn("main.py", result)
 
     def test_skips_common_build_directories(self):
         """node_modules, __pycache__, target, build, dist, venv are skipped."""

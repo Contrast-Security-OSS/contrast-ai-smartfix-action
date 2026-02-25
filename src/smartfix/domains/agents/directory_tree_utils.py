@@ -90,11 +90,11 @@ def generate_simple_tree(path: Path, max_depth: int, current_depth: int = 0, pre
 
     lines = []
     try:
-        # Get items, skip hidden and common build directories; dirs before files
+        # Get items, skip hidden files/directories (starting with '.') and common build directories; dirs before files
         items = sorted([
             item for item in path.iterdir()
             if not item.name.startswith('.')
-            and item.name not in {'node_modules', '__pycache__', 'target', 'build', 'dist', '.venv', 'venv'}
+            and item.name not in {'node_modules', '__pycache__', 'target', 'build', 'dist', 'venv'}
         ], key=lambda x: (0 if x.is_dir() else 1, x.name))
 
         for i, item in enumerate(items):
