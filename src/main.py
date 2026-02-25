@@ -444,7 +444,10 @@ def main():  # noqa: C901
             log(f"Skipping vulnerability {vuln_uuid} as an OPEN PR with label '{label_name}' already exists.")
             log("\n::endgroup::")
             if vuln_uuid in skipped_vulns:
-                log(f"Already skipped {vuln_uuid} before, breaking loop to avoid infinite loop.")
+                log(f"Vulnerability {vuln_uuid} was re-suggested after being skipped. "
+                    f"This may indicate GitHub returned incorrect PR data. "
+                    f"See https://www.githubstatus.com/ for possible incidents. "
+                    f"Breaking loop to avoid infinite processing.")
                 break
             skipped_vulns.add(vuln_uuid)
             continue
