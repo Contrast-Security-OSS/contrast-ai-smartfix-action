@@ -72,6 +72,18 @@ class TestGetDirectoryTree(unittest.TestCase):
         self.assertIn('node_modules', exclusion_pattern)
         self.assertIn('target', exclusion_pattern)
 
+    def test_tree_cli_passes_gitignore_flag(self):
+        """The tree CLI call includes --gitignore so .gitignore files are respected natively."""
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "tree output"
+
+        with patch('subprocess.run', return_value=mock_result) as mock_run:
+            get_directory_tree(Path('/some/repo'), max_depth=3)
+
+        cmd = mock_run.call_args[0][0]
+        self.assertIn('--gitignore', cmd)
+
     def test_tree_cli_nonzero_returncode_falls_back_to_python(self):
         """When tree CLI returns non-zero, falls back to generate_simple_tree."""
         mock_result = MagicMock()
@@ -239,6 +251,103 @@ class TestGenerateSimpleTree(unittest.TestCase):
         zebra_pos = result.index("zebra.py")
         self.assertLess(alpha_pos, mango_pos)
         self.assertLess(mango_pos, zebra_pos)
+
+    def test_does_not_recurse_into_symlinked_directories(self):
+        """Symlinked directories appear in the listing but are not recursed into."""
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            real_dir = root / "real_dir"
+            real_dir.mkdir()
+            (real_dir / "nested.py").touch()
+
+            # Create a symlink to real_dir — would double-list nested.py if recursed
+            link_dir = root / "link_dir"
+            link_dir.symlink_to(real_dir)
+
+            result = generate_simple_tree(root, max_depth=3)
+
+        # Both real_dir and link_dir appear in the top-level listing
+        self.assertIn("real_dir", result)
+        self.assertIn("link_dir", result)
+        # real_dir is recursed into (nested.py visible), but link_dir is not
+        # so nested.py appears exactly once (not duplicated via link_dir)
+        self.assertEqual(result.count("nested.py"), 1)
+
+    def test_circular_symlink_does_not_cause_infinite_recursion(self):
+        """A circular symlink (dir pointing to ancestor) must not cause infinite recursion."""
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            subdir = root / "subdir"
+            subdir.mkdir()
+            # Create circular symlink: subdir/loop -> root (points back to ancestor)
+            loop = subdir / "loop"
+            loop.symlink_to(root)
+
+            # Should complete without RecursionError
+            result = generate_simple_tree(root, max_depth=10)
+
+        self.assertIn("subdir", result)
+        # loop appears in listing (it's a symlink so it shows up), but is not recursed into
+        self.assertIn("loop", result)
+
+    def test_excludes_gitignored_items_when_repo_root_provided(self):
+        """Entries reported as ignored by git check-ignore are excluded from the tree."""
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "src").mkdir()
+            (root / "secret.log").touch()
+            (root / "README.md").touch()
+
+            # Mock git check-ignore to report secret.log as ignored
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+            mock_result.stdout = "secret.log\n"
+
+            with patch(
+                'src.smartfix.domains.agents.directory_tree_utils.subprocess.run',
+                return_value=mock_result,
+            ):
+                result = generate_simple_tree(root, max_depth=2, repo_root=root)
+
+        self.assertIn("src", result)
+        self.assertIn("README.md", result)
+        self.assertNotIn("secret.log", result)
+
+    def test_includes_all_items_when_no_gitignored_entries(self):
+        """When git check-ignore reports nothing ignored (returncode=1), all items are shown."""
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "src").mkdir()
+            (root / "main.py").touch()
+
+            mock_result = MagicMock()
+            mock_result.returncode = 1  # nothing ignored
+            mock_result.stdout = ""
+
+            with patch(
+                'src.smartfix.domains.agents.directory_tree_utils.subprocess.run',
+                return_value=mock_result,
+            ):
+                result = generate_simple_tree(root, max_depth=2, repo_root=root)
+
+        self.assertIn("src", result)
+        self.assertIn("main.py", result)
+
+    def test_skips_gitignore_filtering_when_repo_root_not_provided(self):
+        """When repo_root is None, git check-ignore is not called and all items are shown."""
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "src").mkdir()
+            (root / "debug.log").touch()
+
+            with patch(
+                'src.smartfix.domains.agents.directory_tree_utils.subprocess.run',
+            ) as mock_run:
+                result = generate_simple_tree(root, max_depth=2)  # repo_root=None
+
+        mock_run.assert_not_called()
+        self.assertIn("src", result)
+        self.assertIn("debug.log", result)
 
 
 class TestGetDirectoryTreeForAgentPrompt(unittest.TestCase):
