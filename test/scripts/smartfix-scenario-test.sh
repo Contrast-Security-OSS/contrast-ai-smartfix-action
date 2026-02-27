@@ -68,18 +68,24 @@ do_cleanup() {
   info "Restoring workflow file to @$original_ref ..."
 
   local current_file_json current_sha current_content restored_content restored_b64
-  current_file_json=$(gh api "repos/$repo/contents/$workflow_path")
+  if ! current_file_json=$(gh api "repos/$repo/contents/$workflow_path" 2>&1); then
+    warn "Failed to fetch workflow file during cleanup: $current_file_json"
+    return 1
+  fi
   current_sha=$(echo "$current_file_json" | jq -r '.sha')
   current_content=$(echo "$current_file_json" | jq -r '.content' | tr -d '\n' | base64 --decode)
   restored_content=$(echo "$current_content" \
     | sed "s|uses: $ACTION_REPO@[A-Za-z0-9_./-]*|uses: $ACTION_REPO@$original_ref|g")
-  restored_b64=$(echo "$restored_content" | base64)
+  restored_b64=$(echo "$restored_content" | base64 | tr -d '\n')
 
-  gh api --method PUT "repos/$repo/contents/$workflow_path" \
+  local put_response
+  if ! put_response=$(gh api --method PUT "repos/$repo/contents/$workflow_path" \
     --field message="Restore workflow to @$original_ref" \
     --field content="$restored_b64" \
-    --field sha="$current_sha" \
-    > /dev/null
+    --field sha="$current_sha" 2>&1); then
+    warn "Failed to restore workflow file to @$original_ref: $put_response"
+    return 1
+  fi
 
   ok "Workflow file restored to @$original_ref"
 }
@@ -106,6 +112,19 @@ done
 
 [[ -z "$BRANCH" || -z "$REPO" || -z "$WORKFLOW" ]] && usage
 
+if [[ ! "$REPO" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]]; then
+  echo "Error: --repo must be in OWNER/REPO format (e.g. JacobMagesHaskinsContrast/employee-management)." >&2
+  exit 1
+fi
+if [[ ! "$BRANCH" =~ ^[A-Za-z0-9._/\-]+$ ]]; then
+  echo "Error: --branch contains invalid characters. Allowed: letters, digits, '.', '_', '-', '/'." >&2
+  exit 1
+fi
+if [[ ! "$WORKFLOW" =~ ^[A-Za-z0-9._-]+\.y[a]?ml$ ]]; then
+  echo "Error: --workflow must be a .yml or .yaml filename (e.g. contrast-ai-smartfix.yml)." >&2
+  exit 1
+fi
+
 WORKFLOW_PATH="${WORKFLOW_PATH:-.github/workflows/$WORKFLOW}"
 CLEANUP_STATE_FILE="/tmp/smartfix-test-state.json"
 SETTLE_POLL_SECONDS=15
@@ -123,7 +142,10 @@ echo ""
 
 info "Step 1: Pinning workflow file to @$BRANCH ..."
 
-FILE_JSON=$(gh api "repos/$REPO/contents/$WORKFLOW_PATH")
+if ! FILE_JSON=$(gh api "repos/$REPO/contents/$WORKFLOW_PATH" 2>&1); then
+  warn "Failed to fetch workflow file: $FILE_JSON"
+  exit 1
+fi
 FILE_SHA=$(echo "$FILE_JSON" | jq -r '.sha')
 ORIGINAL_CONTENT=$(echo "$FILE_JSON" | jq -r '.content' | tr -d '\n' | base64 --decode)
 
@@ -143,13 +165,16 @@ info "  Original ref: @$ORIGINAL_REF"
 
 PINNED_CONTENT=$(echo "$ORIGINAL_CONTENT" \
   | sed "s|uses: $ACTION_REPO@[A-Za-z0-9_./-]*|uses: $ACTION_REPO@$BRANCH|g")
-PINNED_CONTENT_B64=$(echo "$PINNED_CONTENT" | base64)
+PINNED_CONTENT_B64=$(echo "$PINNED_CONTENT" | base64 | tr -d '\n')
 
-gh api --method PUT "repos/$REPO/contents/$WORKFLOW_PATH" \
+PIN_RESPONSE=""
+if ! PIN_RESPONSE=$(gh api --method PUT "repos/$REPO/contents/$WORKFLOW_PATH" \
   --field message="Pin to branch $BRANCH" \
   --field content="$PINNED_CONTENT_B64" \
-  --field sha="$FILE_SHA" \
-  > /dev/null
+  --field sha="$FILE_SHA" 2>&1); then
+  warn "Failed to pin workflow file to @$BRANCH: $PIN_RESPONSE"
+  exit 1
+fi
 
 ok "Workflow file pinned to @$BRANCH (was @$ORIGINAL_REF)"
 
@@ -226,11 +251,13 @@ DEADLINE=$(( $(date +%s) + TIMEOUT_SECONDS ))
 RUN_ID=""
 RUN_URL=""
 
-# Wait for the run to appear in the list
+# Wait for the newly dispatched run to appear — filter by creation timestamp to
+# avoid picking up a concurrent run that predates the dispatch.
 for _i in $(seq 1 10); do
-  LATEST=$(gh run list --repo "$REPO" --workflow "$WORKFLOW" --limit 1 \
-    --json databaseId,status,url \
-    --jq '.[0]' 2>/dev/null || echo "null")
+  LATEST=$(gh run list --repo "$REPO" --workflow "$WORKFLOW" --limit 5 \
+    --json databaseId,status,url,createdAt \
+    --jq "[.[] | select(.createdAt >= \"$RUN_STARTED_AT\")] | .[0]" \
+    2>/dev/null || echo "null")
 
   if [[ "$LATEST" != "null" && -n "$LATEST" ]]; then
     RUN_ID=$(echo "$LATEST" | jq -r '.databaseId')

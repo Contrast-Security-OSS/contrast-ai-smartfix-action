@@ -87,7 +87,7 @@ FILE_JSON=$(gh api "repos/<REPO>/contents/<WORKFLOW_PATH>")
 CURRENT_SHA=$(echo "$FILE_JSON" | jq -r '.sha')
 CURRENT_CONTENT=$(echo "$FILE_JSON" | jq -r '.content' | tr -d '\n' | base64 --decode)
 RESTORED=$(echo "$CURRENT_CONTENT" | sed "s|uses: Contrast-Security-OSS/contrast-ai-smartfix-action@[A-Za-z0-9_./-]*|uses: Contrast-Security-OSS/contrast-ai-smartfix-action@<ORIGINAL_REF>|g")
-RESTORED_B64=$(echo "$RESTORED" | base64)
+RESTORED_B64=$(echo "$RESTORED" | base64 | tr -d '\n')
 gh api --method PUT "repos/<REPO>/contents/<WORKFLOW_PATH>" \
   --field message="Restore workflow to @<ORIGINAL_REF>" \
   --field content="$RESTORED_B64" \
