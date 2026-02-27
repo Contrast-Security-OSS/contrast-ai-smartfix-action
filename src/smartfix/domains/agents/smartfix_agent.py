@@ -18,6 +18,7 @@ from src import telemetry_handler
 from src.smartfix.domains.scm.git_operations import GitOperations
 
 from .coding_agent import CodingAgentStrategy
+from .directory_tree_utils import get_directory_tree_for_agent_prompt
 from .agent_session import AgentSession
 from src.smartfix.domains.vulnerability import RemediationContext
 
@@ -231,11 +232,13 @@ class SmartFixAgent(CodingAgentStrategy):
 
     def _run_fix_agent_execution(self, context) -> str:
         """Execute the fix agent and return the summary."""
+        directory_tree = get_directory_tree_for_agent_prompt(context.repo_config.repo_path)
+        fix_user_prompt_with_tree = context.prompts.fix_user_prompt + directory_tree
         agent_summary_str = _run_agent_in_event_loop(
             _run_agent_internal_with_prompts,
             'fix',
             context.repo_config.repo_path,
-            context.prompts.fix_user_prompt,
+            fix_user_prompt_with_tree,
             context.prompts.fix_system_prompt,
             context.remediation_id,
             context.session_id
@@ -356,6 +359,9 @@ class SmartFixAgent(CodingAgentStrategy):
         repo_root = context.repo_config.repo_path
         remediation_id = context.remediation_id
 
+        # Compute directory tree once — the repo does not change between QA iterations
+        directory_tree = get_directory_tree_for_agent_prompt(repo_root)
+
         if not build_command:
             log("Skipping QA loop: No build command provided.")
             return True, changed_files, build_command, qa_summary_log  # Assume success if no build command
@@ -407,7 +413,8 @@ class SmartFixAgent(CodingAgentStrategy):
                     context=context,
                     build_output=truncated_output,
                     changed_files=changed_files,  # Pass the current list of changed files
-                    qa_history=qa_summary_log  # Pass the history of previous QA attempts
+                    qa_history=qa_summary_log,  # Pass the history of previous QA attempts
+                    directory_tree=directory_tree,
                 )
 
                 # Check if QA agent encountered an error
@@ -460,7 +467,7 @@ class SmartFixAgent(CodingAgentStrategy):
 
         return build_success, changed_files, build_command, qa_summary_log
 
-    def _run_qa_agent(self, context: RemediationContext, build_output: str, changed_files: List[str], qa_history: Optional[List[str]] = None) -> str:
+    def _run_qa_agent(self, context: RemediationContext, build_output: str, changed_files: List[str], qa_history: Optional[List[str]] = None, directory_tree: str = "") -> str:
         """
         Synchronously runs the QA AI agent to fix build/test errors using API-provided prompts.
 
@@ -469,6 +476,7 @@ class SmartFixAgent(CodingAgentStrategy):
             build_output: The output from the build command.
             changed_files: A list of files that were changed by the fix agent.
             qa_history: Optional history of previous QA attempts.
+            directory_tree: Pre-computed directory tree section (computed once per remediation).
 
         Returns:
             A summary string of the QA agent's actions.
@@ -495,6 +503,7 @@ class SmartFixAgent(CodingAgentStrategy):
 
         # Get processed QA user prompt
         qa_query = context.prompts.get_processed_qa_user_prompt(changed_files, build_output, qa_history_section)
+        qa_query_with_tree = qa_query + directory_tree
 
         try:
             # Execute the QA agent
@@ -502,7 +511,7 @@ class SmartFixAgent(CodingAgentStrategy):
                 _run_agent_internal_with_prompts,
                 'qa',
                 context.repo_config.repo_path,
-                qa_query,
+                qa_query_with_tree,
                 context.prompts.qa_system_prompt,
                 context.remediation_id,
                 context.session_id
