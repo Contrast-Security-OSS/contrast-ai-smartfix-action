@@ -552,6 +552,7 @@ def main():  # noqa: C901
                 contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
                 contrast_api_key=config.CONTRAST_API_KEY
             )
+            processed_one = True
             continue
 
         # Commit all changes together (fix + QA fixes + formatting)
@@ -701,7 +702,7 @@ def main():  # noqa: C901
     if not processed_one:
         log("\n--- No vulnerabilities were processed in this run. ---")
     else:
-        log("\n--- Finished processing vulnerabilities. At least one vulnerability was successfully processed. ---")
+        log("\n--- Finished processing vulnerabilities. At least one vulnerability was handled in this run. ---")
 
     log(f"\n--- Script finished (total runtime: {total_runtime}) ---")
 
