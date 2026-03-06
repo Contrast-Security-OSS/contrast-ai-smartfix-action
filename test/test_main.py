@@ -176,7 +176,7 @@ class TestMain(unittest.TestCase):
                     # Verify the loop broke cleanly
                     self.assertIn("No vulnerabilities were processed in this run", output)
 
-    def test_no_changes_detected_notifies_backend_as_agent_failure(self):
+    def test_no_changes_detected_notifies_backend_as_no_code_changed(self):
         """Regression test: when agent makes no code changes, backend must be notified.
 
         Previously the action called continue without notifying the backend, causing
@@ -237,7 +237,7 @@ class TestMain(unittest.TestCase):
 
         mock_notify_failed.assert_called_once()
         call_kwargs = mock_notify_failed.call_args[1]
-        self.assertEqual(call_kwargs['failure_category'], FailureCategory.AGENT_FAILURE.value)
+        self.assertEqual(call_kwargs['failure_category'], FailureCategory.NO_CODE_CHANGED.value)
         self.assertEqual(call_kwargs['remediation_id'], 'REM-TEST-456')
         mock_cleanup.assert_called_once_with("smartfix/remediation-REM-TEST-456")
         self.assertIn("No changes detected from agent execution", output)
