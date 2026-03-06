@@ -541,8 +541,18 @@ def main():  # noqa: C901
         # Check if there are changes to commit
         if not git_ops.check_status():
             # No changes detected - agent didn't make any modifications
-            log("No changes detected from agent execution. Skipping PR creation.")
+            log("No changes detected from agent execution. Notifying backend and skipping PR creation.")
             git_ops.cleanup_branch(new_branch_name)
+            contrast_api.notify_remediation_failed(
+                remediation_id=remediation_id,
+                failure_category=FailureCategory.AGENT_FAILURE.value,
+                contrast_host=config.CONTRAST_HOST,
+                contrast_org_id=config.CONTRAST_ORG_ID,
+                contrast_app_id=config.CONTRAST_APP_ID,
+                contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
+                contrast_api_key=config.CONTRAST_API_KEY
+            )
+            processed_one = True
             continue
 
         # Commit all changes together (fix + QA fixes + formatting)
@@ -692,7 +702,7 @@ def main():  # noqa: C901
     if not processed_one:
         log("\n--- No vulnerabilities were processed in this run. ---")
     else:
-        log("\n--- Finished processing vulnerabilities. At least one vulnerability was successfully processed. ---")
+        log("\n--- Finished processing vulnerabilities. At least one vulnerability was handled in this run. ---")
 
     log(f"\n--- Script finished (total runtime: {total_runtime}) ---")
 
