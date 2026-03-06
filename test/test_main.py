@@ -239,7 +239,7 @@ class TestMain(unittest.TestCase):
         call_kwargs = mock_notify_failed.call_args[1]
         self.assertEqual(call_kwargs['failure_category'], FailureCategory.AGENT_FAILURE.value)
         self.assertEqual(call_kwargs['remediation_id'], 'REM-TEST-456')
-        mock_cleanup.assert_called_once()
+        mock_cleanup.assert_called_once_with("smartfix/remediation-REM-TEST-456")
         self.assertIn("No changes detected from agent execution", output)
 
 
