@@ -176,7 +176,6 @@ class TestMain(unittest.TestCase):
                     # Verify the loop broke cleanly
                     self.assertIn("No vulnerabilities were processed in this run", output)
 
-
     def test_no_changes_detected_notifies_backend_as_agent_failure(self):
         """Regression test: when agent makes no code changes, backend must be notified.
 
