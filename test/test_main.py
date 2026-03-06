@@ -6,7 +6,7 @@ from unittest.mock import patch, MagicMock
 
 # Test setup imports (path is set up by conftest.py)
 from setup_test_env import create_temp_repo_dir
-from src.config import reset_config
+from src.config import reset_config, get_config
 from src.main import main
 from src.smartfix.shared.failure_categories import FailureCategory
 
@@ -213,13 +213,6 @@ class TestMain(unittest.TestCase):
         mock_session_handler.handle_session_result.return_value = mock_session_result
         mock_session_handler.generate_qa_section.return_value = ""
 
-        # Mock credit tracking so the module-level config's USE_CONTRAST_LLM=True path
-        # (set at import time) doesn't trigger error_exit when get_credit_tracking returns None.
-        mock_credit_info = MagicMock()
-        mock_credit_info.is_exhausted = False
-        mock_credit_info.should_log_warning.return_value = False
-        mock_credit_info.to_log_message.return_value = "mock credit info"
-
         with patch('src.github.github_operations.GitHubOperations.count_open_prs_with_prefix', return_value=0), \
              patch('src.github.github_operations.GitHubOperations.check_pr_status_for_label', return_value="NOT_FOUND"), \
              patch('src.github.github_operations.GitHubOperations.generate_label_details',
@@ -230,17 +223,17 @@ class TestMain(unittest.TestCase):
              patch('src.smartfix.domains.scm.git_operations.GitOperations.cleanup_branch') as mock_cleanup, \
              patch('src.github.agent_factory.GitHubAgentFactory.create_agent') as mock_factory, \
              patch('src.main.create_session_handler', return_value=mock_session_handler), \
-             patch('src.contrast_api.get_credit_tracking', return_value=mock_credit_info), \
              patch('src.contrast_api.notify_remediation_failed') as mock_notify_failed:
 
             mock_agent = MagicMock()
             mock_factory.return_value = mock_agent
 
             with patch.dict('os.environ', test_env, clear=True):
-                reset_config()  # Rebuild config from test_env after clear
-                with io.StringIO() as buf, contextlib.redirect_stdout(buf):
-                    main()
-                    output = buf.getvalue()
+                reset_config()
+                with patch('src.main.config', get_config()):
+                    with io.StringIO() as buf, contextlib.redirect_stdout(buf):
+                        main()
+                        output = buf.getvalue()
 
         mock_notify_failed.assert_called_once()
         call_kwargs = mock_notify_failed.call_args[1]
