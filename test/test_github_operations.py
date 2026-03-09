@@ -1098,6 +1098,212 @@ class TestGitHubOperations(unittest.TestCase):
                 self.assertIn("truncated", written_content.lower())
                 self.assertEqual(result, "https://github.com/test/repo/pull/456")
 
+    @patch('tempfile.NamedTemporaryFile')
+    @patch('os.path.exists')
+    @patch('os.path.getsize')
+    @patch('os.remove')
+    @patch('subprocess.run')
+    @patch('src.github.github_operations.run_command')
+    @patch('src.github.github_operations.error_exit')
+    @patch('src.github.github_operations.log')
+    def test_create_pr_permission_denied_logs_actionable_message(
+        self, mock_log, mock_error_exit, mock_run_command,
+        mock_subprocess_run, mock_remove, mock_getsize, mock_exists,
+        mock_tempfile
+    ):
+        """Test PR creation failure due to disabled PR permission setting."""
+        from src.utils import CommandExecutionError
+
+        # Mock temp file
+        mock_temp = MagicMock()
+        mock_temp.name = "/tmp/test_pr_body.md"
+        mock_temp.__enter__ = MagicMock(return_value=mock_temp)
+        mock_temp.__exit__ = MagicMock(return_value=False)
+        mock_tempfile.return_value = mock_temp
+
+        mock_exists.return_value = True
+        mock_getsize.return_value = 1000
+        mock_subprocess_run.return_value = MagicMock(
+            returncode=0, stdout="gh version 2.0.0"
+        )
+
+        # Simulate the exact error GitHub returns when setting is disabled
+        permission_error = CommandExecutionError(
+            message="Command failed with return code 1.",
+            return_code=1,
+            command="gh pr create",
+            stderr="GraphQL: GitHub Actions is not permitted to "
+                   "create or approve pull requests (createPullRequest)"
+        )
+        mock_run_command.side_effect = permission_error
+
+        with patch.object(
+            self.github_ops.git_ops, 'get_branch_name'
+        ) as mock_get_branch:
+            mock_get_branch.return_value = "smartfix/fix-issue-123"
+            self.github_ops.create_pr(
+                "Fix: Test", "body", "rem-123", "main", "label1"
+            )
+
+        # Verify actionable error message was logged
+        actionable_msg_logged = any(
+            "does not have permission to create PRs" in str(call)
+            and "Allow GitHub Actions to create and approve pull "
+            "requests" in str(call)
+            for call in mock_log.call_args_list
+        )
+        self.assertTrue(
+            actionable_msg_logged,
+            "Expected actionable permission error message to be logged"
+        )
+
+        # Verify error_exit was called with GENERATE_PR_FAILURE
+        mock_error_exit.assert_called_once_with(
+            "rem-123", FailureCategory.GENERATE_PR_FAILURE.value
+        )
+
+    @patch('tempfile.NamedTemporaryFile')
+    @patch('os.path.exists')
+    @patch('os.path.getsize')
+    @patch('os.remove')
+    @patch('subprocess.run')
+    @patch('src.github.github_operations.run_command')
+    @patch('src.github.github_operations.error_exit')
+    @patch('src.github.github_operations.log')
+    def test_create_pr_other_command_error_logs_generic_message(
+        self, mock_log, mock_error_exit, mock_run_command,
+        mock_subprocess_run, mock_remove, mock_getsize, mock_exists,
+        mock_tempfile
+    ):
+        """Test non-permission PR failure logs the generic error."""
+        from src.utils import CommandExecutionError
+
+        # Mock temp file
+        mock_temp = MagicMock()
+        mock_temp.name = "/tmp/test_pr_body.md"
+        mock_temp.__enter__ = MagicMock(return_value=mock_temp)
+        mock_temp.__exit__ = MagicMock(return_value=False)
+        mock_tempfile.return_value = mock_temp
+
+        mock_exists.return_value = True
+        mock_getsize.return_value = 1000
+        mock_subprocess_run.return_value = MagicMock(
+            returncode=0, stdout="gh version 2.0.0"
+        )
+
+        # Simulate a different command error (not permission-related)
+        other_error = CommandExecutionError(
+            message="Command failed with return code 1.",
+            return_code=1,
+            command="gh pr create",
+            stderr="GraphQL: Resource not accessible by integration "
+                   "(createPullRequest)"
+        )
+        mock_run_command.side_effect = other_error
+
+        with patch.object(
+            self.github_ops.git_ops, 'get_branch_name'
+        ) as mock_get_branch:
+            mock_get_branch.return_value = "smartfix/fix-issue-456"
+            self.github_ops.create_pr(
+                "Fix: Test", "body", "rem-456", "main", "label1"
+            )
+
+        # Verify generic error message was logged (not permission one)
+        permission_msg_logged = any(
+            "does not have permission to create PRs" in str(call)
+            for call in mock_log.call_args_list
+        )
+        self.assertFalse(
+            permission_msg_logged,
+            "Permission-specific message should NOT be logged"
+        )
+
+        generic_msg_logged = any(
+            "An unexpected error occurred during PR creation"
+            in str(call)
+            for call in mock_log.call_args_list
+        )
+        self.assertTrue(
+            generic_msg_logged,
+            "Expected generic error message to be logged"
+        )
+
+        # Verify error details with stderr were logged
+        stderr_logged = any(
+            "Resource not accessible by integration" in str(call)
+            for call in mock_log.call_args_list
+        )
+        self.assertTrue(
+            stderr_logged, "Expected stderr details to be logged"
+        )
+
+        # Verify error_exit was called with GENERATE_PR_FAILURE
+        mock_error_exit.assert_called_once_with(
+            "rem-456", FailureCategory.GENERATE_PR_FAILURE.value
+        )
+
+    @patch('tempfile.NamedTemporaryFile')
+    @patch('os.path.exists')
+    @patch('os.path.getsize')
+    @patch('os.remove')
+    @patch('subprocess.run')
+    @patch('src.github.github_operations.run_command')
+    @patch('src.github.github_operations.error_exit')
+    @patch('src.github.github_operations.log')
+    def test_create_pr_command_error_no_stderr_logs_generic_message(
+        self, mock_log, mock_error_exit, mock_run_command,
+        mock_subprocess_run, mock_remove, mock_getsize, mock_exists,
+        mock_tempfile
+    ):
+        """Test PR failure with no stderr falls to generic message."""
+        from src.utils import CommandExecutionError
+
+        # Mock temp file
+        mock_temp = MagicMock()
+        mock_temp.name = "/tmp/test_pr_body.md"
+        mock_temp.__enter__ = MagicMock(return_value=mock_temp)
+        mock_temp.__exit__ = MagicMock(return_value=False)
+        mock_tempfile.return_value = mock_temp
+
+        mock_exists.return_value = True
+        mock_getsize.return_value = 1000
+        mock_subprocess_run.return_value = MagicMock(
+            returncode=0, stdout="gh version 2.0.0"
+        )
+
+        # Simulate a command error with no stderr
+        no_stderr_error = CommandExecutionError(
+            message="Command failed with return code 1.",
+            return_code=1,
+            command="gh pr create",
+            stderr=None
+        )
+        mock_run_command.side_effect = no_stderr_error
+
+        with patch.object(
+            self.github_ops.git_ops, 'get_branch_name'
+        ) as mock_get_branch:
+            mock_get_branch.return_value = "smartfix/fix-issue-789"
+            self.github_ops.create_pr(
+                "Fix: Test", "body", "rem-789", "main", "label1"
+            )
+
+        # Verify generic error message was logged
+        generic_msg_logged = any(
+            "An unexpected error occurred during PR creation"
+            in str(call)
+            for call in mock_log.call_args_list
+        )
+        self.assertTrue(
+            generic_msg_logged,
+            "Expected generic error message when stderr is None"
+        )
+
+        mock_error_exit.assert_called_once_with(
+            "rem-789", FailureCategory.GENERATE_PR_FAILURE.value
+        )
+
     @patch('subprocess.run')
     @patch('src.github.github_operations.run_command')
     def test_ensure_label_name_too_long(self, mock_run_command, mock_subprocess_run):

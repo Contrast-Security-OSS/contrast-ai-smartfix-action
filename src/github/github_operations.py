@@ -21,7 +21,7 @@ import os
 import json
 import re
 from typing import List, Optional, TypedDict
-from src.utils import run_command, debug_log, log, error_exit
+from src.utils import run_command, debug_log, log, error_exit, CommandExecutionError
 from src.smartfix.shared.failure_categories import FailureCategory
 from src.config import get_config
 from src.smartfix.shared.coding_agents import CodingAgents
@@ -554,6 +554,26 @@ class GitHubOperations(ScmOperations):
 
         except FileNotFoundError:
             log("Error: gh command not found. Please ensure the GitHub CLI is installed and in PATH.", is_error=True)
+            error_exit(remediation_id, FailureCategory.GENERATE_PR_FAILURE.value)
+        except CommandExecutionError as e:
+            if e.stderr and "GitHub Actions is not permitted to create or approve pull requests" in e.stderr:
+                log(
+                    "SmartFix was unable to create a pull request because GitHub Actions "
+                    "does not have permission to create PRs in this repository.\n\n"
+                    "To fix this, enable 'Allow GitHub Actions to create and approve pull requests' in:\n"
+                    "  - Repository: Settings > Actions > General > Workflow permissions\n"
+                    "  - Organization: Settings > Actions > General > Workflow permissions\n"
+                    "  - Enterprise: Settings > Actions > General > Workflow permissions (overrides all)\n\n"
+                    "For more information, see: "
+                    "https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/"
+                    "enabling-features-for-your-repository/managing-github-actions-settings-for-a-repository"
+                    "#preventing-github-actions-from-creating-or-approving-pull-requests",
+                    is_error=True
+                )
+            else:
+                log(f"An unexpected error occurred during PR creation: {e}", is_error=True)
+                if e.stderr:
+                    log(f"Error details: {e.stderr}", is_error=True)
             error_exit(remediation_id, FailureCategory.GENERATE_PR_FAILURE.value)
         except Exception as e:
             log(f"An unexpected error occurred during PR creation: {e}", is_error=True)
