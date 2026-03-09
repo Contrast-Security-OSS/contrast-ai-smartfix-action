@@ -379,6 +379,9 @@ def main():  # noqa: C901
 
             # Check if this is the same vulnerability UUID as the previous iteration
             if vuln_uuid == previous_vuln_uuid:
+                if vuln_uuid in skipped_vulns:
+                    log(f"Vulnerability {vuln_uuid} was re-served after being handled. Breaking loop to avoid infinite processing.")
+                    break
                 log(f"Error: Backend provided the same vulnerability UUID ({vuln_uuid}) as the previous iteration. This indicates a backend error.", is_warning=True)
                 error_exit(remediation_id, FailureCategory.GENERAL_FAILURE.value)
 
@@ -545,7 +548,7 @@ def main():  # noqa: C901
             git_ops.cleanup_branch(new_branch_name)
             contrast_api.notify_remediation_failed(
                 remediation_id=remediation_id,
-                failure_category=FailureCategory.AGENT_FAILURE.value,
+                failure_category=FailureCategory.NO_CODE_CHANGED.value,
                 contrast_host=config.CONTRAST_HOST,
                 contrast_org_id=config.CONTRAST_ORG_ID,
                 contrast_app_id=config.CONTRAST_APP_ID,

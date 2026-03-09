@@ -51,7 +51,8 @@ class TestContrastApiFailureCategories(unittest.TestCase):
             "GENERAL_FAILURE",
             "EXCEEDED_TIMEOUT",
             "EXCEEDED_AGENT_EVENTS",
-            "INVALID_LLM_CONFIG"
+            "INVALID_LLM_CONFIG",
+            "NO_CODE_CHANGED"
         ]
 
         actual_categories = [category.value for category in FailureCategory]
