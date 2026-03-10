@@ -26,6 +26,11 @@ beads.left.meta.json
 beads.right.jsonl
 beads.right.meta.json
 
+# History snapshots and runtime artifacts (not useful in PRs)
+.br_history/
+.bv.lock
+last-touched
+
 # Keep JSONL exports and config (source of truth for git)
 !issues.jsonl
 !metadata.json

@@ -86,7 +86,7 @@ inputs:
   vulnerability_severities:
     description: 'Array of vulnerability severity levels to process (allowed: CRITICAL, HIGH, MEDIUM, LOW, NOTE)'
     required: false
-    default: '["CRITICAL", "HIGH"]'
+    default: '["CRITICAL", "HIGH", "MEDIUM"]'
   run_task:
     description: '[DEPRECATED] This input is now automatically determined. Setting this will be ignored.'
     required: false
@@ -203,7 +203,7 @@ runs:
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.11'
+        python-version: '3.13'
 
     # Install uv tool for dependency management
     - name: Install uv
@@ -212,9 +212,9 @@ runs:
         echo ""
         echo "📦 Installing uv package manager..."
         if [ "$RUNNER_OS" = "Windows" ]; then
-          pip install uv==0.7.15 > uv-install.log || (cat uv-install.log && exit 1)
+          pip install uv==0.10.2 > uv-install.log || (cat uv-install.log && exit 1)
         else
-          pip install uv==0.7.15 > /tmp/uv-install.log || (cat /tmp/uv-install.log && exit 1)
+          pip install uv==0.10.2 > /tmp/uv-install.log || (cat /tmp/uv-install.log && exit 1)
         fi
         echo "✅ uv installed successfully"
 

@@ -24,6 +24,8 @@ Handles connection to MCP servers, toolset creation, and platform-specific
 configuration for filesystem access in agent operations.
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import platform
@@ -81,7 +83,7 @@ class MCPToolsetManager:
 
         # NPM configuration
         self.npm_cache_path = '/tmp/.npm-cache'
-        self.mcp_package = '@modelcontextprotocol/server-filesystem@2025.11.25'
+        self.mcp_package = '@modelcontextprotocol/server-filesystem@2026.1.14'
 
     async def get_tools(self, target_folder: Path, remediation_id: str) -> MCPToolset:
         """

@@ -207,3 +207,6 @@ plan.zip
 # Claude Code local session files
 .claude/learnings/
 docs/plans/
+
+# Abacus
+.abacus/

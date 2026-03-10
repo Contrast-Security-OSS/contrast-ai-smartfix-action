@@ -365,7 +365,8 @@ def main():  # noqa: C901
             vulnerability_data = contrast_api.get_vulnerability_with_prompts(
                 config.CONTRAST_HOST, config.CONTRAST_ORG_ID, config.CONTRAST_APP_ID,
                 config.CONTRAST_AUTHORIZATION_KEY, config.CONTRAST_API_KEY,
-                max_open_prs_setting, github_repo_url, config.VULNERABILITY_SEVERITIES
+                max_open_prs_setting, github_repo_url, config.VULNERABILITY_SEVERITIES,
+                credit_info=current_credit_info if config.USE_CONTRAST_LLM else None
             )
             log("\n::endgroup::")
 
@@ -378,6 +379,9 @@ def main():  # noqa: C901
 
             # Check if this is the same vulnerability UUID as the previous iteration
             if vuln_uuid == previous_vuln_uuid:
+                if vuln_uuid in skipped_vulns:
+                    log(f"Vulnerability {vuln_uuid} was re-served after being handled. Breaking loop to avoid infinite processing.")
+                    break
                 log(f"Error: Backend provided the same vulnerability UUID ({vuln_uuid}) as the previous iteration. This indicates a backend error.", is_warning=True)
                 error_exit(remediation_id, FailureCategory.GENERAL_FAILURE.value)
 
@@ -403,7 +407,8 @@ def main():  # noqa: C901
             vulnerability_data = contrast_api.get_vulnerability_details(
                 config.CONTRAST_HOST, config.CONTRAST_ORG_ID, config.CONTRAST_APP_ID,
                 config.CONTRAST_AUTHORIZATION_KEY, config.CONTRAST_API_KEY,
-                github_repo_url, max_open_prs_setting, config.VULNERABILITY_SEVERITIES
+                github_repo_url, max_open_prs_setting, config.VULNERABILITY_SEVERITIES,
+                credit_info=current_credit_info if config.USE_CONTRAST_LLM else None
             )
             log("\n::endgroup::")
 
@@ -442,7 +447,10 @@ def main():  # noqa: C901
             log(f"Skipping vulnerability {vuln_uuid} as an OPEN PR with label '{label_name}' already exists.")
             log("\n::endgroup::")
             if vuln_uuid in skipped_vulns:
-                log(f"Already skipped {vuln_uuid} before, breaking loop to avoid infinite loop.")
+                log(f"Vulnerability {vuln_uuid} was re-suggested after being skipped. "
+                    f"This may indicate GitHub returned incorrect PR data. "
+                    f"See https://www.githubstatus.com/ for possible incidents. "
+                    f"Breaking loop to avoid infinite processing.")
                 break
             skipped_vulns.add(vuln_uuid)
             continue
@@ -536,8 +544,18 @@ def main():  # noqa: C901
         # Check if there are changes to commit
         if not git_ops.check_status():
             # No changes detected - agent didn't make any modifications
-            log("No changes detected from agent execution. Skipping PR creation.")
+            log("No changes detected from agent execution. Notifying backend and skipping PR creation.")
             git_ops.cleanup_branch(new_branch_name)
+            contrast_api.notify_remediation_failed(
+                remediation_id=remediation_id,
+                failure_category=FailureCategory.NO_CODE_CHANGED.value,
+                contrast_host=config.CONTRAST_HOST,
+                contrast_org_id=config.CONTRAST_ORG_ID,
+                contrast_app_id=config.CONTRAST_APP_ID,
+                contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
+                contrast_api_key=config.CONTRAST_API_KEY
+            )
+            processed_one = True
             continue
 
         # Commit all changes together (fix + QA fixes + formatting)
@@ -687,7 +705,7 @@ def main():  # noqa: C901
     if not processed_one:
         log("\n--- No vulnerabilities were processed in this run. ---")
     else:
-        log("\n--- Finished processing vulnerabilities. At least one vulnerability was successfully processed. ---")
+        log("\n--- Finished processing vulnerabilities. At least one vulnerability was handled in this run. ---")
 
     log(f"\n--- Script finished (total runtime: {total_runtime}) ---")
 
