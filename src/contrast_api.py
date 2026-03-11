@@ -76,6 +76,55 @@ def get_sanitized_409_message(response_text: str, credit_info=None) -> tuple[str
     return ("Unable to process request. Please try again or contact Contrast support if the issue persists.", True)
 
 
+def get_open_remediations(contrast_host, contrast_org_id, contrast_app_id,
+                          contrast_auth_key, contrast_api_key) -> list:
+    """Returns remediations the backend believes are in OPEN status.
+
+    Best-effort: returns [] on any error. Must not block main flow.
+
+    Args:
+        contrast_host: The Contrast Security host URL
+        contrast_org_id: The organization ID
+        contrast_app_id: The application ID
+        contrast_auth_key: The Contrast authorization key
+        contrast_api_key: The Contrast API key
+
+    Returns:
+        list: List of open remediation dicts, or empty list on error
+    """
+    api_url = (f"https://{normalize_host(contrast_host)}/api/v4/aiml-remediation/"
+               f"organizations/{contrast_org_id}/applications/{contrast_app_id}/remediations/open")
+
+    headers = {
+        "Authorization": contrast_auth_key,
+        "API-Key": contrast_api_key,
+        "Accept": "application/json",
+        "User-Agent": config.USER_AGENT
+    }
+
+    try:
+        debug_log(f"Fetching open remediations from: {api_url}")
+        response = requests.get(api_url, headers=headers, timeout=30)
+
+        if response.status_code == 200:
+            result = response.json()
+            debug_log(f"Found {len(result)} open remediations")
+            return result
+        else:
+            log(f"Unexpected status {response.status_code} fetching open remediations", is_warning=True)
+            return []
+
+    except requests.exceptions.RequestException as e:
+        log(f"Error fetching open remediations: {e}", is_warning=True)
+        return []
+    except json.JSONDecodeError:
+        log("Error decoding JSON from open remediations endpoint", is_warning=True)
+        return []
+    except Exception as e:
+        log(f"Unexpected error fetching open remediations: {e}", is_warning=True)
+        return []
+
+
 def get_vulnerability_with_prompts(contrast_host, contrast_org_id, contrast_app_id, contrast_auth_key, contrast_api_key,
                                    max_open_prs, github_repo_url, vulnerability_severities, credit_info=None):
     """Fetches a vulnerability to process along with pre-populated prompt templates from the new prompt-details endpoint.
