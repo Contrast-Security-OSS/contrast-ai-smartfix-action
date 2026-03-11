@@ -47,6 +47,7 @@ from src.smartfix.domains.vulnerability.models import Vulnerability
 
 # Import GitHub-specific agent factory
 from src.github.agent_factory import GitHubAgentFactory
+from src.smartfix.domains.workflow.pr_reconciliation import reconcile_open_remediations
 
 config = get_config()
 telemetry_handler.initialize_telemetry()
@@ -237,71 +238,6 @@ def cleanup_asyncio():  # noqa: C901
 
 # Register the cleanup function
 atexit.register(cleanup_asyncio)
-
-
-def reconcile_open_remediations(config, github_ops):
-    """Checks all remediations the backend thinks are OPEN against actual GitHub PR state.
-
-    Calls the appropriate backend transition for any that have drifted.
-    Best-effort: logs warnings on failure, never raises, never exits.
-    """
-    try:
-        open_remediations = contrast_api.get_open_remediations(
-            contrast_host=config.CONTRAST_HOST,
-            contrast_org_id=config.CONTRAST_ORG_ID,
-            contrast_app_id=config.CONTRAST_APP_ID,
-            contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
-            contrast_api_key=config.CONTRAST_API_KEY,
-        )
-
-        if not open_remediations:
-            log("No open remediations to reconcile")
-            return
-
-        log(f"Found {len(open_remediations)} open remediation(s) to check")
-
-        for rem in open_remediations:
-            remediation_id = rem.get('remediationId', 'unknown')
-            vuln_id = rem.get('vulnerabilityId', 'unknown')
-            pr_number = rem.get('pullRequestNumber')
-
-            if pr_number is None:
-                log(f"Remediation {remediation_id} (vuln {vuln_id}) has no PR number, skipping", is_warning=True)
-                continue
-
-            actual_state = github_ops.get_pr_actual_state(pr_number)
-
-            if actual_state is None:
-                log(f"Could not determine state for PR #{pr_number} (remediation {remediation_id}), skipping", is_warning=True)
-                continue
-
-            if actual_state == 'OPEN':
-                debug_log(f"Remediation {remediation_id} (vuln {vuln_id}, PR #{pr_number}): GitHub state is OPEN, no action needed")
-                continue
-
-            log(f"Reconciling remediation {remediation_id} (vuln {vuln_id}, PR #{pr_number}): GitHub state is {actual_state}, notifying backend")
-
-            if actual_state == 'MERGED':
-                contrast_api.notify_remediation_pr_merged(
-                    remediation_id=remediation_id,
-                    contrast_host=config.CONTRAST_HOST,
-                    contrast_org_id=config.CONTRAST_ORG_ID,
-                    contrast_app_id=config.CONTRAST_APP_ID,
-                    contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
-                    contrast_api_key=config.CONTRAST_API_KEY,
-                )
-            elif actual_state == 'CLOSED':
-                contrast_api.notify_remediation_pr_closed(
-                    remediation_id=remediation_id,
-                    contrast_host=config.CONTRAST_HOST,
-                    contrast_org_id=config.CONTRAST_ORG_ID,
-                    contrast_app_id=config.CONTRAST_APP_ID,
-                    contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
-                    contrast_api_key=config.CONTRAST_API_KEY,
-                )
-
-    except Exception as e:
-        log(f"Error during orphan PR reconciliation: {e}", is_warning=True)
 
 
 def main():  # noqa: C901

@@ -3,7 +3,7 @@
 import unittest
 from unittest.mock import patch, MagicMock
 
-from src.main import reconcile_open_remediations
+from src.smartfix.domains.workflow.pr_reconciliation import reconcile_open_remediations
 
 
 class TestReconcileOpenRemediations(unittest.TestCase):
@@ -20,7 +20,7 @@ class TestReconcileOpenRemediations(unittest.TestCase):
         )
         self.mock_github_ops = MagicMock()
 
-    @patch('src.main.contrast_api')
+    @patch('src.smartfix.domains.workflow.pr_reconciliation.contrast_api')
     def test_empty_list_makes_no_github_calls(self, mock_contrast_api):
         """Test that an empty open remediations list results in no GitHub calls."""
         mock_contrast_api.get_open_remediations.return_value = []
@@ -31,7 +31,7 @@ class TestReconcileOpenRemediations(unittest.TestCase):
         mock_contrast_api.notify_remediation_pr_merged.assert_not_called()
         mock_contrast_api.notify_remediation_pr_closed.assert_not_called()
 
-    @patch('src.main.contrast_api')
+    @patch('src.smartfix.domains.workflow.pr_reconciliation.contrast_api')
     def test_open_pr_no_action(self, mock_contrast_api):
         """Test that a remediation with an OPEN PR triggers no transition."""
         mock_contrast_api.get_open_remediations.return_value = [
@@ -44,7 +44,7 @@ class TestReconcileOpenRemediations(unittest.TestCase):
         mock_contrast_api.notify_remediation_pr_merged.assert_not_called()
         mock_contrast_api.notify_remediation_pr_closed.assert_not_called()
 
-    @patch('src.main.contrast_api')
+    @patch('src.smartfix.domains.workflow.pr_reconciliation.contrast_api')
     def test_closed_pr_calls_notify_closed(self, mock_contrast_api):
         """Test that a CLOSED PR triggers notify_remediation_pr_closed."""
         mock_contrast_api.get_open_remediations.return_value = [
@@ -64,7 +64,7 @@ class TestReconcileOpenRemediations(unittest.TestCase):
         )
         mock_contrast_api.notify_remediation_pr_merged.assert_not_called()
 
-    @patch('src.main.contrast_api')
+    @patch('src.smartfix.domains.workflow.pr_reconciliation.contrast_api')
     def test_merged_pr_calls_notify_merged(self, mock_contrast_api):
         """Test that a MERGED PR triggers notify_remediation_pr_merged."""
         mock_contrast_api.get_open_remediations.return_value = [
@@ -84,7 +84,7 @@ class TestReconcileOpenRemediations(unittest.TestCase):
         )
         mock_contrast_api.notify_remediation_pr_closed.assert_not_called()
 
-    @patch('src.main.contrast_api')
+    @patch('src.smartfix.domains.workflow.pr_reconciliation.contrast_api')
     def test_null_pr_number_skips(self, mock_contrast_api):
         """Test that a remediation with null pullRequestNumber is skipped."""
         mock_contrast_api.get_open_remediations.return_value = [
@@ -97,7 +97,7 @@ class TestReconcileOpenRemediations(unittest.TestCase):
         mock_contrast_api.notify_remediation_pr_merged.assert_not_called()
         mock_contrast_api.notify_remediation_pr_closed.assert_not_called()
 
-    @patch('src.main.contrast_api')
+    @patch('src.smartfix.domains.workflow.pr_reconciliation.contrast_api')
     def test_get_pr_actual_state_returns_none_skips(self, mock_contrast_api):
         """Test that None from get_pr_actual_state skips the remediation."""
         mock_contrast_api.get_open_remediations.return_value = [
@@ -110,7 +110,7 @@ class TestReconcileOpenRemediations(unittest.TestCase):
         mock_contrast_api.notify_remediation_pr_merged.assert_not_called()
         mock_contrast_api.notify_remediation_pr_closed.assert_not_called()
 
-    @patch('src.main.contrast_api')
+    @patch('src.smartfix.domains.workflow.pr_reconciliation.contrast_api')
     def test_multiple_remediations_reconciled_independently(self, mock_contrast_api):
         """Test that multiple remediations are each reconciled independently."""
         mock_contrast_api.get_open_remediations.return_value = [
@@ -126,7 +126,7 @@ class TestReconcileOpenRemediations(unittest.TestCase):
         mock_contrast_api.notify_remediation_pr_merged.assert_called_once()
         mock_contrast_api.notify_remediation_pr_closed.assert_called_once()
 
-    @patch('src.main.contrast_api')
+    @patch('src.smartfix.domains.workflow.pr_reconciliation.contrast_api')
     def test_exception_does_not_propagate(self, mock_contrast_api):
         """Test that an exception during reconciliation does not propagate."""
         mock_contrast_api.get_open_remediations.side_effect = RuntimeError("unexpected")
