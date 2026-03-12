@@ -35,18 +35,22 @@ def reconcile_open_remediations(config, github_ops):
             contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
             contrast_api_key=config.CONTRAST_API_KEY,
         )
+    except Exception as e:
+        log(f"Error fetching open remediations: {e}", is_warning=True)
+        return
 
-        if not open_remediations:
-            log("No open remediations to reconcile")
-            return
+    if not open_remediations:
+        log("No open remediations to reconcile")
+        return
 
-        log(f"Found {len(open_remediations)} open remediation(s) to check")
+    log(f"Found {len(open_remediations)} open remediation(s) to check")
 
-        for rem in open_remediations:
-            remediation_id = rem.get('remediationId', 'unknown')
-            vuln_id = rem.get('vulnerabilityId', 'unknown')
-            pr_number = rem.get('pullRequestNumber')
+    for rem in open_remediations:
+        remediation_id = rem.get('remediationId', 'unknown')
+        vuln_id = rem.get('vulnerabilityId', 'unknown')
+        pr_number = rem.get('pullRequestNumber')
 
+        try:
             if pr_number is None:
                 log(f"Remediation {remediation_id} (vuln {vuln_id}) has no PR number, skipping", is_warning=True)
                 continue
@@ -81,6 +85,5 @@ def reconcile_open_remediations(config, github_ops):
                     contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
                     contrast_api_key=config.CONTRAST_API_KEY,
                 )
-
-    except Exception as e:
-        log(f"Error during orphan PR reconciliation: {e}", is_warning=True)
+        except Exception as e:
+            log(f"Error reconciling remediation {remediation_id} (vuln {vuln_id}, PR #{pr_number}): {e}", is_warning=True)

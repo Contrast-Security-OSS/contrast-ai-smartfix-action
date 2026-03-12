@@ -127,12 +127,29 @@ class TestReconcileOpenRemediations(unittest.TestCase):
         mock_contrast_api.notify_remediation_pr_closed.assert_called_once()
 
     @patch('src.smartfix.domains.workflow.pr_reconciliation.contrast_api')
-    def test_exception_does_not_propagate(self, mock_contrast_api):
-        """Test that an exception during reconciliation does not propagate."""
+    def test_fetch_exception_does_not_propagate(self, mock_contrast_api):
+        """Test that an exception fetching open remediations does not propagate."""
         mock_contrast_api.get_open_remediations.side_effect = RuntimeError("unexpected")
 
         # Should not raise
         reconcile_open_remediations(self.mock_config, self.mock_github_ops)
+
+    @patch('src.smartfix.domains.workflow.pr_reconciliation.contrast_api')
+    def test_per_remediation_exception_continues_to_next(self, mock_contrast_api):
+        """Test that an exception on one remediation doesn't skip the rest."""
+        mock_contrast_api.get_open_remediations.return_value = [
+            {'remediationId': 'rem-1', 'vulnerabilityId': 'vuln-1', 'pullRequestNumber': 10},
+            {'remediationId': 'rem-2', 'vulnerabilityId': 'vuln-2', 'pullRequestNumber': 20},
+        ]
+        # First call raises, second returns CLOSED
+        self.mock_github_ops.get_pr_actual_state.side_effect = [RuntimeError("boom"), 'CLOSED']
+
+        reconcile_open_remediations(self.mock_config, self.mock_github_ops)
+
+        # Both PRs should have been checked
+        self.assertEqual(self.mock_github_ops.get_pr_actual_state.call_count, 2)
+        # Second remediation should still have been reconciled
+        mock_contrast_api.notify_remediation_pr_closed.assert_called_once()
 
 
 if __name__ == '__main__':
