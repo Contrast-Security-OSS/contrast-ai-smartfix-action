@@ -185,7 +185,7 @@ class GitHubOperations(ScmOperations):
         try:
             result = run_command(
                 ['gh', 'pr', 'view', str(pr_number), '--repo', self.config.GITHUB_REPOSITORY,
-                 '--json', 'state,mergedAt'],
+                 '--json', 'state'],
                 env=self.get_gh_env(),
                 check=False
             )
@@ -194,13 +194,10 @@ class GitHubOperations(ScmOperations):
                 return None
 
             data = json.loads(result.strip())
-            state = data.get('state', '').lower()
-            merged_at = data.get('mergedAt')
+            state = data.get('state', '').upper()
 
-            if state == 'open':
-                return 'OPEN'
-            elif state == 'closed':
-                return 'MERGED' if merged_at else 'CLOSED'
+            if state in ('OPEN', 'MERGED', 'CLOSED'):
+                return state
             else:
                 debug_log(f"Unexpected PR state '{state}' for PR #{pr_number}")
                 return None
