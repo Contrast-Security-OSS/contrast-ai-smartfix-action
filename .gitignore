@@ -209,5 +209,9 @@ plan.zip
 .claude/learnings/
 docs/plans/
 
-# Architecture Decision Records (ADRs) - local development only
+    # Architecture Decision Records (ADRs) - local development only
 docs/adr/
+
+# Abacus
+.abacus/
+

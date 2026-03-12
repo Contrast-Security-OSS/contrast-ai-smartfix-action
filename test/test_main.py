@@ -6,8 +6,9 @@ from unittest.mock import patch, MagicMock
 
 # Test setup imports (path is set up by conftest.py)
 from setup_test_env import create_temp_repo_dir
-from src.config import reset_config
+from src.config import reset_config, get_config
 from src.main import main
+from src.smartfix.shared.failure_categories import FailureCategory
 
 
 class TestMain(unittest.TestCase):
@@ -63,6 +64,10 @@ class TestMain(unittest.TestCase):
         self.mock_api = self.api_patcher.start()
         self.mock_api.return_value = None
 
+        # Mock reconciliation to avoid real API calls
+        self.reconcile_patcher = patch('src.main.reconcile_open_remediations')
+        self.mock_reconcile = self.reconcile_patcher.start()
+
         # Mock requests for version checking
         self.requests_patcher = patch('src.version_check.requests.get')
         self.mock_requests_get = self.requests_patcher.start()
@@ -81,6 +86,7 @@ class TestMain(unittest.TestCase):
         self.subproc_patcher.stop()
         self.git_patcher.stop()
         self.api_patcher.stop()
+        self.reconcile_patcher.stop()
         self.requests_patcher.stop()
         self.exit_patcher.stop()
         reset_config()
@@ -170,10 +176,76 @@ class TestMain(unittest.TestCase):
 
                     # Verify the vulnerability was skipped both times
                     self.assertIn("Skipping vulnerability TEST-VULN-UUID-123", output)
-                    self.assertIn("Already skipped TEST-VULN-UUID-123 before, breaking loop", output)
+                    self.assertIn("TEST-VULN-UUID-123 was re-suggested after being skipped", output)
 
                     # Verify the loop broke cleanly
                     self.assertIn("No vulnerabilities were processed in this run", output)
+
+    def test_no_changes_detected_notifies_backend_as_no_code_changed(self):
+        """Regression test: when agent makes no code changes, backend must be notified.
+
+        Previously the action called continue without notifying the backend, causing
+        the backend to re-serve the same vuln on the next iteration, which then
+        triggered the duplicate-UUID guard and exited with GENERAL_FAILURE.
+        """
+        vuln_data = {
+            'vulnerabilityUuid': 'TEST-VULN-UUID-456',
+            'vulnerabilityTitle': 'Test Container Vulnerability',
+            'vulnerabilityRuleName': 'weak-hash',
+            'vulnerabilitySeverity': 'HIGH',
+            'remediationId': 'REM-TEST-456',
+            'sessionId': 'session-456',
+            'fixSystemPrompt': 'Fix the vulnerability',
+            'fixUserPrompt': 'Please fix',
+            'qaSystemPrompt': 'Review the fix',
+            'qaUserPrompt': 'Is it good?',
+        }
+        # Return one vuln, then None to stop the loop
+        self.mock_api.side_effect = [vuln_data, None]
+
+        # Disable Contrast LLM to skip the credit tracking check (which would call
+        # notify_remediation_failed before we reach the no-changes branch).
+        # Set AGENT_MODEL to a non-Bedrock model so _validate_aws_bedrock_config skips its
+        # AWS credentials check (which would fail with no AWS creds in test env).
+        test_env = {**self.env_vars, 'USE_CONTRAST_LLM': 'false', 'AGENT_MODEL': 'mock-model'}
+
+        mock_session_result = MagicMock()
+        mock_session_result.should_continue = True
+        mock_session_result.ai_fix_summary = "No code changes needed - container-level issue"
+        mock_session_result.failure_category = None
+
+        mock_session_handler = MagicMock()
+        mock_session_handler.handle_session_result.return_value = mock_session_result
+        mock_session_handler.generate_qa_section.return_value = ""
+
+        with patch('src.github.github_operations.GitHubOperations.count_open_prs_with_prefix', return_value=0), \
+             patch('src.github.github_operations.GitHubOperations.check_pr_status_for_label', return_value="NOT_FOUND"), \
+             patch('src.github.github_operations.GitHubOperations.generate_label_details',
+                   return_value=('contrast-vuln-id:TEST-VULN-UUID-456', 'desc', 'color')), \
+             patch('src.smartfix.domains.scm.git_operations.GitOperations.prepare_feature_branch'), \
+             patch('src.smartfix.domains.scm.git_operations.GitOperations.stage_changes'), \
+             patch('src.smartfix.domains.scm.git_operations.GitOperations.check_status', return_value=False), \
+             patch('src.smartfix.domains.scm.git_operations.GitOperations.cleanup_branch') as mock_cleanup, \
+             patch('src.github.agent_factory.GitHubAgentFactory.create_agent') as mock_factory, \
+             patch('src.main.create_session_handler', return_value=mock_session_handler), \
+             patch('src.contrast_api.notify_remediation_failed') as mock_notify_failed:
+
+            mock_agent = MagicMock()
+            mock_factory.return_value = mock_agent
+
+            with patch.dict('os.environ', test_env, clear=True):
+                reset_config()
+                with patch('src.main.config', get_config()):
+                    with io.StringIO() as buf, contextlib.redirect_stdout(buf):
+                        main()
+                        output = buf.getvalue()
+
+        mock_notify_failed.assert_called_once()
+        call_kwargs = mock_notify_failed.call_args[1]
+        self.assertEqual(call_kwargs['failure_category'], FailureCategory.NO_CODE_CHANGED.value)
+        self.assertEqual(call_kwargs['remediation_id'], 'REM-TEST-456')
+        mock_cleanup.assert_called_once_with("smartfix/remediation-REM-TEST-456")
+        self.assertIn("No changes detected from agent execution", output)
 
 
 if __name__ == '__main__':

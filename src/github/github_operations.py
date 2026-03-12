@@ -21,7 +21,7 @@ import os
 import json
 import re
 from typing import List, Optional, TypedDict
-from src.utils import run_command, debug_log, log, error_exit
+from src.utils import run_command, debug_log, log, error_exit, CommandExecutionError
 from src.smartfix.shared.failure_categories import FailureCategory
 from src.config import get_config
 from src.smartfix.shared.coding_agents import CodingAgents
@@ -171,6 +171,44 @@ class GitHubOperations(ScmOperations):
         else:
             log("NOTE: In testing mode, not exiting on Copilot assignment failure", is_warning=True)
 
+    def get_pr_actual_state(self, pr_number: int) -> Optional[str]:
+        """
+        Returns the actual GitHub state of a PR: 'OPEN', 'MERGED', or 'CLOSED'.
+        Returns None on error (caller should skip this PR).
+
+        Args:
+            pr_number: The PR number to check
+
+        Returns:
+            Optional[str]: 'OPEN', 'MERGED', 'CLOSED', or None on error
+        """
+        try:
+            result = run_command(
+                ['gh', 'pr', 'view', str(pr_number), '--repo', self.config.GITHUB_REPOSITORY,
+                 '--json', 'state'],
+                env=self.get_gh_env(),
+                check=False
+            )
+            if result is None:
+                debug_log(f"Failed to get PR state for PR #{pr_number}")
+                return None
+
+            data = json.loads(result.strip())
+            state = data.get('state', '').upper()
+
+            if state in ('OPEN', 'MERGED', 'CLOSED'):
+                return state
+            else:
+                debug_log(f"Unexpected PR state '{state}' for PR #{pr_number}")
+                return None
+
+        except (json.JSONDecodeError, ValueError) as e:
+            debug_log(f"Error parsing PR state for PR #{pr_number}: {e}")
+            return None
+        except Exception as e:
+            debug_log(f"Exception while getting PR state for PR #{pr_number}: {e}")
+            return None
+
     def get_pr_changed_files_count(self, pr_number: int) -> int:
         """
         Get the number of changed files in a PR using GitHub CLI.
@@ -297,9 +335,50 @@ class GitHubOperations(ScmOperations):
             log(f"Exception while creating label: {e}", is_error=True)
             return False
 
+    def _verify_pr_has_label(self, pr_number: int, label_name: str, gh_env: dict) -> bool:
+        """
+        Verify a PR actually has the expected label via a direct gh pr view query.
+
+        Uses a separate API path from gh pr list to cross-check data consistency.
+        Returns True if verified, False if the label is missing.
+        Returns True (fail open) if the verification query itself fails.
+        """
+        verify_command = [
+            "gh", "pr", "view", str(pr_number),
+            "--repo", self.config.GITHUB_REPOSITORY,
+            "--json", "number,labels,state"
+        ]
+        verify_output = run_command(verify_command, env=gh_env, check=False)
+        if not verify_output:
+            debug_log(f"Verification query for PR #{pr_number} returned no output. Trusting original result.")
+            return True
+
+        try:
+            pr_data = json.loads(verify_output)
+        except json.JSONDecodeError:
+            debug_log(f"Verification query for PR #{pr_number} returned invalid JSON. Trusting original result.")
+            return True
+
+        pr_labels = [label.get("name", "") for label in pr_data.get("labels", [])]
+        if label_name in pr_labels:
+            debug_log(f"Verified: PR #{pr_number} has label '{label_name}'.")
+            return True
+
+        log(
+            f"GitHub data inconsistency detected: gh pr list reported PR #{pr_number} "
+            f"for label '{label_name}', but gh pr view shows labels: {pr_labels}. "
+            f"This may indicate a GitHub API issue — see https://www.githubstatus.com/",
+            is_warning=True
+        )
+        return False
+
     def check_pr_status_for_label(self, label_name: str) -> str:
         """
         Checks GitHub for OPEN or MERGED PRs with the given label.
+
+        When a PR is found, a verification query cross-checks the result through
+        a different API path (gh pr view) to detect stale or incorrect data that
+        GitHub may return during incidents.
 
         Returns:
             str: 'OPEN', 'MERGED', or 'NONE'
@@ -313,14 +392,18 @@ class GitHubOperations(ScmOperations):
             "--repo", self.config.GITHUB_REPOSITORY,
             "--label", label_name,
             "--state", "open",
-            "--limit", "1",  # We only need to know if at least one exists
-            "--json", "number"  # Requesting JSON output
+            "--limit", "1",
+            "--json", "number"
         ]
-        open_pr_output = run_command(open_pr_command, env=gh_env, check=False)  # Don't exit if command fails (e.g., no PRs found)
+        open_pr_output = run_command(open_pr_command, env=gh_env, check=False)
         try:
-            if open_pr_output and json.loads(open_pr_output):  # Check if output is not empty and contains JSON data
-                debug_log(f"Found OPEN PR for label {label_name}.")
-                return "OPEN"
+            open_prs = json.loads(open_pr_output) if open_pr_output else []
+            if open_prs:
+                pr_number = open_prs[0]["number"]
+                if self._verify_pr_has_label(pr_number, label_name, gh_env):
+                    debug_log(f"Found OPEN PR #{pr_number} for label {label_name} (verified).")
+                    return "OPEN"
+                # Verification failed — fall through to merged check
         except json.JSONDecodeError:
             log("Could not parse JSON output from gh pr list (open): Invalid JSON format", is_error=True)
 
@@ -335,9 +418,13 @@ class GitHubOperations(ScmOperations):
         ]
         merged_pr_output = run_command(merged_pr_command, env=gh_env, check=False)
         try:
-            if merged_pr_output and json.loads(merged_pr_output):
-                debug_log(f"Found MERGED PR for label {label_name}.")
-                return "MERGED"
+            merged_prs = json.loads(merged_pr_output) if merged_pr_output else []
+            if merged_prs:
+                pr_number = merged_prs[0]["number"]
+                if self._verify_pr_has_label(pr_number, label_name, gh_env):
+                    debug_log(f"Found MERGED PR #{pr_number} for label {label_name} (verified).")
+                    return "MERGED"
+                # Verification failed — fall through to NONE
         except json.JSONDecodeError:
             log("Could not parse JSON output from gh pr list (merged): Invalid JSON format", is_error=True)
 
@@ -494,6 +581,26 @@ class GitHubOperations(ScmOperations):
 
         except FileNotFoundError:
             log("Error: gh command not found. Please ensure the GitHub CLI is installed and in PATH.", is_error=True)
+            error_exit(remediation_id, FailureCategory.GENERATE_PR_FAILURE.value)
+        except CommandExecutionError as e:
+            if e.stderr and "GitHub Actions is not permitted to create or approve pull requests" in e.stderr:
+                log(
+                    "SmartFix was unable to create a pull request because GitHub Actions "
+                    "does not have permission to create PRs in this repository.\n\n"
+                    "To fix this, enable 'Allow GitHub Actions to create and approve pull requests' in:\n"
+                    "  - Repository: Settings > Actions > General > Workflow permissions\n"
+                    "  - Organization: Settings > Actions > General > Workflow permissions\n"
+                    "  - Enterprise: Settings > Actions > General > Workflow permissions (overrides all)\n\n"
+                    "For more information, see: "
+                    "https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/"
+                    "enabling-features-for-your-repository/managing-github-actions-settings-for-a-repository"
+                    "#preventing-github-actions-from-creating-or-approving-pull-requests",
+                    is_error=True
+                )
+            else:
+                log(f"An unexpected error occurred during PR creation: {e}", is_error=True)
+                if e.stderr:
+                    log(f"Error details: {e.stderr}", is_error=True)
             error_exit(remediation_id, FailureCategory.GENERATE_PR_FAILURE.value)
         except Exception as e:
             log(f"An unexpected error occurred during PR creation: {e}", is_error=True)
