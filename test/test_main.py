@@ -64,6 +64,10 @@ class TestMain(unittest.TestCase):
         self.mock_api = self.api_patcher.start()
         self.mock_api.return_value = None
 
+        # Mock reconciliation to avoid real API calls
+        self.reconcile_patcher = patch('src.main.reconcile_open_remediations')
+        self.mock_reconcile = self.reconcile_patcher.start()
+
         # Mock requests for version checking
         self.requests_patcher = patch('src.version_check.requests.get')
         self.mock_requests_get = self.requests_patcher.start()
@@ -82,6 +86,7 @@ class TestMain(unittest.TestCase):
         self.subproc_patcher.stop()
         self.git_patcher.stop()
         self.api_patcher.stop()
+        self.reconcile_patcher.stop()
         self.requests_patcher.stop()
         self.exit_patcher.stop()
         reset_config()
