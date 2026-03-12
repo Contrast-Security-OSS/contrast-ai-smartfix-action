@@ -43,6 +43,19 @@ class ScmOperations(ABC):
         pass
 
     @abstractmethod
+    def get_pr_actual_state(self, pr_number: int) -> Optional[str]:
+        """
+        Returns the actual SCM state of a PR: 'OPEN', 'MERGED', or 'CLOSED'.
+
+        Args:
+            pr_number (int): The PR number to check
+
+        Returns:
+            Optional[str]: 'OPEN', 'MERGED', 'CLOSED', or None on error
+        """
+        pass
+
+    @abstractmethod
     def get_pr_changed_files_count(self, pr_number: int) -> int:
         """
         Gets the number of changed files in a PR.

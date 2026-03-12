@@ -171,6 +171,44 @@ class GitHubOperations(ScmOperations):
         else:
             log("NOTE: In testing mode, not exiting on Copilot assignment failure", is_warning=True)
 
+    def get_pr_actual_state(self, pr_number: int) -> Optional[str]:
+        """
+        Returns the actual GitHub state of a PR: 'OPEN', 'MERGED', or 'CLOSED'.
+        Returns None on error (caller should skip this PR).
+
+        Args:
+            pr_number: The PR number to check
+
+        Returns:
+            Optional[str]: 'OPEN', 'MERGED', 'CLOSED', or None on error
+        """
+        try:
+            result = run_command(
+                ['gh', 'pr', 'view', str(pr_number), '--repo', self.config.GITHUB_REPOSITORY,
+                 '--json', 'state'],
+                env=self.get_gh_env(),
+                check=False
+            )
+            if result is None:
+                debug_log(f"Failed to get PR state for PR #{pr_number}")
+                return None
+
+            data = json.loads(result.strip())
+            state = data.get('state', '').upper()
+
+            if state in ('OPEN', 'MERGED', 'CLOSED'):
+                return state
+            else:
+                debug_log(f"Unexpected PR state '{state}' for PR #{pr_number}")
+                return None
+
+        except (json.JSONDecodeError, ValueError) as e:
+            debug_log(f"Error parsing PR state for PR #{pr_number}: {e}")
+            return None
+        except Exception as e:
+            debug_log(f"Exception while getting PR state for PR #{pr_number}: {e}")
+            return None
+
     def get_pr_changed_files_count(self, pr_number: int) -> int:
         """
         Get the number of changed files in a PR using GitHub CLI.

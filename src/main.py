@@ -47,6 +47,7 @@ from src.smartfix.domains.vulnerability.models import Vulnerability
 
 # Import GitHub-specific agent factory
 from src.github.agent_factory import GitHubAgentFactory
+from src.smartfix.domains.workflow.pr_reconciliation import reconcile_open_remediations
 
 config = get_config()
 telemetry_handler.initialize_telemetry()
@@ -264,6 +265,11 @@ def main():  # noqa: C901
 
     # --- Initial Setup ---
     git_ops.configure_git_user()
+
+    # --- Reconcile Orphaned Open Remediations ---
+    log("\n::group::--- Reconciling open remediations against GitHub ---")
+    reconcile_open_remediations(config, github_ops)
+    log("\n::endgroup::")
 
     # Check Open PR Limit
     log("\n::group::--- Checking Open PR Limit ---")
