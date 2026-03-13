@@ -86,16 +86,15 @@ try:
 
     @pytest.fixture(autouse=True)
     def reset_config_detection_flag():
-        """Reset Config._detection_started flag before each test.
+        """Reset Config._build_detection_in_progress flag before each test.
 
         This ensures that each test can trigger build/format command detection
         without being blocked by the recursion prevention flag.
         """
         from src.config import Config
-        Config._detection_started = False
+        Config._build_detection_in_progress = False
         yield
-        # Cleanup after test (optional, but good practice)
-        Config._detection_started = False
+        Config._build_detection_in_progress = False
 except ImportError:
     # pytest not available (e.g., when running with unittest directly)
     # Tests using unittest will need to manually reset the flag

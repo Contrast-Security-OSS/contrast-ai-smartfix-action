@@ -48,8 +48,8 @@ class Config:
     and typed settings as attributes.
     """
 
-    # Class-level flag to ensure detection only runs once (prevents infinite recursion)
-    _detection_started = False
+    # Class-level recursion guard: True while build command detection is in progress
+    _build_detection_in_progress = False
 
     def __init__(self, env: Dict[str, str] = os.environ, testing: bool = False) -> None:  # noqa: C901
         self.env = env
@@ -103,11 +103,13 @@ class Config:
             # Auto-detect if not provided AND required
             # Skip detection entirely when BUILD_COMMAND not needed
             if not self.BUILD_COMMAND and not testing and is_build_command_required:
-                # Only run detection on first initialization (prevents infinite recursion)
-                if not Config._detection_started:
-                    Config._detection_started = True
-                    # Orchestrator always returns valid string (real command or no-op fallback)
-                    self.BUILD_COMMAND = self._auto_detect_build_command()
+                # Recursion guard: detection calls get_config() internally
+                if not Config._build_detection_in_progress:
+                    Config._build_detection_in_progress = True
+                    try:
+                        self.BUILD_COMMAND = self._auto_detect_build_command()
+                    finally:
+                        Config._build_detection_in_progress = False
                     # Mark as auto-detected for proper validation
                     self._build_command_source = "ai_detected"
                 else:
@@ -132,8 +134,8 @@ class Config:
         # Only needed for generate_fix task
         is_format_command_needed = self.RUN_TASK == "generate_fix" and is_smartfix_coding_agent
         if not self.FORMATTING_COMMAND and not testing and is_format_command_needed:
-            # Only run detection if BUILD_COMMAND detection hasn't triggered recursion
-            if not Config._detection_started or self._build_command_source == "ai_detected":
+            # Recursion guard: skip if we're inside a recursive get_config() call
+            if not Config._build_detection_in_progress:
                 self.FORMATTING_COMMAND = self._auto_detect_format_command()
                 # Mark as auto-detected for proper validation
                 self._format_command_source = "ai_detected"
@@ -527,4 +529,4 @@ def reset_config() -> None:
     global _config_instance
     _config_instance = None
     # Also reset the detection flag to allow fresh detection in tests
-    Config._detection_started = False
+    Config._build_detection_in_progress = False
