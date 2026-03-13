@@ -581,12 +581,6 @@ def main():  # noqa: C901
         git_ops.push_branch(new_branch_name)  # Push the final commit (original or amended)
 
         label_name, label_desc, label_color = github_ops.generate_label_details(vuln_uuid)
-        label_created = github_ops.ensure_label(label_name, label_desc, label_color)
-
-        if not label_created:
-            log(f"Could not create GitHub label '{label_name}'. PR will be created without a label.", is_warning=True)
-            label_name = ""  # Clear label_name to avoid using it in PR creation
-
         pr_title = github_ops.generate_pr_title(vuln_title)
 
         updated_pr_body = pr_body_base + qa_section
