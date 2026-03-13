@@ -644,9 +644,12 @@ def main():  # noqa: C901
                 except (ValueError, IndexError, AttributeError) as e:
                     log(f"Could not extract PR number from URL: {pr_url} - Error: {str(e)}")
 
-                # Add labels to the PR
+                # Add labels to the PR (non-critical — don't fail the run)
                 if pr_number and label_name:
-                    github_ops.add_labels_to_pr(pr_number, [label_name])
+                    try:
+                        github_ops.add_labels_to_pr(pr_number, [label_name])
+                    except Exception as label_err:
+                        log(f"Failed to add label to PR #{pr_number}: {label_err}", is_warning=True)
 
                 # Notify the Remediation backend service about the PR
                 if pr_number is None:

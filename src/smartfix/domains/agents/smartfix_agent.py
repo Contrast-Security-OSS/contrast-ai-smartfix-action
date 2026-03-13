@@ -10,11 +10,7 @@ import re
 from typing import Optional
 
 from src.smartfix.domains.agents.event_loop_utils import _run_agent_in_event_loop, _run_agent_internal_with_prompts
-from src.smartfix.domains.agents.build_tool import (
-    create_build_tool,
-    get_successful_build_command,
-    reset_storage,
-)
+from src.smartfix.domains.agents.build_tool import create_build_tool
 from src.utils import debug_log, log, error_exit
 from src.smartfix.shared.failure_categories import FailureCategory
 from src import telemetry_handler
@@ -36,7 +32,7 @@ class SmartFixAgent(CodingAgentStrategy):
 
     def __init__(self) -> None:
         """Initialize SmartFixAgent. Configuration comes from RemediationContext."""
-        pass
+        self._build_state = None
 
     def remediate(self, context: RemediationContext) -> AgentSession:
         """
@@ -49,9 +45,7 @@ class SmartFixAgent(CodingAgentStrategy):
             AgentSession containing the complete remediation attempt data
         """
         session = AgentSession()
-
-        # Reset BuildTool storage for this remediation run
-        reset_storage()
+        self._build_state = None
 
         try:
             # Run fix agent (with BuildTool for build verification)
@@ -97,7 +91,7 @@ class SmartFixAgent(CodingAgentStrategy):
             debug_log("PR gate skipped: no build command configured or detected")
             return True
 
-        recorded_cmd = get_successful_build_command()
+        recorded_cmd = self._build_state["build_cmd"] if self._build_state else None
         if recorded_cmd is not None:
             # If a configured command exists, the recorded command must match it
             configured_cmd = getattr(context.build_config, 'user_build_command', None)
@@ -177,8 +171,8 @@ class SmartFixAgent(CodingAgentStrategy):
         repo_path = context.repo_config.repo_path
         build_config = context.build_config
 
-        # Create BuildTool for this remediation run
-        build_tool = create_build_tool(
+        # Create BuildTool for this remediation run (closure-scoped state)
+        build_tool, self._build_state = create_build_tool(
             repo_root=repo_path,
             remediation_id=context.remediation_id,
             user_build_command=getattr(build_config, 'user_build_command', None) if build_config else None,

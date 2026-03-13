@@ -6,37 +6,28 @@ from unittest.mock import patch
 
 from src.smartfix.domains.agents.build_tool import (
     create_build_tool,
-    get_successful_build_command,
-    get_successful_format_command,
-    reset_storage,
     _is_recordable_command,
     _truncate_tail,
 )
 from src.smartfix.config.command_validator import CommandValidationError
 
 
-class TestBuildToolStorage(unittest.TestCase):
-    """Test module-level storage functions."""
-
-    def setUp(self):
-        reset_storage()
-
-    def tearDown(self):
-        reset_storage()
+class TestBuildToolClosureState(unittest.TestCase):
+    """Test closure-scoped state returned by create_build_tool."""
 
     def test_initial_state_is_none(self):
-        self.assertIsNone(get_successful_build_command())
-        self.assertIsNone(get_successful_format_command())
+        tool, state = create_build_tool(Path("/fake"), "rem-1")
+        self.assertIsNone(state["build_cmd"])
+        self.assertIsNone(state["format_cmd"])
 
-    def test_reset_clears_storage(self):
-        # Use create_build_tool to set storage via a successful build
-        tool = create_build_tool(Path("/fake"), "rem-1")
+    def test_each_closure_has_independent_state(self):
+        """Two create_build_tool calls get independent state dicts."""
+        tool1, state1 = create_build_tool(Path("/fake"), "rem-1")
+        tool2, state2 = create_build_tool(Path("/fake"), "rem-2")
         with patch('src.smartfix.domains.agents.build_tool.run_build_command', return_value=(True, "ok")):
-            tool("make test")
-        self.assertIsNotNone(get_successful_build_command())
-        reset_storage()
-        self.assertIsNone(get_successful_build_command())
-        self.assertIsNone(get_successful_format_command())
+            tool1("make test")
+        self.assertIsNotNone(state1["build_cmd"])
+        self.assertIsNone(state2["build_cmd"])
 
 
 class TestIsRecordableCommand(unittest.TestCase):
@@ -89,16 +80,10 @@ class TestTruncateTail(unittest.TestCase):
 class TestBuildToolConfiguredMode(unittest.TestCase):
     """Test configured vs determined command validation."""
 
-    def setUp(self):
-        reset_storage()
-
-    def tearDown(self):
-        reset_storage()
-
     @patch('src.smartfix.domains.agents.build_tool.run_build_command', return_value=(True, "BUILD SUCCESS"))
     def test_configured_command_skips_validation(self, mock_build):
         """User-configured command (exact match) should skip allowlist validation."""
-        tool = create_build_tool(
+        tool, state = create_build_tool(
             Path("/repo"), "rem-1",
             user_build_command="mvn test",
         )
@@ -110,7 +95,7 @@ class TestBuildToolConfiguredMode(unittest.TestCase):
     @patch('src.smartfix.domains.agents.build_tool.run_build_command', return_value=(True, "BUILD SUCCESS"))
     def test_determined_command_validates_against_allowlist(self, mock_build):
         """Non-user-configured command must pass allowlist validation."""
-        tool = create_build_tool(
+        tool, state = create_build_tool(
             Path("/repo"), "rem-1",
             user_build_command="mvn test",
         )
@@ -121,7 +106,7 @@ class TestBuildToolConfiguredMode(unittest.TestCase):
 
     def test_determined_command_fails_validation(self):
         """Determined command that fails allowlist should return error without running."""
-        tool = create_build_tool(Path("/repo"), "rem-1")
+        tool, state = create_build_tool(Path("/repo"), "rem-1")
         with patch('src.smartfix.domains.agents.build_tool.validate_command',
                    side_effect=CommandValidationError("blocked")):
             with patch('src.smartfix.domains.agents.build_tool.run_build_command') as mock_build:
@@ -134,12 +119,6 @@ class TestBuildToolConfiguredMode(unittest.TestCase):
 class TestBuildToolFormatHandling(unittest.TestCase):
     """Test format command handling."""
 
-    def setUp(self):
-        reset_storage()
-
-    def tearDown(self):
-        reset_storage()
-
     @patch('src.smartfix.domains.agents.build_tool.run_build_command', return_value=(True, "ok"))
     @patch('src.smartfix.domains.agents.build_tool.run_formatting_command')
     def test_format_runs_before_build(self, mock_format, mock_build):
@@ -148,7 +127,7 @@ class TestBuildToolFormatHandling(unittest.TestCase):
         mock_format.side_effect = lambda *a, **kw: call_order.append("format")
         mock_build.side_effect = lambda *a, **kw: (call_order.append("build"), (True, "ok"))[-1]
 
-        tool = create_build_tool(Path("/repo"), "rem-1")
+        tool, state = create_build_tool(Path("/repo"), "rem-1")
         tool("mvn test", "mvn spotless:apply")
 
         self.assertEqual(call_order, ["format", "build"])
@@ -158,7 +137,7 @@ class TestBuildToolFormatHandling(unittest.TestCase):
            side_effect=Exception("format failed"))
     def test_format_failure_continues_to_build(self, mock_format, mock_build):
         """Format failure should log warning and continue to build."""
-        tool = create_build_tool(Path("/repo"), "rem-1")
+        tool, state = create_build_tool(Path("/repo"), "rem-1")
         result = tool("mvn test", "mvn spotless:apply")
         self.assertTrue(result["success"])
         mock_build.assert_called_once()
@@ -167,15 +146,15 @@ class TestBuildToolFormatHandling(unittest.TestCase):
     @patch('src.smartfix.domains.agents.build_tool.run_formatting_command')
     def test_format_success_records_command(self, mock_format, mock_build):
         """Successful recordable format should be stored."""
-        tool = create_build_tool(Path("/repo"), "rem-1")
+        tool, state = create_build_tool(Path("/repo"), "rem-1")
         tool("mvn test", "mvn spotless:apply")
-        self.assertEqual(get_successful_format_command(), "mvn spotless:apply")
+        self.assertEqual(state["format_cmd"], "mvn spotless:apply")
 
     @patch('src.smartfix.domains.agents.build_tool.run_build_command', return_value=(True, "ok"))
     @patch('src.smartfix.domains.agents.build_tool.run_formatting_command')
     def test_configured_format_skips_validation(self, mock_format, mock_build):
         """User-configured format command should skip allowlist validation."""
-        tool = create_build_tool(
+        tool, state = create_build_tool(
             Path("/repo"), "rem-1",
             user_format_command="mvn spotless:apply",
         )
@@ -188,7 +167,7 @@ class TestBuildToolFormatHandling(unittest.TestCase):
 
     def test_determined_format_fails_validation(self):
         """Determined format command that fails allowlist should return error."""
-        tool = create_build_tool(Path("/repo"), "rem-1")
+        tool, state = create_build_tool(Path("/repo"), "rem-1")
         with patch('src.smartfix.domains.agents.build_tool.validate_command',
                    side_effect=CommandValidationError("blocked")):
             result = tool("mvn test", "bad-format-cmd")
@@ -199,42 +178,36 @@ class TestBuildToolFormatHandling(unittest.TestCase):
 class TestBuildToolExecution(unittest.TestCase):
     """Test build execution and recording."""
 
-    def setUp(self):
-        reset_storage()
-
-    def tearDown(self):
-        reset_storage()
-
     @patch('src.smartfix.domains.agents.build_tool.run_build_command', return_value=(True, "BUILD SUCCESS"))
     def test_successful_build_records_command(self, mock_build):
-        tool = create_build_tool(Path("/repo"), "rem-1")
+        tool, state = create_build_tool(Path("/repo"), "rem-1")
         result = tool("mvn test")
         self.assertTrue(result["success"])
         self.assertTrue(result["recorded"])
-        self.assertEqual(get_successful_build_command(), "mvn test")
+        self.assertEqual(state["build_cmd"], "mvn test")
 
     @patch('src.smartfix.domains.agents.build_tool.run_build_command', return_value=(True, "ok"))
     def test_non_recordable_success_not_recorded(self, mock_build):
-        tool = create_build_tool(Path("/repo"), "rem-1")
+        tool, state = create_build_tool(Path("/repo"), "rem-1")
         result = tool("mvn --version")
         self.assertTrue(result["success"])
         self.assertFalse(result["recorded"])
-        self.assertIsNone(get_successful_build_command())
+        self.assertIsNone(state["build_cmd"])
 
     @patch('src.smartfix.domains.agents.build_tool.run_build_command', return_value=(False, "COMPILATION ERROR\nfoo.java:10: error: cannot find symbol"))
     @patch('src.smartfix.domains.agents.build_tool.extract_build_errors', return_value="error: cannot find symbol")
     def test_failed_build_returns_errors(self, mock_extract, mock_build):
-        tool = create_build_tool(Path("/repo"), "rem-1")
+        tool, state = create_build_tool(Path("/repo"), "rem-1")
         result = tool("mvn test")
         self.assertFalse(result["success"])
         self.assertFalse(result["recorded"])
         self.assertIn("cannot find symbol", result["output"])
-        self.assertIsNone(get_successful_build_command())
+        self.assertIsNone(state["build_cmd"])
 
     @patch('src.smartfix.domains.agents.build_tool.run_build_command',
            side_effect=Exception("subprocess exploded"))
     def test_build_exception_returns_error(self, mock_build):
-        tool = create_build_tool(Path("/repo"), "rem-1")
+        tool, state = create_build_tool(Path("/repo"), "rem-1")
         result = tool("mvn test")
         self.assertFalse(result["success"])
         self.assertIn("exception", result["output"].lower())
@@ -242,7 +215,7 @@ class TestBuildToolExecution(unittest.TestCase):
     @patch('src.smartfix.domains.agents.build_tool.run_build_command', return_value=(True, "ok"))
     def test_no_format_command_skips_format(self, mock_build):
         """When no format command provided, only build runs."""
-        tool = create_build_tool(Path("/repo"), "rem-1")
+        tool, state = create_build_tool(Path("/repo"), "rem-1")
         with patch('src.smartfix.domains.agents.build_tool.run_formatting_command') as mock_format:
             result = tool("mvn test")
             mock_format.assert_not_called()
@@ -250,7 +223,7 @@ class TestBuildToolExecution(unittest.TestCase):
 
     @patch('src.smartfix.domains.agents.build_tool.run_build_command', return_value=(True, "ok"))
     def test_none_format_command_skips_format(self, mock_build):
-        tool = create_build_tool(Path("/repo"), "rem-1")
+        tool, state = create_build_tool(Path("/repo"), "rem-1")
         with patch('src.smartfix.domains.agents.build_tool.run_formatting_command') as mock_format:
             tool("mvn test", None)
             mock_format.assert_not_called()
@@ -259,16 +232,10 @@ class TestBuildToolExecution(unittest.TestCase):
 class TestBuildToolWhitespace(unittest.TestCase):
     """Test command normalization."""
 
-    def setUp(self):
-        reset_storage()
-
-    def tearDown(self):
-        reset_storage()
-
     @patch('src.smartfix.domains.agents.build_tool.run_build_command', return_value=(True, "ok"))
     def test_whitespace_stripped_for_comparison(self, mock_build):
         """Commands with extra whitespace should still match user config."""
-        tool = create_build_tool(
+        tool, state = create_build_tool(
             Path("/repo"), "rem-1",
             user_build_command="mvn test",
         )

@@ -174,20 +174,22 @@ class TestSmartFixAgent(unittest.TestCase):
 
             mock_fix.assert_called_once()
 
-    @patch('src.smartfix.domains.agents.smartfix_agent.get_successful_build_command')
-    def test_complete_remediation_workflow_with_build_verification(self, mock_get_cmd):
+    def test_complete_remediation_workflow_with_build_verification(self):
         """
         Tests the complete remediation workflow with BuildTool verification (PR gate).
         """
-        mock_get_cmd.return_value = "mvn test"
-
         agent = SmartFixAgent()
         mock_context = MagicMock(spec=RemediationContext)
         mock_context.build_config = MagicMock()
         mock_context.build_config.has_build_command.return_value = True
         mock_context.build_config.user_build_command = "mvn test"
 
-        with patch.object(agent, '_run_fix_agent', return_value="success") as mock_fix:
+        def fake_fix_agent(session, context):
+            # Simulate BuildTool recording a successful build
+            agent._build_state = {"build_cmd": "mvn test", "format_cmd": None}
+            return "success"
+
+        with patch.object(agent, '_run_fix_agent', side_effect=fake_fix_agent) as mock_fix:
             result = agent.remediate(mock_context)
 
             self.assertTrue(result.success)

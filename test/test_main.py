@@ -1,14 +1,17 @@
+import sys
 import unittest
 import os
 import io
 import contextlib
+from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-# Test setup imports (path is set up by conftest.py)
-from setup_test_env import create_temp_repo_dir
-from src.config import reset_config, get_config
-from src.main import main
-from src.smartfix.shared.failure_categories import FailureCategory
+# Ensure test directory is on path (conftest.py only runs under pytest)
+sys.path.insert(0, str(Path(__file__).parent))
+from setup_test_env import create_temp_repo_dir  # noqa: E402
+from src.config import reset_config, get_config  # noqa: E402
+from src.main import main  # noqa: E402
+from src.smartfix.shared.failure_categories import FailureCategory  # noqa: E402
 
 
 class TestMain(unittest.TestCase):
@@ -80,6 +83,17 @@ class TestMain(unittest.TestCase):
         self.exit_patcher = patch('sys.exit')
         self.mock_exit = self.exit_patcher.start()
 
+        # Mock count_open_prs_with_prefix to avoid JSON parse failure from mocked subprocess
+        self.pr_count_patcher = patch(
+            'src.github.github_operations.GitHubOperations.count_open_prs_with_prefix',
+            return_value=0
+        )
+        self.mock_pr_count = self.pr_count_patcher.start()
+
+        # Mock notify_remediation_failed to prevent real HTTP calls in error paths
+        self.notify_patcher = patch('src.contrast_api.notify_remediation_failed', return_value=False)
+        self.mock_notify = self.notify_patcher.start()
+
     def tearDown(self):
         """Clean up after each test."""
         # Stop all patches
@@ -89,6 +103,8 @@ class TestMain(unittest.TestCase):
         self.reconcile_patcher.stop()
         self.requests_patcher.stop()
         self.exit_patcher.stop()
+        self.pr_count_patcher.stop()
+        self.notify_patcher.stop()
         reset_config()
 
         # Clean up temp directory

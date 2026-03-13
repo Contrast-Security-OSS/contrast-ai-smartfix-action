@@ -13,12 +13,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch, Mock
 
-from src.smartfix.domains.agents.build_tool import (
-    create_build_tool,
-    get_successful_build_command,
-    get_successful_format_command,
-    reset_storage,
-)
+from src.smartfix.domains.agents.build_tool import create_build_tool
 from src.smartfix.domains.agents.smartfix_agent import SmartFixAgent
 from src.smartfix.domains.vulnerability.context import BuildConfiguration
 from src.smartfix.shared.failure_categories import FailureCategory
@@ -27,18 +22,12 @@ from src.smartfix.shared.failure_categories import FailureCategory
 class TestBuildToolPRGateIntegration(unittest.TestCase):
     """Test BuildTool recording → PR gate pass/fail flow."""
 
-    def setUp(self):
-        reset_storage()
-
-    def tearDown(self):
-        reset_storage()
-
     @patch('subprocess.run')
     def test_successful_build_records_command_and_pr_gate_passes(self, mock_subprocess):
         """Full flow: BuildTool records success → PR gate passes."""
         mock_subprocess.return_value = Mock(returncode=0, stdout="BUILD SUCCESS", stderr="")
 
-        tool = create_build_tool(
+        tool, state = create_build_tool(
             repo_root=Path("/tmp/test"),
             remediation_id="int-001",
             user_build_command="mvn test",
@@ -48,10 +37,11 @@ class TestBuildToolPRGateIntegration(unittest.TestCase):
 
         self.assertTrue(result["success"])
         self.assertTrue(result["recorded"])
-        self.assertEqual(get_successful_build_command(), "mvn test")
+        self.assertEqual(state["build_cmd"], "mvn test")
 
         # PR gate should pass
         agent = SmartFixAgent()
+        agent._build_state = state
         session = Mock()
         context = Mock()
         context.build_config = Mock()
@@ -64,6 +54,7 @@ class TestBuildToolPRGateIntegration(unittest.TestCase):
     def test_no_build_recorded_pr_gate_fails(self):
         """No successful build recorded → PR gate fails with BUILD_VERIFICATION_FAILED."""
         agent = SmartFixAgent()
+        agent._build_state = {"build_cmd": None, "format_cmd": None}
         session = Mock()
         session.complete_session = Mock()
         context = Mock()
@@ -103,7 +94,7 @@ class TestBuildToolPRGateIntegration(unittest.TestCase):
         """Non-recordable commands (--version, echo) don't satisfy PR gate."""
         mock_subprocess.return_value = Mock(returncode=0, stdout="Maven 3.8.1", stderr="")
 
-        tool = create_build_tool(
+        tool, state = create_build_tool(
             repo_root=Path("/tmp/test"),
             remediation_id="int-002",
         )
@@ -112,10 +103,11 @@ class TestBuildToolPRGateIntegration(unittest.TestCase):
 
         self.assertTrue(result["success"])
         self.assertFalse(result["recorded"])
-        self.assertIsNone(get_successful_build_command())
+        self.assertIsNone(state["build_cmd"])
 
         # PR gate should fail since nothing was recorded
         agent = SmartFixAgent()
+        agent._build_state = state
         session = Mock()
         session.complete_session = Mock()
         context = Mock()
@@ -129,18 +121,12 @@ class TestBuildToolPRGateIntegration(unittest.TestCase):
 class TestBuildCommandEnforcement(unittest.TestCase):
     """Test that scoped/modified commands don't satisfy the PR gate when a configured command exists."""
 
-    def setUp(self):
-        reset_storage()
-
-    def tearDown(self):
-        reset_storage()
-
     @patch('subprocess.run')
     def test_scoped_command_not_recorded_when_configured_exists(self, mock_subprocess):
         """Agent runs scoped command (e.g. mvn test -Dtest=Foo) but configured is 'mvn test' → not recorded."""
         mock_subprocess.return_value = Mock(returncode=0, stdout="BUILD SUCCESS", stderr="")
 
-        tool = create_build_tool(
+        tool, state = create_build_tool(
             repo_root=Path("/tmp/test"),
             remediation_id="enf-001",
             user_build_command="mvn test",
@@ -151,14 +137,14 @@ class TestBuildCommandEnforcement(unittest.TestCase):
 
         self.assertTrue(result["success"])
         self.assertFalse(result["recorded"])
-        self.assertIsNone(get_successful_build_command())
+        self.assertIsNone(state["build_cmd"])
 
     @patch('subprocess.run')
     def test_exact_configured_command_is_recorded(self, mock_subprocess):
         """Agent runs exact configured command → recorded."""
         mock_subprocess.return_value = Mock(returncode=0, stdout="BUILD SUCCESS", stderr="")
 
-        tool = create_build_tool(
+        tool, state = create_build_tool(
             repo_root=Path("/tmp/test"),
             remediation_id="enf-002",
             user_build_command="mvn test",
@@ -168,7 +154,7 @@ class TestBuildCommandEnforcement(unittest.TestCase):
 
         self.assertTrue(result["success"])
         self.assertTrue(result["recorded"])
-        self.assertEqual(get_successful_build_command(), "mvn test")
+        self.assertEqual(state["build_cmd"], "mvn test")
 
     @patch('subprocess.run')
     def test_pr_gate_rejects_mismatched_recorded_command(self, mock_subprocess):
@@ -176,7 +162,7 @@ class TestBuildCommandEnforcement(unittest.TestCase):
         mock_subprocess.return_value = Mock(returncode=0, stdout="BUILD SUCCESS", stderr="")
 
         # Simulate: no user_build_command so any recordable command gets recorded
-        tool = create_build_tool(
+        tool, state = create_build_tool(
             repo_root=Path("/tmp/test"),
             remediation_id="enf-003",
         )
@@ -184,6 +170,7 @@ class TestBuildCommandEnforcement(unittest.TestCase):
 
         # Now check PR gate with a configured command that doesn't match
         agent = SmartFixAgent()
+        agent._build_state = state
         session = Mock()
         session.complete_session = Mock()
         context = Mock()
@@ -201,18 +188,12 @@ class TestBuildCommandEnforcement(unittest.TestCase):
 class TestBuildToolConfiguredVsDetermined(unittest.TestCase):
     """Test configured (user) vs determined (detected/agent-discovered) mode."""
 
-    def setUp(self):
-        reset_storage()
-
-    def tearDown(self):
-        reset_storage()
-
     @patch('subprocess.run')
     def test_configured_command_skips_allowlist(self, mock_subprocess):
         """User-configured command skips allowlist validation."""
         mock_subprocess.return_value = Mock(returncode=0, stdout="OK", stderr="")
 
-        tool = create_build_tool(
+        tool, state = create_build_tool(
             repo_root=Path("/tmp/test"),
             remediation_id="int-003",
             user_build_command="custom-internal-tool build",
@@ -223,14 +204,14 @@ class TestBuildToolConfiguredVsDetermined(unittest.TestCase):
 
         self.assertTrue(result["success"])
         self.assertTrue(result["recorded"])
-        self.assertEqual(get_successful_build_command(), "custom-internal-tool build")
+        self.assertEqual(state["build_cmd"], "custom-internal-tool build")
 
     @patch('subprocess.run')
     def test_agent_discovered_command_must_pass_allowlist(self, mock_subprocess):
         """Agent-discovered command must pass allowlist validation."""
         mock_subprocess.return_value = Mock(returncode=0, stdout="OK", stderr="")
 
-        tool = create_build_tool(
+        tool, state = create_build_tool(
             repo_root=Path("/tmp/test"),
             remediation_id="int-004",
             # No user_build_command → agent-discovered mode
@@ -248,7 +229,7 @@ class TestBuildToolConfiguredVsDetermined(unittest.TestCase):
         """User-configured format command skips allowlist validation."""
         mock_subprocess.return_value = Mock(returncode=0, stdout="Formatted", stderr="")
 
-        tool = create_build_tool(
+        tool, state = create_build_tool(
             repo_root=Path("/tmp/test"),
             remediation_id="int-005",
             user_build_command="mvn test",
@@ -258,17 +239,11 @@ class TestBuildToolConfiguredVsDetermined(unittest.TestCase):
         result = tool(build_command="mvn test", format_command="custom-formatter --fix")
 
         self.assertTrue(result["success"])
-        self.assertEqual(get_successful_format_command(), "custom-formatter --fix")
+        self.assertEqual(state["format_cmd"], "custom-formatter --fix")
 
 
 class TestCrossRunPersistence(unittest.TestCase):
     """Test that BuildConfiguration carries forward proven commands between runs."""
-
-    def setUp(self):
-        reset_storage()
-
-    def tearDown(self):
-        reset_storage()
 
     def test_build_config_from_config_user_configured(self):
         """User-configured commands populate user_build_command for exact-match."""
@@ -313,7 +288,7 @@ class TestCrossRunPersistence(unittest.TestCase):
         build_config = BuildConfiguration.from_config(config)
 
         # Create BuildTool with the user_build_command from config
-        tool = create_build_tool(
+        tool, state = create_build_tool(
             repo_root=Path("/tmp/test"),
             remediation_id="cross-001",
             user_build_command=build_config.user_build_command,
@@ -326,40 +301,26 @@ class TestCrossRunPersistence(unittest.TestCase):
         self.assertTrue(result["success"])
         self.assertTrue(result["recorded"])
 
-    def test_storage_resets_between_remediations(self):
-        """reset_storage clears state between vulnerability remediations."""
-        # Simulate a previous run's success
-        from src.smartfix.domains.agents import build_tool
-        build_tool._successful_build_command = "mvn test"
-        build_tool._successful_format_command = "mvn spotless:apply"
+    def test_closure_state_is_independent_per_remediation(self):
+        """Each create_build_tool call gets independent state (no cross-contamination)."""
+        tool1, state1 = create_build_tool(Path("/tmp/test"), "rem-1")
+        tool2, state2 = create_build_tool(Path("/tmp/test"), "rem-2")
 
-        self.assertEqual(get_successful_build_command(), "mvn test")
+        with patch('src.smartfix.domains.agents.build_tool.run_build_command', return_value=(True, "ok")):
+            tool1("mvn test")
 
-        # Reset for new remediation
-        reset_storage()
-
-        self.assertIsNone(get_successful_build_command())
-        self.assertIsNone(get_successful_format_command())
+        self.assertEqual(state1["build_cmd"], "mvn test")
+        self.assertIsNone(state2["build_cmd"])
 
 
 class TestSmartFixAgentRemediation(unittest.TestCase):
     """Test full remediation flow through SmartFixAgent."""
 
-    def setUp(self):
-        reset_storage()
-
-    def tearDown(self):
-        reset_storage()
-
-    @patch('src.smartfix.domains.agents.smartfix_agent.get_successful_build_command')
-    def test_remediate_resets_storage_at_start(self, mock_get_cmd):
-        """remediate() calls reset_storage at the beginning."""
-        from src.smartfix.domains.agents import build_tool
-        build_tool._successful_build_command = "leftover"
-
-        mock_get_cmd.return_value = None
-
+    def test_remediate_resets_build_state_at_start(self):
+        """remediate() resets _build_state at the beginning."""
         agent = SmartFixAgent()
+        agent._build_state = {"build_cmd": "leftover", "format_cmd": None}
+
         context = Mock()
         context.build_config = None
         context.prompts = Mock()
@@ -368,9 +329,10 @@ class TestSmartFixAgentRemediation(unittest.TestCase):
         with patch.object(agent, '_run_ai_fix_agent', return_value="<pr_body>Fixed</pr_body>"):
             agent.remediate(context)
 
-        # After remediate starts, storage should have been reset
-        # (mock_get_cmd returns None because we're checking the PR gate)
-        self.assertIsNone(build_tool._successful_build_command)
+        # _build_state is reset to None at start of remediate, then set by _run_fix_agent_execution
+        # Since we mock _run_ai_fix_agent, _run_fix_agent_execution doesn't run,
+        # so _build_state stays None (reset value)
+        self.assertIsNone(agent._build_state)
 
     @patch('src.smartfix.domains.agents.smartfix_agent._run_agent_in_event_loop')
     def test_remediate_passes_build_tool_to_agent(self, mock_event_loop):

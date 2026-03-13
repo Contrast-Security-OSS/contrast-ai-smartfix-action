@@ -4,31 +4,15 @@ SmartFix can automatically detect and run build/test commands.
 
 ## How Command Detection Works
 
-SmartFix uses a **three-phase detection approach** with automatic fallback:
+SmartFix uses **deterministic file-based detection** to find build and format commands:
 
-### Phase 1: Deterministic Detection (Fast, File-Based)
+### Detection Process
 SmartFix looks for marker files (e.g., `pom.xml`, `package.json`) and generates a prioritized list of common commands for detected build systems. Each candidate command is:
-1. Quickly filtered by checking if the tool exists (`mvn --version`, etc.) - skipped if tool not installed
+1. Quickly filtered by checking if the tool exists (`mvn --version`, etc.) — skipped if tool not installed
 2. Validated against the security allowlist
-3. **Actually executed** to verify it works in your project
+3. The first command that passes both checks is selected
 
-The first command that successfully builds your project is used immediately.
-
-### Phase 2: LLM-Based Detection (Iterative, Context-Aware)
-If Phase 1 fails (no marker files, tools missing, or all builds fail), SmartFix uses an LLM agent to:
-1. Analyze your project structure and any Phase 1 failure history
-2. Suggest alternative commands from the validated ecosystem tools
-3. Iterate up to 6 times with error feedback to find a working command
-
-The LLM agent has access to failure messages and can adapt suggestions based on what didn't work.
-
-### Phase 3: No-Op Fallback (Always Safe)
-If both Phase 1 and Phase 2 fail, SmartFix uses a no-op command:
-```bash
-echo 'No build command detected - using no-op'
-```
-
-This ensures SmartFix never fails due to build detection issues—it gracefully degrades to skip build validation when necessary.
+The Fix agent then uses the BuildTool to actually execute the command and verify it works.
 
 ### When Detection is Skipped
 
@@ -41,21 +25,11 @@ In these cases, SmartFix uses the provided command or skips build validation ent
 
 ### Security Validation
 
-**Auto-detected** (Phase 1) and **LLM-suggested** (Phase 2) commands must pass **security validation** against an allowlist of approved executables and patterns.
+**Auto-detected** commands must pass **security validation** against an allowlist of approved executables and patterns.
 
 **Manually specified commands** (via `BUILD_COMMAND` or `FORMATTING_COMMAND` inputs) are **trusted as safe** and skip validation since they come from humans who control the GitHub Actions workflow configuration.
 
 See [Command Validation](./command-validation.md) for security details.
-
-### Auto-Detected vs. Validated Commands
-
-- **Auto-Detected Commands** (Phase 1, listed below): Commands SmartFix will automatically try based on marker files
-- **Validated Commands** (Phase 2, broader set): Ecosystem tools the LLM may suggest, all validated by the security allowlist
-
-For example:
-- Maven: Phase 1 tries `mvn test`, Phase 2 may suggest `mvn verify`, `mvn clean install`, `mvnw`, etc.
-- Node.js: Phase 1 tries `npm test`, Phase 2 may suggest `yarn test`, `pnpm test`, `bun test`, `npx jest`, etc.
-- Python: Phase 1 tries `pytest`, Phase 2 may suggest `python -m pytest`, `poetry run pytest`, `tox`, etc.
 
 **See the [full list of allowed executables](../src/smartfix/config/command_validator.py#L38-L74) in the validator source code.**
 
@@ -71,7 +45,7 @@ SmartFix detects build systems by looking for marker files in your project:
 - `mvn verify`
 - `mvn clean install`
 
-**Also Validated:** `mvn` (any Maven goal), `mvnw` (Maven wrapper), `ant`, `sbt`, `junit`, `testng`
+**Also on allowlist:** `mvn` (any Maven goal), `mvnw` (Maven wrapper), `ant`, `sbt`, `junit`, `testng`
 
 ### Gradle (Java/Kotlin)
 **Marker Files:** `build.gradle` or `build.gradle.kts`
@@ -82,7 +56,7 @@ SmartFix detects build systems by looking for marker files in your project:
 - `./gradlew check`
 - `gradle test` (fallback if no wrapper)
 
-**Also Validated:** `gradlew`, `gradle` (any Gradle task), `ant`, `sbt`, Java test frameworks
+**Also on allowlist:** `gradlew`, `gradle` (any Gradle task), `ant`, `sbt`, Java test frameworks
 
 ### Python
 **Marker Files:** `pytest.ini`, `setup.py`, or `pyproject.toml`
@@ -92,7 +66,7 @@ SmartFix detects build systems by looking for marker files in your project:
 - `python -m pytest`
 - `python setup.py test`
 
-**Also Validated:** `python`, `python3`, `nose2`, `unittest`, `coverage`, `poetry`, `pipenv`, `uv`, `tox`, `virtualenv`
+**Also on allowlist:** `python`, `python3`, `nose2`, `unittest`, `coverage`, `poetry`, `pipenv`, `uv`, `tox`, `virtualenv`
 
 ### Node.js / JavaScript / TypeScript
 **Marker File:** `package.json`
@@ -102,7 +76,7 @@ SmartFix detects build systems by looking for marker files in your project:
 - `npm run build`
 - `npm run test`
 
-**Also Validated:** `yarn`, `pnpm`, `bun`, `npx`, `node`, `jest`, `mocha`, `jasmine`, `karma`, `ava`, `vitest`, `nyc`
+**Also on allowlist:** `yarn`, `pnpm`, `bun`, `npx`, `node`, `jest`, `mocha`, `jasmine`, `karma`, `ava`, `vitest`, `nyc`
 
 ### PHP
 **Marker File:** `composer.json`
@@ -112,7 +86,7 @@ SmartFix detects build systems by looking for marker files in your project:
 - `phpunit`
 - `./vendor/bin/phpunit`
 
-**Also Validated:** `php`, `pest`, `codeception`
+**Also on allowlist:** `php`, `pest`, `codeception`
 
 ### .NET (C#/F#)
 **Marker Files:** `*.sln` or `*.csproj`
@@ -121,7 +95,7 @@ SmartFix detects build systems by looking for marker files in your project:
 - `dotnet test`
 - `dotnet build`
 
-**Also Validated:** `dotnet` (any command), `msbuild`, `nuget`, `nunit-console`, `nunit3-console`, `xunit.console`, `vstest.console`, `mstest`
+**Also on allowlist:** `dotnet` (any command), `msbuild`, `nuget`, `nunit-console`, `nunit3-console`, `xunit.console`, `vstest.console`, `mstest`
 
 ### Makefile
 **Marker File:** `Makefile`
@@ -132,7 +106,7 @@ SmartFix detects build systems by looking for marker files in your project:
 - `make build` (if `build` target exists)
 - `make all` (if `all` target exists)
 
-**Also Validated:** `make` (any target), `cmake`, `ninja`, `bazel`, `ctest`
+**Also on allowlist:** `make` (any target), `cmake`, `ninja`, `bazel`, `ctest`
 
 **Note:** SmartFix prioritizes test-related targets (`test`, `check`) over build targets.
 
@@ -148,7 +122,7 @@ SmartFix can also auto-detect formatting commands:
 - `ruff format .`
 - `autopep8 --in-place --recursive .`
 
-**Also Validated:** `black`, `ruff`, `autopep8`, `yapf`, `isort`, `flake8`, `pylint`
+**Also on allowlist:** `black`, `ruff`, `autopep8`, `yapf`, `isort`, `flake8`, `pylint`
 
 ### JavaScript/TypeScript Formatters
 **Marker File:** `package.json`
@@ -158,7 +132,7 @@ SmartFix can also auto-detect formatting commands:
 - `npm run format`
 - `yarn format`
 
-**Also Validated:** `prettier`, `eslint`, `standard`, package manager commands (`npm`, `yarn`, `pnpm`, `bun`)
+**Also on allowlist:** `prettier`, `eslint`, `standard`, package manager commands (`npm`, `yarn`, `pnpm`, `bun`)
 
 ### Java Formatters
 **Marker File:** `pom.xml`
@@ -166,7 +140,7 @@ SmartFix can also auto-detect formatting commands:
 **Auto-Detected Commands:**
 - `mvn spotless:apply`
 
-**Also Validated:** `google-java-format`, `checkstyle`, `clang-format`
+**Also on allowlist:** `google-java-format`, `checkstyle`, `clang-format`
 
 ### .NET Formatters
 **Marker Files:** `*.sln` or `*.csproj`
@@ -175,7 +149,7 @@ SmartFix can also auto-detect formatting commands:
 - `dotnet format`
 - `csharpier .`
 
-**Also Validated:** `dotnet`, `csharpier`, `clang-format`
+**Also on allowlist:** `dotnet`, `csharpier`, `clang-format`
 
 ### PHP Formatters
 **Marker File:** `composer.json`
@@ -184,29 +158,15 @@ SmartFix can also auto-detect formatting commands:
 - `php-cs-fixer fix`
 - `./vendor/bin/php-cs-fixer fix`
 
-**Also Validated:** `php-cs-fixer`, `phpcbf`
+**Also on allowlist:** `php-cs-fixer`, `phpcbf`
 
 ## Detection Priority
 
-### Phase 1 Priority (Deterministic)
 When multiple marker files are present, SmartFix generates candidates from all detected build systems and tests them in priority order. The first command that:
-1. Has the tool installed on the system (quick `mvn --version` check - just a pre-filter)
+1. Has the tool installed on the system (quick `--version` check — just a pre-filter to skip tools that aren't installed)
 2. Passes security validation (allowlist check)
-3. **Successfully executes** in your project (actual build must pass)
 
-...is used immediately without trying Phase 2. The `--version` check is just a fast way to skip tools that aren't installed; the real validation is running the actual build.
-
-### Phase 2 Fallback (LLM-Based)
-If Phase 1 fails (no working commands found), the LLM agent:
-1. Receives all Phase 1 failure messages for context
-2. Suggests alternative commands from validated ecosystem tools
-3. Iterates up to 6 times, adapting suggestions based on error feedback
-4. Returns first successful command or None after exhausting attempts
-
-### Phase 3 Fallback (No-Op)
-If both Phase 1 and Phase 2 fail, SmartFix uses the no-op fallback command to gracefully degrade rather than failing the remediation.
-
-**Future Enhancement:** Automatic detection of subdirectory build files with appropriate path flags is planned but not yet available.
+...is selected as the detected command. The Fix agent's BuildTool handles actual execution and verification.
 
 ## Package Manager Detection
 
@@ -223,7 +183,7 @@ If only `package.json` exists with no lock file, defaults to `npm`.
 
 ## Security
 
-All commands (both auto-detected and LLM-suggested) are validated against a security allowlist before execution. Commands must:
+All auto-detected commands are validated against a security allowlist before execution. Commands must:
 - Start with an approved tool name from the [validated executables list](../src/smartfix/config/command_validator.py#L38-L74)
 - Not contain dangerous patterns (command substitution, shell injection, etc.)
 - Not use dangerous interpreter flags (`python -c`, `node -e`, etc.)

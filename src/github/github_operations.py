@@ -321,17 +321,17 @@ class GitHubOperations(ScmOperations):
         ]
 
         try:
-            # Use run_command for consistency with other gh CLI calls
-            # check=False allows the command to fail gracefully (e.g., if label already exists due to race condition)
-            run_command(label_command, env=gh_env, check=False)
-            # If run_command returns without exception, the label was created successfully
-            # Note: We pre-checked if label exists above, so this should typically succeed
-            # If there's a race condition and label was created between check and create,
-            # run_command will log the error but not fail (check=False)
+            run_command(label_command, env=gh_env, check=True)
             debug_log(f"Label '{label_name}' created successfully.")
             return True
+        except CommandExecutionError as e:
+            # Race condition: label was created between our check and create
+            if e.stderr and "already exists" in e.stderr:
+                debug_log(f"Label '{label_name}' already exists (race condition).")
+                return True
+            log(f"Failed to create label '{label_name}': {e.stderr or e}", is_error=True)
+            return False
         except Exception as e:
-            # Unexpected exception (not from command failure since check=False)
             log(f"Exception while creating label: {e}", is_error=True)
             return False
 

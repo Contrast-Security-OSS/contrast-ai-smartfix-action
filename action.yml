@@ -183,7 +183,10 @@ runs:
 
         echo Git verification completed successfully
 
-    # Check if repository is already checked out
+    # Check if repository is already checked out.
+    # This supports callers that pre-checkout (e.g., composite actions or local
+    # testing workflows). It only checks for *any* git repo in the workspace;
+    # callers are responsible for ensuring the correct repo is checked out.
     - name: Check if already in git repository
       id: check_git
       shell: bash

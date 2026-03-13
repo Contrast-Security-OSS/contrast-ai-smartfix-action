@@ -24,7 +24,7 @@ Key behaviors:
 - Determines command mode (configured vs determined) by exact match
 - Validates determined commands against allowlist
 - Executes format first (if provided), then build
-- Records successful commands in module-level storage
+- Records successful commands in closure-scoped state (thread-safe per-vulnerability)
 - Returns dict results with success status and output
 """
 
@@ -39,29 +39,8 @@ from src.build_output_analyzer import extract_build_errors
 
 logger = logging.getLogger(__name__)
 
-# Module-level storage (single-threaded CLI, no singleton needed)
-_successful_build_command: Optional[str] = None
-_successful_format_command: Optional[str] = None
-
 # Shell utilities that don't count as real builds
 _SHELL_UTILITIES = {'echo', 'sh', 'bash', 'grep', 'sed', 'awk', 'cat', 'tee'}
-
-
-def get_successful_build_command() -> Optional[str]:
-    """Get the recorded successful build command."""
-    return _successful_build_command
-
-
-def get_successful_format_command() -> Optional[str]:
-    """Get the recorded successful format command."""
-    return _successful_format_command
-
-
-def reset_storage() -> None:
-    """Reset storage. Used for testing and between vulnerability runs."""
-    global _successful_build_command, _successful_format_command
-    _successful_build_command = None
-    _successful_format_command = None
 
 
 def _is_recordable_command(cmd) -> bool:
@@ -93,6 +72,9 @@ def create_build_tool(  # noqa: C901
     """
     Factory to create build_tool function for Google ADK agents.
 
+    State is scoped to the closure — each call to create_build_tool gets
+    independent storage, making it safe for concurrent vulnerability processing.
+
     Args:
         repo_root: Repository root path
         remediation_id: Unique ID for this remediation run
@@ -100,8 +82,11 @@ def create_build_tool(  # noqa: C901
         user_format_command: User-configured format command (exact match = configured mode)
 
     Returns:
-        Callable that can be passed directly to agent's tools list.
+        Tuple of (tool_function, state_dict). The tool function is passed to the
+        agent's tools list; the state dict can be inspected by the caller to check
+        recorded commands (e.g., for the PR gate).
     """
+    state = {"build_cmd": None, "format_cmd": None}
 
     def build_tool(build_command: str, format_command: Optional[str] = None) -> dict:
         """Execute format and build commands to verify code changes compile correctly.
@@ -119,8 +104,6 @@ def create_build_tool(  # noqa: C901
             - output: Command output (truncated tail or error snippet)
             - recorded: Whether this counts as a verified build for PR creation
         """
-        global _successful_build_command, _successful_format_command
-
         normalized_build = build_command.strip() if build_command else ""
         normalized_user_build = user_build_command.strip() if user_build_command else ""
         normalized_format = format_command.strip() if format_command else ""
@@ -152,7 +135,7 @@ def create_build_tool(  # noqa: C901
             try:
                 run_formatting_command(format_command, repo_root, remediation_id)
                 if _is_recordable_command(format_command):
-                    _successful_format_command = format_command
+                    state["format_cmd"] = format_command
                     logger.info(f"Format recorded: {format_command}")
             except Exception as e:
                 logger.warning(f"Format failed (continuing): {e}")
@@ -172,7 +155,7 @@ def create_build_tool(  # noqa: C901
                 is_recordable = False
                 logger.info(f"Build succeeded but not recorded (does not match configured command '{user_build_command}')")
             elif is_recordable:
-                _successful_build_command = build_command
+                state["build_cmd"] = build_command
                 logger.info(f"Build recorded: {build_command}")
             else:
                 logger.info("Build succeeded but not recorded (--version/--help/shell utility)")
@@ -190,4 +173,4 @@ def create_build_tool(  # noqa: C901
                 "recorded": False,
             }
 
-    return build_tool
+    return build_tool, state

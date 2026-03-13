@@ -70,7 +70,10 @@ ALLOWED_COMMANDS: List[str] = [
     'make', 'cmake', 'ninja', 'bazel', 'ctest',
 
     # Shell utilities
-    'echo', 'grep', 'sed', 'awk', 'cat', 'tee'
+    'echo', 'grep', 'sed', 'awk', 'cat', 'tee',
+
+    # Shell interpreters (validated further by validate_shell_command)
+    'sh', 'bash',
 ]
 
 # Allowed operators for chaining commands
