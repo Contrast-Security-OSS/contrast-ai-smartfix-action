@@ -187,16 +187,23 @@ class SmartFixAgent(CodingAgentStrategy):
 
         directory_tree = get_directory_tree_for_agent_prompt(repo_path)
 
-        # Append build command instruction if a configured command exists
+        # Append build/format command instructions if configured
         build_instruction = ""
         if build_config and getattr(build_config, 'user_build_command', None):
             cmd = build_config.user_build_command
+            fmt = getattr(build_config, 'user_format_command', None)
             build_instruction = (
                 f"\n\nIMPORTANT: A build command has been configured for this project: `{cmd}`. "
                 f"You MUST run this exact command using the build_tool at least once to verify "
                 f"your changes do not break existing tests. Do NOT add scoping flags like "
                 f"`-Dtest=...` or `--tests=...` — run the full configured command as-is."
             )
+            if fmt:
+                build_instruction += (
+                    f"\n\nA formatting command has also been configured: `{fmt}`. "
+                    f"Pass this as the `format_command` parameter when calling build_tool "
+                    f"so that code is formatted before the build runs."
+                )
 
         fix_user_prompt_with_tree = context.prompts.fix_user_prompt + build_instruction + directory_tree
         agent_summary_str = _run_agent_in_event_loop(
