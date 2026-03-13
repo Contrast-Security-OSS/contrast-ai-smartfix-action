@@ -317,8 +317,10 @@ def _validate_command_exists(command: str, repo_root: Path, timeout: int = 5) ->
                     errors='replace',
                     timeout=timeout
                 )
-                # If command exists and responds to version/help, it's valid
-                if result.returncode == 0 or result.returncode == 1:
+                # Accept exit 0 or 1: some tools (e.g., gradle --help) return 1
+                # for info flags. False positives are low-risk since this is just
+                # a pre-filter — the actual build will fail later if the tool is broken.
+                if result.returncode in (0, 1):
                     return True
             except (subprocess.TimeoutExpired, FileNotFoundError):
                 continue
