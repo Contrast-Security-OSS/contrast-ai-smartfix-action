@@ -111,12 +111,12 @@ class Config:
                     # Mark as auto-detected for proper validation
                     self._build_command_source = "ai_detected"
                 else:
-                    # Recursion detected: detection already in progress, use no-op fallback
+                    # Recursion detected: detection already in progress
                     _log_config_message(
-                        "Build command detection already in progress, using no-op fallback",
+                        "Build command detection already in progress, skipping",
                         is_warning=True
                     )
-                    self.BUILD_COMMAND = "echo 'No build command detected - using no-op'"
+                    self.BUILD_COMMAND = None
                     self._build_command_source = "ai_detected"
             else:
                 # Command from environment/config (trusted source)
@@ -286,48 +286,43 @@ class Config:
             # Convert CommandValidationError to ConfigurationError
             raise ConfigurationError(str(e)) from e
 
-    def _auto_detect_build_command(self) -> str:
+    def _auto_detect_build_command(self) -> Optional[str]:
         """
-        Auto-detect build command using two-phase detection with fallback.
+        Auto-detect build command using deterministic detection.
 
-        Uses orchestrator to coordinate Phase 1 (deterministic), Phase 2 (LLM),
-        and Phase 3 (no-op fallback). Always returns a valid command string.
+        Uses file-marker-based detection to find a valid build command.
+        Returns None if no command can be detected — the Fix agent's
+        BuildTool will discover the command at runtime.
 
         Returns:
-            Detected build command or no-op fallback
+            Detected build command or None
         """
-        from src.smartfix.config.command_detection_orchestrator import (
-            detect_build_command_with_fallback,
-            NO_OP_BUILD_COMMAND
-        )
+        from src.smartfix.config.command_detector import detect_build_command
 
         try:
-            command = detect_build_command_with_fallback(
+            command = detect_build_command(
                 repo_root=self.REPO_ROOT,
                 project_dir=None,  # NOTE: Will need update when monorepo support is implemented
-                max_llm_attempts=self.MAX_COMMAND_DETECTION_ATTEMPTS,
-                remediation_id="config-init"
             )
 
-            # Log result (orchestrator logs phase transitions, we log final result)
-            if command == NO_OP_BUILD_COMMAND:
-                _log_config_message(
-                    "Using no-op fallback for BUILD_COMMAND (detection did not find valid command)",
-                    is_warning=True
-                )
-            else:
+            if command:
                 _log_config_message(
                     f"Auto-detected BUILD_COMMAND: {command}",
                     is_error=False
+                )
+            else:
+                _log_config_message(
+                    "Could not auto-detect BUILD_COMMAND (agent will discover at runtime)",
+                    is_warning=True
                 )
 
             return command
         except Exception as e:
             _log_config_message(
-                f"Build command auto-detection failed unexpectedly: {str(e)}. Using no-op fallback.",
+                f"Build command auto-detection failed: {str(e)}",
                 is_error=True
             )
-            return NO_OP_BUILD_COMMAND
+            return None
 
     def _auto_detect_format_command(self) -> Optional[str]:
         """
