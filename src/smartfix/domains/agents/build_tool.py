@@ -167,7 +167,11 @@ def create_build_tool(  # noqa: C901
 
         if success:
             is_recordable = _is_recordable_command(build_command)
-            if is_recordable:
+            # When a configured command exists, only record an exact match
+            if is_recordable and normalized_user_build and normalized_build != normalized_user_build:
+                is_recordable = False
+                logger.info(f"Build succeeded but not recorded (does not match configured command '{user_build_command}')")
+            elif is_recordable:
                 _successful_build_command = build_command
                 logger.info(f"Build recorded: {build_command}")
             else:

@@ -97,8 +97,18 @@ class SmartFixAgent(CodingAgentStrategy):
             debug_log("PR gate skipped: no build command configured or detected")
             return True
 
-        if get_successful_build_command() is not None:
-            debug_log(f"PR gate passed: verified build with '{get_successful_build_command()}'")
+        recorded_cmd = get_successful_build_command()
+        if recorded_cmd is not None:
+            # If a configured command exists, the recorded command must match it
+            configured_cmd = getattr(context.build_config, 'user_build_command', None)
+            if configured_cmd and recorded_cmd.strip() != configured_cmd.strip():
+                log(f"PR gate failed: recorded build '{recorded_cmd}' does not match configured '{configured_cmd}'", is_error=True)
+                session.complete_session(
+                    failure_category=FailureCategory.BUILD_VERIFICATION_FAILED,
+                    pr_body=f"Fix agent ran '{recorded_cmd}' but the configured build command is '{configured_cmd}'"
+                )
+                return False
+            debug_log(f"PR gate passed: verified build with '{recorded_cmd}'")
             return True
 
         # Gate failed — agent had a build command but never verified a successful build
@@ -176,7 +186,19 @@ class SmartFixAgent(CodingAgentStrategy):
         )
 
         directory_tree = get_directory_tree_for_agent_prompt(repo_path)
-        fix_user_prompt_with_tree = context.prompts.fix_user_prompt + directory_tree
+
+        # Append build command instruction if a configured command exists
+        build_instruction = ""
+        if build_config and getattr(build_config, 'user_build_command', None):
+            cmd = build_config.user_build_command
+            build_instruction = (
+                f"\n\nIMPORTANT: A build command has been configured for this project: `{cmd}`. "
+                f"You MUST run this exact command using the build_tool at least once to verify "
+                f"your changes do not break existing tests. Do NOT add scoping flags like "
+                f"`-Dtest=...` or `--tests=...` — run the full configured command as-is."
+            )
+
+        fix_user_prompt_with_tree = context.prompts.fix_user_prompt + build_instruction + directory_tree
         agent_summary_str = _run_agent_in_event_loop(
             _run_agent_internal_with_prompts,
             'fix',

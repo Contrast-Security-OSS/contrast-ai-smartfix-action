@@ -56,6 +56,7 @@ class TestBuildToolPRGateIntegration(unittest.TestCase):
         context = Mock()
         context.build_config = Mock()
         context.build_config.has_build_command.return_value = True
+        context.build_config.user_build_command = "mvn test"
 
         gate_result = agent._check_pr_gate(session, context)
         self.assertTrue(gate_result)
@@ -123,6 +124,78 @@ class TestBuildToolPRGateIntegration(unittest.TestCase):
 
         gate_result = agent._check_pr_gate(session, context)
         self.assertFalse(gate_result)
+
+
+class TestBuildCommandEnforcement(unittest.TestCase):
+    """Test that scoped/modified commands don't satisfy the PR gate when a configured command exists."""
+
+    def setUp(self):
+        reset_storage()
+
+    def tearDown(self):
+        reset_storage()
+
+    @patch('subprocess.run')
+    def test_scoped_command_not_recorded_when_configured_exists(self, mock_subprocess):
+        """Agent runs scoped command (e.g. mvn test -Dtest=Foo) but configured is 'mvn test' → not recorded."""
+        mock_subprocess.return_value = Mock(returncode=0, stdout="BUILD SUCCESS", stderr="")
+
+        tool = create_build_tool(
+            repo_root=Path("/tmp/test"),
+            remediation_id="enf-001",
+            user_build_command="mvn test",
+        )
+
+        # Agent runs a scoped variant instead of the exact configured command
+        result = tool(build_command="mvn test -Dtest=SqlInjectionTest")
+
+        self.assertTrue(result["success"])
+        self.assertFalse(result["recorded"])
+        self.assertIsNone(get_successful_build_command())
+
+    @patch('subprocess.run')
+    def test_exact_configured_command_is_recorded(self, mock_subprocess):
+        """Agent runs exact configured command → recorded."""
+        mock_subprocess.return_value = Mock(returncode=0, stdout="BUILD SUCCESS", stderr="")
+
+        tool = create_build_tool(
+            repo_root=Path("/tmp/test"),
+            remediation_id="enf-002",
+            user_build_command="mvn test",
+        )
+
+        result = tool(build_command="mvn test")
+
+        self.assertTrue(result["success"])
+        self.assertTrue(result["recorded"])
+        self.assertEqual(get_successful_build_command(), "mvn test")
+
+    @patch('subprocess.run')
+    def test_pr_gate_rejects_mismatched_recorded_command(self, mock_subprocess):
+        """PR gate fails if recorded command doesn't match configured command."""
+        mock_subprocess.return_value = Mock(returncode=0, stdout="BUILD SUCCESS", stderr="")
+
+        # Simulate: no user_build_command so any recordable command gets recorded
+        tool = create_build_tool(
+            repo_root=Path("/tmp/test"),
+            remediation_id="enf-003",
+        )
+        tool(build_command="mvn test -Dtest=Foo")
+
+        # Now check PR gate with a configured command that doesn't match
+        agent = SmartFixAgent()
+        session = Mock()
+        session.complete_session = Mock()
+        context = Mock()
+        context.build_config = Mock()
+        context.build_config.has_build_command.return_value = True
+        context.build_config.user_build_command = "mvn test"
+
+        gate_result = agent._check_pr_gate(session, context)
+        self.assertFalse(gate_result)
+        session.complete_session.assert_called_once()
+        call_kwargs = session.complete_session.call_args[1]
+        self.assertEqual(call_kwargs["failure_category"], FailureCategory.BUILD_VERIFICATION_FAILED)
 
 
 class TestBuildToolConfiguredVsDetermined(unittest.TestCase):

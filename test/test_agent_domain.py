@@ -185,6 +185,7 @@ class TestSmartFixAgent(unittest.TestCase):
         mock_context = MagicMock(spec=RemediationContext)
         mock_context.build_config = MagicMock()
         mock_context.build_config.has_build_command.return_value = True
+        mock_context.build_config.user_build_command = "mvn test"
 
         with patch.object(agent, '_run_fix_agent', return_value="success") as mock_fix:
             result = agent.remediate(mock_context)
