@@ -187,20 +187,28 @@ class SmartFixAgent(CodingAgentStrategy):
 
         directory_tree = get_directory_tree_for_agent_prompt(repo_path)
 
-        # Append build/format command instructions if configured
+        # Append build/format command instructions when a build command is known
         build_instruction = ""
-        if build_config and getattr(build_config, 'user_build_command', None):
-            cmd = build_config.user_build_command
-            fmt = getattr(build_config, 'user_format_command', None)
-            build_instruction = (
-                f"\n\nIMPORTANT: A build command has been configured for this project: `{cmd}`. "
-                f"You MUST run this exact command using the build_tool at least once to verify "
-                f"your changes do not break existing tests. Do NOT add scoping flags like "
-                f"`-Dtest=...` or `--tests=...` — run the full configured command as-is."
-            )
+        if build_config and build_config.has_build_command():
+            cmd = build_config.build_command
+            fmt = build_config.formatting_command
+            is_user_configured = getattr(build_config, 'user_build_command', None) is not None
+            if is_user_configured:
+                build_instruction = (
+                    f"\n\nIMPORTANT: A build command has been configured for this project: `{cmd}`. "
+                    f"You MUST run this exact command using the build_tool at least once to verify "
+                    f"your changes do not break existing tests. Do NOT add scoping flags like "
+                    f"`-Dtest=...` or `--tests=...` — run the full configured command as-is."
+                )
+            else:
+                build_instruction = (
+                    f"\n\nIMPORTANT: A build command has been detected for this project: `{cmd}`. "
+                    f"You MUST run a build using the build_tool at least once to verify "
+                    f"your changes do not break existing tests."
+                )
             if fmt:
                 build_instruction += (
-                    f"\n\nA formatting command has also been configured: `{fmt}`. "
+                    f"\n\nA formatting command is also available: `{fmt}`. "
                     f"Pass this as the `format_command` parameter when calling build_tool "
                     f"so that code is formatted before the build runs."
                 )
