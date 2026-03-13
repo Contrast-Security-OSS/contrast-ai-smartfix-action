@@ -103,7 +103,7 @@ def create_build_tool(  # noqa: C901
         Callable that can be passed directly to agent's tools list.
     """
 
-    def build_tool(build_command: str, format_command: str = None) -> dict:
+    def build_tool(build_command: str, format_command: Optional[str] = None) -> dict:
         """Execute format and build commands to verify code changes compile correctly.
 
         Run this first to establish baseline, then after making code changes.
