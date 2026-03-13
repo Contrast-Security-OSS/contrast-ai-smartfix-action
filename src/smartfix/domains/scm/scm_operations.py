@@ -148,7 +148,7 @@ class ScmOperations(ABC):
 
     @abstractmethod
     def create_pr(self, title: str, body: str, remediation_id: str,
-                  base_branch: str, label: str) -> str:
+                  base_branch: str) -> str:
         """
         Creates a pull request and returns the PR URL.
 
@@ -157,7 +157,6 @@ class ScmOperations(ABC):
             body (str): PR body
             remediation_id (str): Remediation ID
             base_branch (str): Base branch name
-            label (str): Label to apply to the PR
 
         Returns:
             str: URL of the created PR

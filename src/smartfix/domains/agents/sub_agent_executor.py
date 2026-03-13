@@ -2,7 +2,7 @@
 # #%L
 # Contrast AI SmartFix
 # %%
-# Copyright (C) 2025 Contrast Security, Inc.
+# Copyright (C) 2026 Contrast Security, Inc.
 # %%
 # Contact: support@contrastsecurity.com
 # License: Commercial
@@ -32,7 +32,6 @@ import re
 from pathlib import Path
 from typing import Optional
 
-from src.config import get_config
 from src.utils import debug_log, log, error_exit, tail_string
 from src.smartfix.shared.failure_categories import FailureCategory
 import src.telemetry_handler as telemetry_handler
@@ -61,13 +60,16 @@ class SubAgentExecutor:
     for Fix and QA agents operating under the SmartFixAgent orchestrator.
     """
 
-    def __init__(self, max_events: int = None):
+    def __init__(self, max_events: int = None) -> None:
         """
         Initialize sub-agent executor with configuration.
 
         Args:
             max_events: Maximum events per agent execution (defaults to config value)
         """
+        # Lazy import to avoid circular dependency with config module
+        from src.config import get_config
+
         self.config = get_config()
         self.max_events = max_events or self.config.MAX_EVENTS_PER_AGENT
         self.mcp_manager = MCPToolsetManager()
@@ -78,7 +80,8 @@ class SubAgentExecutor:
         remediation_id: str,
         session_id: str,
         agent_type: str = "fix",
-        system_prompt: Optional[str] = None
+        system_prompt: Optional[str] = None,
+        additional_tools: list = None
     ) -> Optional[Agent]:
         """
         Create an ADK Agent (either 'fix' or 'qa').
@@ -89,6 +92,7 @@ class SubAgentExecutor:
             session_id: Session ID for Contrast LLM tracking
             agent_type: Type of agent ("fix" or "qa")
             system_prompt: System prompt for agent instructions
+            additional_tools: Optional list of extra tools (e.g., BuildTool) to include
 
         Returns:
             Agent: Configured ADK agent instance
@@ -138,11 +142,15 @@ class SubAgentExecutor:
                 )
                 debug_log(f"Creating {agent_type} agent ({agent_name}) with model {self.config.AGENT_MODEL}")
 
+            agent_tools = [mcp_tools]
+            if additional_tools:
+                agent_tools.extend(additional_tools)
+
             root_agent = SmartFixLlmAgent(
                 model=model_instance,
                 name=agent_name,
                 instruction=agent_instruction,
-                tools=[mcp_tools],
+                tools=agent_tools,
             )
             debug_log(f"Created {agent_type} agent ({agent_name})")
             return root_agent
@@ -352,7 +360,7 @@ class SubAgentExecutor:
 
         return None
 
-    def _process_function_calls(self, event, agent_type: str, agent_tool_calls_telemetry: list):
+    def _process_function_calls(self, event, agent_type: str, agent_tool_calls_telemetry: list) -> None:
         """Process function calls from event."""
         calls = event.get_function_calls()
         if calls:
@@ -366,7 +374,7 @@ class SubAgentExecutor:
                     "result": "CALLING",
                 })
 
-    def _process_function_responses(self, event, agent_type: str, agent_tool_calls_telemetry: list):
+    def _process_function_responses(self, event, agent_type: str, agent_tool_calls_telemetry: list) -> None:
         """Process function responses from event."""
         responses = event.get_function_responses()
         if responses:

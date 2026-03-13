@@ -2,7 +2,7 @@
 # #%L
 # Contrast AI SmartFix
 # %%
-# Copyright (C) 2025 Contrast Security, Inc.
+# Copyright (C) 2026 Contrast Security, Inc.
 # %%
 # Contact: support@contrastsecurity.com
 # License: Commercial
@@ -85,6 +85,10 @@ class TestAllowedCommands(unittest.TestCase):
         ]
         for cmd in valid_commands:
             validate_command("BUILD_COMMAND", cmd)  # Should not raise
+
+    def test_echo_command_passes_validation(self):
+        """Test that echo commands pass validation (used as shell utilities)."""
+        validate_command("BUILD_COMMAND", "echo 'test'")  # Should not raise
 
 
 class TestCommandChaining(unittest.TestCase):

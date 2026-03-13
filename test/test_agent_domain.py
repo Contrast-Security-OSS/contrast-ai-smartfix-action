@@ -109,53 +109,6 @@ class TestSmartFixAgent(unittest.TestCase):
         # Just verify that the method returns a valid session object, don't check specific status
         # since the mock setup might result in different statuses
 
-    @patch('src.smartfix.domains.agents.smartfix_agent.run_build_command')
-    @patch('src.smartfix.domains.agents.smartfix_agent.extract_build_errors')
-    def test_validate_initial_build_success(self, mock_extract_errors, mock_run_build):
-        """
-        Tests successful initial build validation.
-        """
-        agent = SmartFixAgent()
-        mock_context = MagicMock(spec=RemediationContext)
-
-        # Setup mocks with proper attribute structure
-        mock_context.build_config = MagicMock()
-        mock_context.build_config.has_build_command.return_value = True
-        mock_context.build_config.build_command = "npm test"
-        mock_context.repo_config = MagicMock()
-        mock_context.repo_config.repo_path = "/repo"
-        mock_context.remediation_id = "test-123"
-        mock_run_build.return_value = (True, "build success output")
-
-        session = AgentSession()
-        result = agent._validate_initial_build(session, mock_context)
-
-        self.assertTrue(result)
-
-    @patch('src.smartfix.domains.agents.smartfix_agent.run_build_command')
-    @patch('src.smartfix.domains.agents.smartfix_agent.extract_build_errors')
-    def test_validate_initial_build_failure(self, mock_extract_errors, mock_run_build):
-        """
-        Tests failed initial build validation.
-        """
-        agent = SmartFixAgent()
-        mock_context = MagicMock(spec=RemediationContext)
-
-        # Setup mocks with proper attribute structure
-        mock_context.build_config = MagicMock()
-        mock_context.build_config.has_build_command.return_value = True
-        mock_context.build_config.build_command = "npm test"
-        mock_context.repo_config = MagicMock()
-        mock_context.repo_config.repo_path = "/repo"
-        mock_context.remediation_id = "test-123"
-        mock_run_build.return_value = (False, "build failed output")
-        mock_extract_errors.return_value = "Compilation errors found"
-
-        session = AgentSession()
-        result = agent._validate_initial_build(session, mock_context)
-
-        self.assertFalse(result)
-
     @patch('src.smartfix.domains.agents.smartfix_agent.SmartFixAgent._run_ai_fix_agent')
     def test_run_fix_agent_success(self, mock_run_ai_fix):
         """
@@ -201,27 +154,6 @@ class TestSmartFixAgent(unittest.TestCase):
         from src.smartfix.shared.failure_categories import FailureCategory
         self.assertEqual(session.failure_category, FailureCategory.AGENT_FAILURE)
 
-    @patch('src.smartfix.domains.agents.smartfix_agent.SmartFixAgent._run_qa_loop_internal')
-    def test_run_qa_loop_success(self, mock_run_qa):
-        """
-        Tests successful QA loop execution.
-        """
-        agent = SmartFixAgent()
-        session = AgentSession()
-        mock_context = MagicMock(spec=RemediationContext)
-
-        # Set up build config for QA loop to run
-        mock_context.build_config = MagicMock()
-        mock_context.build_config.has_build_command.return_value = True
-
-        mock_run_qa.return_value = (True, ["src/file1.py"], "npm test", ["QA attempt 1"])
-
-        result = agent._run_qa_loop(session, mock_context, "fix_result")
-
-        self.assertTrue(result)
-        self.assertEqual(session.qa_attempts, 1)
-        self.assertIsNone(session.failure_category)  # No failure category should be set on success
-
     def test_complete_remediation_workflow_success(self):
         """
         Tests the complete remediation workflow with all steps successful.
@@ -229,48 +161,40 @@ class TestSmartFixAgent(unittest.TestCase):
         agent = SmartFixAgent()
         mock_context = MagicMock(spec=RemediationContext)
 
-        # Setup context
+        # Setup context — no build command so PR gate is skipped
         mock_context.build_config = MagicMock()
-        mock_context.build_config.has_build_command.return_value = False  # Skip QA
+        mock_context.build_config.has_build_command.return_value = False
 
-        # Set should_try_building to False so _validate_initial_build is not called
         with patch.object(agent, '_run_fix_agent', return_value="success") as mock_fix:
             result = agent.remediate(mock_context)
 
             self.assertIsInstance(result, AgentSession)
             self.assertTrue(result.success)
-            self.assertIsNone(result.failure_category)  # No failure category should be set
+            self.assertIsNone(result.failure_category)
 
-            # Validate that run_fix_agent was called
             mock_fix.assert_called_once()
 
-    def test_complete_remediation_workflow_with_qa(self):
+    def test_complete_remediation_workflow_with_build_verification(self):
         """
-        Tests the complete remediation workflow including QA validation.
+        Tests the complete remediation workflow with BuildTool verification (PR gate).
         """
         agent = SmartFixAgent()
         mock_context = MagicMock(spec=RemediationContext)
+        mock_context.build_config = MagicMock()
+        mock_context.build_config.has_build_command.return_value = True
+        mock_context.build_config.user_build_command = "mvn test"
 
-        # Setup context for QA
-        with patch('src.config.get_config') as mock_config:
-            config_mock = MagicMock()
-            config_mock.SKIP_QA_REVIEW = False
-            mock_config.return_value = config_mock
-            mock_context.build_config = MagicMock()
-            mock_context.build_config.has_build_command.return_value = True
+        def fake_fix_agent(session, context):
+            # Simulate BuildTool recording a successful build
+            agent._build_state = {"build_cmd": "mvn test", "format_cmd": None}
+            return "success"
 
-            with patch.object(agent, '_validate_initial_build', return_value=True) as mock_validate, \
-                 patch.object(agent, '_run_fix_agent', return_value="success") as mock_fix, \
-                 patch.object(agent, '_run_qa_loop', return_value=True) as mock_qa:
+        with patch.object(agent, '_run_fix_agent', side_effect=fake_fix_agent) as mock_fix:
+            result = agent.remediate(mock_context)
 
-                result = agent.remediate(mock_context)
-
-                self.assertTrue(result.success)
-                self.assertIsNone(result.failure_category)  # No failure category should be set
-
-                mock_validate.assert_called_once()
-                mock_fix.assert_called_once()
-                mock_qa.assert_called_once()
+            self.assertTrue(result.success)
+            self.assertIsNone(result.failure_category)
+            mock_fix.assert_called_once()
 
 
 class TestAgentSession(unittest.TestCase):

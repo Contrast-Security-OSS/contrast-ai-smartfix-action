@@ -2,7 +2,7 @@
 # #%L
 # Contrast AI SmartFix
 # %%
-# Copyright (C) 2025 Contrast Security, Inc.
+# Copyright (C) 2026 Contrast Security, Inc.
 # %%
 # Contact: support@contrastsecurity.com
 # License: Commercial
@@ -28,12 +28,10 @@ import asyncio
 import logging
 import platform
 from pathlib import Path
+from typing import Any
 
-from src.config import get_config
 from src.utils import debug_log, log, error_exit
 from src.smartfix.shared.failure_categories import FailureCategory
-
-from .sub_agent_executor import SubAgentExecutor, ADK_AVAILABLE
 
 # Conditional imports
 try:
@@ -47,7 +45,46 @@ except ImportError:
 MAX_PENDING_TASKS = 100
 
 
-def _run_agent_in_event_loop(coroutine_func, *args, **kwargs):
+def _configure_cleanup_logging() -> None:
+    """Configure logging to suppress benign asyncio and MCP cleanup errors."""
+    # Suppress anyio error logging
+    anyio_logger = logging.getLogger("anyio")
+    anyio_logger.setLevel(logging.CRITICAL)
+
+    # Suppress MCP client/stdio error logging
+    mcp_logger = logging.getLogger("mcp.client.stdio")
+    mcp_logger.setLevel(logging.CRITICAL)
+
+    # Silence the task exception was never retrieved warnings
+    asyncio_logger = logging.getLogger("asyncio")
+    asyncio_logger.setLevel(logging.CRITICAL)
+
+    # Add a comprehensive filter to specifically ignore common cancel scope and cleanup errors
+    class AsyncioCleanupFilter(logging.Filter):
+        def filter(self, record) -> bool:
+            message = record.getMessage()
+            # Filter out common cleanup errors
+            if any(pattern in message for pattern in [
+                "exit cancel scope in a different task",
+                "Task exception was never retrieved",
+                "unhandled errors in a TaskGroup",
+                "GeneratorExit",
+                "CancelledError",
+                "asyncio.exceptions",
+                "BaseExceptionGroup"
+            ]):
+                return False
+            return True
+
+    # Apply the filter to multiple loggers
+    cleanup_filter = AsyncioCleanupFilter()
+    anyio_logger.addFilter(cleanup_filter)
+    asyncio_logger.addFilter(cleanup_filter)
+    if mcp_logger:
+        mcp_logger.addFilter(cleanup_filter)
+
+
+def _run_agent_in_event_loop(coroutine_func, *args, **kwargs) -> Any:
     """
     Wrapper function to run an async coroutine in a controlled event loop.
     Handles proper setup and cleanup of the event loop and tasks.
@@ -60,6 +97,9 @@ def _run_agent_in_event_loop(coroutine_func, *args, **kwargs):
         The result returned by the coroutine
     """
     result = None
+
+    # Configure logging to suppress asyncio and anyio errors that typically occur during cleanup
+    _configure_cleanup_logging()
 
     # Platform-specific setup
     is_windows = platform.system() == 'Windows'
@@ -176,7 +216,8 @@ async def _run_agent_internal_with_prompts(
     query: str,
     system_prompt: str,
     remediation_id: str,
-    session_id: str = None
+    session_id: str = None,
+    additional_tools: list = None
 ) -> str:
     """
     Internal helper to run either fix or QA agent with API-provided prompts. Returns summary.
@@ -188,10 +229,15 @@ async def _run_agent_internal_with_prompts(
         system_prompt: System prompt for agent instructions
         remediation_id: Remediation ID for error tracking
         session_id: Session ID for Contrast LLM tracking
+        additional_tools: Optional list of extra tools (e.g., BuildTool) to add to the agent
 
     Returns:
         str: Summary from the agent execution
     """
+    # Lazy imports to avoid circular dependency with config and agents modules
+    from src.config import get_config
+    from .sub_agent_executor import SubAgentExecutor, ADK_AVAILABLE
+
     config = get_config()
     debug_log(f"Using Agent Model ID: {config.AGENT_MODEL}")
 
@@ -237,7 +283,7 @@ async def _run_agent_internal_with_prompts(
 
     # Add a comprehensive filter to specifically ignore common cancel scope and cleanup errors
     class AsyncioCleanupFilter(logging.Filter):
-        def filter(self, record):
+        def filter(self, record) -> bool:
             message = record.getMessage()
             # Filter out common cleanup errors
             if any(pattern in message for pattern in [
@@ -284,7 +330,8 @@ async def _run_agent_internal_with_prompts(
     executor = SubAgentExecutor()
 
     agent = await executor.create_agent(
-        repo_root, remediation_id, session_id, agent_type=agent_type, system_prompt=system_prompt
+        repo_root, remediation_id, session_id, agent_type=agent_type, system_prompt=system_prompt,
+        additional_tools=additional_tools
     )
     if not agent:
         log(

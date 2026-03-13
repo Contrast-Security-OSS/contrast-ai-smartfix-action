@@ -581,12 +581,6 @@ def main():  # noqa: C901
         git_ops.push_branch(new_branch_name)  # Push the final commit (original or amended)
 
         label_name, label_desc, label_color = github_ops.generate_label_details(vuln_uuid)
-        label_created = github_ops.ensure_label(label_name, label_desc, label_color)
-
-        if not label_created:
-            log(f"Could not create GitHub label '{label_name}'. PR will be created without a label.", is_warning=True)
-            label_name = ""  # Clear label_name to avoid using it in PR creation
-
         pr_title = github_ops.generate_pr_title(vuln_title)
 
         updated_pr_body = pr_body_base + qa_section
@@ -629,7 +623,7 @@ def main():  # noqa: C901
 
             # Try to create the PR using the GitHub CLI
             log("Attempting to create a pull request...")
-            pr_url = github_ops.create_pr(pr_title, updated_pr_body, remediation_id, config.BASE_BRANCH, label_name)
+            pr_url = github_ops.create_pr(pr_title, updated_pr_body, remediation_id, config.BASE_BRANCH)
 
             if pr_url:
                 pr_creation_success = True
@@ -649,6 +643,13 @@ def main():  # noqa: C901
                         log(f"Could not find PR number pattern in URL: {pr_url}", is_warning=True)
                 except (ValueError, IndexError, AttributeError) as e:
                     log(f"Could not extract PR number from URL: {pr_url} - Error: {str(e)}")
+
+                # Add labels to the PR (non-critical — don't fail the run)
+                if pr_number and label_name:
+                    try:
+                        github_ops.add_labels_to_pr(pr_number, [label_name])
+                    except Exception as label_err:
+                        log(f"Failed to add label to PR #{pr_number}: {label_err}", is_warning=True)
 
                 # Notify the Remediation backend service about the PR
                 if pr_number is None:

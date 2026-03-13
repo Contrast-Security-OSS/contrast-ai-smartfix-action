@@ -2,7 +2,7 @@
 # #%L
 # Contrast AI SmartFix
 # %%
-# Copyright (C) 2025 Contrast Security, Inc.
+# Copyright (C) 2026 Contrast Security, Inc.
 # %%
 # Contact: support@contrastsecurity.com
 # License: Commercial
@@ -142,7 +142,7 @@ class TestEventLoopUtils(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             event_loop_utils._run_agent_in_event_loop(async_func_with_pending_task)
 
-    @patch('src.smartfix.domains.agents.event_loop_utils.ADK_AVAILABLE', False)
+    @patch('src.smartfix.domains.agents.sub_agent_executor.ADK_AVAILABLE', False)
     @patch('src.smartfix.domains.agents.event_loop_utils.error_exit')
     def test_run_agent_internal_adk_not_available(self, mock_error_exit):
         """Test _run_agent_internal_with_prompts when ADK not available"""
@@ -164,7 +164,7 @@ class TestEventLoopUtils(unittest.TestCase):
         call_args = mock_error_exit.call_args
         self.assertEqual(call_args[0][0], "REM-123")
 
-    @patch('src.smartfix.domains.agents.event_loop_utils.ADK_AVAILABLE', True)
+    @patch('src.smartfix.domains.agents.sub_agent_executor.ADK_AVAILABLE', True)
     @patch('src.smartfix.domains.agents.event_loop_utils.InMemorySessionService')
     @patch('src.smartfix.domains.agents.event_loop_utils.error_exit')
     def test_run_agent_internal_session_creation_error(self, mock_error_exit, mock_session_service):
@@ -191,10 +191,10 @@ class TestEventLoopUtils(unittest.TestCase):
         call_args = mock_error_exit.call_args
         self.assertEqual(call_args[0][0], "REM-456")
 
-    @patch('src.smartfix.domains.agents.event_loop_utils.ADK_AVAILABLE', True)
+    @patch('src.smartfix.domains.agents.sub_agent_executor.ADK_AVAILABLE', True)
     @patch('src.smartfix.domains.agents.event_loop_utils.InMemorySessionService')
     @patch('src.smartfix.domains.agents.event_loop_utils.InMemoryArtifactService')
-    @patch('src.smartfix.domains.agents.event_loop_utils.SubAgentExecutor')
+    @patch('src.smartfix.domains.agents.sub_agent_executor.SubAgentExecutor')
     @patch('src.smartfix.domains.agents.event_loop_utils.error_exit')
     def test_run_agent_internal_agent_creation_failure(
         self, mock_error_exit, mock_executor_class, mock_artifact_service, mock_session_service
@@ -227,10 +227,10 @@ class TestEventLoopUtils(unittest.TestCase):
         call_args = mock_error_exit.call_args
         self.assertEqual(call_args[0][0], "REM-789")
 
-    @patch('src.smartfix.domains.agents.event_loop_utils.ADK_AVAILABLE', True)
+    @patch('src.smartfix.domains.agents.sub_agent_executor.ADK_AVAILABLE', True)
     @patch('src.smartfix.domains.agents.event_loop_utils.InMemorySessionService')
     @patch('src.smartfix.domains.agents.event_loop_utils.InMemoryArtifactService')
-    @patch('src.smartfix.domains.agents.event_loop_utils.SubAgentExecutor')
+    @patch('src.smartfix.domains.agents.sub_agent_executor.SubAgentExecutor')
     @patch('src.smartfix.domains.agents.event_loop_utils.Runner')
     def test_run_agent_internal_success(
         self, mock_runner_class, mock_executor_class, mock_artifact_service, mock_session_service
@@ -263,10 +263,10 @@ class TestEventLoopUtils(unittest.TestCase):
         mock_executor.execute_agent.assert_called_once()
 
     @patch('src.smartfix.domains.agents.event_loop_utils.platform.system')
-    @patch('src.smartfix.domains.agents.event_loop_utils.ADK_AVAILABLE', True)
+    @patch('src.smartfix.domains.agents.sub_agent_executor.ADK_AVAILABLE', True)
     @patch('src.smartfix.domains.agents.event_loop_utils.InMemorySessionService')
     @patch('src.smartfix.domains.agents.event_loop_utils.InMemoryArtifactService')
-    @patch('src.smartfix.domains.agents.event_loop_utils.SubAgentExecutor')
+    @patch('src.smartfix.domains.agents.sub_agent_executor.SubAgentExecutor')
     @patch('src.smartfix.domains.agents.event_loop_utils.Runner')
     @patch('src.smartfix.domains.agents.event_loop_utils.asyncio.set_event_loop_policy')
     def test_run_agent_internal_windows_platform_handling(
