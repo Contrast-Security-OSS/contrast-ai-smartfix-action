@@ -1050,20 +1050,14 @@ class TestGitHubOperations(unittest.TestCase):
         with patch.object(self.github_ops.git_ops, 'get_branch_name') as mock_get_branch:
             mock_get_branch.return_value = "copilot/fix-issue-789"
 
-            # Mock add_labels_to_pr
-            with patch.object(self.github_ops, 'add_labels_to_pr') as mock_add_labels:
-                mock_add_labels.return_value = True
+            result = self.github_ops.create_pr(
+                "Fix: Test Issue",
+                "This is a test PR body",
+                "test-rem-123",
+                "main",
+            )
 
-                result = self.github_ops.create_pr(
-                    "Fix: Test Issue",
-                    "This is a test PR body",
-                    "test-rem-123",
-                    "main",
-                    "contrast-vuln-id:VULN-123"
-                )
-
-                self.assertEqual(result, "https://github.com/test/repo/pull/123")
-                mock_add_labels.assert_called_once_with(123, ["contrast-vuln-id:VULN-123"])
+            self.assertEqual(result, "https://github.com/test/repo/pull/123")
 
     @patch('tempfile.NamedTemporaryFile')
     @patch('os.path.exists')
@@ -1089,17 +1083,16 @@ class TestGitHubOperations(unittest.TestCase):
         with patch.object(self.github_ops.git_ops, 'get_branch_name') as mock_get_branch:
             mock_get_branch.return_value = "copilot/fix-issue-999"
 
-            with patch.object(self.github_ops, 'add_labels_to_pr'):
-                # Create body larger than 32000 chars
-                large_body = "x" * 35000
+            # Create body larger than 32000 chars
+            large_body = "x" * 35000
 
-                result = self.github_ops.create_pr("Title", large_body, "rem-456", "main", "label1")
+            result = self.github_ops.create_pr("Title", large_body, "rem-456", "main")
 
-                # Check that write was called with truncated content
-                written_content = "".join([call[0][0] for call in mock_temp.write.call_args_list])
-                self.assertLess(len(written_content), 33000)  # Should be truncated + disclaimer
-                self.assertIn("truncated", written_content.lower())
-                self.assertEqual(result, "https://github.com/test/repo/pull/456")
+            # Check that write was called with truncated content
+            written_content = "".join([call[0][0] for call in mock_temp.write.call_args_list])
+            self.assertLess(len(written_content), 33000)  # Should be truncated + disclaimer
+            self.assertIn("truncated", written_content.lower())
+            self.assertEqual(result, "https://github.com/test/repo/pull/456")
 
     @patch('tempfile.NamedTemporaryFile')
     @patch('os.path.exists')
@@ -1145,7 +1138,7 @@ class TestGitHubOperations(unittest.TestCase):
         ) as mock_get_branch:
             mock_get_branch.return_value = "smartfix/fix-issue-123"
             self.github_ops.create_pr(
-                "Fix: Test", "body", "rem-123", "main", "label1"
+                "Fix: Test", "body", "rem-123", "main"
             )
 
         # Verify actionable error message was logged
@@ -1209,7 +1202,7 @@ class TestGitHubOperations(unittest.TestCase):
         ) as mock_get_branch:
             mock_get_branch.return_value = "smartfix/fix-issue-456"
             self.github_ops.create_pr(
-                "Fix: Test", "body", "rem-456", "main", "label1"
+                "Fix: Test", "body", "rem-456", "main"
             )
 
         # Verify generic error message was logged (not permission one)
@@ -1289,7 +1282,7 @@ class TestGitHubOperations(unittest.TestCase):
         ) as mock_get_branch:
             mock_get_branch.return_value = "smartfix/fix-issue-789"
             self.github_ops.create_pr(
-                "Fix: Test", "body", "rem-789", "main", "label1"
+                "Fix: Test", "body", "rem-789", "main"
             )
 
         # Verify generic error message was logged

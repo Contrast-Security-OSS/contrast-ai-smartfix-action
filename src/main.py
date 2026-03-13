@@ -629,7 +629,7 @@ def main():  # noqa: C901
 
             # Try to create the PR using the GitHub CLI
             log("Attempting to create a pull request...")
-            pr_url = github_ops.create_pr(pr_title, updated_pr_body, remediation_id, config.BASE_BRANCH, label_name)
+            pr_url = github_ops.create_pr(pr_title, updated_pr_body, remediation_id, config.BASE_BRANCH)
 
             if pr_url:
                 pr_creation_success = True
@@ -649,6 +649,10 @@ def main():  # noqa: C901
                         log(f"Could not find PR number pattern in URL: {pr_url}", is_warning=True)
                 except (ValueError, IndexError, AttributeError) as e:
                     log(f"Could not extract PR number from URL: {pr_url} - Error: {str(e)}")
+
+                # Add labels to the PR
+                if pr_number and label_name:
+                    github_ops.add_labels_to_pr(pr_number, [label_name])
 
                 # Notify the Remediation backend service about the PR
                 if pr_number is None:
