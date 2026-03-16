@@ -393,8 +393,6 @@ class TestSmartfixAgentDirectoryTreeIntegration(unittest.TestCase):
         context.session_id = "sess-456"
         context.prompts.fix_user_prompt = "Fix this vulnerability."
         context.prompts.fix_system_prompt = "You are a security expert."
-        context.prompts.qa_system_prompt = "You are a QA reviewer."
-        context.prompts.get_processed_qa_user_prompt.return_value = "Review this fix."
         context.build_config.has_build_command.return_value = False
         return context
 

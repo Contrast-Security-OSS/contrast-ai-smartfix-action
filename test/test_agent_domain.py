@@ -35,8 +35,6 @@ GIT_OPERATIONS_PATCHES = [
     'src.smartfix.domains.scm.git_operations.GitOperations.stage_changes',
     'src.smartfix.domains.scm.git_operations.GitOperations.check_status',
     'src.smartfix.domains.scm.git_operations.GitOperations.commit_changes',
-    'src.smartfix.domains.scm.git_operations.GitOperations.amend_commit',
-    'src.smartfix.domains.scm.git_operations.GitOperations.get_last_commit_changed_files',
     'src.smartfix.domains.scm.git_operations.GitOperations.get_uncommitted_changed_files',
     'src.smartfix.domains.scm.git_operations.GitOperations.push_branch',
     'src.smartfix.domains.scm.git_operations.GitOperations.cleanup_branch'
@@ -59,11 +57,8 @@ class TestSmartFixAgent(unittest.TestCase):
             self.git_mocks.append((patcher, mock))
 
         # Set up common return values for git mocks
-        # get_last_commit_changed_files and get_uncommitted_changed_files should return a list
         for patcher, mock in self.git_mocks:
-            if 'get_last_commit_changed_files' in patcher.attribute:
-                mock.return_value = ["src/file1.py", "src/file2.py"]
-            elif 'get_uncommitted_changed_files' in patcher.attribute:
+            if 'get_uncommitted_changed_files' in patcher.attribute:
                 mock.return_value = ["src/file1.py", "src/file2.py"]
             elif 'check_status' in patcher.attribute:
                 mock.return_value = True  # Has changes
@@ -205,7 +200,6 @@ class TestAgentSession(unittest.TestCase):
         """
         session = AgentSession()
         self.assertFalse(session.is_complete)
-        self.assertEqual(session.qa_attempts, 0)
         self.assertIsNone(session.failure_category)
         self.assertIsNone(session.final_pr_body)
 

@@ -10,10 +10,6 @@ inputs:
   build_command:
     description: 'Command to build the application'
     required: false
-  max_qa_attempts:
-    description: 'Maximum number of QA intervention attempts'
-    required: false
-    default: '6'
   formatting_command:
     description: 'Command to format code (optional)'
     required: false
@@ -73,10 +69,6 @@ inputs:
     required: false
   skip_writing_security_test:
     description: 'Whether to attempt writing security tests'
-    required: false
-    default: 'false'
-  skip_qa_review:
-    description: 'Whether to skip QA review'
     required: false
     default: 'false'
   debug_mode:
@@ -419,8 +411,6 @@ runs:
       env:
         # --- Build Command ---
         BUILD_COMMAND: ${{ inputs.build_command }}
-        # --- Max QA Intervention Attempts ---
-        MAX_QA_ATTEMPTS: ${{ inputs.max_qa_attempts }}
         # --- Formatting Command ---
         FORMATTING_COMMAND: ${{ inputs.formatting_command }}
         # --- Max Open PRs ---
@@ -451,8 +441,6 @@ runs:
         MAX_EVENTS_PER_AGENT: ${{ inputs.max_events_per_agent }}
         # --- Test Writing Configuration ---
         SKIP_WRITING_SECURITY_TEST: ${{ inputs.skip_writing_security_test }}
-        # --- QA Configuration ---
-        SKIP_QA_REVIEW: ${{ inputs.skip_qa_review }}
         # --- Debug Mode ---
         DEBUG_MODE: ${{ inputs.debug_mode }}
         # --- Vulnerability Configuration ---

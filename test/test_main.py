@@ -168,9 +168,7 @@ class TestMain(unittest.TestCase):
             'remediationId': 'REM-TEST-123',
             'sessionId': 'session-123',
             'fixSystemPrompt': 'Fix the vulnerability',
-            'fixUserPrompt': 'Please fix',
-            'qaSystemPrompt': 'Review the fix',
-            'qaUserPrompt': 'Is it good?'
+            'fixUserPrompt': 'Please fix'
         }
 
         # Return same vuln twice, then None to stop loop
@@ -213,8 +211,6 @@ class TestMain(unittest.TestCase):
             'sessionId': 'session-456',
             'fixSystemPrompt': 'Fix the vulnerability',
             'fixUserPrompt': 'Please fix',
-            'qaSystemPrompt': 'Review the fix',
-            'qaUserPrompt': 'Is it good?',
         }
         # Return one vuln, then None to stop the loop
         self.mock_api.side_effect = [vuln_data, None]

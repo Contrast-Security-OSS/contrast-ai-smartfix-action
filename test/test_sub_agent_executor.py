@@ -21,7 +21,7 @@
 Tests for sub_agent_executor.py module.
 
 Tests the SubAgentExecutor class including:
-- Agent creation (fix and qa agents)
+- Agent creation (fix agents)
 - Event processing and execution
 - Telemetry collection
 - Error handling and cleanup
@@ -158,7 +158,7 @@ class TestSubAgentExecutorContentProcessing(unittest.TestCase):
         mock_event.content.text = "Agent is analyzing the code..."
 
         # Act
-        result = executor._process_content(mock_event, "fix")
+        result = executor._process_content(mock_event)
 
         # Assert
         self.assertEqual(result, "Agent is analyzing the code...")
@@ -179,7 +179,7 @@ class TestSubAgentExecutorContentProcessing(unittest.TestCase):
         mock_event.content.parts = [Mock(text="Processing vulnerability...")]
 
         # Act
-        result = executor._process_content(mock_event, "qa")
+        result = executor._process_content(mock_event)
 
         # Assert
         self.assertEqual(result, "Processing vulnerability...")
@@ -198,7 +198,7 @@ class TestSubAgentExecutorContentProcessing(unittest.TestCase):
         mock_event.content = None
 
         # Act
-        result = executor._process_content(mock_event, "fix")
+        result = executor._process_content(mock_event)
 
         # Assert
         self.assertIsNone(result)
@@ -229,7 +229,6 @@ class TestSubAgentExecutorAgentCreation(unittest.TestCase):
                     target_folder=Path("/tmp/test"),
                     remediation_id="test-123",
                     session_id="session-456",
-                    agent_type="fix",
                     system_prompt="Test prompt"
                 ))
 
@@ -261,7 +260,6 @@ class TestSubAgentExecutorAgentCreation(unittest.TestCase):
                     target_folder=Path("/tmp/test"),
                     remediation_id="test-123",
                     session_id="session-456",
-                    agent_type="fix",
                     system_prompt=None
                 ))
 
@@ -303,7 +301,6 @@ class TestSubAgentExecutorAgentCreation(unittest.TestCase):
                 target_folder=Path("/tmp/test"),
                 remediation_id="test-123",
                 session_id="session-456",
-                agent_type="fix",
                 system_prompt="You are a helpful fix agent"
             ))
 
@@ -355,8 +352,7 @@ class TestSubAgentExecutorAgentCreation(unittest.TestCase):
                 target_folder=Path("/tmp/test"),
                 remediation_id="test-123",
                 session_id="session-456",
-                agent_type="qa",
-                system_prompt="You are a helpful QA agent"
+                system_prompt="You are a helpful fix agent"
             ))
 
             # Assert
@@ -371,10 +367,10 @@ class TestSubAgentExecutorAgentCreation(unittest.TestCase):
             self.assertEqual(headers["Api-Key"], "test-api-key")
             self.assertEqual(headers["Authorization"], "test-auth-key")
             self.assertEqual(headers["x-contrast-llm-session-id"], "session-456")
-            # Verify agent was created with qa name
+            # Verify agent was created with fix agent name
             mock_agent_class.assert_called_once()
             agent_kwargs = mock_agent_class.call_args[1]
-            self.assertEqual(agent_kwargs["name"], "contrast_qa_agent")
+            self.assertEqual(agent_kwargs["name"], "contrast_fix_agent")
 
     def test_create_agent_handles_creation_exception(self):
         """
@@ -407,7 +403,6 @@ class TestSubAgentExecutorAgentCreation(unittest.TestCase):
                     target_folder=Path("/tmp/test"),
                     remediation_id="test-123",
                     session_id="session-456",
-                    agent_type="fix",
                     system_prompt="Test prompt"
                 ))
 
@@ -443,7 +438,7 @@ class TestSubAgentExecutorFunctionProcessing(unittest.TestCase):
         telemetry = []
 
         # Act
-        executor._process_function_calls(mock_event, "fix", telemetry)
+        executor._process_function_calls(mock_event, telemetry)
 
         # Assert
         self.assertEqual(len(telemetry), 2)
@@ -468,7 +463,7 @@ class TestSubAgentExecutorFunctionProcessing(unittest.TestCase):
         telemetry = []
 
         # Act
-        executor._process_function_calls(mock_event, "fix", telemetry)
+        executor._process_function_calls(mock_event, telemetry)
 
         # Assert
         self.assertEqual(len(telemetry), 0)
@@ -492,7 +487,7 @@ class TestSubAgentExecutorFunctionProcessing(unittest.TestCase):
         telemetry = []
 
         # Act
-        executor._process_function_responses(mock_event, "fix", telemetry)
+        executor._process_function_responses(mock_event, telemetry)
 
         # Assert
         self.assertEqual(len(telemetry), 1)
@@ -518,7 +513,7 @@ class TestSubAgentExecutorFunctionProcessing(unittest.TestCase):
         telemetry = []
 
         # Act
-        executor._process_function_responses(mock_event, "qa", telemetry)
+        executor._process_function_responses(mock_event, telemetry)
 
         # Assert
         self.assertEqual(len(telemetry), 1)
@@ -544,7 +539,7 @@ class TestSubAgentExecutorFunctionProcessing(unittest.TestCase):
         telemetry = []
 
         # Act
-        executor._process_function_responses(mock_event, "fix", telemetry)
+        executor._process_function_responses(mock_event, telemetry)
 
         # Assert
         self.assertEqual(len(telemetry), 1)

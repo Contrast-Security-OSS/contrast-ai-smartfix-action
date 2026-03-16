@@ -23,8 +23,6 @@ from enum import Enum
 class FailureCategory(Enum):
     """Define failure categories as an enum to ensure consistency."""
     INITIAL_BUILD_FAILURE = "INITIAL_BUILD_FAILURE"
-    EXCEEDED_QA_ATTEMPTS = "EXCEEDED_QA_ATTEMPTS"
-    QA_AGENT_FAILURE = "QA_AGENT_FAILURE"
     GIT_COMMAND_FAILURE = "GIT_COMMAND_FAILURE"
     AGENT_FAILURE = "AGENT_FAILURE"
     GENERATE_PR_FAILURE = "GENERATE_PR_FAILURE"

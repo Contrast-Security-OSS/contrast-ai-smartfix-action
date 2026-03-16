@@ -152,7 +152,6 @@ class TestEventLoopUtils(unittest.TestCase):
         # Use asyncio.run to execute the async function - should exit early
         with self.assertRaises(SystemExit):
             asyncio.run(event_loop_utils._run_agent_internal_with_prompts(
-                agent_type="fix",
                 repo_root=Path("/tmp/repo"),
                 query="Test query",
                 system_prompt="Test prompt",
@@ -179,7 +178,6 @@ class TestEventLoopUtils(unittest.TestCase):
 
         with self.assertRaises(SystemExit):
             asyncio.run(event_loop_utils._run_agent_internal_with_prompts(
-                agent_type="fix",
                 repo_root=Path("/tmp/repo"),
                 query="Test query",
                 system_prompt="Test prompt",
@@ -215,7 +213,6 @@ class TestEventLoopUtils(unittest.TestCase):
 
         with self.assertRaises(SystemExit):
             asyncio.run(event_loop_utils._run_agent_internal_with_prompts(
-                agent_type="qa",
                 repo_root=Path("/tmp/repo"),
                 query="Test query",
                 system_prompt="Test prompt",
@@ -250,7 +247,6 @@ class TestEventLoopUtils(unittest.TestCase):
         mock_executor_class.return_value = mock_executor
 
         result = asyncio.run(event_loop_utils._run_agent_internal_with_prompts(
-            agent_type="fix",
             repo_root=Path("/tmp/repo"),
             query="Fix SQL injection",
             system_prompt="You are a security fix agent",
@@ -293,10 +289,9 @@ class TestEventLoopUtils(unittest.TestCase):
         mock_policy = MagicMock()
         with patch('asyncio.WindowsProactorEventLoopPolicy', mock_policy, create=True):
             result = asyncio.run(event_loop_utils._run_agent_internal_with_prompts(
-                agent_type="qa",
                 repo_root=Path("/tmp/repo"),
                 query="Verify fix",
-                system_prompt="You are a QA agent",
+                system_prompt="You are a fix agent",
                 remediation_id="REM-WIN",
                 session_id="SESSION-WIN"
             ))

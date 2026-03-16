@@ -211,7 +211,6 @@ def _run_agent_in_event_loop(coroutine_func, *args, **kwargs) -> Any:
 
 
 async def _run_agent_internal_with_prompts(
-    agent_type: str,
     repo_root: Path,
     query: str,
     system_prompt: str,
@@ -220,10 +219,9 @@ async def _run_agent_internal_with_prompts(
     additional_tools: list = None
 ) -> str:
     """
-    Internal helper to run either fix or QA agent with API-provided prompts. Returns summary.
+    Internal helper to run either fix agent with API-provided prompts. Returns summary.
 
     Args:
-        agent_type: Type of agent ("fix" or "qa")
         repo_root: Path to repository root
         query: User query/prompt for the agent
         system_prompt: System prompt for agent instructions
@@ -306,7 +304,7 @@ async def _run_agent_internal_with_prompts(
         mcp_logger.addFilter(cleanup_filter)
 
     if not ADK_AVAILABLE:
-        log(f"FATAL: {agent_type.capitalize()} Agent execution skipped: ADK libraries not available (import failed).")
+        log("FATAL: Agent execution skipped: ADK libraries not available (import failed).")
         error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
 
     session = None
@@ -315,29 +313,29 @@ async def _run_agent_internal_with_prompts(
     try:
         session_service = InMemorySessionService()
         artifacts_service = InMemoryArtifactService()
-        app_name = f'contrast_{agent_type}_app'
+        app_name = 'contrast_fix_app'
         session = await session_service.create_session(
             state={},
             app_name=app_name,
-            user_id=f'github_action_{agent_type}'
+            user_id='github_action_fix'
         )
     except Exception as e:
         # Handle any errors in session creation
-        log(f"FATAL: Failed to create {agent_type.capitalize()} agent session: {e}", is_error=True)
+        log(f"FATAL: Failed to create fix agent session: {e}", is_error=True)
         error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
 
     # Use SubAgentExecutor to create and execute the agent
     executor = SubAgentExecutor()
 
     agent = await executor.create_agent(
-        repo_root, remediation_id, session_id, agent_type=agent_type, system_prompt=system_prompt,
+        repo_root, remediation_id, session_id, system_prompt=system_prompt,
         additional_tools=additional_tools
     )
     if not agent:
         log(
-            f"AI Agent creation failed ({agent_type} agent). "
-            f"Possible reasons: MCP server connection issue, missing prompts, "
-            f"model configuration error, or internal ADK problem."
+            "AI Agent creation failed (fix agent). "
+            "Possible reasons: MCP server connection issue, missing prompts, "
+            "model configuration error, or internal ADK problem."
         )
         error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
 
@@ -349,5 +347,5 @@ async def _run_agent_internal_with_prompts(
     )
 
     # Execute the agent using the executor
-    summary = await executor.execute_agent(runner, agent, session, query, remediation_id, agent_type)
+    summary = await executor.execute_agent(runner, agent, session, query, remediation_id)
     return summary

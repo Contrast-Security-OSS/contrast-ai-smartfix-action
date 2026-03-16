@@ -155,7 +155,6 @@ class Config:
             self._validate_command("FORMATTING_COMMAND", self.FORMATTING_COMMAND, source=self._format_command_source)
 
         # --- Validated and normalized settings ---
-        self.MAX_QA_ATTEMPTS = self._get_validated_int("MAX_QA_ATTEMPTS", default=6, min_val=0, max_val=10)
         self.MAX_OPEN_PRS = self._get_validated_int("MAX_OPEN_PRS", default=5, min_val=0)
         self.MAX_EVENTS_PER_AGENT = self._get_validated_int("MAX_EVENTS_PER_AGENT", default=120, min_val=10, max_val=500)
 
@@ -190,7 +189,6 @@ class Config:
 
         # --- Feature Flags ---
         self.SKIP_WRITING_SECURITY_TEST = self._get_bool_env("SKIP_WRITING_SECURITY_TEST", default=False)
-        self.SKIP_QA_REVIEW = self._get_bool_env("SKIP_QA_REVIEW", default=False)
         self.ENABLE_FULL_TELEMETRY = self._get_bool_env("ENABLE_FULL_TELEMETRY", default=True)
         self.USE_CONTRAST_LLM = self._get_bool_env("USE_CONTRAST_LLM", default=True)
         self.ENABLE_ANTHROPIC_PROMPT_CACHING = self._get_bool_env("ENABLE_ANTHROPIC_PROMPT_CACHING", default=True)
@@ -486,7 +484,6 @@ class Config:
             _log_config_message(f"Agent Model: {self.AGENT_MODEL}")
         _log_config_message(f"Coding Agent: {self.CODING_AGENT}")
         _log_config_message(f"Skip Writing Security Test: {self.SKIP_WRITING_SECURITY_TEST}")
-        _log_config_message(f"Skip QA Review: {self.SKIP_QA_REVIEW}")
         _log_config_message(f"Vulnerability Severities: {self.VULNERABILITY_SEVERITIES}")
         _log_config_message(f"Max Events Per Agent: {self.MAX_EVENTS_PER_AGENT}")
         _log_config_message(f"Enable Full Telemetry: {self.ENABLE_FULL_TELEMETRY}")

@@ -37,57 +37,34 @@ class TestSessionHandler(unittest.TestCase):
         """Set up test fixtures."""
         self.session_handler = SessionHandler()
 
-    def create_mock_session(self, success=True, qa_attempts=0, failure_category=None, pr_body="Test PR body"):
+    def create_mock_session(self, success=True, failure_category=None, pr_body="Test PR body"):
         """Helper to create a mock session object."""
         session = MagicMock()
         session.success = success
-        session.qa_attempts = qa_attempts
         session.failure_category = failure_category
         session.pr_body = pr_body
         return session
 
-    def test_generate_qa_section_success_no_attempts(self):
-        """Test QA section generation for successful session with no QA attempts."""
-        session = self.create_mock_session(success=True, qa_attempts=0)
-        config = QASectionConfig(skip_qa_review=False, has_build_command=True, build_command="pytest")
-
-        result = self.session_handler.generate_qa_section(session, config)
-
-        self.assertIn("Success (passed on first attempt)", result)
-        self.assertIn("Build Run:** Yes (`pytest`)", result)
-
-    def test_generate_qa_section_success_with_attempts(self):
-        """Test QA section generation for successful session with QA attempts."""
-        session = self.create_mock_session(success=True, qa_attempts=2)
-        config = QASectionConfig(skip_qa_review=False, has_build_command=True, build_command="npm test")
+    def test_generate_qa_section_success_with_build_command(self):
+        """Test QA section generation for successful session with build command."""
+        session = self.create_mock_session(success=True)
+        config = QASectionConfig(has_build_command=True, build_command="pytest")
 
         result = self.session_handler.generate_qa_section(session, config)
 
         self.assertIn("Final Build Status:** Success", result)
-        self.assertNotIn("passed on first attempt", result)
-        self.assertIn("Build Run:** Yes (`npm test`)", result)
+        self.assertIn("Build Run:** Yes (`pytest`)", result)
 
-    def test_generate_qa_section_qa_skipped_no_build_command(self):
-        """Test QA section when QA is skipped due to no build command."""
-        session = self.create_mock_session(success=True, qa_attempts=0)
-        config = QASectionConfig(skip_qa_review=False, has_build_command=False, build_command="")
-
-        with patch('src.smartfix.domains.workflow.session_handler.log') as mock_log:
-            result = self.session_handler.generate_qa_section(session, config)
-
-        self.assertEqual(result, "")  # Empty section when QA skipped
-        mock_log.assert_called_with("QA Review was skipped as no BUILD_COMMAND was provided.")
-
-    def test_generate_qa_section_qa_skipped_by_config(self):
-        """Test QA section when QA is skipped by configuration."""
-        session = self.create_mock_session(success=True, qa_attempts=0)
-        config = QASectionConfig(skip_qa_review=True, has_build_command=True, build_command="make test")
+    def test_generate_qa_section_no_build_command(self):
+        """Test QA section when no build command is provided."""
+        session = self.create_mock_session(success=True)
+        config = QASectionConfig(has_build_command=False, build_command="")
 
         with patch('src.smartfix.domains.workflow.session_handler.log') as mock_log:
             result = self.session_handler.generate_qa_section(session, config)
 
-        self.assertEqual(result, "")  # Empty section when QA skipped
-        mock_log.assert_called_with("QA Review was skipped based on SKIP_QA_REVIEW setting.")
+        self.assertEqual(result, "")  # Empty section when no build command
+        mock_log.assert_called_with("Review section skipped: no BUILD_COMMAND was provided.")
 
     def test_handle_session_result_success(self):
         """Test session result handling for successful session."""
@@ -141,10 +118,9 @@ class TestSessionHandler(unittest.TestCase):
         This test simulates the exact scenario that was causing false positive
         "Success (passed on first attempt)" messages.
         """
-        # Bug scenario: qa_attempts == 0 AND session failed
+        # Bug scenario: session failed
         failed_session = self.create_mock_session(
             success=False,
-            qa_attempts=0,
             failure_category=MagicMock(value="INITIAL_BUILD_FAILURE")
         )
 
@@ -155,37 +131,34 @@ class TestSessionHandler(unittest.TestCase):
         self.assertEqual(result.failure_category, "INITIAL_BUILD_FAILURE")
 
         # Legitimate success scenario should still work
-        success_session = self.create_mock_session(success=True, qa_attempts=0)
+        success_session = self.create_mock_session(success=True)
         result = self.session_handler.handle_session_result(success_session)
 
         self.assertTrue(result.should_continue)  # Should continue to PR generation
         self.assertIsNone(result.failure_category)
 
         # Generate QA section for legitimate success
-        config = QASectionConfig(skip_qa_review=False, has_build_command=True, build_command="pytest")
+        config = QASectionConfig(has_build_command=True, build_command="pytest")
         qa_section = self.session_handler.generate_qa_section(success_session, config)
 
-        self.assertIn("Success (passed on first attempt)", qa_section)
+        self.assertIn("Final Build Status:** Success", qa_section)
 
-    def test_session_failure_with_qa_attempts(self):
+    def test_session_failure_with_category(self):
         """
-        Test that session failure returns should_continue=False even when qa_attempts > 0.
+        Test that session failure returns should_continue=False with a failure category.
 
-        This specifically tests the scenario where session success is false
-        but qa_attempts is greater than 0, ensuring proper failure handling.
+        This specifically tests the scenario where session success is false,
+        ensuring proper failure handling.
         """
-        # Failure scenario: session failed but QA attempts were made
         mock_failure_category = MagicMock()
         mock_failure_category.value = "QA_BUILD_FAILURE"
-        failed_session_with_qa = self.create_mock_session(
+        failed_session = self.create_mock_session(
             success=False,
-            qa_attempts=3,  # QA was attempted multiple times
             failure_category=mock_failure_category
         )
 
-        result = self.session_handler.handle_session_result(failed_session_with_qa)
+        result = self.session_handler.handle_session_result(failed_session)
 
-        # Should NOT continue regardless of qa_attempts when session failed
         self.assertFalse(result.should_continue)
         self.assertEqual(result.failure_category, "QA_BUILD_FAILURE")
         self.assertIsNone(result.ai_fix_summary)

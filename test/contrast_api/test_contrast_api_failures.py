@@ -43,8 +43,6 @@ class TestContrastApiFailureCategories(unittest.TestCase):
         """Test that all expected failure categories are present"""
         expected_categories = [
             "INITIAL_BUILD_FAILURE",
-            "EXCEEDED_QA_ATTEMPTS",
-            "QA_AGENT_FAILURE",
             "GIT_COMMAND_FAILURE",
             "AGENT_FAILURE",
             "GENERATE_PR_FAILURE",

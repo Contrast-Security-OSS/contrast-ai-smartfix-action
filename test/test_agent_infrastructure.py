@@ -212,7 +212,6 @@ class TestSubAgentExecutor(unittest.TestCase):
             target_folder=Path('/test'),
             remediation_id='test-123',
             session_id='test-session-123',
-            agent_type='fix',
             system_prompt='Test prompt'
         ))
 
@@ -246,7 +245,6 @@ class TestSubAgentExecutor(unittest.TestCase):
             target_folder=Path('/test'),
             remediation_id='test-123',
             session_id='session-456',
-            agent_type='qa',
             system_prompt='QA test prompt'
         ))
 
@@ -277,7 +275,6 @@ class TestSubAgentExecutor(unittest.TestCase):
             target_folder=Path('/test'),
             remediation_id='test-123',
             session_id='test-session-123',
-            agent_type='fix',
             system_prompt='Test prompt'
         ))
 
@@ -298,7 +295,6 @@ class TestSubAgentExecutor(unittest.TestCase):
             target_folder=Path('/test'),
             remediation_id='test-123',
             session_id='test-session-123',
-            agent_type='fix',
             system_prompt=None
         ))
 
@@ -358,7 +354,7 @@ class TestSubAgentExecutor(unittest.TestCase):
         mock_event = MagicMock()
         mock_event.content.text = 'Agent response text'
 
-        result = executor._process_content(mock_event, 'fix')
+        result = executor._process_content(mock_event)
 
         self.assertEqual(result, 'Agent response text')
 
@@ -374,7 +370,7 @@ class TestSubAgentExecutor(unittest.TestCase):
         mock_part.text = 'Part text'
         mock_event.content.parts = [mock_part]
 
-        result = executor._process_content(mock_event, 'fix')
+        result = executor._process_content(mock_event)
 
         self.assertEqual(result, 'Part text')
 
@@ -386,7 +382,7 @@ class TestSubAgentExecutor(unittest.TestCase):
         mock_event = MagicMock()
         mock_event.content = None
 
-        result = executor._process_content(mock_event, 'fix')
+        result = executor._process_content(mock_event)
 
         self.assertIsNone(result)
 
@@ -402,7 +398,7 @@ class TestSubAgentExecutor(unittest.TestCase):
         mock_call.args = {'path': '/test/file.py'}
         mock_event.get_function_calls.return_value = [mock_call]
 
-        executor._process_function_calls(mock_event, 'fix', telemetry)
+        executor._process_function_calls(mock_event, telemetry)
 
         self.assertEqual(len(telemetry), 1)
         self.assertEqual(telemetry[0]['tool'], 'read_file')
@@ -420,7 +416,7 @@ class TestSubAgentExecutor(unittest.TestCase):
         mock_response.response = 'isError = False, content = file contents'
         mock_event.get_function_responses.return_value = [mock_response]
 
-        executor._process_function_responses(mock_event, 'fix', telemetry)
+        executor._process_function_responses(mock_event, telemetry)
 
         self.assertEqual(len(telemetry), 1)
         self.assertEqual(telemetry[0]['tool'], 'read_file')
@@ -438,7 +434,7 @@ class TestSubAgentExecutor(unittest.TestCase):
         mock_response.response = 'isError = True, error = permission denied'
         mock_event.get_function_responses.return_value = [mock_response]
 
-        executor._process_function_responses(mock_event, 'fix', telemetry)
+        executor._process_function_responses(mock_event, telemetry)
 
         self.assertEqual(len(telemetry), 1)
         self.assertEqual(telemetry[0]['tool'], 'write_file')

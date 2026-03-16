@@ -256,7 +256,6 @@ def main():  # noqa: C901
 
     debug_log(f"Build command: {build_config.build_command}")
     debug_log(f"Formatting command: {build_config.formatting_command}")
-    debug_log(f"Max QA attempts: {config.MAX_QA_ATTEMPTS}")
     debug_log(f"Repository path: {repo_config.repo_path}")
 
     # Use the validated and normalized settings from config module
@@ -400,9 +399,7 @@ def main():  # noqa: C901
                 PromptConfiguration.validate_raw_prompts_data(vulnerability_data)
                 prompts = PromptConfiguration.for_smartfix_agent(
                     fix_system_prompt=vulnerability_data['fixSystemPrompt'],
-                    fix_user_prompt=vulnerability_data['fixUserPrompt'],
-                    qa_system_prompt=vulnerability_data['qaSystemPrompt'],
-                    qa_user_prompt=vulnerability_data['qaUserPrompt']
+                    fix_user_prompt=vulnerability_data['fixUserPrompt']
                 )
             except ValueError as e:
                 log(f"Error: Invalid prompts from backend: {e}", is_error=True)
@@ -508,7 +505,7 @@ def main():  # noqa: C901
         smartfix_agent = GitHubAgentFactory.create_agent(CodingAgents.SMARTFIX)
 
         # Run the agent remediation process
-        # The agent will run the fix agent and QA loop without doing any git operations
+        # The agent will run the fix agent loop without doing any git operations
         # All git operations (staging, committing) happen in main.py after remediate() completes
         session = smartfix_agent.remediate(context)
 
@@ -517,7 +514,7 @@ def main():  # noqa: C901
         session_result = session_handler.handle_session_result(session)
 
         if not session_result.should_continue:
-            # QA Agent failed to fix the build
+            # Agent failed to fix the build
             log(f"Agent failed with reason: {session_result.failure_category}")
             git_ops.cleanup_branch(new_branch_name)
             contrast_api.notify_remediation_failed(
@@ -532,17 +529,15 @@ def main():  # noqa: C901
             continue  # Move to next vulnerability
 
         ai_fix_summary_full = session_result.ai_fix_summary
-        # Generate QA section based on session results
-        # The SmartFix agent already handled the QA loop internally
+        # Generate review section based on session results
         qa_config = QASectionConfig(
-            skip_qa_review=config.SKIP_QA_REVIEW,
             has_build_command=build_config.has_build_command(),
             build_command=build_config.build_command
         )
         qa_section = session_handler.generate_qa_section(session, qa_config)
 
         # --- Git and GitHub Operations ---
-        # All file changes from the agent (fix + QA + formatting) are uncommitted at this point
+        # All file changes from the agent (fix + formatting) are uncommitted at this point
         # Stage and commit everything together
         log("\n--- Proceeding with Git & GitHub Operations ---")
         git_ops.stage_changes()
@@ -564,7 +559,7 @@ def main():  # noqa: C901
             processed_one = True
             continue
 
-        # Commit all changes together (fix + QA fixes + formatting)
+        # Commit all changes together (fix + formatting)
         commit_message = git_ops.generate_commit_message(vuln_title, vuln_uuid)
         git_ops.commit_changes(commit_message)
         log("Committed all agent changes.")

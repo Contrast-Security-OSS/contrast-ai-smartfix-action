@@ -3,7 +3,7 @@ SmartFixAgent - Internal Contrast AI SmartFix coding agent implementation.
 
 This module contains the SmartFixAgent class which orchestrates the Fix Agent
 workflow for vulnerability remediation. The Fix agent uses a BuildTool to
-verify its changes compile correctly — no separate QA agent is needed.
+verify its changes compile correctly.
 """
 
 import re

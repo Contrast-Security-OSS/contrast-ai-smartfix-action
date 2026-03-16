@@ -155,7 +155,6 @@ class TestConfigIntegration(unittest.TestCase):
     def test_all_feature_flags_work_together(self):
         """Test that USE_CONTRAST_LLM works alongside other feature flags."""
         os.environ['USE_CONTRAST_LLM'] = 'true'
-        os.environ['SKIP_QA_REVIEW'] = 'false'
         os.environ['SKIP_WRITING_SECURITY_TEST'] = 'true'
         os.environ['ENABLE_FULL_TELEMETRY'] = 'false'
         reset_config()
@@ -164,7 +163,6 @@ class TestConfigIntegration(unittest.TestCase):
 
         # Verify all feature flags are set correctly
         self.assertTrue(config.USE_CONTRAST_LLM)
-        self.assertFalse(config.SKIP_QA_REVIEW)
         self.assertTrue(config.SKIP_WRITING_SECURITY_TEST)
         self.assertFalse(config.ENABLE_FULL_TELEMETRY)
 
