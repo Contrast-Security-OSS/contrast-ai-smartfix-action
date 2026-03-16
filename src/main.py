@@ -500,7 +500,6 @@ def main():  # noqa: C901
             continue
 
         # --- Run SmartFix Agent ---
-        # NOTE: The agent will validate the initial build before attempting fixes
         # Create SmartFix agent (no config needed - gets everything from context)
         smartfix_agent = GitHubAgentFactory.create_agent(CodingAgents.SMARTFIX)
 
@@ -514,19 +513,30 @@ def main():  # noqa: C901
         session_result = session_handler.handle_session_result(session)
 
         if not session_result.should_continue:
-            # Agent failed to fix the build
             log(f"Agent failed with reason: {session_result.failure_category}")
             git_ops.cleanup_branch(new_branch_name)
+
+            # Map internal failure categories to server-recognized values
+            api_failure_category = session_result.failure_category
+            if api_failure_category == FailureCategory.BUILD_VERIFICATION_FAILED.value:
+                api_failure_category = FailureCategory.AGENT_FAILURE.value
+
             contrast_api.notify_remediation_failed(
                 remediation_id=remediation_id,
-                failure_category=session_result.failure_category,
+                failure_category=api_failure_category,
                 contrast_host=config.CONTRAST_HOST,
                 contrast_org_id=config.CONTRAST_ORG_ID,
                 contrast_app_id=config.CONTRAST_APP_ID,
                 contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
                 contrast_api_key=config.CONTRAST_API_KEY
             )
-            continue  # Move to next vulnerability
+
+            # Build verification failure means the build environment is broken —
+            # continuing to the next vuln would waste LLM spend on the same failure
+            if session_result.failure_category == FailureCategory.BUILD_VERIFICATION_FAILED.value:
+                error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
+
+            continue  # Move to next vulnerability for other failure types
 
         ai_fix_summary_full = session_result.ai_fix_summary
         # Generate review section based on session results
