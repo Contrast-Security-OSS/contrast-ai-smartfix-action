@@ -210,7 +210,6 @@ class SmartFixAgent(CodingAgentStrategy):
         fix_user_prompt_with_tree = context.prompts.fix_user_prompt + build_instruction + directory_tree
         agent_summary_str = _run_agent_in_event_loop(
             _run_agent_internal_with_prompts,
-            'fix',
             repo_path,
             fix_user_prompt_with_tree,
             context.prompts.fix_system_prompt,

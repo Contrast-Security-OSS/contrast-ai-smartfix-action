@@ -414,7 +414,7 @@ class TestSmartfixAgentDirectoryTreeIntegration(unittest.TestCase):
                 agent._run_fix_agent_execution(context)
 
         mock_tree.assert_called_once_with(context.repo_config.repo_path)
-        actual_prompt = mock_run.call_args[0][3]
+        actual_prompt = mock_run.call_args[0][2]
         self.assertEqual(actual_prompt, "Fix this vulnerability." + tree_section)
 
     def test_fix_agent_tree_called_with_correct_repo_path(self):
