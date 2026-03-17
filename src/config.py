@@ -91,8 +91,6 @@ class Config:
 
         # --- Build and Formatting Configuration ---
         is_build_command_required = self.RUN_TASK == "generate_fix" and is_smartfix_coding_agent
-        # Initialize MAX_COMMAND_DETECTION_ATTEMPTS early (needed by _auto_detect_build_command)
-        self.MAX_COMMAND_DETECTION_ATTEMPTS = self._get_validated_int("MAX_COMMAND_DETECTION_ATTEMPTS", default=6, min_val=0, max_val=10)
 
         # Make BUILD_COMMAND optional in tests
         if testing and "BUILD_COMMAND" not in env and is_build_command_required:
