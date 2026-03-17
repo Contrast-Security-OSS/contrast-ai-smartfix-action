@@ -20,7 +20,6 @@ from src.smartfix.config.command_detector import (
     inspect_makefile_targets,
     generate_build_command_candidates,
     generate_format_command_candidates,
-    detect_package_manager,
 )
 
 
@@ -157,7 +156,7 @@ class TestGenerateBuildCommandCandidates(unittest.TestCase):
             self.assertIn('pytest', candidates)
 
     def test_npm_project(self):
-        """Generate npm commands for package.json."""
+        """Generate npm commands for package.json (default when no lock file)."""
         with tempfile.TemporaryDirectory() as tmpdir:
             repo_root = Path(tmpdir)
             (repo_root / 'package.json').touch()
@@ -166,6 +165,45 @@ class TestGenerateBuildCommandCandidates(unittest.TestCase):
 
             self.assertIn('npm test', candidates)
             self.assertIn('npm run build', candidates)
+
+    def test_yarn_project(self):
+        """Generate yarn commands when yarn.lock exists."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            (repo_root / 'package.json').touch()
+            (repo_root / 'yarn.lock').touch()
+
+            candidates = generate_build_command_candidates(repo_root)
+
+            self.assertIn('yarn test', candidates)
+            self.assertIn('yarn run build', candidates)
+            self.assertNotIn('npm test', candidates)
+
+    def test_pnpm_project(self):
+        """Generate pnpm commands when pnpm-lock.yaml exists."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            (repo_root / 'package.json').touch()
+            (repo_root / 'pnpm-lock.yaml').touch()
+
+            candidates = generate_build_command_candidates(repo_root)
+
+            self.assertIn('pnpm test', candidates)
+            self.assertIn('pnpm run build', candidates)
+            self.assertNotIn('npm test', candidates)
+
+    def test_bun_project(self):
+        """Generate bun commands when bun.lockb exists."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            (repo_root / 'package.json').touch()
+            (repo_root / 'bun.lockb').touch()
+
+            candidates = generate_build_command_candidates(repo_root)
+
+            self.assertIn('bun test', candidates)
+            self.assertIn('bun run build', candidates)
+            self.assertNotIn('npm test', candidates)
 
     def test_makefile_integration(self):
         """Include Makefile targets in candidates."""
@@ -270,63 +308,6 @@ class TestGenerateFormatCommandCandidates(unittest.TestCase):
             candidates = generate_format_command_candidates(repo_root)
 
             self.assertEqual(candidates, [])
-
-
-class TestDetectPackageManager(unittest.TestCase):
-    """Test package manager detection."""
-
-    def test_detects_npm(self):
-        """Detect npm from package-lock.json."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            repo_root = Path(tmpdir)
-            (repo_root / 'package-lock.json').touch()
-
-            pm = detect_package_manager(repo_root)
-            self.assertEqual(pm, 'npm')
-
-    def test_detects_yarn(self):
-        """Detect yarn from yarn.lock."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            repo_root = Path(tmpdir)
-            (repo_root / 'yarn.lock').touch()
-
-            pm = detect_package_manager(repo_root)
-            self.assertEqual(pm, 'yarn')
-
-    def test_detects_pnpm(self):
-        """Detect pnpm from pnpm-lock.yaml."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            repo_root = Path(tmpdir)
-            (repo_root / 'pnpm-lock.yaml').touch()
-
-            pm = detect_package_manager(repo_root)
-            self.assertEqual(pm, 'pnpm')
-
-    def test_detects_bun(self):
-        """Detect bun from bun.lockb."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            repo_root = Path(tmpdir)
-            (repo_root / 'bun.lockb').touch()
-
-            pm = detect_package_manager(repo_root)
-            self.assertEqual(pm, 'bun')
-
-    def test_defaults_to_npm_with_package_json(self):
-        """Default to npm if only package.json exists."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            repo_root = Path(tmpdir)
-            (repo_root / 'package.json').touch()
-
-            pm = detect_package_manager(repo_root)
-            self.assertEqual(pm, 'npm')
-
-    def test_returns_none_without_node_files(self):
-        """Return None for non-Node.js projects."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            repo_root = Path(tmpdir)
-
-            pm = detect_package_manager(repo_root)
-            self.assertIsNone(pm)
 
 
 class TestCommandValidationIntegration(unittest.TestCase):

@@ -97,6 +97,17 @@ def inspect_makefile_targets(makefile_path: Path) -> List[str]:
     return priority_found + other_targets
 
 
+def _detect_js_package_manager(search_dir: Path) -> str:
+    """Detect JS package manager from lock files. Defaults to npm."""
+    if (search_dir / 'yarn.lock').exists():
+        return 'yarn'
+    if (search_dir / 'pnpm-lock.yaml').exists():
+        return 'pnpm'
+    if (search_dir / 'bun.lockb').exists():
+        return 'bun'
+    return 'npm'
+
+
 def generate_build_command_candidates(
     repo_root: Path,
     project_dir: Optional[Path] = None
@@ -170,19 +181,21 @@ def generate_build_command_candidates(
             'python setup.py test',
         ])
 
-    # Node.js / JavaScript
+    # Node.js / JavaScript — detect package manager from lock files
     if (search_dir / 'package.json').exists():
+        pkg_cmd = _detect_js_package_manager(search_dir)
+
         if rel_path:
             candidates.extend([
-                f'npm --prefix {rel_path} test',
-                f'npm --prefix {rel_path} run build',
-                f'npm --prefix {rel_path} run test',
+                f'{pkg_cmd} --prefix {rel_path} test',
+                f'{pkg_cmd} --prefix {rel_path} run build',
+                f'{pkg_cmd} --prefix {rel_path} run test',
             ])
         else:
             candidates.extend([
-                'npm test',
-                'npm run build',
-                'npm run test',
+                f'{pkg_cmd} test',
+                f'{pkg_cmd} run build',
+                f'{pkg_cmd} run test',
             ])
 
     # PHP
@@ -239,10 +252,10 @@ def generate_format_command_candidates(
 
     # JavaScript/TypeScript formatters
     if (search_dir / 'package.json').exists():
+        pkg_cmd = _detect_js_package_manager(search_dir)
         candidates.extend([
             'prettier --write .',
-            'npm run format',
-            'yarn format',
+            f'{pkg_cmd} run format',
         ])
 
     # Java formatters
@@ -328,29 +341,6 @@ def _validate_command_exists(command: str, repo_root: Path, timeout: int = 5) ->
         return False
     except Exception:
         return False
-
-
-def detect_package_manager(repo_root: Path) -> Optional[str]:
-    """
-    Detect the package manager used in a Node.js project.
-
-    Args:
-        repo_root: Repository root directory
-
-    Returns:
-        Package manager name ('npm', 'yarn', 'pnpm', 'bun') or None
-    """
-    if (repo_root / 'package-lock.json').exists():
-        return 'npm'
-    if (repo_root / 'yarn.lock').exists():
-        return 'yarn'
-    if (repo_root / 'pnpm-lock.yaml').exists():
-        return 'pnpm'
-    if (repo_root / 'bun.lockb').exists():
-        return 'bun'
-    if (repo_root / 'package.json').exists():
-        return 'npm'  # Default to npm if package.json exists
-    return None
 
 
 def detect_build_command(
