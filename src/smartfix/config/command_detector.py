@@ -54,7 +54,7 @@ def inspect_makefile_targets(makefile_path: Path) -> List[str]:
     """
     Extract target names from a Makefile.
 
-    Parses Makefile for targets matching pattern: ^([a-zA-Z_][a-zA-Z0-9_-]*)\\s*:
+    Parses Makefile for targets matching pattern: ^([a-zA-Z_][a-zA-Z0-9_.-]*)\\s*:
     Prioritizes common targets: test, check, build, all, default
 
     Args:
@@ -78,7 +78,7 @@ def inspect_makefile_targets(makefile_path: Path) -> List[str]:
                     continue
 
                 # Match target pattern: target:
-                match = re.match(r'^([a-zA-Z_][a-zA-Z0-9_-]*)\s*:', line)
+                match = re.match(r'^([a-zA-Z_][a-zA-Z0-9_.-]*)\s*:', line)
                 if match:
                     target = match.group(1)
                     # Validate target name for safety (C1 fix)

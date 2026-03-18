@@ -109,6 +109,30 @@ real-target:
         finally:
             makefile_path.unlink()
 
+    def test_detects_dotted_targets(self):
+        """Targets containing dots (e.g. test.unit) are detected and validated."""
+        makefile_content = """
+test.unit:
+\t@pytest tests/unit
+
+test.integration:
+\t@pytest tests/integration
+
+build:
+\tpython -m build
+"""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='Makefile', delete=False) as f:
+            f.write(makefile_content)
+            makefile_path = Path(f.name)
+
+        try:
+            targets = inspect_makefile_targets(makefile_path)
+            self.assertIn('test.unit', targets)
+            self.assertIn('test.integration', targets)
+            self.assertIn('build', targets)
+        finally:
+            makefile_path.unlink()
+
 
 class TestGenerateBuildCommandCandidates(unittest.TestCase):
     """Test build command candidate generation."""
