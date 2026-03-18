@@ -87,9 +87,12 @@ class SmartFixAgent(CodingAgentStrategy):
         )
 
         if not has_build_config:
-            # No build command available — skip gate
-            debug_log("PR gate skipped: no build command configured or detected")
-            return True
+            log("PR gate failed: no build command configured or detected", is_error=True)
+            session.complete_session(
+                failure_category=FailureCategory.BUILD_VERIFICATION_FAILED,
+                pr_body="Fix agent did not verify a successful build (no build command configured or detected)"
+            )
+            return False
 
         recorded_cmd = self._build_state["build_cmd"] if self._build_state else None
         if recorded_cmd is not None:

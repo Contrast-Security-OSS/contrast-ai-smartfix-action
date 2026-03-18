@@ -68,18 +68,21 @@ class TestBuildToolPRGateIntegration(unittest.TestCase):
         call_kwargs = session.complete_session.call_args[1]
         self.assertEqual(call_kwargs["failure_category"], FailureCategory.BUILD_VERIFICATION_FAILED)
 
-    def test_no_build_config_pr_gate_skipped(self):
-        """No build command configured → PR gate skipped (passes)."""
+    def test_no_build_config_pr_gate_fails(self):
+        """No build command configured → PR gate fails."""
         agent = SmartFixAgent()
         session = Mock()
         context = Mock()
         context.build_config = None
 
         gate_result = agent._check_pr_gate(session, context)
-        self.assertTrue(gate_result)
+        self.assertFalse(gate_result)
+        session.complete_session.assert_called_once()
+        call_kwargs = session.complete_session.call_args[1]
+        self.assertEqual(call_kwargs["failure_category"], FailureCategory.BUILD_VERIFICATION_FAILED)
 
-    def test_empty_build_command_pr_gate_skipped(self):
-        """Build config exists but has_build_command is False → gate skipped."""
+    def test_empty_build_command_pr_gate_fails(self):
+        """Build config exists but has_build_command is False → gate fails."""
         agent = SmartFixAgent()
         session = Mock()
         context = Mock()
@@ -87,7 +90,10 @@ class TestBuildToolPRGateIntegration(unittest.TestCase):
         context.build_config.has_build_command.return_value = False
 
         gate_result = agent._check_pr_gate(session, context)
-        self.assertTrue(gate_result)
+        self.assertFalse(gate_result)
+        session.complete_session.assert_called_once()
+        call_kwargs = session.complete_session.call_args[1]
+        self.assertEqual(call_kwargs["failure_category"], FailureCategory.BUILD_VERIFICATION_FAILED)
 
     @patch('subprocess.run')
     def test_non_recordable_command_does_not_satisfy_gate(self, mock_subprocess):

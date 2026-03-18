@@ -46,13 +46,11 @@ class TestIsRecordableCommand(unittest.TestCase):
     def test_help_commands_not_recordable(self):
         self.assertFalse(_is_recordable_command("mvn --help"))
 
-    def test_shell_utilities_not_recordable(self):
-        self.assertFalse(_is_recordable_command("echo hello"))
-        self.assertFalse(_is_recordable_command("bash -c 'echo test'"))
-        self.assertFalse(_is_recordable_command("cat file.txt"))
+    def test_grep_not_recordable(self):
+        self.assertFalse(_is_recordable_command("grep -r foo ."))
 
-    def test_full_path_shell_utilities_not_recordable(self):
-        self.assertFalse(_is_recordable_command("/usr/bin/echo hello"))
+    def test_full_path_grep_not_recordable(self):
+        self.assertFalse(_is_recordable_command("/usr/bin/grep pattern file.txt"))
 
     def test_empty_command_not_recordable(self):
         self.assertFalse(_is_recordable_command(""))

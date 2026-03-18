@@ -39,9 +39,9 @@ from src.smartfix.shared.failure_categories import FailureCategory
 class TestSmartFixAgentSuccessScenarios(unittest.TestCase):
     """Test successful remediation scenarios"""
 
-    def test_fix_succeeds_without_build_command_returns_success(self):
-        """When fix agent succeeds and no build command is configured,
-        should return successful session (PR gate skipped)."""
+    def test_fix_fails_without_build_command(self):
+        """When fix agent succeeds but no build command is configured,
+        PR gate fails with BUILD_VERIFICATION_FAILED."""
         agent = SmartFixAgent()
         context = Mock(spec=RemediationContext)
         context.build_config = None
@@ -60,8 +60,7 @@ class TestSmartFixAgentSuccessScenarios(unittest.TestCase):
                     session = agent.remediate(context)
 
         self.assertTrue(session.is_complete)
-        self.assertIsNone(session.failure_category)
-        self.assertIn("Fix Applied", session.pr_body)
+        self.assertEqual(session.failure_category, FailureCategory.BUILD_VERIFICATION_FAILED)
 
     def test_fix_succeeds_with_verified_build_returns_success(self):
         """When fix agent succeeds and BuildTool recorded a successful build,
@@ -180,8 +179,8 @@ class TestSmartFixAgentPRGate(unittest.TestCase):
         self.assertEqual(session.failure_category, FailureCategory.BUILD_VERIFICATION_FAILED)
         self.assertIn("did not verify", session.pr_body)
 
-    def test_pr_gate_skipped_when_no_build_config(self):
-        """When no build command is configured, PR gate is skipped."""
+    def test_pr_gate_fails_when_no_build_config(self):
+        """When no build command is configured, PR gate fails."""
         agent = SmartFixAgent()
         context = Mock(spec=RemediationContext)
         context.build_config = Mock()
@@ -200,9 +199,8 @@ class TestSmartFixAgentPRGate(unittest.TestCase):
                 with patch.object(agent, '_extract_pr_body', return_value="## Fix Applied"):
                     session = agent.remediate(context)
 
-        # Should succeed since gate is skipped
         self.assertTrue(session.is_complete)
-        self.assertIsNone(session.failure_category)
+        self.assertEqual(session.failure_category, FailureCategory.BUILD_VERIFICATION_FAILED)
 
 
 class TestSmartFixAgentBuildToolIntegration(unittest.TestCase):

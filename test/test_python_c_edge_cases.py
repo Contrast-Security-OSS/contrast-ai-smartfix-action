@@ -18,7 +18,7 @@ class TestPythonCEdgeCases(unittest.TestCase):
     def test_python3_c_after_pipe(self):
         """python3 -c should be blocked after pipe."""
         with self.assertRaises(CommandValidationError) as cm:
-            validate_command("BUILD_COMMAND", 'echo test | python3 -c "import sys; print(sys.stdin.read())"')
+            validate_command("BUILD_COMMAND", 'npm test | python3 -c "import sys; print(sys.stdin.read())"')
         self.assertIn("dangerous interpreter flag", str(cm.exception).lower())
 
     def test_python_c_with_redirect(self):

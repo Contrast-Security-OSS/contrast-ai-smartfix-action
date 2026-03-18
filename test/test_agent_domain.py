@@ -156,11 +156,15 @@ class TestSmartFixAgent(unittest.TestCase):
         agent = SmartFixAgent()
         mock_context = MagicMock(spec=RemediationContext)
 
-        # Setup context — no build command so PR gate is skipped
         mock_context.build_config = MagicMock()
-        mock_context.build_config.has_build_command.return_value = False
+        mock_context.build_config.has_build_command.return_value = True
+        mock_context.build_config.user_build_command = None
 
-        with patch.object(agent, '_run_fix_agent', return_value="success") as mock_fix:
+        def fix_agent_side_effect(session, context):
+            agent._build_state = {"build_cmd": "mvn test", "format_cmd": None}
+            return "success"
+
+        with patch.object(agent, '_run_fix_agent', side_effect=fix_agent_side_effect) as mock_fix:
             result = agent.remediate(mock_context)
 
             self.assertIsInstance(result, AgentSession)
