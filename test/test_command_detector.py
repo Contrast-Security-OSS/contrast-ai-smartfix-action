@@ -245,6 +245,63 @@ class TestGenerateBuildCommandCandidates(unittest.TestCase):
             # Should use -p flag
             self.assertTrue(any('./gradlew -p backend test' in c for c in candidates))
 
+    def test_monorepo_npm_uses_prefix_flag(self):
+        """npm uses --prefix in monorepo subdirectories."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            subdir = repo_root / 'frontend'
+            subdir.mkdir()
+            (subdir / 'package.json').touch()
+
+            candidates = generate_build_command_candidates(repo_root, project_dir=subdir)
+
+            self.assertIn('npm --prefix frontend test', candidates)
+            self.assertNotIn('npm --cwd frontend test', candidates)
+            self.assertNotIn('npm --dir frontend test', candidates)
+
+    def test_monorepo_yarn_uses_cwd_flag(self):
+        """yarn uses --cwd in monorepo subdirectories."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            subdir = repo_root / 'frontend'
+            subdir.mkdir()
+            (subdir / 'package.json').touch()
+            (subdir / 'yarn.lock').touch()
+
+            candidates = generate_build_command_candidates(repo_root, project_dir=subdir)
+
+            self.assertIn('yarn --cwd frontend test', candidates)
+            self.assertNotIn('yarn --prefix frontend test', candidates)
+
+    def test_monorepo_pnpm_uses_dir_flag(self):
+        """pnpm uses --dir in monorepo subdirectories."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            subdir = repo_root / 'frontend'
+            subdir.mkdir()
+            (subdir / 'package.json').touch()
+            (subdir / 'pnpm-lock.yaml').touch()
+
+            candidates = generate_build_command_candidates(repo_root, project_dir=subdir)
+
+            self.assertIn('pnpm --dir frontend test', candidates)
+            self.assertNotIn('pnpm --prefix frontend test', candidates)
+            self.assertNotIn('pnpm --cwd frontend test', candidates)
+
+    def test_monorepo_bun_uses_cwd_flag(self):
+        """bun uses --cwd in monorepo subdirectories."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            subdir = repo_root / 'frontend'
+            subdir.mkdir()
+            (subdir / 'package.json').touch()
+            (subdir / 'bun.lockb').touch()
+
+            candidates = generate_build_command_candidates(repo_root, project_dir=subdir)
+
+            self.assertIn('bun --cwd frontend test', candidates)
+            self.assertNotIn('bun --prefix frontend test', candidates)
+
     def test_empty_directory(self):
         """Return empty list for directory with no build files."""
         with tempfile.TemporaryDirectory() as tmpdir:

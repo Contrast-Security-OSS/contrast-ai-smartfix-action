@@ -108,6 +108,17 @@ def _detect_js_package_manager(search_dir: Path) -> str:
     return 'npm'
 
 
+def _js_monorepo_dir_flag(pkg_cmd: str, rel_path: str) -> str:
+    """Return the correct subdirectory flag for a JS package manager in monorepo context."""
+    if pkg_cmd == 'npm':
+        return f'--prefix {rel_path}'
+    elif pkg_cmd in ('yarn', 'bun'):
+        return f'--cwd {rel_path}'
+    elif pkg_cmd == 'pnpm':
+        return f'--dir {rel_path}'
+    return f'--prefix {rel_path}'  # fallback
+
+
 def generate_build_command_candidates(
     repo_root: Path,
     project_dir: Optional[Path] = None
@@ -122,6 +133,8 @@ def generate_build_command_candidates(
     - Maven: mvn -f path/to/pom.xml
     - Gradle: ./gradlew -p path/to/subdir
     - npm: npm --prefix path/to/subdir
+    - yarn/bun: yarn/bun --cwd path/to/subdir
+    - pnpm: pnpm --dir path/to/subdir
 
     Args:
         repo_root: Repository root directory
@@ -186,10 +199,11 @@ def generate_build_command_candidates(
         pkg_cmd = _detect_js_package_manager(search_dir)
 
         if rel_path:
+            dir_flag = _js_monorepo_dir_flag(pkg_cmd, rel_path)
             candidates.extend([
-                f'{pkg_cmd} --prefix {rel_path} test',
-                f'{pkg_cmd} --prefix {rel_path} run build',
-                f'{pkg_cmd} --prefix {rel_path} run test',
+                f'{pkg_cmd} {dir_flag} test',
+                f'{pkg_cmd} {dir_flag} run build',
+                f'{pkg_cmd} {dir_flag} run test',
             ])
         else:
             candidates.extend([
