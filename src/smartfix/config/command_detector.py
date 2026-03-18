@@ -191,7 +191,6 @@ def generate_build_command_candidates(
         candidates.extend([
             'pytest',
             'python -m pytest',
-            'python setup.py test',
         ])
 
     # Node.js / JavaScript — detect package manager from lock files
