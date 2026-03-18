@@ -34,6 +34,7 @@ from src.utils import debug_log, log, error_exit
 from src import telemetry_handler
 from src.version_check import do_version_check
 from src.smartfix.domains.workflow.session_handler import create_session_handler, QASectionConfig
+from src.smartfix.domains.workflow.build_runner import run_build_command
 from src.smartfix.shared.failure_categories import FailureCategory
 
 # Import domain-specific handlers
@@ -261,6 +262,25 @@ def main():  # noqa: C901
     # Use the validated and normalized settings from config module
     # These values are already processed in config.py with appropriate validation and defaults
     max_open_prs_setting = config.MAX_OPEN_PRS
+
+    # --- Initial Build Validation ---
+    # If the user explicitly configured a build command, verify it works on the
+    # clean repo before spending LLM credits on vulnerability fixes
+    if build_config.user_build_command:
+        log("\n::group::--- Validating configured build command ---")
+        log(f"Running initial build: {build_config.user_build_command}")
+        build_success, build_output = run_build_command(
+            build_config.user_build_command, repo_config.repo_path, "unknown"
+        )
+        if not build_success:
+            log("Initial build failed. The configured BUILD_COMMAND does not succeed on the "
+                "clean repository. Please verify the command and fix any build issues before "
+                "running SmartFix.", is_error=True)
+            debug_log(f"Build output:\n{build_output}")
+            log("\n::endgroup::")
+            error_exit("unknown", FailureCategory.INITIAL_BUILD_FAILURE.value)
+        log("Initial build succeeded. Proceeding with vulnerability processing.")
+        log("\n::endgroup::")
 
     # --- Initial Setup ---
     git_ops.configure_git_user()
