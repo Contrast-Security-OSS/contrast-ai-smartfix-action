@@ -26,7 +26,6 @@ FORMATTER_PATCHES = [
 # Command validation patches - for testing validation logic
 COMMAND_VALIDATION_PATCHES = [
     'src.smartfix.config.command_validator.validate_command',
-    'src.smartfix.config.command_validator.validate_shell_command',
 ]
 
 # Combined build workflow patches (all of the above)

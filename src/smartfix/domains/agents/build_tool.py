@@ -40,7 +40,7 @@ from src.build_output_analyzer import extract_build_errors
 logger = logging.getLogger(__name__)
 
 # Shell utilities that don't count as real builds
-_SHELL_UTILITIES = {'echo', 'sh', 'bash', 'grep', 'sed', 'awk', 'cat', 'tee'}
+_SHELL_UTILITIES = {'grep'}
 
 
 def _is_recordable_command(cmd) -> bool:
