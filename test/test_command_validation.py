@@ -115,7 +115,6 @@ class TestCommandChaining(unittest.TestCase):
         validate_command("BUILD_COMMAND", cmd)  # Should not raise
 
 
-
 class TestRedirectValidation(unittest.TestCase):
     """Test file redirect validation."""
 

@@ -241,7 +241,6 @@ def extract_redirects(segment: str) -> List[str]:
     return redirects
 
 
-
 def parse_command_segment(segment: str) -> Tuple[str, List[str]]:
     """
     Parse command segment into executable and arguments.
