@@ -326,7 +326,7 @@ class GitHubOperations(ScmOperations):
             return True
         except CommandExecutionError as e:
             # Race condition: label was created between our check and create
-            if e.stderr and "already exists" in e.stderr:
+            if e.stderr and "already exists" in e.stderr.lower():
                 debug_log(f"Label '{label_name}' already exists (race condition).")
                 return True
             log(f"Failed to create label '{label_name}': {e.stderr or e}", is_error=True)
