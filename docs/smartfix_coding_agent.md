@@ -268,8 +268,8 @@ The following are key inputs for the SmartFix GitHub Action using SmartFix Codin
 | `aws_bearer_token_bedrock` | AWS Bedrock API Bearer Token (alternative to IAM credentials). Use with caution - less secure than IAM. | No |  |
 | `aws_region` | AWS Region for Bedrock (required for all Bedrock auth methods: IAM or bearer token). | No |  |
 | `gemini_api_key` | Gemini API key (if using Gemini). | No |  |
-| `build_command` | Command to build the application (for QA). **Auto-detected** if not provided - see [Supported Build Systems](./supported-build-systems.md) for details. | No (auto-detected) | Auto-detected |
-| `formatting_command` | Command to format code. **Auto-detected** if not provided - see [Supported Build Systems](./supported-build-systems.md) for formatting tools. | No | Auto-detected |
+| `build_command` | Command to build the application (for QA). **Auto-detected** if not provided | No (auto-detected) | Auto-detected |
+| `formatting_command` | Command to format code. **Auto-detected** if not provided | No | Auto-detected |
 | `max_open_prs` | Maximum number of open PRs SmartFix can create. | No | `5` |
 | `debug_mode` | Enable verbose logging. | No | `false` |
 | `skip_qa_review` | Skip the QA review step (not recommended). | No | `false` |
