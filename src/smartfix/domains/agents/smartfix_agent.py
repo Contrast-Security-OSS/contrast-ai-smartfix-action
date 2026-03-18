@@ -73,9 +73,10 @@ class SmartFixAgent(CodingAgentStrategy):
         """
         Check PR gate: a successful recorded build is required before PR creation.
 
-        If no build command was available (neither configured nor detected),
-        the gate is skipped. Otherwise, the agent must have called BuildTool
-        with a real build command that succeeded.
+        If no build command is available (neither configured nor detected), the
+        gate fails and PR creation is blocked. If a build command is available,
+        the agent must have called BuildTool with a real build command that
+        succeeded (and, when configured, matches the configured build command).
 
         Returns:
             bool: True if gate passes, False if gate fails
