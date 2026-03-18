@@ -3,7 +3,7 @@
 # #%L
 # Contrast AI SmartFix
 # %%
-# Copyright (C) 2025 Contrast Security, Inc.
+# Copyright (C) 2026 Contrast Security, Inc.
 # %%
 # Contact: support@contrastsecurity.com
 # License: Commercial
@@ -29,9 +29,10 @@ import unittest
 import json
 from unittest.mock import Mock, patch, MagicMock
 
+# ADK mocks are set up globally in conftest.py before any imports
 # Test setup imports (path is set up by conftest.py)
-from src.smartfix.extensions.smartfix_llm_agent import SmartFixLlmAgent
-from src.smartfix.extensions.smartfix_litellm import SmartFixLiteLlm
+from src.smartfix.extensions.smartfix_llm_agent import SmartFixLlmAgent  # noqa: E402
+from src.smartfix.extensions.smartfix_litellm import SmartFixLiteLlm  # noqa: E402
 
 
 class TestSmartFixLlmAgentFunctionality(unittest.TestCase):
