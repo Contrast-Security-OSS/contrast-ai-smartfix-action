@@ -266,43 +266,6 @@ async def _run_agent_internal_with_prompts(
             debug_log(f"Warning: Error setting Windows event loop policy: {e}")
             debug_log("Will continue with default event loop policy")
 
-    # Configure logging to suppress asyncio and anyio errors that typically occur during cleanup
-    # Suppress anyio error logging
-    anyio_logger = logging.getLogger("anyio")
-    anyio_logger.setLevel(logging.CRITICAL)  # Using CRITICAL instead of ERROR for stricter filtering
-
-    # Suppress MCP client/stdio error logging
-    mcp_logger = logging.getLogger("mcp.client.stdio")
-    mcp_logger.setLevel(logging.CRITICAL)
-
-    # Silence the task exception was never retrieved warnings
-    asyncio_logger = logging.getLogger("asyncio")
-    asyncio_logger.setLevel(logging.CRITICAL)
-
-    # Add a comprehensive filter to specifically ignore common cancel scope and cleanup errors
-    class AsyncioCleanupFilter(logging.Filter):
-        def filter(self, record) -> bool:
-            message = record.getMessage()
-            # Filter out common cleanup errors
-            if any(pattern in message for pattern in [
-                "exit cancel scope in a different task",
-                "Task exception was never retrieved",
-                "unhandled errors in a TaskGroup",
-                "GeneratorExit",
-                "CancelledError",
-                "asyncio.exceptions",
-                "BaseExceptionGroup"
-            ]):
-                return False
-            return True
-
-    # Apply the filter to multiple loggers
-    cleanup_filter = AsyncioCleanupFilter()
-    anyio_logger.addFilter(cleanup_filter)
-    asyncio_logger.addFilter(cleanup_filter)
-    if mcp_logger:
-        mcp_logger.addFilter(cleanup_filter)
-
     if not ADK_AVAILABLE:
         log("FATAL: Agent execution skipped: ADK libraries not available (import failed).")
         error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
