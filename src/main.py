@@ -419,7 +419,8 @@ def main():  # noqa: C901
                 PromptConfiguration.validate_raw_prompts_data(vulnerability_data)
                 prompts = PromptConfiguration.for_smartfix_agent(
                     fix_system_prompt=vulnerability_data['fixSystemPrompt'],
-                    fix_user_prompt=vulnerability_data['fixUserPrompt']
+                    fix_user_prompt=vulnerability_data['fixUserPrompt'],
+                    skip_writing_security_test=config.SKIP_WRITING_SECURITY_TEST,
                 )
             except ValueError as e:
                 log(f"Error: Invalid prompts from backend: {e}", is_error=True)
@@ -451,8 +452,8 @@ def main():  # noqa: C901
             remediation_id = vulnerability_data['remediationId']
             session_id = None  # External agents don't use Contrast LLM sessions
 
-            # Create prompt configuration for external agent (no prompts required)
-            prompts = PromptConfiguration.for_external_agent()
+            # No prompts required for external agents
+            prompts = PromptConfiguration()
 
         # Populate vulnInfo in telemetry
         telemetry_handler.update_telemetry("vulnInfo.vulnId", vuln_uuid)
