@@ -212,6 +212,7 @@ class SubAgentExecutor:
                 event_count += 1
 
                 # Process the event and get updated state
+                prev_final_response = final_response
                 event_response, should_break = await self._process_event(
                     event, event_count, agent_tool_calls_telemetry
                 )
@@ -219,8 +220,10 @@ class SubAgentExecutor:
                 if event_response:
                     final_response = event_response
 
-                # Handle agent messages and telemetry
-                if event.content and event_response and event_response != final_response:
+                # Handle agent messages and telemetry: when we get a new LLM response
+                # that differs from the previous one, flush the current telemetry segment
+                # and start a fresh one for the new response.
+                if event.content and event_response and event_response != prev_final_response:
                     if agent_event_telemetry is not None:
                         # Directly assign toolCalls rather than appending
                         agent_event_telemetry["toolCalls"] = agent_tool_calls_telemetry
