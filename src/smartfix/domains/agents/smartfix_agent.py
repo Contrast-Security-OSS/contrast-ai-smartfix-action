@@ -9,7 +9,8 @@ verify its changes compile correctly.
 import re
 from typing import Optional
 
-from src.smartfix.domains.agents.event_loop_utils import _run_agent_in_event_loop, _run_agent_internal_with_prompts
+from src.smartfix.domains.agents.event_loop_utils import _run_agent_in_event_loop
+from src.smartfix.domains.agents.sub_agent_executor import SubAgentExecutor
 from src.smartfix.domains.agents.build_tool import create_build_tool
 from src.utils import debug_log, log, error_exit
 from src.smartfix.shared.failure_categories import FailureCategory
@@ -212,8 +213,9 @@ class SmartFixAgent(CodingAgentStrategy):
                 )
 
         fix_user_prompt_with_tree = context.prompts.fix_user_prompt + build_instruction + directory_tree
+        executor = SubAgentExecutor()
         agent_summary_str = _run_agent_in_event_loop(
-            _run_agent_internal_with_prompts,
+            executor.run,
             repo_path,
             fix_user_prompt_with_tree,
             context.prompts.fix_system_prompt,
