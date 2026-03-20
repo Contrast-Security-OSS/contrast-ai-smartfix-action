@@ -487,19 +487,23 @@ def main():  # noqa: C901
         log(f"\n\033[0;33m Selected vuln to fix: {vuln_title} \033[0m")
 
         # --- Create Common Remediation Context ---
-        # Create vulnerability and context from config - single source of truth
         vulnerability = Vulnerability.from_api_data(vulnerability_data)
-        context = RemediationContext.from_config(remediation_id, vulnerability, config, prompts=prompts, session_id=session_id)
+        context = RemediationContext(
+            remediation_id=remediation_id,
+            vulnerability=vulnerability,
+            prompts=prompts,
+            build_config=build_config,
+            repo_config=repo_config,
+            skip_writing_security_test=config.SKIP_WRITING_SECURITY_TEST,
+            session_id=session_id,
+        )
 
         # --- Check if we need to use the external coding agent ---
         if config.CODING_AGENT != CodingAgents.SMARTFIX.name:
             # Create agent using GitHubAgentFactory
             agent_type = CodingAgents[config.CODING_AGENT]
             external_agent = GitHubAgentFactory.create_agent(agent_type, config)
-            # Assemble the issue body from vulnerability details
-            issue_body = external_agent.assemble_issue_body(vulnerability_data)
-            # Add issue_body for external agent compatibility
-            context.issue_body = issue_body
+            context.issue_body = external_agent.assemble_issue_body(vulnerability_data)
 
             result = external_agent.remediate(context)
 
