@@ -236,13 +236,13 @@ class TestMain(unittest.TestCase):
              patch('src.smartfix.domains.scm.git_operations.GitOperations.stage_changes'), \
              patch('src.smartfix.domains.scm.git_operations.GitOperations.check_status', return_value=False), \
              patch('src.smartfix.domains.scm.git_operations.GitOperations.cleanup_branch') as mock_cleanup, \
-             patch('src.github.agent_factory.GitHubAgentFactory.create_agent') as mock_factory, \
+             patch('src.main.SmartFixAgent') as mock_agent_class, \
              patch('src.main.handle_session_result', return_value=mock_session_result), \
              patch('src.main.generate_qa_section', return_value=""), \
              patch('src.contrast_api.notify_remediation_failed') as mock_notify_failed:
 
             mock_agent = MagicMock()
-            mock_factory.return_value = mock_agent
+            mock_agent_class.return_value = mock_agent
 
             with patch.dict('os.environ', test_env, clear=True):
                 reset_config()

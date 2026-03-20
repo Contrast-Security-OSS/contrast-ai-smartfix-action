@@ -46,8 +46,8 @@ from src.github.github_operations import GitHubOperations
 from src.smartfix.domains.vulnerability.context import RemediationContext, PromptConfiguration, BuildConfiguration, RepositoryConfiguration
 from src.smartfix.domains.vulnerability.models import Vulnerability
 
-# Import GitHub-specific agent factory
-from src.github.agent_factory import GitHubAgentFactory
+from src.smartfix.domains.agents.smartfix_agent import SmartFixAgent
+from src.github.external_coding_agent import ExternalCodingAgent
 from src.smartfix.domains.workflow.pr_reconciliation import reconcile_open_remediations
 
 config = get_config()
@@ -501,9 +501,7 @@ def main():  # noqa: C901
 
         # --- Check if we need to use the external coding agent ---
         if config.CODING_AGENT != CodingAgents.SMARTFIX.name:
-            # Create agent using GitHubAgentFactory
-            agent_type = CodingAgents[config.CODING_AGENT]
-            external_agent = GitHubAgentFactory.create_agent(agent_type, config)
+            external_agent = ExternalCodingAgent(config)
             context.issue_body = external_agent.assemble_issue_body(vulnerability_data)
 
             result = external_agent.remediate(context)
@@ -525,8 +523,7 @@ def main():  # noqa: C901
             continue
 
         # --- Run SmartFix Agent ---
-        # Create SmartFix agent (no config needed - gets everything from context)
-        smartfix_agent = GitHubAgentFactory.create_agent(CodingAgents.SMARTFIX)
+        smartfix_agent = SmartFixAgent()
 
         # Run the agent remediation process
         # The agent will run the fix agent loop without doing any git operations
