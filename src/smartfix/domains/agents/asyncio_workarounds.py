@@ -27,7 +27,7 @@ def apply_asyncio_workarounds():
     atexit.register(_cleanup_asyncio)
 
 
-def cleanup_event_loop():
+def cleanup_event_loop():  # noqa: C901
     """Cancel pending tasks and close the event loop. Call at end of main() before exit."""
     try:
         loop = asyncio.get_event_loop_policy().get_event_loop()
