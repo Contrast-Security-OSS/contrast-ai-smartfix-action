@@ -29,8 +29,7 @@ import logging
 import platform
 from typing import Any
 
-from src.utils import debug_log, log, error_exit
-from src.smartfix.shared.failure_categories import FailureCategory
+from src.utils import debug_log, log
 
 # Conditional imports
 try:
@@ -204,5 +203,3 @@ def _run_agent_in_event_loop(coroutine_func, *args, **kwargs) -> Any:
             pass
 
     return result
-
-
