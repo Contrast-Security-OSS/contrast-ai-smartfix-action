@@ -33,7 +33,7 @@ from src.smartfix.shared.coding_agents import CodingAgents
 from src.utils import debug_log, log, error_exit
 from src import telemetry_handler
 from src.version_check import do_version_check
-from src.smartfix.domains.workflow.session_handler import create_session_handler, QASectionConfig
+from src.smartfix.domains.workflow.session_handler import handle_session_result, generate_qa_section
 from src.smartfix.domains.workflow.build_runner import run_build_command
 from src.smartfix.shared.failure_categories import FailureCategory
 
@@ -534,8 +534,7 @@ def main():  # noqa: C901
         session = smartfix_agent.remediate(context)
 
         # Extract results from the session
-        session_handler = create_session_handler()
-        session_result = session_handler.handle_session_result(session)
+        session_result = handle_session_result(session)
 
         if not session_result.should_continue:
             log(f"Agent failed with reason: {session_result.failure_category}")
@@ -564,12 +563,7 @@ def main():  # noqa: C901
             continue  # Move to next vulnerability for other failure types
 
         ai_fix_summary_full = session_result.ai_fix_summary
-        # Generate review section based on session results
-        qa_config = QASectionConfig(
-            has_build_command=build_config.has_build_command(),
-            build_command=build_config.build_command
-        )
-        qa_section = session_handler.generate_qa_section(session, qa_config)
+        qa_section = generate_qa_section(build_config.build_command)
 
         # --- Git and GitHub Operations ---
         # All file changes from the agent (fix + formatting) are uncommitted at this point
