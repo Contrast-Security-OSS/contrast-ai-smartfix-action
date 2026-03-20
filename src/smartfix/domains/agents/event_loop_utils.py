@@ -239,32 +239,9 @@ async def _run_agent_internal_with_prompts(
     config = get_config()
     debug_log(f"Using Agent Model ID: {config.AGENT_MODEL}")
 
-    # Set the correct event loop policy for Windows
-    # This is crucial for the MCP filesystem server connections to work on Windows
-    if platform.system() == 'Windows':
-        try:
-            # First ensure there's no active event loop that might conflict
-            try:
-                loop = asyncio.get_event_loop()
-                if not loop.is_closed():
-                    debug_log("Closing existing event loop before setting policy")
-                    loop.close()
-            except RuntimeError:
-                pass  # No event loop, which is fine
-
-            # IMPORTANT: On Windows, we MUST use the ProactorEventLoop
-            # SelectorEventLoop doesn't support subprocesses on Windows
-            # Explicitly set the WindowsProactorEventLoopPolicy to ensure subprocess support
-            asyncio.set_event_loop_policy(WindowsProactorEventLoopPolicy())
-            debug_log("Explicitly set WindowsProactorEventLoopPolicy for subprocess support")
-
-            # Create a fresh event loop with the WindowsProactorEventLoopPolicy
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            debug_log(f"Created and set new event loop with Windows default policy: {type(loop).__name__}")
-        except Exception as e:
-            debug_log(f"Warning: Error setting Windows event loop policy: {e}")
-            debug_log("Will continue with default event loop policy")
+    # Note: Windows event loop policy (WindowsProactorEventLoopPolicy) is set
+    # in _run_agent_in_event_loop before run_until_complete() is called.
+    # Setting it here (inside a running async coroutine) would be a no-op.
 
     if not ADK_AVAILABLE:
         log("FATAL: Agent execution skipped: ADK libraries not available (import failed).")
