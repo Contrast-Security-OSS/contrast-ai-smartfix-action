@@ -202,6 +202,37 @@ class TestSmartFixAgentPRGate(unittest.TestCase):
         self.assertTrue(session.is_complete)
         self.assertEqual(session.failure_category, FailureCategory.BUILD_VERIFICATION_FAILED)
 
+    def test_pr_gate_passes_when_agent_discovers_build_command(self):
+        """Scenario 4: No pre-configured or detected build command, but agent discovers
+        one at runtime and records a successful build — PR gate should pass."""
+        agent = SmartFixAgent()
+        context = Mock(spec=RemediationContext)
+        context.build_config = Mock()
+        context.build_config.has_build_command.return_value = False
+        context.build_config.user_build_command = None
+        context.prompts = Mock()
+        context.prompts.fix_system_prompt = "Fix"
+        context.prompts.fix_user_prompt = "Fix"
+        context.repo_config = Mock()
+        context.repo_config.repo_path = Path("/tmp/test")
+        context.remediation_id = "test-discovered-build"
+        context.session_id = "session-discovered"
+        context.skip_writing_security_test = False
+
+        def fake_execution(ctx):
+            # Agent discovered "mvn test" at runtime and ran a successful build
+            agent._build_state = {"build_cmd": "mvn test", "format_cmd": None}
+            return "Success"
+
+        with patch.object(agent, '_run_fix_agent_execution', side_effect=fake_execution):
+            with patch.object(agent, '_extract_analytics_data'):
+                with patch.object(agent, '_extract_pr_body', return_value="## Fix Applied"):
+                    session = agent.remediate(context)
+
+        self.assertTrue(session.is_complete)
+        self.assertIsNone(session.failure_category)
+        self.assertEqual(session.pr_body, "## Fix Applied")
+
 
 class TestSmartFixAgentBuildToolIntegration(unittest.TestCase):
     """Test BuildTool is properly created and passed to the agent."""

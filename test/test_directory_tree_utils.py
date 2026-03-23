@@ -415,7 +415,10 @@ class TestSmartfixAgentDirectoryTreeIntegration(unittest.TestCase):
 
         mock_tree.assert_called_once_with(context.repo_config.repo_path)
         actual_prompt = mock_run.call_args[0][2]
-        self.assertEqual(actual_prompt, "Fix this vulnerability." + tree_section)
+        # When no build command is known, discovery instructions are prepended before the tree
+        self.assertIn("Fix this vulnerability.", actual_prompt)
+        self.assertIn(tree_section, actual_prompt)
+        self.assertIn("No build command has been pre-configured", actual_prompt)
 
     def test_fix_agent_tree_called_with_correct_repo_path(self):
         """get_directory_tree_for_agent_prompt receives the repo_path from context."""

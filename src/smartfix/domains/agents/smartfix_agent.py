@@ -81,24 +81,13 @@ class SmartFixAgent(CodingAgentStrategy):
         Returns:
             bool: True if gate passes, False if gate fails
         """
-        has_build_config = (
-            hasattr(context, 'build_config')
-            and context.build_config
-            and context.build_config.has_build_command()
-        )
-
-        if not has_build_config:
-            log("PR gate failed: no build command configured or detected", is_error=True)
-            session.complete_session(
-                failure_category=FailureCategory.BUILD_VERIFICATION_FAILED,
-                pr_body="Fix agent did not verify a successful build (no build command configured or detected)"
-            )
-            return False
-
         recorded_cmd = self._build_state["build_cmd"] if self._build_state else None
+
         if recorded_cmd is not None:
-            # If a configured command exists, the recorded command must match it
-            configured_cmd = getattr(context.build_config, 'user_build_command', None)
+            # Agent verified a successful build. If the user explicitly configured a command,
+            # the recorded command must match it exactly. For detected or runtime-discovered
+            # commands there is no such constraint.
+            configured_cmd = getattr(context.build_config, 'user_build_command', None) if context.build_config else None
             if configured_cmd and recorded_cmd.strip() != configured_cmd.strip():
                 log(f"PR gate failed: recorded build '{recorded_cmd}' does not match configured '{configured_cmd}'", is_error=True)
                 session.complete_session(
@@ -109,12 +98,24 @@ class SmartFixAgent(CodingAgentStrategy):
             debug_log(f"PR gate passed: verified build with '{recorded_cmd}'")
             return True
 
-        # Gate failed — agent had a build command but never verified a successful build
-        log("PR gate failed: agent did not verify a successful build", is_error=True)
-        session.complete_session(
-            failure_category=FailureCategory.BUILD_VERIFICATION_FAILED,
-            pr_body="Fix agent did not verify a successful build"
+        # Agent never recorded a successful build.
+        has_build_config = (
+            hasattr(context, 'build_config')
+            and context.build_config
+            and context.build_config.has_build_command()
         )
+        if has_build_config:
+            log("PR gate failed: agent did not verify a successful build", is_error=True)
+            session.complete_session(
+                failure_category=FailureCategory.BUILD_VERIFICATION_FAILED,
+                pr_body="Fix agent did not verify a successful build"
+            )
+        else:
+            log("PR gate failed: no build command configured or detected, and agent did not discover one", is_error=True)
+            session.complete_session(
+                failure_category=FailureCategory.BUILD_VERIFICATION_FAILED,
+                pr_body="Fix agent did not verify a successful build (no build command configured or detected)"
+            )
         return False
 
     def _run_fix_agent(self, session: AgentSession, context: RemediationContext) -> Optional[str]:
@@ -210,6 +211,14 @@ class SmartFixAgent(CodingAgentStrategy):
                     f"Pass this as the `format_command` parameter when calling build_tool "
                     f"so that code is formatted before the build runs."
                 )
+        else:
+            build_instruction = (
+                "\n\nIMPORTANT: No build command has been pre-configured or detected for this project. "
+                "You MUST discover an appropriate build command by inspecting the repository "
+                "(e.g. check for pom.xml, build.gradle, package.json, Makefile, setup.py, etc.) "
+                "and then run it using the build_tool at least once to verify your changes do not "
+                "break existing tests."
+            )
 
         fix_user_prompt_with_tree = context.prompts.fix_user_prompt + build_instruction + directory_tree
         agent_summary_str = _run_agent_in_event_loop(
