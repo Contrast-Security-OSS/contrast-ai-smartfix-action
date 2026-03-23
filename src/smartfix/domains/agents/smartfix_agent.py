@@ -214,10 +214,19 @@ class SmartFixAgent(CodingAgentStrategy):
         else:
             build_instruction = (
                 "\n\nIMPORTANT: No build command has been pre-configured or detected for this project. "
-                "You MUST discover an appropriate build command by inspecting the repository "
-                "(e.g. check for pom.xml, build.gradle, package.json, Makefile, setup.py, etc.) "
-                "and then run it using the build_tool at least once to verify your changes do not "
-                "break existing tests."
+                "You MUST discover and successfully run a build command using build_tool before finishing. "
+                "Follow these steps:\n"
+                "1. Inspect the repository to identify the build system "
+                "(pom.xml → Maven, build.gradle → Gradle, package.json → npm/yarn, Makefile → make, "
+                "setup.py/pyproject.toml → Python).\n"
+                "2. Try the primary build command (e.g. `mvn clean test`, `./gradlew test`, `npm test`).\n"
+                "3. If a command fails with exit code 127 (command not found), immediately try the "
+                "wrapper/alternative — do NOT give up:\n"
+                "   - Maven: try `./mvnw clean test` if `mvn` fails\n"
+                "   - Gradle: try `./gradlew test` if `gradle` fails\n"
+                "   - npm: try `yarn test` or `npx jest` if `npm test` fails\n"
+                "4. Try at least 2-3 different commands before concluding a build is impossible.\n"
+                "5. Do NOT skip the build step or mark the task complete without a recorded successful build."
             )
 
         fix_user_prompt_with_tree = context.prompts.fix_user_prompt + build_instruction + directory_tree
