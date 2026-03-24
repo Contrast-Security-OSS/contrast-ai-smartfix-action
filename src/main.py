@@ -316,6 +316,8 @@ def main():  # noqa: C901
     skipped_vulns = set()  # TS-39904
     remediation_id = "unknown"
     previous_vuln_uuid = None  # Track previous vulnerability UUID to detect duplicates
+    discovered_build_cmd = None   # Build command found by agent at runtime; carried forward across iterations
+    discovered_format_cmd = None  # Format command found by agent at runtime; carried forward across iterations
 
     # Log initial credit tracking status if using Contrast LLM (only for SMARTFIX agent)
     if config.CODING_AGENT == CodingAgents.SMARTFIX.name and config.USE_CONTRAST_LLM:
@@ -491,6 +493,20 @@ def main():  # noqa: C901
         vulnerability = Vulnerability.from_api_data(vulnerability_data)
         context = RemediationContext.from_config(remediation_id, vulnerability, config, prompts=prompts, session_id=session_id)
 
+        # Propagate a build command discovered by a previous agent run so the next
+        # agent skips the discovery step.  Only applies when no command was
+        # user-configured (user_build_command is the sacred, user-supplied value).
+        if discovered_build_cmd and not context.build_config.user_build_command:
+            context.build_config = BuildConfiguration(
+                build_command=discovered_build_cmd,
+                formatting_command=discovered_format_cmd,
+                build_command_source="agent_discovered",
+                format_command_source="agent_discovered" if discovered_format_cmd else "user_configured",
+                user_build_command=None,
+                user_format_command=None,
+            )
+            log(f"Reusing agent-discovered build command from previous run: {discovered_build_cmd}")
+
         # --- Check if we need to use the external coding agent ---
         if config.CODING_AGENT != CodingAgents.SMARTFIX.name:
             # Create agent using GitHubAgentFactory
@@ -557,6 +573,16 @@ def main():  # noqa: C901
                 error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
 
             continue  # Move to next vulnerability for other failure types
+
+        # Persist the agent-discovered build command for subsequent vulnerability iterations.
+        # Only save when there is no user-configured command (user_build_command is sacred).
+        if not context.build_config.user_build_command and smartfix_agent._build_state:
+            new_build_cmd = smartfix_agent._build_state.get("build_cmd")
+            new_format_cmd = smartfix_agent._build_state.get("format_cmd")
+            if new_build_cmd and new_build_cmd != discovered_build_cmd:
+                discovered_build_cmd = new_build_cmd
+                discovered_format_cmd = new_format_cmd
+                log(f"Saving agent-discovered build command for future runs: {discovered_build_cmd}")
 
         ai_fix_summary_full = session_result.ai_fix_summary
         # Generate review section based on session results
