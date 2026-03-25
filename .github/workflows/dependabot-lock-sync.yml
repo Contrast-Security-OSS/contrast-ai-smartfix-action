@@ -1,0 +1,61 @@
+#-
+# #%L
+# Contrast AI SmartFix
+# %%
+# Copyright (C) 2026 Contrast Security, Inc.
+# %%
+# Contact: support@contrastsecurity.com
+# License: Commercial
+# NOTICE: This Software and the patented inventions embodied within may only be
+# used as part of Contrast Security's commercial offerings. Even though it is
+# made available through public repositories, use of this Software is subject to
+# the applicable End User Licensing Agreement found at
+# https://www.contrastsecurity.com/enduser-terms-0317a or as otherwise agreed
+# between Contrast Security and the End User. The Software may not be reverse
+# engineered, modified, repackaged, sold, redistributed or otherwise used in a
+# way not consistent with the End User License Agreement.
+# #L%
+#
+
+# When dependabot opens a pip PR that modifies src/requirements.txt, regenerate
+# src/requirements.lock and commit the result back to the dependabot branch.
+
+name: Dependabot Lock File Sync
+
+on:
+  pull_request:
+    paths:
+      - 'src/requirements.txt'
+
+permissions:
+  contents: write
+
+jobs:
+  sync-lock-file:
+    name: Regenerate requirements.lock
+    runs-on: ubuntu-latest
+    if: github.actor == 'dependabot[bot]'
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Regenerate requirements.lock
+        run: uv pip compile src/requirements.txt --no-cache -o src/requirements.lock
+
+      - name: Commit updated lock file
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add src/requirements.lock
+          if git diff --cached --quiet; then
+            echo "requirements.lock unchanged, nothing to commit"
+          else
+            git commit -m "AIML-574: Regenerate requirements.lock for dependabot bump"
+            git push
+          fi
