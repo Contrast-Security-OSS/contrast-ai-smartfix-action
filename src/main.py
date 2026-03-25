@@ -85,7 +85,7 @@ def main():  # noqa: C901
         log("\n::group::--- Validating configured build command ---")
         log(f"Running initial build: {build_config.user_build_command}")
         build_success, build_output = run_build_command(
-            build_config.user_build_command, repo_config.repo_path, "unknown"
+            build_config.user_build_command, repo_config.repo_path, "initial-build-check"
         )
         if not build_success:
             log("Initial build failed. The configured BUILD_COMMAND does not succeed on the "
@@ -93,7 +93,8 @@ def main():  # noqa: C901
                 "running SmartFix.", is_error=True)
             debug_log(f"Build output:\n{build_output}")
             log("\n::endgroup::")
-            error_exit("unknown", FailureCategory.INITIAL_BUILD_FAILURE.value)
+            # No remediation ID exists yet — exit directly without notifying the backend.
+            sys.exit(1)
         log("Initial build succeeded. Proceeding with vulnerability processing.")
         log("\n::endgroup::")
 
