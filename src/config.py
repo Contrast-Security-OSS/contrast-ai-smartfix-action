@@ -323,7 +323,22 @@ class Config:
                 "Error: contrast_app_ids must not be an empty array."
             )
 
-        return [str(app_id) for app_id in app_ids]
+        cleaned_ids: List[str] = []
+        invalid_entries = []
+        for index, raw_app_id in enumerate(app_ids):
+            app_id_str = str(raw_app_id).strip() if raw_app_id is not None else ""
+            if app_id_str:
+                cleaned_ids.append(app_id_str)
+            else:
+                invalid_entries.append((index, raw_app_id))
+        if invalid_entries:
+            details = ", ".join(
+                f"{idx} (value: {repr(value)})" for idx, value in invalid_entries
+            )
+            raise ConfigurationError(
+                f"Error: contrast_app_ids contains invalid entries at positions: {details}."
+            )
+        return cleaned_ids
 
     def _parse_and_validate_severities(self, json_str: Optional[str]) -> List[str]:
         default_severities = ["CRITICAL", "HIGH", "MEDIUM"]

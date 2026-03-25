@@ -170,6 +170,40 @@ class TestContrastAppIds(unittest.TestCase):
         with self.assertRaises(ConfigurationError):
             Config(env=env, testing=False)
 
+    def test_contrast_app_ids_empty_string_element_raises_config_error(self):
+        """An empty string element in contrast_app_ids raises ConfigurationError."""
+        env = self._get_base_env()
+        env['CONTRAST_APP_IDS'] = '["valid-id", ""]'
+
+        with self.assertRaises(ConfigurationError):
+            Config(env=env, testing=False)
+
+    def test_contrast_app_ids_whitespace_only_element_raises_config_error(self):
+        """A whitespace-only string element in contrast_app_ids raises ConfigurationError."""
+        env = self._get_base_env()
+        env['CONTRAST_APP_IDS'] = '["valid-id", "   "]'
+
+        with self.assertRaises(ConfigurationError):
+            Config(env=env, testing=False)
+
+    def test_contrast_app_ids_null_element_raises_config_error(self):
+        """A null element in contrast_app_ids raises ConfigurationError."""
+        env = self._get_base_env()
+        env['CONTRAST_APP_IDS'] = '["valid-id", null]'
+
+        with self.assertRaises(ConfigurationError):
+            Config(env=env, testing=False)
+
+    def test_contrast_app_ids_strips_whitespace_from_valid_elements(self):
+        """Valid elements with surrounding whitespace are stripped."""
+        env = self._get_base_env()
+        env['CONTRAST_APP_IDS'] = '["  app-id-1  ", "app-id-2"]'
+
+        config = Config(env=env, testing=False)
+
+        self.assertEqual(config.CONTRAST_APP_IDS, ['app-id-1', 'app-id-2'])
+        self.assertEqual(config.CONTRAST_APP_ID, 'app-id-1')
+
     # =========================================================================
     # Testing mode: defaults unchanged
     # =========================================================================
