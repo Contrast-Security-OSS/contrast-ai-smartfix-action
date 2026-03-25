@@ -176,6 +176,7 @@ class TestContrastAppIds(unittest.TestCase):
 
     def test_testing_mode_uses_default_app_id_when_not_set(self):
         """In testing mode, CONTRAST_APP_ID defaults to 'test-app' when not set."""
+        os.environ.pop('CONTRAST_APP_ID', None)
         config = Config(testing=True)
 
         self.assertEqual(config.CONTRAST_APP_ID, 'test-app')
