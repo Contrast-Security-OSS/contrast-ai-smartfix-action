@@ -400,11 +400,13 @@ class TestGitHubOperations(unittest.TestCase):
     @patch('src.github.github_operations.run_command')
     def test_add_labels_to_pr_success(self, mock_run_command, mock_subprocess_run):
         """Test adding labels to PR successfully."""
-        # Mock ensure_label checking for existing labels
+        # Mock ensure_label checking and creating labels
         mock_run_command.side_effect = [
-            json.dumps([]),  # First label doesn't exist
-            json.dumps([]),  # Second label doesn't exist
-            "Success"  # Final add labels command
+            json.dumps([]),  # Check if label1 exists (doesn't)
+            "Created",       # Create label1
+            json.dumps([]),  # Check if label2 exists (doesn't)
+            "Created",       # Create label2
+            "Success"        # Final add labels command
         ]
         mock_subprocess_run.return_value = MagicMock(returncode=0)
 
@@ -417,18 +419,14 @@ class TestGitHubOperations(unittest.TestCase):
         """Test adding labels to PR with failure."""
         # Mock ensure_label succeeding (label list + create), but final add_labels failing
         mock_run_command.side_effect = [
-            json.dumps([]),  # Label check for label1
-            None  # Add labels command fails (raises exception)
+            json.dumps([]),  # Check if label1 exists (doesn't)
+            "Created",       # Create label1
+            Exception("Failed to add labels")  # Final add labels command fails
         ]
         mock_subprocess_run.return_value = MagicMock(returncode=0)
 
-        # The final add_labels command should raise an exception and be caught
-        with patch('src.github.github_operations.run_command', side_effect=[
-            json.dumps([]),  # Label check
-            Exception("Failed to add labels")  # Final command fails
-        ]):
-            result = self.github_ops.add_labels_to_pr(123, ["label1"])
-            self.assertFalse(result)
+        result = self.github_ops.add_labels_to_pr(123, ["label1"])
+        self.assertFalse(result)
 
     @patch('src.github.github_operations.run_command')
     def test_get_issue_comments_all(self, mock_run_command):
@@ -901,7 +899,9 @@ class TestGitHubOperations(unittest.TestCase):
         mock_run_command.side_effect = [
             "[]",  # check_issues_enabled
             json.dumps([]),  # ensure_label for vuln (check)
+            "Created",       # ensure_label for vuln (create)
             json.dumps([]),  # ensure_label for remediation (check)
+            "Created",       # ensure_label for remediation (create)
             "https://github.com/test/repo/issues/789"  # create issue
         ]
         mock_subprocess_run.return_value = MagicMock(returncode=0)
@@ -999,14 +999,17 @@ class TestGitHubOperations(unittest.TestCase):
         # 1. check_issues_enabled
         # 2. find_open_pr_for_issue (no PR)
         # 3. get current labels
-        # 4. ensure_label (check)
-        # 5. add label command
-        # 6. comment command
+        # 4. remove old label
+        # 5. ensure_label (check)
+        # 6. ensure_label (create)
+        # 7. add new label command
+        # 8. comment command
         mock_run_command.side_effect = [
             "[]",  # check_issues_enabled
             json.dumps({"labels": [{"name": "smartfix-id:old-rem"}]}),  # get labels
             "Success",  # remove old label
             json.dumps([]),  # ensure_label check
+            "Created",  # ensure_label create
             "Success",  # add new label
             "Comment added"  # add comment
         ]
@@ -1047,20 +1050,14 @@ class TestGitHubOperations(unittest.TestCase):
         with patch.object(self.github_ops.git_ops, 'get_branch_name') as mock_get_branch:
             mock_get_branch.return_value = "copilot/fix-issue-789"
 
-            # Mock add_labels_to_pr
-            with patch.object(self.github_ops, 'add_labels_to_pr') as mock_add_labels:
-                mock_add_labels.return_value = True
+            result = self.github_ops.create_pr(
+                "Fix: Test Issue",
+                "This is a test PR body",
+                "test-rem-123",
+                "main",
+            )
 
-                result = self.github_ops.create_pr(
-                    "Fix: Test Issue",
-                    "This is a test PR body",
-                    "test-rem-123",
-                    "main",
-                    "contrast-vuln-id:VULN-123"
-                )
-
-                self.assertEqual(result, "https://github.com/test/repo/pull/123")
-                mock_add_labels.assert_called_once_with(123, ["contrast-vuln-id:VULN-123"])
+            self.assertEqual(result, "https://github.com/test/repo/pull/123")
 
     @patch('tempfile.NamedTemporaryFile')
     @patch('os.path.exists')
@@ -1086,17 +1083,16 @@ class TestGitHubOperations(unittest.TestCase):
         with patch.object(self.github_ops.git_ops, 'get_branch_name') as mock_get_branch:
             mock_get_branch.return_value = "copilot/fix-issue-999"
 
-            with patch.object(self.github_ops, 'add_labels_to_pr'):
-                # Create body larger than 32000 chars
-                large_body = "x" * 35000
+            # Create body larger than 32000 chars
+            large_body = "x" * 35000
 
-                result = self.github_ops.create_pr("Title", large_body, "rem-456", "main", "label1")
+            result = self.github_ops.create_pr("Title", large_body, "rem-456", "main")
 
-                # Check that write was called with truncated content
-                written_content = "".join([call[0][0] for call in mock_temp.write.call_args_list])
-                self.assertLess(len(written_content), 33000)  # Should be truncated + disclaimer
-                self.assertIn("truncated", written_content.lower())
-                self.assertEqual(result, "https://github.com/test/repo/pull/456")
+            # Check that write was called with truncated content
+            written_content = "".join([call[0][0] for call in mock_temp.write.call_args_list])
+            self.assertLess(len(written_content), 33000)  # Should be truncated + disclaimer
+            self.assertIn("truncated", written_content.lower())
+            self.assertEqual(result, "https://github.com/test/repo/pull/456")
 
     @patch('tempfile.NamedTemporaryFile')
     @patch('os.path.exists')
@@ -1142,7 +1138,7 @@ class TestGitHubOperations(unittest.TestCase):
         ) as mock_get_branch:
             mock_get_branch.return_value = "smartfix/fix-issue-123"
             self.github_ops.create_pr(
-                "Fix: Test", "body", "rem-123", "main", "label1"
+                "Fix: Test", "body", "rem-123", "main"
             )
 
         # Verify actionable error message was logged
@@ -1206,7 +1202,7 @@ class TestGitHubOperations(unittest.TestCase):
         ) as mock_get_branch:
             mock_get_branch.return_value = "smartfix/fix-issue-456"
             self.github_ops.create_pr(
-                "Fix: Test", "body", "rem-456", "main", "label1"
+                "Fix: Test", "body", "rem-456", "main"
             )
 
         # Verify generic error message was logged (not permission one)
@@ -1286,7 +1282,7 @@ class TestGitHubOperations(unittest.TestCase):
         ) as mock_get_branch:
             mock_get_branch.return_value = "smartfix/fix-issue-789"
             self.github_ops.create_pr(
-                "Fix: Test", "body", "rem-789", "main", "label1"
+                "Fix: Test", "body", "rem-789", "main"
             )
 
         # Verify generic error message was logged

@@ -34,6 +34,7 @@ from src.utils import debug_log, log, error_exit
 from src import telemetry_handler
 from src.version_check import do_version_check
 from src.smartfix.domains.workflow.session_handler import create_session_handler, QASectionConfig
+from src.smartfix.domains.workflow.build_runner import run_build_command
 from src.smartfix.shared.failure_categories import FailureCategory
 
 # Import domain-specific handlers
@@ -256,12 +257,30 @@ def main():  # noqa: C901
 
     debug_log(f"Build command: {build_config.build_command}")
     debug_log(f"Formatting command: {build_config.formatting_command}")
-    debug_log(f"Max QA attempts: {config.MAX_QA_ATTEMPTS}")
     debug_log(f"Repository path: {repo_config.repo_path}")
 
     # Use the validated and normalized settings from config module
     # These values are already processed in config.py with appropriate validation and defaults
     max_open_prs_setting = config.MAX_OPEN_PRS
+
+    # --- Initial Build Validation ---
+    # If the user explicitly configured a build command, verify it works on the
+    # clean repo before spending LLM credits on vulnerability fixes
+    if build_config.user_build_command:
+        log("\n::group::--- Validating configured build command ---")
+        log(f"Running initial build: {build_config.user_build_command}")
+        build_success, build_output = run_build_command(
+            build_config.user_build_command, repo_config.repo_path, "unknown"
+        )
+        if not build_success:
+            log("Initial build failed. The configured BUILD_COMMAND does not succeed on the "
+                "clean repository. Please verify the command and fix any build issues before "
+                "running SmartFix.", is_error=True)
+            debug_log(f"Build output:\n{build_output}")
+            log("\n::endgroup::")
+            error_exit("unknown", FailureCategory.INITIAL_BUILD_FAILURE.value)
+        log("Initial build succeeded. Proceeding with vulnerability processing.")
+        log("\n::endgroup::")
 
     # --- Initial Setup ---
     git_ops.configure_git_user()
@@ -297,6 +316,8 @@ def main():  # noqa: C901
     skipped_vulns = set()  # TS-39904
     remediation_id = "unknown"
     previous_vuln_uuid = None  # Track previous vulnerability UUID to detect duplicates
+    discovered_build_cmd = None   # Build command found by agent at runtime; carried forward across iterations
+    discovered_format_cmd = None  # Format command found by agent at runtime; carried forward across iterations
 
     # Log initial credit tracking status if using Contrast LLM (only for SMARTFIX agent)
     if config.CODING_AGENT == CodingAgents.SMARTFIX.name and config.USE_CONTRAST_LLM:
@@ -400,9 +421,7 @@ def main():  # noqa: C901
                 PromptConfiguration.validate_raw_prompts_data(vulnerability_data)
                 prompts = PromptConfiguration.for_smartfix_agent(
                     fix_system_prompt=vulnerability_data['fixSystemPrompt'],
-                    fix_user_prompt=vulnerability_data['fixUserPrompt'],
-                    qa_system_prompt=vulnerability_data['qaSystemPrompt'],
-                    qa_user_prompt=vulnerability_data['qaUserPrompt']
+                    fix_user_prompt=vulnerability_data['fixUserPrompt']
                 )
             except ValueError as e:
                 log(f"Error: Invalid prompts from backend: {e}", is_error=True)
@@ -474,6 +493,20 @@ def main():  # noqa: C901
         vulnerability = Vulnerability.from_api_data(vulnerability_data)
         context = RemediationContext.from_config(remediation_id, vulnerability, config, prompts=prompts, session_id=session_id)
 
+        # Propagate a build command discovered by a previous agent run so the next
+        # agent skips the discovery step.  Only applies when no command was
+        # user-configured (user_build_command is the sacred, user-supplied value).
+        if discovered_build_cmd and not context.build_config.user_build_command:
+            context.build_config = BuildConfiguration(
+                build_command=discovered_build_cmd,
+                formatting_command=discovered_format_cmd,
+                build_command_source="agent_discovered",
+                format_command_source="agent_discovered" if discovered_format_cmd else "user_configured",
+                user_build_command=None,
+                user_format_command=None,
+            )
+            log(f"Reusing agent-discovered build command from previous run: {discovered_build_cmd}")
+
         # --- Check if we need to use the external coding agent ---
         if config.CODING_AGENT != CodingAgents.SMARTFIX.name:
             # Create agent using GitHubAgentFactory
@@ -503,12 +536,11 @@ def main():  # noqa: C901
             continue
 
         # --- Run SmartFix Agent ---
-        # NOTE: The agent will validate the initial build before attempting fixes
         # Create SmartFix agent (no config needed - gets everything from context)
         smartfix_agent = GitHubAgentFactory.create_agent(CodingAgents.SMARTFIX)
 
         # Run the agent remediation process
-        # The agent will run the fix agent and QA loop without doing any git operations
+        # The agent will run the fix agent loop without doing any git operations
         # All git operations (staging, committing) happen in main.py after remediate() completes
         session = smartfix_agent.remediate(context)
 
@@ -517,32 +549,51 @@ def main():  # noqa: C901
         session_result = session_handler.handle_session_result(session)
 
         if not session_result.should_continue:
-            # QA Agent failed to fix the build
             log(f"Agent failed with reason: {session_result.failure_category}")
             git_ops.cleanup_branch(new_branch_name)
+
+            # Map internal failure categories to server-recognized values
+            api_failure_category = session_result.failure_category
+            if api_failure_category == FailureCategory.BUILD_VERIFICATION_FAILED.value:
+                api_failure_category = FailureCategory.AGENT_FAILURE.value
+
             contrast_api.notify_remediation_failed(
                 remediation_id=remediation_id,
-                failure_category=session_result.failure_category,
+                failure_category=api_failure_category,
                 contrast_host=config.CONTRAST_HOST,
                 contrast_org_id=config.CONTRAST_ORG_ID,
                 contrast_app_id=config.CONTRAST_APP_ID,
                 contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
                 contrast_api_key=config.CONTRAST_API_KEY
             )
-            continue  # Move to next vulnerability
+
+            # Build verification failure means the build environment is broken —
+            # continuing to the next vuln would waste LLM spend on the same failure
+            if session_result.failure_category == FailureCategory.BUILD_VERIFICATION_FAILED.value:
+                error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
+
+            continue  # Move to next vulnerability for other failure types
+
+        # Persist the agent-discovered build command for subsequent vulnerability iterations.
+        # Only save when there is no user-configured command (user_build_command is sacred).
+        if not context.build_config.user_build_command and smartfix_agent._build_state:
+            new_build_cmd = smartfix_agent._build_state.get("build_cmd")
+            new_format_cmd = smartfix_agent._build_state.get("format_cmd")
+            if new_build_cmd and new_build_cmd != discovered_build_cmd:
+                discovered_build_cmd = new_build_cmd
+                discovered_format_cmd = new_format_cmd
+                log(f"Saving agent-discovered build command for future runs: {discovered_build_cmd}")
 
         ai_fix_summary_full = session_result.ai_fix_summary
-        # Generate QA section based on session results
-        # The SmartFix agent already handled the QA loop internally
+        # Generate review section based on session results
         qa_config = QASectionConfig(
-            skip_qa_review=config.SKIP_QA_REVIEW,
             has_build_command=build_config.has_build_command(),
             build_command=build_config.build_command
         )
         qa_section = session_handler.generate_qa_section(session, qa_config)
 
         # --- Git and GitHub Operations ---
-        # All file changes from the agent (fix + QA + formatting) are uncommitted at this point
+        # All file changes from the agent (fix + formatting) are uncommitted at this point
         # Stage and commit everything together
         log("\n--- Proceeding with Git & GitHub Operations ---")
         git_ops.stage_changes()
@@ -564,7 +615,7 @@ def main():  # noqa: C901
             processed_one = True
             continue
 
-        # Commit all changes together (fix + QA fixes + formatting)
+        # Commit all changes together (fix + formatting)
         commit_message = git_ops.generate_commit_message(vuln_title, vuln_uuid)
         git_ops.commit_changes(commit_message)
         log("Committed all agent changes.")
@@ -582,11 +633,9 @@ def main():  # noqa: C901
 
         label_name, label_desc, label_color = github_ops.generate_label_details(vuln_uuid)
         label_created = github_ops.ensure_label(label_name, label_desc, label_color)
-
         if not label_created:
             log(f"Could not create GitHub label '{label_name}'. PR will be created without a label.", is_warning=True)
-            label_name = ""  # Clear label_name to avoid using it in PR creation
-
+            label_name = ""
         pr_title = github_ops.generate_pr_title(vuln_title)
 
         updated_pr_body = pr_body_base + qa_section
@@ -629,7 +678,7 @@ def main():  # noqa: C901
 
             # Try to create the PR using the GitHub CLI
             log("Attempting to create a pull request...")
-            pr_url = github_ops.create_pr(pr_title, updated_pr_body, remediation_id, config.BASE_BRANCH, label_name)
+            pr_url = github_ops.create_pr(pr_title, updated_pr_body, remediation_id, config.BASE_BRANCH)
 
             if pr_url:
                 pr_creation_success = True
@@ -649,6 +698,13 @@ def main():  # noqa: C901
                         log(f"Could not find PR number pattern in URL: {pr_url}", is_warning=True)
                 except (ValueError, IndexError, AttributeError) as e:
                     log(f"Could not extract PR number from URL: {pr_url} - Error: {str(e)}")
+
+                # Add labels to the PR (non-critical — don't fail the run)
+                if pr_number and label_name:
+                    try:
+                        github_ops.add_labels_to_pr(pr_number, [label_name])
+                    except Exception as label_err:
+                        log(f"Failed to add label to PR #{pr_number}: {label_err}", is_warning=True)
 
                 # Notify the Remediation backend service about the PR
                 if pr_number is None:

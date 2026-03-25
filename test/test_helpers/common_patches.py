@@ -12,8 +12,6 @@ GIT_OPERATIONS_PATCHES = [
     'src.smartfix.domains.scm.git_operations.GitOperations.stage_changes',
     'src.smartfix.domains.scm.git_operations.GitOperations.check_status',
     'src.smartfix.domains.scm.git_operations.GitOperations.commit_changes',
-    'src.smartfix.domains.scm.git_operations.GitOperations.amend_commit',
-    'src.smartfix.domains.scm.git_operations.GitOperations.get_last_commit_changed_files',
     'src.smartfix.domains.scm.git_operations.GitOperations.get_uncommitted_changed_files',
     'src.smartfix.domains.scm.git_operations.GitOperations.push_branch',
     'src.smartfix.domains.scm.git_operations.GitOperations.cleanup_branch',
@@ -103,9 +101,7 @@ def setup_git_patches_with_defaults(test_case):
 
     # Set default return values for common git operations
     for patcher, mock in mocks:
-        if 'get_last_commit_changed_files' in patcher.attribute:
-            mock.return_value = ["src/file1.py", "src/file2.py"]
-        elif 'get_uncommitted_changed_files' in patcher.attribute:
+        if 'get_uncommitted_changed_files' in patcher.attribute:
             mock.return_value = ["src/file1.py", "src/file2.py"]
         elif 'check_status' in patcher.attribute:
             mock.return_value = True  # Has changes

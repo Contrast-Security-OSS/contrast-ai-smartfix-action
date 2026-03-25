@@ -55,8 +55,7 @@ class QASectionConfig:
         build_command: The build command used
     """
 
-    def __init__(self, skip_qa_review: bool, has_build_command: bool, build_command: str):
-        self.skip_qa_review = skip_qa_review
+    def __init__(self, has_build_command: bool, build_command: str):
         self.has_build_command = has_build_command
         self.build_command = build_command
 
@@ -97,48 +96,27 @@ class SessionHandler:
 
     def generate_qa_section(self, session, config: QASectionConfig) -> str:
         """
-        Generate the QA section for PR body based on session results.
+        Generate the Review section for PR body based on session results.
 
         Args:
-            session: AgentSession with success, qa_attempts properties
-            config: QA section configuration
+            session: AgentSession with build verification properties
+            config: Review section configuration
 
         Returns:
-            str: QA section for PR body
+            str: Review section for PR body
         """
 
         # Note: At this point session.success must be True
         # (failures are handled by handle_session_result earlier)
-        # Start with standard QA section header
-        qa_section = "\n\n---\n\n## Review \n\n"
-        if not config.skip_qa_review and config.has_build_command:
-            # QA was expected to run - check session results
-            if session.qa_attempts > 0:
-                # QA loop ran and eventually succeeded
-                qa_section += f"*   **Build Run:** Yes (`{config.build_command}`)\n"
-                qa_section += "*   **Final Build Status:** Success \n"
-            else:
-                # Build passed on first attempt, no QA needed
-                qa_section += f"*   **Build Run:** Yes (`{config.build_command}`)\n"
-                qa_section += "*   **Final Build Status:** Success (passed on first attempt)\n"
+        if config.has_build_command:
+            qa_section = "\n\n---\n\n## Review \n\n"
+            qa_section += f"*   **Build Run:** Yes (`{config.build_command}`)\n"
+            qa_section += "*   **Final Build Status:** Success\n"
         else:
-            # QA was skipped - provide empty section and log reason
             qa_section = ""
-            self._log_qa_skip_reason(config)
+            log("Review section skipped: no BUILD_COMMAND was provided.")
 
         return qa_section
-
-    def _log_qa_skip_reason(self, config: QASectionConfig) -> None:
-        """
-        Log the reason why QA review was skipped.
-
-        Args:
-            config: QA section configuration
-        """
-        if config.skip_qa_review:
-            log("QA Review was skipped based on SKIP_QA_REVIEW setting.")
-        elif not config.has_build_command:
-            log("QA Review was skipped as no BUILD_COMMAND was provided.")
 
 
 # Factory function for backward compatibility and easy instantiation

@@ -80,14 +80,6 @@ class TestGitOperations(unittest.TestCase):
         self.assertEqual(result, expected)
 
     @patch('src.smartfix.domains.scm.git_operations.run_command')
-    def test_get_last_commit_changed_files(self, mock_run_command):
-        """Test getting files changed in last commit."""
-        mock_run_command.return_value = "src/file1.py\nsrc/file2.js\ndocs/readme.md"
-        result = self.git_ops.get_last_commit_changed_files()
-        expected = ["src/file1.py", "src/file2.js", "docs/readme.md"]
-        self.assertEqual(result, expected)
-
-    @patch('src.smartfix.domains.scm.git_operations.run_command')
     def test_push_branch(self, mock_run_command):
         """Test pushing branch."""
         with patch('src.smartfix.domains.scm.git_operations.get_config') as mock_config:
