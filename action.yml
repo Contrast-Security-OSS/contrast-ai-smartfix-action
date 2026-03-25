@@ -10,10 +10,6 @@ inputs:
   build_command:
     description: 'Command to build the application'
     required: false
-  max_qa_attempts:
-    description: 'Maximum number of QA intervention attempts'
-    required: false
-    default: '6'
   formatting_command:
     description: 'Command to format code (optional)'
     required: false
@@ -76,10 +72,6 @@ inputs:
     required: false
   skip_writing_security_test:
     description: 'Whether to attempt writing security tests'
-    required: false
-    default: 'false'
-  skip_qa_review:
-    description: 'Whether to skip QA review'
     required: false
     default: 'false'
   debug_mode:
@@ -186,8 +178,25 @@ runs:
 
         echo Git verification completed successfully
 
-    # Checkout with reduced verbosity
+    # Check if repository is already checked out.
+    # This supports callers that pre-checkout (e.g., composite actions or local
+    # testing workflows). It only checks for *any* git repo in the workspace;
+    # callers are responsible for ensuring the correct repo is checked out.
+    - name: Check if already in git repository
+      id: check_git
+      shell: bash
+      run: |
+        if git rev-parse --git-dir > /dev/null 2>&1; then
+          echo "already_checked_out=true" >> $GITHUB_OUTPUT
+          echo "Repository already checked out, skipping checkout step"
+        else
+          echo "already_checked_out=false" >> $GITHUB_OUTPUT
+          echo "Repository not checked out, will perform checkout"
+        fi
+
+    # Checkout with reduced verbosity (only if not already checked out)
     - name: Checkout repository
+      if: steps.check_git.outputs.already_checked_out != 'true'
       uses: actions/checkout@v4
       with:
         fetch-depth: 0
@@ -405,8 +414,6 @@ runs:
       env:
         # --- Build Command ---
         BUILD_COMMAND: ${{ inputs.build_command }}
-        # --- Max QA Intervention Attempts ---
-        MAX_QA_ATTEMPTS: ${{ inputs.max_qa_attempts }}
         # --- Formatting Command ---
         FORMATTING_COMMAND: ${{ inputs.formatting_command }}
         # --- Max Open PRs ---
@@ -438,8 +445,6 @@ runs:
         MAX_EVENTS_PER_AGENT: ${{ inputs.max_events_per_agent }}
         # --- Test Writing Configuration ---
         SKIP_WRITING_SECURITY_TEST: ${{ inputs.skip_writing_security_test }}
-        # --- QA Configuration ---
-        SKIP_QA_REVIEW: ${{ inputs.skip_qa_review }}
         # --- Debug Mode ---
         DEBUG_MODE: ${{ inputs.debug_mode }}
         # --- Vulnerability Configuration ---

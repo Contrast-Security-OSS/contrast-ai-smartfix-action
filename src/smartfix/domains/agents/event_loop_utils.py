@@ -2,7 +2,7 @@
 # #%L
 # Contrast AI SmartFix
 # %%
-# Copyright (C) 2025 Contrast Security, Inc.
+# Copyright (C) 2026 Contrast Security, Inc.
 # %%
 # Contact: support@contrastsecurity.com
 # License: Commercial
@@ -28,12 +28,10 @@ import asyncio
 import logging
 import platform
 from pathlib import Path
+from typing import Any
 
-from src.config import get_config
 from src.utils import debug_log, log, error_exit
 from src.smartfix.shared.failure_categories import FailureCategory
-
-from .sub_agent_executor import SubAgentExecutor, ADK_AVAILABLE
 
 # Conditional imports
 try:
@@ -47,7 +45,46 @@ except ImportError:
 MAX_PENDING_TASKS = 100
 
 
-def _run_agent_in_event_loop(coroutine_func, *args, **kwargs):
+def _configure_cleanup_logging() -> None:
+    """Configure logging to suppress benign asyncio and MCP cleanup errors."""
+    # Suppress anyio error logging
+    anyio_logger = logging.getLogger("anyio")
+    anyio_logger.setLevel(logging.CRITICAL)
+
+    # Suppress MCP client/stdio error logging
+    mcp_logger = logging.getLogger("mcp.client.stdio")
+    mcp_logger.setLevel(logging.CRITICAL)
+
+    # Silence the task exception was never retrieved warnings
+    asyncio_logger = logging.getLogger("asyncio")
+    asyncio_logger.setLevel(logging.CRITICAL)
+
+    # Add a comprehensive filter to specifically ignore common cancel scope and cleanup errors
+    class AsyncioCleanupFilter(logging.Filter):
+        def filter(self, record) -> bool:
+            message = record.getMessage()
+            # Filter out common cleanup errors
+            if any(pattern in message for pattern in [
+                "exit cancel scope in a different task",
+                "Task exception was never retrieved",
+                "unhandled errors in a TaskGroup",
+                "GeneratorExit",
+                "CancelledError",
+                "asyncio.exceptions",
+                "BaseExceptionGroup"
+            ]):
+                return False
+            return True
+
+    # Apply the filter to multiple loggers
+    cleanup_filter = AsyncioCleanupFilter()
+    anyio_logger.addFilter(cleanup_filter)
+    asyncio_logger.addFilter(cleanup_filter)
+    if mcp_logger:
+        mcp_logger.addFilter(cleanup_filter)
+
+
+def _run_agent_in_event_loop(coroutine_func, *args, **kwargs) -> Any:
     """
     Wrapper function to run an async coroutine in a controlled event loop.
     Handles proper setup and cleanup of the event loop and tasks.
@@ -60,6 +97,9 @@ def _run_agent_in_event_loop(coroutine_func, *args, **kwargs):
         The result returned by the coroutine
     """
     result = None
+
+    # Configure logging to suppress asyncio and anyio errors that typically occur during cleanup
+    _configure_cleanup_logging()
 
     # Platform-specific setup
     is_windows = platform.system() == 'Windows'
@@ -171,27 +211,31 @@ def _run_agent_in_event_loop(coroutine_func, *args, **kwargs):
 
 
 async def _run_agent_internal_with_prompts(
-    agent_type: str,
     repo_root: Path,
     query: str,
     system_prompt: str,
     remediation_id: str,
-    session_id: str = None
+    session_id: str = None,
+    additional_tools: list = None
 ) -> str:
     """
-    Internal helper to run either fix or QA agent with API-provided prompts. Returns summary.
+    Internal helper to run either fix agent with API-provided prompts. Returns summary.
 
     Args:
-        agent_type: Type of agent ("fix" or "qa")
         repo_root: Path to repository root
         query: User query/prompt for the agent
         system_prompt: System prompt for agent instructions
         remediation_id: Remediation ID for error tracking
         session_id: Session ID for Contrast LLM tracking
+        additional_tools: Optional list of extra tools (e.g., BuildTool) to add to the agent
 
     Returns:
         str: Summary from the agent execution
     """
+    # Lazy imports to avoid circular dependency with config and agents modules
+    from src.config import get_config
+    from .sub_agent_executor import SubAgentExecutor, ADK_AVAILABLE
+
     config = get_config()
     debug_log(f"Using Agent Model ID: {config.AGENT_MODEL}")
 
@@ -222,45 +266,8 @@ async def _run_agent_internal_with_prompts(
             debug_log(f"Warning: Error setting Windows event loop policy: {e}")
             debug_log("Will continue with default event loop policy")
 
-    # Configure logging to suppress asyncio and anyio errors that typically occur during cleanup
-    # Suppress anyio error logging
-    anyio_logger = logging.getLogger("anyio")
-    anyio_logger.setLevel(logging.CRITICAL)  # Using CRITICAL instead of ERROR for stricter filtering
-
-    # Suppress MCP client/stdio error logging
-    mcp_logger = logging.getLogger("mcp.client.stdio")
-    mcp_logger.setLevel(logging.CRITICAL)
-
-    # Silence the task exception was never retrieved warnings
-    asyncio_logger = logging.getLogger("asyncio")
-    asyncio_logger.setLevel(logging.CRITICAL)
-
-    # Add a comprehensive filter to specifically ignore common cancel scope and cleanup errors
-    class AsyncioCleanupFilter(logging.Filter):
-        def filter(self, record):
-            message = record.getMessage()
-            # Filter out common cleanup errors
-            if any(pattern in message for pattern in [
-                "exit cancel scope in a different task",
-                "Task exception was never retrieved",
-                "unhandled errors in a TaskGroup",
-                "GeneratorExit",
-                "CancelledError",
-                "asyncio.exceptions",
-                "BaseExceptionGroup"
-            ]):
-                return False
-            return True
-
-    # Apply the filter to multiple loggers
-    cleanup_filter = AsyncioCleanupFilter()
-    anyio_logger.addFilter(cleanup_filter)
-    asyncio_logger.addFilter(cleanup_filter)
-    if mcp_logger:
-        mcp_logger.addFilter(cleanup_filter)
-
     if not ADK_AVAILABLE:
-        log(f"FATAL: {agent_type.capitalize()} Agent execution skipped: ADK libraries not available (import failed).")
+        log("FATAL: Agent execution skipped: ADK libraries not available (import failed).")
         error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
 
     session = None
@@ -269,28 +276,29 @@ async def _run_agent_internal_with_prompts(
     try:
         session_service = InMemorySessionService()
         artifacts_service = InMemoryArtifactService()
-        app_name = f'contrast_{agent_type}_app'
+        app_name = 'contrast_fix_app'
         session = await session_service.create_session(
             state={},
             app_name=app_name,
-            user_id=f'github_action_{agent_type}'
+            user_id='github_action_fix'
         )
     except Exception as e:
         # Handle any errors in session creation
-        log(f"FATAL: Failed to create {agent_type.capitalize()} agent session: {e}", is_error=True)
+        log(f"FATAL: Failed to create fix agent session: {e}", is_error=True)
         error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
 
     # Use SubAgentExecutor to create and execute the agent
     executor = SubAgentExecutor()
 
     agent = await executor.create_agent(
-        repo_root, remediation_id, session_id, agent_type=agent_type, system_prompt=system_prompt
+        repo_root, remediation_id, session_id, system_prompt=system_prompt,
+        additional_tools=additional_tools
     )
     if not agent:
         log(
-            f"AI Agent creation failed ({agent_type} agent). "
-            f"Possible reasons: MCP server connection issue, missing prompts, "
-            f"model configuration error, or internal ADK problem."
+            "AI Agent creation failed (fix agent). "
+            "Possible reasons: MCP server connection issue, missing prompts, "
+            "model configuration error, or internal ADK problem."
         )
         error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
 
@@ -302,5 +310,5 @@ async def _run_agent_internal_with_prompts(
     )
 
     # Execute the agent using the executor
-    summary = await executor.execute_agent(runner, agent, session, query, remediation_id, agent_type)
+    summary = await executor.execute_agent(runner, agent, session, query, remediation_id)
     return summary

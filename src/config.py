@@ -2,7 +2,7 @@
 # #%L
 # Contrast AI SmartFix
 # %%
-# Copyright (C) 2025 Contrast Security, Inc.
+# Copyright (C) 2026 Contrast Security, Inc.
 # %%
 # Contact: support@contrastsecurity.com
 # License: Commercial
@@ -27,7 +27,7 @@ from typing import Optional, Any, Dict, List
 from src.smartfix.config.command_validator import validate_command, CommandValidationError
 
 
-def _log_config_message(message: str, is_error: bool = False, is_warning: bool = False):
+def _log_config_message(message: str, is_error: bool = False, is_warning: bool = False) -> None:
     """A minimal logger for use only within the config module before full logging is set up."""
     # This function should have no dependencies on other project modules
     if is_error or is_warning:
@@ -47,13 +47,26 @@ class Config:
     It reads from environment variables upon instantiation and provides validated
     and typed settings as attributes.
     """
-    def __init__(self, env: Dict[str, str] = os.environ, testing: bool = False):
+
+    # Class-level recursion guard: True while build command detection is in progress
+    _build_detection_in_progress = False
+
+    def __init__(self, env: Dict[str, str] = os.environ, testing: bool = False) -> None:  # noqa: C901
         self.env = env
         self.testing = testing
 
         # --- Preset ---
         self.VERSION = "v1.0.11"
         self.USER_AGENT = f"contrast-smart-fix {self.VERSION}"
+
+        # --- Paths (initialized early for use in command detection) ---
+        if testing:
+            # For tests, default to /tmp if GITHUB_WORKSPACE not set
+            self.REPO_ROOT = Path(self._get_env_var("GITHUB_WORKSPACE", required=False, default="/tmp")).resolve()
+        else:
+            self.REPO_ROOT = Path(self._get_env_var("GITHUB_WORKSPACE", required=True)).resolve()
+
+        self.SCRIPT_DIR = Path(__file__).parent.resolve()
 
         # --- Core Settings ---
         self.DEBUG_MODE = self._get_bool_env("DEBUG_MODE", default=False)
@@ -78,24 +91,68 @@ class Config:
 
         # --- Build and Formatting Configuration ---
         is_build_command_required = self.RUN_TASK == "generate_fix" and is_smartfix_coding_agent
+
         # Make BUILD_COMMAND optional in tests
         if testing and "BUILD_COMMAND" not in env and is_build_command_required:
             self.BUILD_COMMAND = "echo 'Test build command'"
         else:
-            self.BUILD_COMMAND = self._get_env_var("BUILD_COMMAND", required=is_build_command_required)
+            self.BUILD_COMMAND = self._get_env_var("BUILD_COMMAND", required=False)
+
+            # Auto-detect if not provided AND required
+            # Skip detection entirely when BUILD_COMMAND not needed
+            if not self.BUILD_COMMAND and not testing and is_build_command_required:
+                # Recursion guard: detection calls get_config() internally
+                if not Config._build_detection_in_progress:
+                    Config._build_detection_in_progress = True
+                    try:
+                        self.BUILD_COMMAND = self._auto_detect_build_command()
+                    finally:
+                        Config._build_detection_in_progress = False
+                    # Mark as auto-detected for proper validation
+                    self._build_command_source = "ai_detected"
+                else:
+                    # Recursion detected: detection already in progress
+                    _log_config_message(
+                        "Build command detection already in progress, skipping",
+                        is_warning=True
+                    )
+                    self.BUILD_COMMAND = None
+                    self._build_command_source = "ai_detected"
+            else:
+                # Command from environment/config (trusted source)
+                self._build_command_source = "config"
 
         # Validate BUILD_COMMAND if present
-        if not testing:
-            self._validate_command("BUILD_COMMAND", self.BUILD_COMMAND)
+        if not testing and self.BUILD_COMMAND:
+            self._validate_command("BUILD_COMMAND", self.BUILD_COMMAND, source=self._build_command_source)
 
         self.FORMATTING_COMMAND = self._get_env_var("FORMATTING_COMMAND", required=False)
 
+        # Auto-detect formatting command if not provided AND formatting is needed
+        # Only needed for generate_fix task
+        is_format_command_needed = self.RUN_TASK == "generate_fix" and is_smartfix_coding_agent
+        if not self.FORMATTING_COMMAND and not testing and is_format_command_needed:
+            # Recursion guard: skip if we're inside a recursive get_config() call
+            if not Config._build_detection_in_progress:
+                self.FORMATTING_COMMAND = self._auto_detect_format_command()
+                # Mark as auto-detected for proper validation
+                self._format_command_source = "ai_detected"
+            else:
+                # Recursion detected: skip formatting detection
+                _log_config_message(
+                    "Format command detection skipped (recursion detected)",
+                    is_warning=True
+                )
+                self._format_command_source = "config"
+        else:
+            # Command from environment/config (trusted source)
+            self._format_command_source = "config"
+
         # Validate FORMATTING_COMMAND if present
-        if not testing:
-            self._validate_command("FORMATTING_COMMAND", self.FORMATTING_COMMAND)
+        if not testing and self.FORMATTING_COMMAND:
+            self._validate_command("FORMATTING_COMMAND", self.FORMATTING_COMMAND, source=self._format_command_source)
 
         # --- Validated and normalized settings ---
-        self.MAX_QA_ATTEMPTS = self._get_validated_int("MAX_QA_ATTEMPTS", default=6, min_val=0, max_val=10)
         self.MAX_OPEN_PRS = self._get_validated_int("MAX_OPEN_PRS", default=5, min_val=0)
         self.MAX_EVENTS_PER_AGENT = self._get_validated_int("MAX_EVENTS_PER_AGENT", default=120, min_val=10, max_val=500)
 
@@ -138,7 +195,6 @@ class Config:
 
         # --- Feature Flags ---
         self.SKIP_WRITING_SECURITY_TEST = self._get_bool_env("SKIP_WRITING_SECURITY_TEST", default=False)
-        self.SKIP_QA_REVIEW = self._get_bool_env("SKIP_QA_REVIEW", default=False)
         self.ENABLE_FULL_TELEMETRY = self._get_bool_env("ENABLE_FULL_TELEMETRY", default=True)
         self.USE_CONTRAST_LLM = self._get_bool_env("USE_CONTRAST_LLM", default=True)
         self.ENABLE_ANTHROPIC_PROMPT_CACHING = self._get_bool_env("ENABLE_ANTHROPIC_PROMPT_CACHING", default=True)
@@ -161,15 +217,6 @@ class Config:
         self.VULNERABILITY_SEVERITIES = self._parse_and_validate_severities(
             self._get_env_var("VULNERABILITY_SEVERITIES", required=False, default='["CRITICAL", "HIGH", "MEDIUM"]')
         )
-
-        # --- Paths ---
-        if testing:
-            # For tests, default to /tmp if GITHUB_WORKSPACE not set
-            self.REPO_ROOT = Path(self._get_env_var("GITHUB_WORKSPACE", required=False, default="/tmp")).resolve()
-        else:
-            self.REPO_ROOT = Path(self._get_env_var("GITHUB_WORKSPACE", required=True)).resolve()
-
-        self.SCRIPT_DIR = Path(__file__).parent.resolve()
 
         if not testing:
             self._log_initial_settings()
@@ -198,7 +245,7 @@ class Config:
             _log_config_message(f"Invalid value for {var_name}. Using default: {default}", is_warning=True)
             return default
 
-    def _check_contrast_config_values_exist(self):
+    def _check_contrast_config_values_exist(self) -> None:
         if not all([self.CONTRAST_HOST, self.CONTRAST_ORG_ID, self.CONTRAST_APP_ID, self.CONTRAST_AUTHORIZATION_KEY, self.CONTRAST_API_KEY]):
             raise ConfigurationError("Error: Missing one or more Contrast API configuration variables (HOST, ORG_ID, APP_ID, AUTH_KEY, API_KEY).")
 
@@ -244,6 +291,78 @@ class Config:
             )
             # Convert CommandValidationError to ConfigurationError
             raise ConfigurationError(str(e)) from e
+
+    def _auto_detect_build_command(self) -> Optional[str]:
+        """
+        Auto-detect build command using deterministic detection.
+
+        Uses file-marker-based detection to find a valid build command.
+        Returns None if no command can be detected — the Fix agent's
+        BuildTool will discover the command at runtime.
+
+        Returns:
+            Detected build command or None
+        """
+        from src.smartfix.config.command_detector import detect_build_command
+
+        try:
+            command = detect_build_command(
+                repo_root=self.REPO_ROOT,
+                project_dir=None,  # NOTE: Will need update when monorepo support is implemented
+            )
+
+            if command:
+                _log_config_message(
+                    f"Auto-detected BUILD_COMMAND: {command}",
+                    is_error=False
+                )
+            else:
+                _log_config_message(
+                    "Could not auto-detect BUILD_COMMAND (agent will discover at runtime)",
+                    is_warning=True
+                )
+
+            return command
+        except Exception as e:
+            _log_config_message(
+                f"Build command auto-detection failed: {str(e)}",
+                is_error=True
+            )
+            return None
+
+    def _auto_detect_format_command(self) -> Optional[str]:
+        """
+        Auto-detect format command using deterministic detection.
+
+        Returns:
+            Detected format command or None if detection fails
+        """
+        from src.smartfix.config.command_detector import detect_format_command
+
+        try:
+            detected = detect_format_command(
+                repo_root=self.REPO_ROOT,
+                project_dir=None  # NOTE: Will need update when monorepo support is implemented
+            )
+
+            if detected:
+                _log_config_message(
+                    f"Auto-detected FORMATTING_COMMAND: {detected}",
+                    is_error=False
+                )
+            else:
+                _log_config_message(
+                    "Could not auto-detect FORMATTING_COMMAND (optional)",
+                    is_error=False
+                )
+
+            return detected
+        except Exception as e:
+            _log_config_message(
+                f"Format command auto-detection failed: {str(e)}",
+                is_error=False
+            )
+            return None
 
     def _get_coding_agent(self) -> str:
         from src.smartfix.shared.coding_agents import CodingAgents
@@ -438,7 +557,7 @@ class Config:
                 "  2. AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables"
             )
 
-    def _log_initial_settings(self):
+    def _log_initial_settings(self) -> None:
         if not self.DEBUG_MODE:
             return
         _log_config_message(f"Repository Root: {self.REPO_ROOT}")
@@ -450,7 +569,6 @@ class Config:
             _log_config_message(f"Agent Model: {self.AGENT_MODEL}")
         _log_config_message(f"Coding Agent: {self.CODING_AGENT}")
         _log_config_message(f"Skip Writing Security Test: {self.SKIP_WRITING_SECURITY_TEST}")
-        _log_config_message(f"Skip QA Review: {self.SKIP_QA_REVIEW}")
         _log_config_message(f"Vulnerability Severities: {self.VULNERABILITY_SEVERITIES}")
         _log_config_message(f"Max Events Per Agent: {self.MAX_EVENTS_PER_AGENT}")
         _log_config_message(f"Enable Full Telemetry: {self.ENABLE_FULL_TELEMETRY}")
@@ -488,7 +606,9 @@ def get_config(testing: bool = False) -> Config:
     return _config_instance
 
 
-def reset_config():
+def reset_config() -> None:
     """For testing purposes only. Resets the config singleton."""
     global _config_instance
     _config_instance = None
+    # Also reset the detection flag to allow fresh detection in tests
+    Config._build_detection_in_progress = False

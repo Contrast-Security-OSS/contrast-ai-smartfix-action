@@ -22,7 +22,7 @@
 Directory Tree Utilities
 
 Shared utilities for generating directory tree views of repositories.
-Used by multiple agents (detection, fix, qa) to provide project structure context.
+Used by agents to provide project structure context.
 """
 
 import subprocess
