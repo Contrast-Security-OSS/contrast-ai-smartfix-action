@@ -402,7 +402,7 @@ def main():  # noqa: C901
                 log(f"Saving agent-discovered build command for future runs: {discovered_build_cmd}")
 
         ai_fix_summary_full = session_result.ai_fix_summary
-        qa_section = generate_qa_section(build_config.build_command)
+        qa_section = generate_qa_section(context.build_config.build_command)
 
         # --- Git and GitHub Operations ---
         # All file changes from the agent (fix + formatting) are uncommitted at this point
