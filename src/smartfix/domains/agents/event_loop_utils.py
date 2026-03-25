@@ -38,10 +38,19 @@ except ImportError:
     pass
 
 MAX_PENDING_TASKS = 100
+_cleanup_logging_configured = False
 
 
 def _configure_cleanup_logging() -> None:
-    """Configure logging to suppress benign asyncio and MCP cleanup errors."""
+    """Configure logging to suppress benign asyncio and MCP cleanup errors.
+
+    Guards against duplicate filter accumulation: logging.addFilter() appends
+    without deduplication, so calling this more than once per process would
+    attach redundant filter instances to each logger.
+    """
+    global _cleanup_logging_configured
+    if _cleanup_logging_configured:
+        return
     # Suppress anyio error logging
     anyio_logger = logging.getLogger("anyio")
     anyio_logger.setLevel(logging.CRITICAL)
@@ -77,6 +86,7 @@ def _configure_cleanup_logging() -> None:
     asyncio_logger.addFilter(cleanup_filter)
     if mcp_logger:
         mcp_logger.addFilter(cleanup_filter)
+    _cleanup_logging_configured = True
 
 
 def _run_agent_in_event_loop(coroutine_func, *args, **kwargs) -> Any:
