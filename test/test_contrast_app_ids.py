@@ -187,6 +187,15 @@ class TestContrastAppIds(unittest.TestCase):
 
         self.assertEqual(config.CONTRAST_APP_IDS, [])
 
+    def test_testing_mode_derives_app_id_from_plural_when_singular_unset(self):
+        """In testing mode, CONTRAST_APP_ID is derived from CONTRAST_APP_IDS when singular is not set."""
+        os.environ.pop('CONTRAST_APP_ID', None)
+        os.environ['CONTRAST_APP_IDS'] = '["test-id-from-plural"]'
+        config = Config(testing=True)
+
+        self.assertEqual(config.CONTRAST_APP_ID, 'test-id-from-plural')
+        self.assertEqual(config.CONTRAST_APP_IDS, ['test-id-from-plural'])
+
 
 if __name__ == '__main__':
     unittest.main()

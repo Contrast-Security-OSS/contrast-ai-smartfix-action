@@ -114,8 +114,15 @@ class Config:
         if testing:
             self.CONTRAST_HOST = self._get_env_var("CONTRAST_HOST", required=False, default="test-host")
             self.CONTRAST_ORG_ID = self._get_env_var("CONTRAST_ORG_ID", required=False, default="test-org")
-            self.CONTRAST_APP_ID = self._get_env_var("CONTRAST_APP_ID", required=False, default="test-app")
+            # In testing mode, respect explicit CONTRAST_APP_ID if set; otherwise, derive it from CONTRAST_APP_IDS,
+            # and only then fall back to the 'test-app' default when neither is provided.
+            self.CONTRAST_APP_ID = self._get_env_var("CONTRAST_APP_ID", required=False, default=None)
             self.CONTRAST_APP_IDS = self._parse_app_ids(self._get_env_var("CONTRAST_APP_IDS", required=False))
+            if self.CONTRAST_APP_ID is None:
+                if self.CONTRAST_APP_IDS:
+                    self.CONTRAST_APP_ID = self.CONTRAST_APP_IDS[0]
+                else:
+                    self.CONTRAST_APP_ID = "test-app"
             self.CONTRAST_AUTHORIZATION_KEY = self._get_env_var("CONTRAST_AUTHORIZATION_KEY", required=False, default="test-auth")
             self.CONTRAST_API_KEY = self._get_env_var("CONTRAST_API_KEY", required=False, default="test-api")
         else:
