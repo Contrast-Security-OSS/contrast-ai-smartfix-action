@@ -171,13 +171,21 @@ class Config:
         if testing:
             self.CONTRAST_HOST = self._get_env_var("CONTRAST_HOST", required=False, default="test-host")
             self.CONTRAST_ORG_ID = self._get_env_var("CONTRAST_ORG_ID", required=False, default="test-org")
-            self.CONTRAST_APP_ID = self._get_env_var("CONTRAST_APP_ID", required=False, default="test-app")
+            # In testing mode, respect explicit CONTRAST_APP_ID if set; otherwise, derive it from CONTRAST_APP_IDS,
+            # and only then fall back to the 'test-app' default when neither is provided.
+            self.CONTRAST_APP_ID = self._get_env_var("CONTRAST_APP_ID", required=False, default=None)
+            self.CONTRAST_APP_IDS = self._parse_app_ids(self._get_env_var("CONTRAST_APP_IDS", required=False))
+            if self.CONTRAST_APP_ID is None:
+                if self.CONTRAST_APP_IDS:
+                    self.CONTRAST_APP_ID = self.CONTRAST_APP_IDS[0]
+                else:
+                    self.CONTRAST_APP_ID = "test-app"
             self.CONTRAST_AUTHORIZATION_KEY = self._get_env_var("CONTRAST_AUTHORIZATION_KEY", required=False, default="test-auth")
             self.CONTRAST_API_KEY = self._get_env_var("CONTRAST_API_KEY", required=False, default="test-api")
         else:
             self.CONTRAST_HOST = self._get_env_var("CONTRAST_HOST", required=True)
             self.CONTRAST_ORG_ID = self._get_env_var("CONTRAST_ORG_ID", required=True)
-            self.CONTRAST_APP_ID = self._get_env_var("CONTRAST_APP_ID", required=True)
+            self.CONTRAST_APP_ID, self.CONTRAST_APP_IDS = self._resolve_app_id()
             self.CONTRAST_AUTHORIZATION_KEY = self._get_env_var("CONTRAST_AUTHORIZATION_KEY", required=True)
             self.CONTRAST_API_KEY = self._get_env_var("CONTRAST_API_KEY", required=True)
 
@@ -371,6 +379,85 @@ class Config:
                 is_warning=True
             )
             return CodingAgents.SMARTFIX.name
+
+    def _resolve_app_id(self):
+        """
+        Resolve the active application ID from contrast_app_id or contrast_app_ids inputs.
+
+        Precedence:
+          1. CONTRAST_APP_ID (singular) — takes precedence if set (backward compat)
+          2. CONTRAST_APP_IDS (plural JSON array) — first element used if singular is absent
+          3. Neither set — raises ConfigurationError
+
+        Returns:
+            Tuple[str, List[str]]: (resolved_app_id, parsed_app_ids_list)
+        """
+        singular = self._get_env_var("CONTRAST_APP_ID", required=False)
+        if singular:
+            return singular, []
+
+        plural_raw = self._get_env_var("CONTRAST_APP_IDS", required=False)
+        if plural_raw:
+            app_ids = self._parse_app_ids(plural_raw)
+            return app_ids[0], app_ids
+
+        raise ConfigurationError(
+            "Error: Must set either contrast_app_id or contrast_app_ids. "
+            "Use contrast_app_id for a single application or "
+            "contrast_app_ids for a JSON array of application IDs."
+        )
+
+    def _parse_app_ids(self, json_str: Optional[str]) -> List[str]:
+        """
+        Parse and validate a JSON array of application IDs.
+
+        Args:
+            json_str: JSON string representing an array of app IDs, or None
+
+        Returns:
+            List[str]: Parsed list of app IDs, or empty list if json_str is None/empty
+
+        Raises:
+            ConfigurationError: If json_str is set but invalid or results in an empty list
+        """
+        if not json_str:
+            return []
+
+        try:
+            app_ids = json.loads(json_str)
+        except json.JSONDecodeError:
+            raise ConfigurationError(
+                f"Error: contrast_app_ids must be a valid JSON array. "
+                f"Got: {json_str!r}"
+            )
+
+        if not isinstance(app_ids, list):
+            raise ConfigurationError(
+                f"Error: contrast_app_ids must be a JSON array, not {type(app_ids).__name__}. "
+                f"Example: '[\"app-id-1\", \"app-id-2\"]'"
+            )
+
+        if not app_ids:
+            raise ConfigurationError(
+                "Error: contrast_app_ids must not be an empty array."
+            )
+
+        cleaned_ids: List[str] = []
+        invalid_entries = []
+        for index, raw_app_id in enumerate(app_ids):
+            app_id_str = str(raw_app_id).strip() if raw_app_id is not None else ""
+            if app_id_str:
+                cleaned_ids.append(app_id_str)
+            else:
+                invalid_entries.append((index, raw_app_id))
+        if invalid_entries:
+            details = ", ".join(
+                f"{idx} (value: {repr(value)})" for idx, value in invalid_entries
+            )
+            raise ConfigurationError(
+                f"Error: contrast_app_ids contains invalid entries at positions: {details}."
+            )
+        return cleaned_ids
 
     def _parse_and_validate_severities(self, json_str: Optional[str]) -> List[str]:
         default_severities = ["CRITICAL", "HIGH", "MEDIUM"]
