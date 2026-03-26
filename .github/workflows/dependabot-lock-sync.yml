@@ -34,7 +34,7 @@ jobs:
   sync-lock-file:
     name: Regenerate requirements.lock
     runs-on: ubuntu-latest
-    if: github.actor == 'dependabot[bot]'
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
     steps:
       - name: Checkout PR branch
         uses: actions/checkout@v4
