@@ -247,7 +247,7 @@ class TestLoadCustomInstructions(unittest.TestCase):
         """Loading Source B emits a log message naming the file and branch."""
         mock_run.side_effect = [
             _git_show_result(returncode=128),         # Source A: not found
-            _git_show_result("copilot instructions"), # Source B
+            _git_show_result("copilot instructions"),  # Source B
         ]
         with patch("src.smartfix.domains.agents.custom_instructions.log") as mock_log:
             load_custom_instructions(self.repo_path, self.config)
