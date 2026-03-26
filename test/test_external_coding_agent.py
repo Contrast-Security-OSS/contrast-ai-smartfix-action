@@ -26,7 +26,9 @@ from unittest.mock import patch, MagicMock, ANY
 from src.config import get_config, reset_config
 from src.github.external_coding_agent import ExternalCodingAgent
 from src.smartfix.domains.vulnerability import Vulnerability
-from src.smartfix.domains.vulnerability.context import RemediationContext
+from src.smartfix.domains.vulnerability.context import (
+    RemediationContext, BuildConfiguration, RepositoryConfiguration, PromptConfiguration
+)
 
 
 class TestExternalCodingAgent(unittest.TestCase):
@@ -54,9 +56,15 @@ class TestExternalCodingAgent(unittest.TestCase):
         )
 
         # Create remediation context
-        context = RemediationContext.from_config(remediation_id, vulnerability, self.config)
-        # Add issue_body for external agent compatibility
-        context.issue_body = "Test issue body"
+        context = RemediationContext(
+            remediation_id=remediation_id,
+            vulnerability=vulnerability,
+            prompts=PromptConfiguration(),
+            build_config=BuildConfiguration.from_config(self.config),
+            repo_config=RepositoryConfiguration.from_config(self.config),
+            skip_writing_security_test=self.config.SKIP_WRITING_SECURITY_TEST,
+            issue_body="Test issue body",
+        )
         return context
 
     @patch('src.github.external_coding_agent.log')

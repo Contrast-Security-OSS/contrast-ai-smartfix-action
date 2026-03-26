@@ -27,26 +27,30 @@ high-level agent execution wrapper functions.
 import asyncio
 import logging
 import platform
-from pathlib import Path
 from typing import Any
 
-from src.utils import debug_log, log, error_exit
-from src.smartfix.shared.failure_categories import FailureCategory
+from src.utils import debug_log, log
 
 # Conditional imports
 try:
-    from google.adk.artifacts.in_memory_artifact_service import InMemoryArtifactService
-    from google.adk.runners import Runner
-    from google.adk.sessions import InMemorySessionService
     from asyncio import WindowsProactorEventLoopPolicy
 except ImportError:
     pass
 
 MAX_PENDING_TASKS = 100
+_cleanup_logging_configured = False
 
 
 def _configure_cleanup_logging() -> None:
-    """Configure logging to suppress benign asyncio and MCP cleanup errors."""
+    """Configure logging to suppress benign asyncio and MCP cleanup errors.
+
+    Guards against duplicate filter accumulation: logging.addFilter() appends
+    without deduplication, so calling this more than once per process would
+    attach redundant filter instances to each logger.
+    """
+    global _cleanup_logging_configured
+    if _cleanup_logging_configured:
+        return
     # Suppress anyio error logging
     anyio_logger = logging.getLogger("anyio")
     anyio_logger.setLevel(logging.CRITICAL)
@@ -82,6 +86,7 @@ def _configure_cleanup_logging() -> None:
     asyncio_logger.addFilter(cleanup_filter)
     if mcp_logger:
         mcp_logger.addFilter(cleanup_filter)
+    _cleanup_logging_configured = True
 
 
 def _run_agent_in_event_loop(coroutine_func, *args, **kwargs) -> Any:
@@ -208,107 +213,3 @@ def _run_agent_in_event_loop(coroutine_func, *args, **kwargs) -> Any:
             pass
 
     return result
-
-
-async def _run_agent_internal_with_prompts(
-    repo_root: Path,
-    query: str,
-    system_prompt: str,
-    remediation_id: str,
-    session_id: str = None,
-    additional_tools: list = None
-) -> str:
-    """
-    Internal helper to run either fix agent with API-provided prompts. Returns summary.
-
-    Args:
-        repo_root: Path to repository root
-        query: User query/prompt for the agent
-        system_prompt: System prompt for agent instructions
-        remediation_id: Remediation ID for error tracking
-        session_id: Session ID for Contrast LLM tracking
-        additional_tools: Optional list of extra tools (e.g., BuildTool) to add to the agent
-
-    Returns:
-        str: Summary from the agent execution
-    """
-    # Lazy imports to avoid circular dependency with config and agents modules
-    from src.config import get_config
-    from .sub_agent_executor import SubAgentExecutor, ADK_AVAILABLE
-
-    config = get_config()
-    debug_log(f"Using Agent Model ID: {config.AGENT_MODEL}")
-
-    # Set the correct event loop policy for Windows
-    # This is crucial for the MCP filesystem server connections to work on Windows
-    if platform.system() == 'Windows':
-        try:
-            # First ensure there's no active event loop that might conflict
-            try:
-                loop = asyncio.get_event_loop()
-                if not loop.is_closed():
-                    debug_log("Closing existing event loop before setting policy")
-                    loop.close()
-            except RuntimeError:
-                pass  # No event loop, which is fine
-
-            # IMPORTANT: On Windows, we MUST use the ProactorEventLoop
-            # SelectorEventLoop doesn't support subprocesses on Windows
-            # Explicitly set the WindowsProactorEventLoopPolicy to ensure subprocess support
-            asyncio.set_event_loop_policy(WindowsProactorEventLoopPolicy())
-            debug_log("Explicitly set WindowsProactorEventLoopPolicy for subprocess support")
-
-            # Create a fresh event loop with the WindowsProactorEventLoopPolicy
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            debug_log(f"Created and set new event loop with Windows default policy: {type(loop).__name__}")
-        except Exception as e:
-            debug_log(f"Warning: Error setting Windows event loop policy: {e}")
-            debug_log("Will continue with default event loop policy")
-
-    if not ADK_AVAILABLE:
-        log("FATAL: Agent execution skipped: ADK libraries not available (import failed).")
-        error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
-
-    session = None
-    runner = None
-
-    try:
-        session_service = InMemorySessionService()
-        artifacts_service = InMemoryArtifactService()
-        app_name = 'contrast_fix_app'
-        session = await session_service.create_session(
-            state={},
-            app_name=app_name,
-            user_id='github_action_fix'
-        )
-    except Exception as e:
-        # Handle any errors in session creation
-        log(f"FATAL: Failed to create fix agent session: {e}", is_error=True)
-        error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
-
-    # Use SubAgentExecutor to create and execute the agent
-    executor = SubAgentExecutor()
-
-    agent = await executor.create_agent(
-        repo_root, remediation_id, session_id, system_prompt=system_prompt,
-        additional_tools=additional_tools
-    )
-    if not agent:
-        log(
-            "AI Agent creation failed (fix agent). "
-            "Possible reasons: MCP server connection issue, missing prompts, "
-            "model configuration error, or internal ADK problem."
-        )
-        error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
-
-    runner = Runner(
-        app_name=app_name,
-        agent=agent,
-        artifact_service=artifacts_service,
-        session_service=session_service,
-    )
-
-    # Execute the agent using the executor
-    summary = await executor.execute_agent(runner, agent, session, query, remediation_id)
-    return summary

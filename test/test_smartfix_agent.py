@@ -220,8 +220,8 @@ class TestSmartFixAgentPRGate(unittest.TestCase):
         context.skip_writing_security_test = False
 
         def fake_execution(ctx):
-            # Agent discovered "mvn test" at runtime and ran a successful build
-            agent._build_state = {"build_cmd": "mvn test", "format_cmd": None}
+            # Agent discovered "pytest" at runtime and ran a successful build
+            agent._build_state = {"build_cmd": "pytest", "format_cmd": None}
             return "Success"
 
         with patch.object(agent, '_run_fix_agent_execution', side_effect=fake_execution):

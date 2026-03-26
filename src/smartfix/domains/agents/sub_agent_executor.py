@@ -44,6 +44,9 @@ ADK_AVAILABLE = False
 
 try:
     from google.adk.agents import Agent
+    from google.adk.artifacts.in_memory_artifact_service import InMemoryArtifactService
+    from google.adk.runners import Runner
+    from google.adk.sessions import InMemorySessionService
     from src.smartfix.extensions.smartfix_litellm import SmartFixLiteLlm
     from src.smartfix.extensions.smartfix_llm_agent import SmartFixLlmAgent
     from google.genai import types as genai_types
@@ -73,6 +76,69 @@ class SubAgentExecutor:
         self.config = get_config()
         self.max_events = max_events or self.config.MAX_EVENTS_PER_AGENT
         self.mcp_manager = MCPToolsetManager()
+
+    async def run(
+        self,
+        repo_root: Path,
+        query: str,
+        system_prompt: str,
+        remediation_id: str,
+        session_id: str = None,
+        additional_tools: list = None
+    ) -> str:
+        """
+        Run the agent end-to-end: create session, create agent, execute, return summary.
+
+        Args:
+            repo_root: Path to repository root
+            query: User query/prompt for the agent
+            system_prompt: System prompt for agent instructions
+            remediation_id: Remediation ID for error tracking
+            session_id: Session ID for Contrast LLM tracking
+            additional_tools: Optional list of extra tools to add to the agent
+
+        Returns:
+            str: Summary from the agent execution
+        """
+        debug_log(f"Using Agent Model ID: {self.config.AGENT_MODEL}")
+
+        if not ADK_AVAILABLE:
+            log("FATAL: Agent execution skipped: ADK libraries not available (import failed).")
+            error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
+
+        try:
+            session_service = InMemorySessionService()
+            artifacts_service = InMemoryArtifactService()
+            app_name = 'contrast_fix_app'
+            session = await session_service.create_session(
+                state={},
+                app_name=app_name,
+                user_id='github_action_fix'
+            )
+        except Exception as e:
+            log(f"FATAL: Failed to create fix agent session: {e}", is_error=True)
+            error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
+
+        agent = await self.create_agent(
+            repo_root, remediation_id, session_id, system_prompt=system_prompt,
+            additional_tools=additional_tools
+        )
+        if not agent:
+            log(
+                "AI Agent creation failed (fix agent). "
+                "Possible reasons: MCP server connection issue, missing prompts, "
+                "model configuration error, or internal ADK problem."
+            )
+            error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
+
+        runner = Runner(
+            app_name=app_name,
+            agent=agent,
+            artifact_service=artifacts_service,
+            session_service=session_service,
+        )
+
+        return await self.execute_agent(runner, agent, session, query, remediation_id)
 
     async def create_agent(
         self,
@@ -212,6 +278,7 @@ class SubAgentExecutor:
                 event_count += 1
 
                 # Process the event and get updated state
+                prev_final_response = final_response
                 event_response, should_break = await self._process_event(
                     event, event_count, agent_tool_calls_telemetry
                 )
@@ -219,8 +286,10 @@ class SubAgentExecutor:
                 if event_response:
                     final_response = event_response
 
-                # Handle agent messages and telemetry
-                if event.content and event_response and event_response != final_response:
+                # Handle agent messages and telemetry: when we get a new LLM response
+                # that differs from the previous one, flush the current telemetry segment
+                # and start a fresh one for the new response.
+                if event.content and event_response and event_response != prev_final_response:
                     if agent_event_telemetry is not None:
                         # Directly assign toolCalls rather than appending
                         agent_event_telemetry["toolCalls"] = agent_tool_calls_telemetry

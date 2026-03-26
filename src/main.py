@@ -19,12 +19,7 @@
 
 import sys
 import re
-import asyncio
-import warnings
-import atexit
-import platform
 from datetime import datetime, timedelta
-from asyncio.proactor_events import _ProactorBasePipeTransport
 from urllib.parse import urlparse
 
 # Import configurations and utilities
@@ -33,7 +28,7 @@ from src.smartfix.shared.coding_agents import CodingAgents
 from src.utils import debug_log, log, error_exit
 from src import telemetry_handler
 from src.version_check import do_version_check
-from src.smartfix.domains.workflow.session_handler import create_session_handler, QASectionConfig
+from src.smartfix.domains.workflow.session_handler import handle_session_result, generate_qa_section
 from src.smartfix.domains.workflow.build_runner import run_build_command
 from src.smartfix.shared.failure_categories import FailureCategory
 
@@ -46,8 +41,9 @@ from src.github.github_operations import GitHubOperations
 from src.smartfix.domains.vulnerability.context import RemediationContext, PromptConfiguration, BuildConfiguration, RepositoryConfiguration
 from src.smartfix.domains.vulnerability.models import Vulnerability
 
-# Import GitHub-specific agent factory
-from src.github.agent_factory import GitHubAgentFactory
+from src.smartfix.domains.agents.smartfix_agent import SmartFixAgent
+from src.smartfix.domains.agents.asyncio_workarounds import apply_asyncio_workarounds, cleanup_event_loop
+from src.github.external_coding_agent import ExternalCodingAgent
 from src.smartfix.domains.workflow.pr_reconciliation import reconcile_open_remediations
 
 config = get_config()
@@ -57,188 +53,7 @@ telemetry_handler.initialize_telemetry()
 git_ops = GitOperations()
 github_ops = GitHubOperations()
 
-# NOTE: Google ADK appears to have issues with asyncio event loop cleanup, and has had attempts to address them in versions 1.4.0-1.5.0
-# Configure warnings to ignore asyncio ResourceWarnings during shutdown
-warnings.filterwarnings("ignore", category=ResourceWarning,
-                        message="unclosed.*<asyncio.sslproto._SSLProtocolTransport.*")
-warnings.filterwarnings("ignore", category=ResourceWarning,
-                        message="unclosed transport")
-warnings.filterwarnings("ignore", category=ResourceWarning,
-                        message="unclosed.*<asyncio.*")
-
-# Patch asyncio to handle event loop closed errors during shutdown
-_original_loop_check_closed = asyncio.base_events.BaseEventLoop._check_closed
-
-
-def _patched_loop_check_closed(self):
-    try:
-        _original_loop_check_closed(self)
-    except RuntimeError as e:
-        if "Event loop is closed" in str(e):
-            return  # Suppress the error
-        raise
-
-
-asyncio.BaseEventLoop._check_closed = _patched_loop_check_closed
-
-
-# Add a specific fix for _ProactorBasePipeTransport.__del__ on Windows
-if platform.system() == 'Windows':
-    # Import the specific module that contains ProactorBasePipeTransport
-    try:
-        # Store the original __del__ method
-        _original_pipe_del = _ProactorBasePipeTransport.__del__
-
-        # Define a safe replacement for __del__
-        def _patched_pipe_del(self):
-            try:
-                # Check if the event loop is closed or finalizing
-                if self._loop.is_closed() or sys.is_finalizing():
-                    # Skip the original __del__ which would trigger the error
-                    return
-
-                # Otherwise use the original __del__ implementation
-                _original_pipe_del(self)
-            except (AttributeError, RuntimeError, ImportError, TypeError):
-                # Catch and ignore all attribute or runtime errors during shutdown
-                pass
-
-        # Apply the patch to the __del__ method
-        _ProactorBasePipeTransport.__del__ = _patched_pipe_del
-
-        debug_log("Successfully patched _ProactorBasePipeTransport.__del__ for Windows")
-    except (ImportError, AttributeError) as e:
-        debug_log(f"Could not patch _ProactorBasePipeTransport: {str(e)}")
-
-    # Add a specific fix for BaseSubprocessTransport.__del__ on Windows
-    try:
-        from asyncio.base_subprocess import BaseSubprocessTransport
-
-        # Store the original __del__ method
-        _original_subprocess_del = BaseSubprocessTransport.__del__
-
-        # Define a safe replacement for __del__
-        def _patched_subprocess_del(self):
-            try:
-                # Check if the event loop is closed or finalizing
-                if hasattr(self, '_loop') and self._loop is not None and (self._loop.is_closed() or sys.is_finalizing()):
-                    # Skip the original __del__ which would trigger the error
-                    return
-
-                # Otherwise use the original __del__ implementation
-                _original_subprocess_del(self)
-            except (AttributeError, RuntimeError, ImportError, TypeError, ValueError):
-                # Catch and ignore all attribute, runtime, or value errors during shutdown
-                # ValueError specifically handles "I/O operation on closed pipe"
-                pass
-
-        # Apply the patch to the __del__ method
-        BaseSubprocessTransport.__del__ = _patched_subprocess_del
-
-        debug_log("Successfully patched BaseSubprocessTransport.__del__ for Windows")
-    except (ImportError, AttributeError) as e:
-        debug_log(f"Could not patch BaseSubprocessTransport: {str(e)}")
-
-
-def cleanup_asyncio():  # noqa: C901
-    """
-    Cleanup function registered with atexit to properly handle asyncio resources during shutdown.
-    This helps prevent the "Event loop is closed" errors during program exit.
-    """
-    # Suppress stderr temporarily to avoid printing shutdown errors
-    original_stderr = sys.stderr
-    try:
-        # Create a dummy stderr to suppress errors during cleanup
-        class DummyStderr:
-            def write(self, *args, **kwargs):
-                pass
-
-            def flush(self):
-                pass
-
-        # Only on Windows do we need the more aggressive error suppression
-        if platform.system() == 'Windows':
-            sys.stderr = DummyStderr()
-
-            # Windows-specific: ensure the proactor event loop resources are properly cleaned
-            try:
-                # Try to access the global WindowsProactorEventLoopPolicy
-                loop_policy = asyncio.get_event_loop_policy()
-
-                # If we have any running loops, close them properly
-                try:
-                    loop = loop_policy.get_event_loop()
-                    if not loop.is_closed():
-                        if loop.is_running():
-                            loop.stop()
-
-                        # Cancel all tasks
-                        pending = asyncio.all_tasks(loop)
-                        if pending:
-                            for task in pending:
-                                task.cancel()
-
-                            # Give tasks a chance to respond to cancellation with a timeout
-                            try:
-                                loop.run_until_complete(asyncio.wait_for(
-                                    asyncio.gather(*pending, return_exceptions=True),
-                                    timeout=1.0
-                                ))
-                            except (asyncio.CancelledError, asyncio.TimeoutError, Exception):
-                                pass
-
-                        # Close transports and other resources
-                        try:
-                            loop.run_until_complete(loop.shutdown_asyncgens())
-                        except Exception:
-                            pass
-
-                        try:
-                            loop.close()
-                        except Exception:
-                            pass
-                except Exception:
-                    pass
-
-                # Force garbage collection to ensure __del__ methods are called
-                try:
-                    import gc
-                    gc.collect()
-                except Exception:
-                    pass
-
-            except Exception:
-                pass  # Ignore any errors during Windows-specific cleanup
-        else:
-            # For non-Windows platforms, perform regular cleanup
-            try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    loop.stop()
-
-                # Cancel all tasks
-                pending = asyncio.all_tasks(loop)
-                if pending:
-                    for task in pending:
-                        task.cancel()
-
-                    # Give tasks a chance to respond to cancellation
-                    if not loop.is_closed():
-                        loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
-
-                # Close the loop
-                if not loop.is_closed():
-                    loop.run_until_complete(loop.shutdown_asyncgens())
-                    loop.close()
-            except Exception:
-                pass  # Ignore any errors during cleanup
-    finally:
-        # Restore stderr
-        sys.stderr = original_stderr
-
-
-# Register the cleanup function
-atexit.register(cleanup_asyncio)
+apply_asyncio_workarounds()
 
 
 def main():  # noqa: C901
@@ -270,7 +85,7 @@ def main():  # noqa: C901
         log("\n::group::--- Validating configured build command ---")
         log(f"Running initial build: {build_config.user_build_command}")
         build_success, build_output = run_build_command(
-            build_config.user_build_command, repo_config.repo_path, "unknown"
+            build_config.user_build_command, repo_config.repo_path, "initial-build-check"
         )
         if not build_success:
             log("Initial build failed. The configured BUILD_COMMAND does not succeed on the "
@@ -278,7 +93,8 @@ def main():  # noqa: C901
                 "running SmartFix.", is_error=True)
             debug_log(f"Build output:\n{build_output}")
             log("\n::endgroup::")
-            error_exit("unknown", FailureCategory.INITIAL_BUILD_FAILURE.value)
+            # No remediation ID exists yet — exit directly without notifying the backend.
+            sys.exit(1)
         log("Initial build succeeded. Proceeding with vulnerability processing.")
         log("\n::endgroup::")
 
@@ -421,7 +237,8 @@ def main():  # noqa: C901
                 PromptConfiguration.validate_raw_prompts_data(vulnerability_data)
                 prompts = PromptConfiguration.for_smartfix_agent(
                     fix_system_prompt=vulnerability_data['fixSystemPrompt'],
-                    fix_user_prompt=vulnerability_data['fixUserPrompt']
+                    fix_user_prompt=vulnerability_data['fixUserPrompt'],
+                    skip_writing_security_test=config.SKIP_WRITING_SECURITY_TEST,
                 )
             except ValueError as e:
                 log(f"Error: Invalid prompts from backend: {e}", is_error=True)
@@ -453,8 +270,8 @@ def main():  # noqa: C901
             remediation_id = vulnerability_data['remediationId']
             session_id = None  # External agents don't use Contrast LLM sessions
 
-            # Create prompt configuration for external agent (no prompts required)
-            prompts = PromptConfiguration.for_external_agent()
+            # No prompts required for external agents
+            prompts = PromptConfiguration()
 
         # Populate vulnInfo in telemetry
         telemetry_handler.update_telemetry("vulnInfo.vulnId", vuln_uuid)
@@ -489,9 +306,16 @@ def main():  # noqa: C901
         log(f"\n\033[0;33m Selected vuln to fix: {vuln_title} \033[0m")
 
         # --- Create Common Remediation Context ---
-        # Create vulnerability and context from config - single source of truth
         vulnerability = Vulnerability.from_api_data(vulnerability_data)
-        context = RemediationContext.from_config(remediation_id, vulnerability, config, prompts=prompts, session_id=session_id)
+        context = RemediationContext(
+            remediation_id=remediation_id,
+            vulnerability=vulnerability,
+            prompts=prompts,
+            build_config=build_config,
+            repo_config=repo_config,
+            skip_writing_security_test=config.SKIP_WRITING_SECURITY_TEST,
+            session_id=session_id,
+        )
 
         # Propagate a build command discovered by a previous agent run so the next
         # agent skips the discovery step.  Only applies when no command was
@@ -509,13 +333,8 @@ def main():  # noqa: C901
 
         # --- Check if we need to use the external coding agent ---
         if config.CODING_AGENT != CodingAgents.SMARTFIX.name:
-            # Create agent using GitHubAgentFactory
-            agent_type = CodingAgents[config.CODING_AGENT]
-            external_agent = GitHubAgentFactory.create_agent(agent_type, config)
-            # Assemble the issue body from vulnerability details
-            issue_body = external_agent.assemble_issue_body(vulnerability_data)
-            # Add issue_body for external agent compatibility
-            context.issue_body = issue_body
+            external_agent = ExternalCodingAgent(config)
+            context.issue_body = external_agent.assemble_issue_body(vulnerability_data)
 
             result = external_agent.remediate(context)
 
@@ -536,8 +355,7 @@ def main():  # noqa: C901
             continue
 
         # --- Run SmartFix Agent ---
-        # Create SmartFix agent (no config needed - gets everything from context)
-        smartfix_agent = GitHubAgentFactory.create_agent(CodingAgents.SMARTFIX)
+        smartfix_agent = SmartFixAgent()
 
         # Run the agent remediation process
         # The agent will run the fix agent loop without doing any git operations
@@ -545,8 +363,7 @@ def main():  # noqa: C901
         session = smartfix_agent.remediate(context)
 
         # Extract results from the session
-        session_handler = create_session_handler()
-        session_result = session_handler.handle_session_result(session)
+        session_result = handle_session_result(session)
 
         if not session_result.should_continue:
             log(f"Agent failed with reason: {session_result.failure_category}")
@@ -585,12 +402,15 @@ def main():  # noqa: C901
                 log(f"Saving agent-discovered build command for future runs: {discovered_build_cmd}")
 
         ai_fix_summary_full = session_result.ai_fix_summary
-        # Generate review section based on session results
-        qa_config = QASectionConfig(
-            has_build_command=build_config.has_build_command(),
-            build_command=build_config.build_command
+        # Prefer the command the agent actually verified over the pre-configured value.
+        # When no build command was configured, context.build_config.build_command is None
+        # even though the agent may have discovered and verified one at runtime.
+        verified_build_cmd = (
+            smartfix_agent._build_state.get("build_cmd")
+            if smartfix_agent._build_state
+            else context.build_config.build_command
         )
-        qa_section = session_handler.generate_qa_section(session, qa_config)
+        qa_section = generate_qa_section(verified_build_cmd)
 
         # --- Git and GitHub Operations ---
         # All file changes from the agent (fix + formatting) are uncommitted at this point
@@ -771,50 +591,7 @@ def main():  # noqa: C901
 
     log(f"\n--- Script finished (total runtime: {total_runtime}) ---")
 
-    # Clean up any dangling asyncio resources
-    try:
-        # Force asyncio resource cleanup before exit
-        loop = asyncio.get_event_loop_policy().get_event_loop()
-        if not loop.is_closed():
-            # Cancel all pending tasks
-            pending = asyncio.all_tasks(loop)
-            if pending:
-                for task in pending:
-                    try:
-                        task.cancel()
-                    except Exception:
-                        pass
-
-                # Give tasks a chance to respond to cancellation
-                try:
-                    # Wait with a timeout to prevent hanging
-                    loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
-                except (asyncio.CancelledError, Exception):
-                    pass
-
-            try:
-                # Shut down asyncgens
-                loop.run_until_complete(loop.shutdown_asyncgens())
-            except Exception:
-                pass
-
-            try:
-                # Close the loop
-                loop.close()
-            except Exception:
-                pass
-
-        # On Windows, specifically force garbage collection
-        if platform.system() == 'Windows':
-            try:
-                import gc
-                gc.collect()
-            except Exception:
-                pass
-    except Exception as e:
-        # Ignore any errors during cleanup
-        debug_log(f"Ignoring error during asyncio cleanup: {str(e)}")
-        pass
+    cleanup_event_loop()
 
 
 if __name__ == "__main__":

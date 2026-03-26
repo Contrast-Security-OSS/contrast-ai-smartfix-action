@@ -124,7 +124,7 @@ def create_build_tool(  # noqa: C901
         # Validate determined format command against allowlist
         if format_command and not format_is_configured:
             try:
-                validate_command("FORMAT_COMMAND", format_command)
+                validate_command("FORMATTING_COMMAND", format_command)
             except CommandValidationError as e:
                 logger.warning(f"Format command validation failed: {e}")
                 return {"success": False, "output": f"Format command not allowed: {e}", "recorded": False}

@@ -55,6 +55,7 @@ os.environ.update(TEST_ENV_VARS)
 
 # Import after environment setup
 from src.smartfix.domains.agents import event_loop_utils  # noqa: E402
+from src.smartfix.domains.agents.sub_agent_executor import SubAgentExecutor  # noqa: E402
 from src.config import reset_config, get_config  # noqa: E402
 
 
@@ -143,152 +144,123 @@ class TestEventLoopUtils(unittest.TestCase):
             event_loop_utils._run_agent_in_event_loop(async_func_with_pending_task)
 
     @patch('src.smartfix.domains.agents.sub_agent_executor.ADK_AVAILABLE', False)
-    @patch('src.smartfix.domains.agents.event_loop_utils.error_exit')
+    @patch('src.smartfix.domains.agents.sub_agent_executor.error_exit')
     def test_run_agent_internal_adk_not_available(self, mock_error_exit):
-        """Test _run_agent_internal_with_prompts when ADK not available"""
-        # Mock error_exit to raise exception to stop execution
+        """Test SubAgentExecutor.run() when ADK not available"""
         mock_error_exit.side_effect = SystemExit(1)
 
-        # Use asyncio.run to execute the async function - should exit early
+        executor = SubAgentExecutor()
         with self.assertRaises(SystemExit):
-            asyncio.run(event_loop_utils._run_agent_internal_with_prompts(
+            asyncio.run(executor.run(
                 repo_root=Path("/tmp/repo"),
                 query="Test query",
                 system_prompt="Test prompt",
                 remediation_id="REM-123"
             ))
 
-        # Verify error_exit was called with correct args
         mock_error_exit.assert_called_once()
         call_args = mock_error_exit.call_args
         self.assertEqual(call_args[0][0], "REM-123")
 
     @patch('src.smartfix.domains.agents.sub_agent_executor.ADK_AVAILABLE', True)
-    @patch('src.smartfix.domains.agents.event_loop_utils.InMemorySessionService')
-    @patch('src.smartfix.domains.agents.event_loop_utils.error_exit')
+    @patch('src.smartfix.domains.agents.sub_agent_executor.InMemorySessionService')
+    @patch('src.smartfix.domains.agents.sub_agent_executor.error_exit')
     def test_run_agent_internal_session_creation_error(self, mock_error_exit, mock_session_service):
-        """Test _run_agent_internal_with_prompts with session creation error"""
-        # Mock error_exit to raise exception to stop execution
+        """Test SubAgentExecutor.run() with session creation error"""
         mock_error_exit.side_effect = SystemExit(1)
 
-        # Mock session service to raise exception
         mock_service_instance = MagicMock()
         mock_service_instance.create_session = AsyncMock(side_effect=Exception("Session error"))
         mock_session_service.return_value = mock_service_instance
 
+        executor = SubAgentExecutor()
         with self.assertRaises(SystemExit):
-            asyncio.run(event_loop_utils._run_agent_internal_with_prompts(
+            asyncio.run(executor.run(
                 repo_root=Path("/tmp/repo"),
                 query="Test query",
                 system_prompt="Test prompt",
                 remediation_id="REM-456"
             ))
 
-        # Verify error_exit was called
         mock_error_exit.assert_called_once()
         call_args = mock_error_exit.call_args
         self.assertEqual(call_args[0][0], "REM-456")
 
     @patch('src.smartfix.domains.agents.sub_agent_executor.ADK_AVAILABLE', True)
-    @patch('src.smartfix.domains.agents.event_loop_utils.InMemorySessionService')
-    @patch('src.smartfix.domains.agents.event_loop_utils.InMemoryArtifactService')
-    @patch('src.smartfix.domains.agents.sub_agent_executor.SubAgentExecutor')
-    @patch('src.smartfix.domains.agents.event_loop_utils.error_exit')
+    @patch('src.smartfix.domains.agents.sub_agent_executor.InMemorySessionService')
+    @patch('src.smartfix.domains.agents.sub_agent_executor.InMemoryArtifactService')
+    @patch('src.smartfix.domains.agents.sub_agent_executor.error_exit')
     def test_run_agent_internal_agent_creation_failure(
-        self, mock_error_exit, mock_executor_class, mock_artifact_service, mock_session_service
+        self, mock_error_exit, mock_artifact_service, mock_session_service
     ):
-        """Test _run_agent_internal_with_prompts when agent creation fails"""
-        # Mock error_exit to raise exception to stop execution
+        """Test SubAgentExecutor.run() when agent creation fails"""
         mock_error_exit.side_effect = SystemExit(1)
 
-        # Mock services
         mock_service_instance = MagicMock()
         mock_service_instance.create_session = AsyncMock(return_value=MagicMock())
         mock_session_service.return_value = mock_service_instance
 
-        # Mock executor to return None (agent creation failure)
-        mock_executor = MagicMock()
-        mock_executor.create_agent = AsyncMock(return_value=None)
-        mock_executor_class.return_value = mock_executor
+        executor = SubAgentExecutor()
+        with patch.object(executor, 'create_agent', AsyncMock(return_value=None)):
+            with self.assertRaises(SystemExit):
+                asyncio.run(executor.run(
+                    repo_root=Path("/tmp/repo"),
+                    query="Test query",
+                    system_prompt="Test prompt",
+                    remediation_id="REM-789"
+                ))
 
-        with self.assertRaises(SystemExit):
-            asyncio.run(event_loop_utils._run_agent_internal_with_prompts(
-                repo_root=Path("/tmp/repo"),
-                query="Test query",
-                system_prompt="Test prompt",
-                remediation_id="REM-789"
-            ))
-
-        # Verify error_exit was called
         mock_error_exit.assert_called_once()
         call_args = mock_error_exit.call_args
         self.assertEqual(call_args[0][0], "REM-789")
 
     @patch('src.smartfix.domains.agents.sub_agent_executor.ADK_AVAILABLE', True)
-    @patch('src.smartfix.domains.agents.event_loop_utils.InMemorySessionService')
-    @patch('src.smartfix.domains.agents.event_loop_utils.InMemoryArtifactService')
-    @patch('src.smartfix.domains.agents.sub_agent_executor.SubAgentExecutor')
-    @patch('src.smartfix.domains.agents.event_loop_utils.Runner')
+    @patch('src.smartfix.domains.agents.sub_agent_executor.InMemorySessionService')
+    @patch('src.smartfix.domains.agents.sub_agent_executor.InMemoryArtifactService')
+    @patch('src.smartfix.domains.agents.sub_agent_executor.Runner')
     def test_run_agent_internal_success(
-        self, mock_runner_class, mock_executor_class, mock_artifact_service, mock_session_service
+        self, mock_runner_class, mock_artifact_service, mock_session_service
     ):
-        """Test _run_agent_internal_with_prompts with successful execution"""
-        # Mock services
+        """Test SubAgentExecutor.run() with successful execution"""
         mock_session = MagicMock()
         mock_service_instance = MagicMock()
         mock_service_instance.create_session = AsyncMock(return_value=mock_session)
         mock_session_service.return_value = mock_service_instance
 
-        # Mock executor
+        executor = SubAgentExecutor()
         mock_agent = MagicMock()
-        mock_executor = MagicMock()
-        mock_executor.create_agent = AsyncMock(return_value=mock_agent)
-        mock_executor.execute_agent = AsyncMock(return_value="Fix applied successfully")
-        mock_executor_class.return_value = mock_executor
-
-        result = asyncio.run(event_loop_utils._run_agent_internal_with_prompts(
-            repo_root=Path("/tmp/repo"),
-            query="Fix SQL injection",
-            system_prompt="You are a security fix agent",
-            remediation_id="REM-999",
-            session_id="SESSION-123"
-        ))
+        with patch.object(executor, 'create_agent', AsyncMock(return_value=mock_agent)) as mock_create, \
+             patch.object(executor, 'execute_agent', AsyncMock(return_value="Fix applied successfully")) as mock_execute:
+            result = asyncio.run(executor.run(
+                repo_root=Path("/tmp/repo"),
+                query="Fix SQL injection",
+                system_prompt="You are a security fix agent",
+                remediation_id="REM-999",
+                session_id="SESSION-123"
+            ))
 
         self.assertEqual(result, "Fix applied successfully")
-        mock_executor.create_agent.assert_called_once()
-        mock_executor.execute_agent.assert_called_once()
+        mock_create.assert_called_once()
+        mock_execute.assert_called_once()
 
-    @patch('src.smartfix.domains.agents.event_loop_utils.platform.system')
     @patch('src.smartfix.domains.agents.sub_agent_executor.ADK_AVAILABLE', True)
-    @patch('src.smartfix.domains.agents.event_loop_utils.InMemorySessionService')
-    @patch('src.smartfix.domains.agents.event_loop_utils.InMemoryArtifactService')
-    @patch('src.smartfix.domains.agents.sub_agent_executor.SubAgentExecutor')
-    @patch('src.smartfix.domains.agents.event_loop_utils.Runner')
-    @patch('src.smartfix.domains.agents.event_loop_utils.asyncio.set_event_loop_policy')
-    def test_run_agent_internal_windows_platform_handling(
-        self, mock_set_policy, mock_runner_class, mock_executor_class, mock_artifact_service,
-        mock_session_service, mock_platform
+    @patch('src.smartfix.domains.agents.sub_agent_executor.InMemorySessionService')
+    @patch('src.smartfix.domains.agents.sub_agent_executor.InMemoryArtifactService')
+    @patch('src.smartfix.domains.agents.sub_agent_executor.Runner')
+    def test_run_agent_internal_with_session_id(
+        self, mock_runner_class, mock_artifact_service, mock_session_service
     ):
-        """Test _run_agent_internal_with_prompts with Windows platform"""
-        mock_platform.return_value = 'Windows'
-
-        # Mock services
+        """Test SubAgentExecutor.run() passes session_id through to create_agent"""
         mock_session = MagicMock()
         mock_service_instance = MagicMock()
         mock_service_instance.create_session = AsyncMock(return_value=mock_session)
         mock_session_service.return_value = mock_service_instance
 
-        # Mock executor
+        executor = SubAgentExecutor()
         mock_agent = MagicMock()
-        mock_executor = MagicMock()
-        mock_executor.create_agent = AsyncMock(return_value=mock_agent)
-        mock_executor.execute_agent = AsyncMock(return_value="Windows fix success")
-        mock_executor_class.return_value = mock_executor
-
-        # Mock WindowsProactorEventLoopPolicy at asyncio level
-        mock_policy = MagicMock()
-        with patch('asyncio.WindowsProactorEventLoopPolicy', mock_policy, create=True):
-            result = asyncio.run(event_loop_utils._run_agent_internal_with_prompts(
+        with patch.object(executor, 'create_agent', AsyncMock(return_value=mock_agent)) as mock_create, \
+             patch.object(executor, 'execute_agent', AsyncMock(return_value="Windows fix success")):
+            result = asyncio.run(executor.run(
                 repo_root=Path("/tmp/repo"),
                 query="Verify fix",
                 system_prompt="You are a fix agent",
@@ -296,7 +268,10 @@ class TestEventLoopUtils(unittest.TestCase):
                 session_id="SESSION-WIN"
             ))
 
-            self.assertEqual(result, "Windows fix success")
+        self.assertEqual(result, "Windows fix success")
+        # Verify session_id was passed to create_agent
+        create_call_kwargs = mock_create.call_args
+        self.assertIn("SESSION-WIN", str(create_call_kwargs))
 
 
 if __name__ == '__main__':
