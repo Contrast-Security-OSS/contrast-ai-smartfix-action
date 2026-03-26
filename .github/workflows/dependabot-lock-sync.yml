@@ -42,12 +42,17 @@ jobs:
           ref: ${{ github.head_ref }}
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
       - name: Install uv
         shell: bash
         run: |
           echo ""
           echo "📦 Installing uv package manager..."
-          pip install uv==0.10.2 > /tmp/uv-install.log || (cat /tmp/uv-install.log && exit 1)
+          python -m pip install uv==0.10.2 > /tmp/uv-install.log || (cat /tmp/uv-install.log && exit 1)
           echo "✅ uv installed successfully"
 
       - name: Regenerate requirements.lock
