@@ -17,9 +17,6 @@
 # #L%
 #
 
-# When dependabot opens a pip PR that modifies src/requirements.txt, regenerate
-# src/requirements.lock and commit the result back to the dependabot branch.
-
 name: Dependabot Lock File Sync
 
 on:
