@@ -427,7 +427,6 @@ class TestCommandAutoDetection(unittest.TestCase):
         self.assertEqual(config.BASE_BRANCH, 'main')
         self.assertEqual(config.RUN_TASK, 'generate_fix')
 
-
     def test_use_smartfix_instructions_defaults_true(self):
         """USE_SMARTFIX_INSTRUCTIONS defaults to True when not set."""
         if 'USE_SMARTFIX_INSTRUCTIONS' in os.environ:
