@@ -45,12 +45,9 @@ jobs:
           python-version: '3.13'
 
       - name: Install uv
-        shell: bash
-        run: |
-          echo ""
-          echo "📦 Installing uv package manager..."
-          python -m pip install uv==0.10.2 > /tmp/uv-install.log || (cat /tmp/uv-install.log && exit 1)
-          echo "✅ uv installed successfully"
+        uses: astral-sh/setup-uv@5a095e7a2014a4212f075830d4f7277575a9d098 # v7.3
+        with:
+          version: "0.10.2"
 
       - name: Regenerate requirements.lock
         run: uv pip compile src/requirements.txt --no-cache -o src/requirements.lock
