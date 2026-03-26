@@ -402,7 +402,15 @@ def main():  # noqa: C901
                 log(f"Saving agent-discovered build command for future runs: {discovered_build_cmd}")
 
         ai_fix_summary_full = session_result.ai_fix_summary
-        qa_section = generate_qa_section(context.build_config.build_command)
+        # Prefer the command the agent actually verified over the pre-configured value.
+        # When no build command was configured, context.build_config.build_command is None
+        # even though the agent may have discovered and verified one at runtime.
+        verified_build_cmd = (
+            smartfix_agent._build_state.get("build_cmd")
+            if smartfix_agent._build_state
+            else context.build_config.build_command
+        )
+        qa_section = generate_qa_section(verified_build_cmd)
 
         # --- Git and GitHub Operations ---
         # All file changes from the agent (fix + formatting) are uncommitted at this point
