@@ -347,5 +347,70 @@ Frameworks: FastAPI, SQLAlchemy, Pydantic
             mock_telemetry.update_telemetry.assert_not_called()
 
 
+class TestSmartFixAgentCustomInstructions(unittest.TestCase):
+    """Test custom instructions injection into the fix agent prompt."""
+
+    @patch('src.smartfix.domains.agents.smartfix_agent._run_agent_in_event_loop')
+    @patch('src.smartfix.domains.agents.smartfix_agent.load_custom_instructions')
+    def test_custom_instructions_appended_to_prompt(self, mock_load, mock_event_loop):
+        """When custom instructions are loaded, they are appended to fix_user_prompt_with_tree."""
+        mock_load.return_value = "\n\n---\n\n## Repository-Specific Coding Standards\n\nUse OWASP encoder."
+        mock_event_loop.return_value = "<pr_body>Fixed</pr_body>"
+
+        agent = SmartFixAgent()
+        context = Mock(spec=RemediationContext)
+        context.build_config = Mock()
+        context.build_config.has_build_command.return_value = False
+        context.build_config.user_build_command = None
+        context.build_config.user_format_command = None
+        context.repo_config = Mock()
+        context.repo_config.repo_path = Path("/tmp/test")
+        context.prompts = Mock()
+        context.prompts.fix_system_prompt = "Fix system"
+        context.prompts.fix_user_prompt = "Fix this vulnerability"
+        context.remediation_id = "test-ci-123"
+        context.session_id = "session-ci"
+        context.skip_writing_security_test = False
+
+        with patch.object(agent, '_extract_analytics_data'):
+            agent.remediate(context)
+
+        # The prompt passed to the event loop should include custom instructions
+        mock_event_loop.assert_called_once()
+        prompt_arg = mock_event_loop.call_args[0][2]  # fix_user_prompt_with_tree positional arg
+        self.assertIn("Use OWASP encoder.", prompt_arg)
+        self.assertIn("Fix this vulnerability", prompt_arg)
+
+    @patch('src.smartfix.domains.agents.smartfix_agent._run_agent_in_event_loop')
+    @patch('src.smartfix.domains.agents.smartfix_agent.load_custom_instructions')
+    def test_no_custom_instructions_prompt_unchanged(self, mock_load, mock_event_loop):
+        """When load_custom_instructions returns None, the prompt is not modified."""
+        mock_load.return_value = None
+        mock_event_loop.return_value = "<pr_body>Fixed</pr_body>"
+
+        agent = SmartFixAgent()
+        context = Mock(spec=RemediationContext)
+        context.build_config = Mock()
+        context.build_config.has_build_command.return_value = False
+        context.build_config.user_build_command = None
+        context.build_config.user_format_command = None
+        context.repo_config = Mock()
+        context.repo_config.repo_path = Path("/tmp/test")
+        context.prompts = Mock()
+        context.prompts.fix_system_prompt = "Fix system"
+        context.prompts.fix_user_prompt = "Fix this vulnerability"
+        context.remediation_id = "test-no-ci"
+        context.session_id = "session-no-ci"
+        context.skip_writing_security_test = False
+
+        with patch.object(agent, '_extract_analytics_data'):
+            agent.remediate(context)
+
+        mock_event_loop.assert_called_once()
+        prompt_arg = mock_event_loop.call_args[0][2]
+        self.assertIn("Fix this vulnerability", prompt_arg)
+        self.assertNotIn("Repository-Specific Coding Standards", prompt_arg)
+
+
 if __name__ == '__main__':
     unittest.main()
