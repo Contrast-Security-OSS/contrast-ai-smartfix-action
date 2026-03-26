@@ -428,5 +428,54 @@ class TestCommandAutoDetection(unittest.TestCase):
         self.assertEqual(config.RUN_TASK, 'generate_fix')
 
 
+    def test_use_smartfix_instructions_defaults_true(self):
+        """USE_SMARTFIX_INSTRUCTIONS defaults to True when not set."""
+        if 'USE_SMARTFIX_INSTRUCTIONS' in os.environ:
+            del os.environ['USE_SMARTFIX_INSTRUCTIONS']
+        reset_config()
+        config = get_config(testing=True)
+        self.assertTrue(config.USE_SMARTFIX_INSTRUCTIONS)
+
+    def test_use_smartfix_instructions_can_be_disabled(self):
+        """USE_SMARTFIX_INSTRUCTIONS can be set to False."""
+        os.environ['USE_SMARTFIX_INSTRUCTIONS'] = 'false'
+        reset_config()
+        config = get_config(testing=True)
+        self.assertFalse(config.USE_SMARTFIX_INSTRUCTIONS)
+
+    def test_use_repo_agent_instructions_defaults_true(self):
+        """USE_REPO_AGENT_INSTRUCTIONS defaults to True when not set."""
+        if 'USE_REPO_AGENT_INSTRUCTIONS' in os.environ:
+            del os.environ['USE_REPO_AGENT_INSTRUCTIONS']
+        reset_config()
+        config = get_config(testing=True)
+        self.assertTrue(config.USE_REPO_AGENT_INSTRUCTIONS)
+
+    def test_use_repo_agent_instructions_can_be_disabled(self):
+        """USE_REPO_AGENT_INSTRUCTIONS can be set to False."""
+        os.environ['USE_REPO_AGENT_INSTRUCTIONS'] = 'false'
+        reset_config()
+        config = get_config(testing=True)
+        self.assertFalse(config.USE_REPO_AGENT_INSTRUCTIONS)
+
+    def test_custom_instructions_flags_accept_true_string(self):
+        """Boolean flags accept 'true' string (as passed by GitHub Actions)."""
+        os.environ['USE_SMARTFIX_INSTRUCTIONS'] = 'true'
+        os.environ['USE_REPO_AGENT_INSTRUCTIONS'] = 'true'
+        reset_config()
+        config = get_config(testing=True)
+        self.assertTrue(config.USE_SMARTFIX_INSTRUCTIONS)
+        self.assertTrue(config.USE_REPO_AGENT_INSTRUCTIONS)
+
+    def test_custom_instructions_flags_work_independently(self):
+        """Both custom instruction flags can be set independently."""
+        os.environ['USE_SMARTFIX_INSTRUCTIONS'] = 'false'
+        os.environ['USE_REPO_AGENT_INSTRUCTIONS'] = 'true'
+        reset_config()
+        config = get_config(testing=True)
+        self.assertFalse(config.USE_SMARTFIX_INSTRUCTIONS)
+        self.assertTrue(config.USE_REPO_AGENT_INSTRUCTIONS)
+
+
 if __name__ == '__main__':
     unittest.main()
