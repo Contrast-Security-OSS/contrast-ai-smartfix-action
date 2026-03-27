@@ -30,7 +30,7 @@ import subprocess
 from pathlib import Path
 from typing import Optional
 
-from src.utils import log
+from src.utils import debug_log, log
 
 SOURCE_A_FILE = "SMARTFIX_INSTRUCTIONS.md"
 
@@ -63,12 +63,14 @@ def _read_from_base_branch(repo_path: Path, base_branch: str, rel_path: str) -> 
     """
     try:
         result = subprocess.run(
-            ["git", "show", f"{base_branch}:{rel_path}"],
+            ["git", "show", f"origin/{base_branch}:{rel_path}"],
             cwd=str(repo_path),
             capture_output=True,
             timeout=10,
         )
         if result.returncode != 0:
+            stderr = result.stderr.decode("utf-8", errors="replace").strip()
+            debug_log(f"Custom instructions: git show origin/{base_branch}:{rel_path} failed (exit {result.returncode}): {stderr}")
             return None
         content = result.stdout.decode("utf-8", errors="replace").strip()
         return content or None

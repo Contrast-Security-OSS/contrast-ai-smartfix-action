@@ -35,7 +35,7 @@ def _config(use_smartfix=True, use_repo=True, base_branch="main"):
     )
 
 
-def _git_show_result(content=None, returncode=0):
+def _git_show_result(content=None, returncode=0, stderr=""):
     """Return a mock subprocess.CompletedProcess for git show."""
     result = MagicMock()
     result.returncode = returncode
@@ -43,6 +43,7 @@ def _git_show_result(content=None, returncode=0):
         result.stdout = content if isinstance(content, bytes) else content.encode("utf-8")
     else:
         result.stdout = b""
+    result.stderr = stderr.encode("utf-8") if isinstance(stderr, str) else stderr
     return result
 
 
@@ -51,6 +52,13 @@ class TestLoadCustomInstructions(unittest.TestCase):
     def setUp(self):
         self.repo_path = Path("/fake/repo")
         self.config = _config()
+        # debug_log requires a config singleton; patch it for all tests so failure
+        # paths don't trigger config initialisation in the test environment.
+        self._debug_log_patcher = patch("src.smartfix.domains.agents.custom_instructions.debug_log")
+        self.mock_debug_log = self._debug_log_patcher.start()
+
+    def tearDown(self):
+        self._debug_log_patcher.stop()
 
     # --- Source A scenarios ---
 
@@ -208,6 +216,16 @@ class TestLoadCustomInstructions(unittest.TestCase):
         self.assertIsNone(result)
 
     @patch("subprocess.run")
+    def test_git_show_failure_emits_debug_log(self, mock_run):
+        """Non-zero git show exit code emits a debug_log with stderr."""
+        mock_run.return_value = _git_show_result(returncode=128, stderr="fatal: not a git repository")
+        with patch("src.smartfix.domains.agents.custom_instructions.debug_log") as mock_debug:
+            load_custom_instructions(self.repo_path, self.config)
+            self.assertTrue(mock_debug.called, "Expected debug_log to be called on git show failure")
+            log_output = " ".join(str(c) for c in mock_debug.call_args_list)
+            self.assertIn("fatal: not a git repository", log_output)
+
+    @patch("subprocess.run")
     def test_large_file_included_without_truncation(self, mock_run):
         """Very large instruction files are included in full."""
         large_content = "A" * 100_000
@@ -220,15 +238,15 @@ class TestLoadCustomInstructions(unittest.TestCase):
 
     @patch("subprocess.run")
     def test_custom_base_branch_passed_to_git_show(self, mock_run):
-        """The configured BASE_BRANCH is passed to git show."""
+        """The configured BASE_BRANCH is prefixed with origin/ and passed to git show."""
         mock_run.return_value = _git_show_result("some content")
         config = _config(base_branch="develop")
         load_custom_instructions(self.repo_path, config)
         call_args = mock_run.call_args[0][0]
-        # The ref argument to git show should contain the base branch
+        # The ref argument to git show should use origin/<branch>:<path>
         self.assertTrue(
-            any("develop:" in arg for arg in call_args),
-            f"Expected 'develop:' in git show args, got: {call_args}"
+            any("origin/develop:" in arg for arg in call_args),
+            f"Expected 'origin/develop:' in git show args, got: {call_args}"
         )
 
     # --- Logging ---
