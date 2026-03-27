@@ -12,6 +12,8 @@ from typing import Optional
 from src.smartfix.domains.agents.event_loop_utils import _run_agent_in_event_loop
 from src.smartfix.domains.agents.sub_agent_executor import SubAgentExecutor
 from src.smartfix.domains.agents.build_tool import create_build_tool
+from src.smartfix.domains.agents.custom_instructions import load_custom_instructions
+from src.config import get_config
 from src.utils import debug_log, log, error_exit
 from src.smartfix.shared.failure_categories import FailureCategory
 from src import telemetry_handler
@@ -230,7 +232,16 @@ class SmartFixAgent(CodingAgentStrategy):
                 "5. Do NOT skip the build step or mark the task complete without a recorded successful build."
             )
 
-        fix_user_prompt_with_tree = context.prompts.fix_user_prompt + build_instruction + directory_tree
+        custom_instructions = load_custom_instructions(repo_path, get_config()) or ""
+        debug_log(
+            f"Custom instructions appended ({len(custom_instructions)} chars)"
+            if custom_instructions
+            else "No custom instructions loaded — using default prompts only"
+        )
+
+        fix_user_prompt_with_tree = (
+            context.prompts.fix_user_prompt + build_instruction + directory_tree + custom_instructions
+        )
         executor = SubAgentExecutor()
         agent_summary_str = _run_agent_in_event_loop(
             executor.run,

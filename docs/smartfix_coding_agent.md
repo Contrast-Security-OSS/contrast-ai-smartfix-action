@@ -274,7 +274,65 @@ The following are key inputs for the SmartFix GitHub Action using SmartFix Codin
 | `debug_mode` | Enable verbose logging. | No | `false` |
 | `skip_qa_review` | Skip the QA review step (not recommended). | No | `false` |
 | `skip_writing_security_test` | Skip attempting to write a security test for the fix. | No | `false` |
+| `use_smartfix_instructions` | Read `SMARTFIX_INSTRUCTIONS.md` from the repo root on the base branch and inject it verbatim into the fix agent prompt. See [Custom Instructions](#custom-instructions). | No | `true` |
+| `use_repo_agent_instructions` | Fall back to existing agent instruction files (`.github/copilot-instructions.md`, `AGENTS.md`, `CLAUDE.md`, `.cursorrules`) if `SMARTFIX_INSTRUCTIONS.md` is absent or disabled. See [Custom Instructions](#custom-instructions). | No | `true` |
 | `enable_full_telemetry` | Control how much telemetry data is sent back to Contrast. When set to 'true' (default), sends complete log files and build commands. When 'false', sensitive build commands and full logs are omitted. | No | `true` |
+
+## Custom Instructions
+
+SmartFix can inject your team's coding standards directly into the fix agent prompt, giving the agent project-specific context about preferred libraries, naming conventions, architectural patterns, and testing standards.
+
+Instructions are always read from the configured `base_branch` via `git show`, not from the workspace filesystem. This means:
+- The base-branch version is always used, regardless of which branch the action is running on.
+- Symlink traversal attacks are impossible — git's object model resolves file contents without any filesystem path resolution.
+
+### Source A: `SMARTFIX_INSTRUCTIONS.md` (Recommended)
+
+Create a `SMARTFIX_INSTRUCTIONS.md` file in your repository root with instructions written specifically for SmartFix. This file's contents are injected under a `## Repository-Specific Coding Standards` header at the end of the fix agent prompt; leading and trailing whitespace/newlines may be trimmed.
+
+**Example `SMARTFIX_INSTRUCTIONS.md`:**
+
+```markdown
+## Security Libraries
+- Use OWASP Java Encoder for all HTML/JS/URL output encoding.
+- Never write custom escaping logic.
+
+## SQL / Data Access
+- All queries must use parameterized Spring Data JPA repositories.
+- Never concatenate user input into SQL or JPQL strings.
+
+## Code Style
+- Follow existing package structure: controllers, services, models.
+- Prefer constructor injection over field injection.
+```
+
+Controlled by the `use_smartfix_instructions` input (default: `true`).
+
+### Source B: Existing Agent Instruction Files (Fallback)
+
+If `SMARTFIX_INSTRUCTIONS.md` is absent or `use_smartfix_instructions` is `false`, SmartFix falls back to the first of the following files it finds on the base branch, in priority order:
+
+1. `.github/copilot-instructions.md`
+2. `AGENTS.md`
+3. `CLAUDE.md`
+4. `.cursorrules`
+
+When using a Source B file, SmartFix prepends a framing directive instructing the agent to apply coding style rules while ignoring any human-only workflow instructions (PR review processes, ticket systems, branch naming conventions, etc.).
+
+Controlled by the `use_repo_agent_instructions` input (default: `true`).
+
+### Disabling Custom Instructions
+
+Both sources can be independently disabled:
+
+```yaml
+- name: Run Contrast AI SmartFix
+  uses: Contrast-Security-OSS/contrast-ai-smartfix-action@v1
+  with:
+    use_smartfix_instructions: 'false'      # Skip SMARTFIX_INSTRUCTIONS.md
+    use_repo_agent_instructions: 'false'    # Skip all Source B files
+    # ... other inputs
+```
 
 ## Telemetry
 

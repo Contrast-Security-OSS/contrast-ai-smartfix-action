@@ -195,6 +195,8 @@ class Config:
 
         # --- Feature Flags ---
         self.SKIP_WRITING_SECURITY_TEST = self._get_bool_env("SKIP_WRITING_SECURITY_TEST", default=False)
+        self.USE_SMARTFIX_INSTRUCTIONS = self._get_bool_env("USE_SMARTFIX_INSTRUCTIONS", default=True)
+        self.USE_REPO_AGENT_INSTRUCTIONS = self._get_bool_env("USE_REPO_AGENT_INSTRUCTIONS", default=True)
         self.ENABLE_FULL_TELEMETRY = self._get_bool_env("ENABLE_FULL_TELEMETRY", default=True)
         self.USE_CONTRAST_LLM = self._get_bool_env("USE_CONTRAST_LLM", default=True)
         self.ENABLE_ANTHROPIC_PROMPT_CACHING = self._get_bool_env("ENABLE_ANTHROPIC_PROMPT_CACHING", default=True)
@@ -569,6 +571,8 @@ class Config:
             _log_config_message(f"Agent Model: {self.AGENT_MODEL}")
         _log_config_message(f"Coding Agent: {self.CODING_AGENT}")
         _log_config_message(f"Skip Writing Security Test: {self.SKIP_WRITING_SECURITY_TEST}")
+        _log_config_message(f"Use SmartFix Instructions: {self.USE_SMARTFIX_INSTRUCTIONS}")
+        _log_config_message(f"Use Repo Agent Instructions: {self.USE_REPO_AGENT_INSTRUCTIONS}")
         _log_config_message(f"Vulnerability Severities: {self.VULNERABILITY_SEVERITIES}")
         _log_config_message(f"Max Events Per Agent: {self.MAX_EVENTS_PER_AGENT}")
         _log_config_message(f"Enable Full Telemetry: {self.ENABLE_FULL_TELEMETRY}")
