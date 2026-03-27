@@ -288,7 +288,7 @@ Instructions are always read from the configured `base_branch` via `git show`, n
 
 ### Source A: `SMARTFIX_INSTRUCTIONS.md` (Recommended)
 
-Create a `SMARTFIX_INSTRUCTIONS.md` file in your repository root with instructions written specifically for SmartFix. This file is injected verbatim under a `## Repository-Specific Coding Standards` header at the end of the fix agent prompt.
+Create a `SMARTFIX_INSTRUCTIONS.md` file in your repository root with instructions written specifically for SmartFix. This file's contents are injected under a `## Repository-Specific Coding Standards` header at the end of the fix agent prompt; leading and trailing whitespace/newlines may be trimmed.
 
 **Example `SMARTFIX_INSTRUCTIONS.md`:**
 
