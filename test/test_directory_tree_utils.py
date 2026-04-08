@@ -381,7 +381,7 @@ class TestGetDirectoryTreeForAgentPrompt(unittest.TestCase):
 
 class TestSmartfixAgentDirectoryTreeIntegration(unittest.TestCase):
     """
-    Tests that SmartFixAgent appends the directory tree to Fix and QA user prompts.
+    Tests that SmartFixAgent appends the directory tree to the Fix user prompt.
     These tests verify the call sites added in contrast-29q.
     """
 
@@ -393,8 +393,6 @@ class TestSmartfixAgentDirectoryTreeIntegration(unittest.TestCase):
         context.session_id = "sess-456"
         context.prompts.fix_user_prompt = "Fix this vulnerability."
         context.prompts.fix_system_prompt = "You are a security expert."
-        context.prompts.qa_system_prompt = "You are a QA reviewer."
-        context.prompts.get_processed_qa_user_prompt.return_value = "Review this fix."
         context.build_config.has_build_command.return_value = False
         return context
 
@@ -416,27 +414,11 @@ class TestSmartfixAgentDirectoryTreeIntegration(unittest.TestCase):
                 agent._run_fix_agent_execution(context)
 
         mock_tree.assert_called_once_with(context.repo_config.repo_path)
-        actual_prompt = mock_run.call_args[0][3]
-        self.assertEqual(actual_prompt, "Fix this vulnerability." + tree_section)
-
-    def test_qa_agent_appends_directory_tree_to_query(self):
-        """
-        _run_qa_agent should append the pre-computed directory tree to qa_query
-        before passing it to _run_agent_in_event_loop.
-        """
-        from src.smartfix.domains.agents.smartfix_agent import SmartFixAgent
-
-        agent = SmartFixAgent()
-        context = self._make_context()
-        tree_section = "\n\n## Repository Directory Tree\n\n```\n.\n└── src\n```"
-
-        with patch('src.smartfix.domains.agents.smartfix_agent._run_agent_in_event_loop',
-                   return_value="qa completed") as mock_run:
-            agent._run_qa_agent(context, "build output", ["src/Foo.java"], directory_tree=tree_section)
-
-        actual_prompt = mock_run.call_args[0][3]
-        self.assertIn("Review this fix.", actual_prompt)
+        actual_prompt = mock_run.call_args[0][2]
+        # When no build command is known, discovery instructions are prepended before the tree
+        self.assertIn("Fix this vulnerability.", actual_prompt)
         self.assertIn(tree_section, actual_prompt)
+        self.assertIn("No build command has been pre-configured", actual_prompt)
 
     def test_fix_agent_tree_called_with_correct_repo_path(self):
         """get_directory_tree_for_agent_prompt receives the repo_path from context."""

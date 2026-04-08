@@ -10,6 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Setup git hooks: `./setup-hooks.sh`
 
 ### Testing
+- **Preferred**: `make test` — handles full environment setup automatically
 - Run all tests: `./test/run_tests.sh`
 - Run specific test file: `./test/run_tests.sh test_main.py`
 - Run multiple test files: `./test/run_tests.sh test_main.py test_config.py`
@@ -40,7 +41,7 @@ The codebase follows domain-driven design under `src/smartfix/`:
 - `smartfix_agent.py`: Main SmartFix agent implementation
 - `agent_session.py`: Session management for agent runs
 - `coding_agent.py`: Base coding agent abstraction
-- `sub_agent_executor.py`: Sub-agent execution (QA, security tests)
+- `sub_agent_executor.py`: Sub-agent execution (security tests)
 
 **domains/workflow/**: Fix generation workflow
 - `session_handler.py`: Processes agent session results, determines success/failure
@@ -86,7 +87,6 @@ The codebase follows domain-driven design under `src/smartfix/`:
    - Create feature branch
    - Run SmartFix agent (or delegate to Copilot/Claude Code)
    - Execute build command to validate fix
-   - Run QA sub-agent for review
    - Create PR with fix details
 4. Notify Contrast backend of PR status changes
 

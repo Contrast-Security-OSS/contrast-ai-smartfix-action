@@ -2,7 +2,7 @@
 # #%L
 # Contrast AI SmartFix
 # %%
-# Copyright (C) 2025 Contrast Security, Inc.
+# Copyright (C) 2026 Contrast Security, Inc.
 # %%
 # Contact: support@contrastsecurity.com
 # License: Commercial
@@ -47,7 +47,7 @@ warnings.filterwarnings(
 try:
     from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset, StdioServerParameters, StdioConnectionParams
     MCP_AVAILABLE = True
-except ImportError:
+except Exception:
     MCP_AVAILABLE = False
 
 # Configure library loggers to reduce noise from ADK authentication warnings
@@ -63,7 +63,7 @@ class MCPToolsetManager:
     timeouts, and npm cache management.
     """
 
-    def __init__(self, platform_name: Optional[str] = None):
+    def __init__(self, platform_name: Optional[str] = None) -> None:
         """
         Initialize MCP toolset manager with platform-specific configuration.
 

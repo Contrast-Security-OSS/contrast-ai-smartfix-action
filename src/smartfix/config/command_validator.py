@@ -70,7 +70,7 @@ ALLOWED_COMMANDS: List[str] = [
     'make', 'cmake', 'ninja', 'bazel', 'ctest',
 
     # Shell utilities
-    'echo', 'sh', 'bash', 'grep', 'sed', 'awk', 'cat', 'tee'
+    'grep',
 ]
 
 # Allowed operators for chaining commands
@@ -241,38 +241,6 @@ def extract_redirects(segment: str) -> List[str]:
     return redirects
 
 
-def validate_shell_command(executable: str, args: List[str]) -> bool:
-    """
-    Validates shell commands (sh/bash).
-    Only allows: sh ./script.sh or bash ./script.sh
-    Blocks: sh -c "command" or bash -c "..."
-
-    Args:
-        executable: The executable name
-        args: List of arguments
-
-    Returns:
-        True if valid, False if invalid
-    """
-    if executable not in ['sh', 'bash']:
-        return True  # Not a shell command
-
-    # Must have at least one argument
-    if not args:
-        return False
-
-    # Block inline execution: -c flag
-    if '-c' in args:
-        return False
-
-    # First non-flag argument must be a .sh file
-    script_path = next((arg for arg in args if not arg.startswith('-')), None)
-    if not script_path:
-        return False
-
-    return script_path.endswith('.sh')
-
-
 def parse_command_segment(segment: str) -> Tuple[str, List[str]]:
     """
     Parse command segment into executable and arguments.
@@ -431,15 +399,6 @@ def validate_command(var_name: str, command: str) -> None:  # noqa: C901
                 f"Error: {var_name} uses disallowed command: {executable}\n"
                 f"Command: {command}\n"
                 f"See documentation for allowed build and format commands."
-            )
-
-        # Special validation for shell commands
-        if not validate_shell_command(executable, args):
-            raise CommandValidationError(
-                f"Error: {var_name} uses shell command incorrectly: {segment}\n"
-                f"Shell commands (sh/bash) can only execute .sh files.\n"
-                f"Blocked: sh -c, bash -c\n"
-                f"Allowed: sh ./build.sh"
             )
 
         # Validate interpreter flags (node -e, python -c, etc.)

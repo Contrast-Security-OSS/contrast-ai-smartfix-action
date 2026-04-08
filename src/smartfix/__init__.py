@@ -6,13 +6,10 @@ that is independent of specific SCM providers and deployment environments.
 The library is organized into domain-driven modules:
 - domains.vulnerability: Vulnerability processing and remediation logic
 - domains.agents: AI agent orchestration and management
-- domains.analysis: Code analysis and build management
 - domains.scm: Source control management abstractions
-- domains.integrations: External service integrations
 - domains.workflow: Workflow orchestration and execution
 - extensions: Enhanced LLM integrations and extensions
 - config: Configuration management and dependency injection
-- telemetry: Telemetry collection and cost tracking
 - shared: Shared utilities and common functionality
 
 Example usage:
@@ -92,6 +89,5 @@ except ImportError:
 # from .domains.agents import SmartFixAgent, CodingAgentStrategy
 # from .domains.workflow import RemediationWorkflow
 # from .domains.vulnerability import RemediationContext
-# from .domains.analysis import BuildResult
 # from .domains.scm import ScmProvider
 # from .config import SmartFixConfig

@@ -10,10 +10,6 @@ inputs:
   build_command:
     description: 'Command to build the application'
     required: false
-  max_qa_attempts:
-    description: 'Maximum number of QA intervention attempts'
-    required: false
-    default: '6'
   formatting_command:
     description: 'Command to format code (optional)'
     required: false
@@ -39,8 +35,11 @@ inputs:
     description: 'Contrast Organization ID'
     required: true
   contrast_app_id:
-    description: 'Contrast Application ID'
-    required: true
+    description: 'Contrast Application ID (use contrast_app_ids for monorepo support)'
+    required: false
+  contrast_app_ids:
+    description: 'JSON array of Contrast Application IDs for monorepo support (e.g. ''["app-id-1", "app-id-2"]''). If contrast_app_id is also set, it takes precedence.'
+    required: false
   contrast_authorization_key:
     description: 'Contrast Authorization Key'
     required: true
@@ -75,10 +74,16 @@ inputs:
     description: 'Whether to attempt writing security tests'
     required: false
     default: 'false'
-  skip_qa_review:
-    description: 'Whether to skip QA review'
+  use_smartfix_instructions:
+    description: 'Read SMARTFIX_INSTRUCTIONS.md from the repo root and inject it into the fix agent prompt.'
     required: false
-    default: 'false'
+    default: 'true'
+  use_repo_agent_instructions:
+    description: >
+      Fall back to existing agent instruction files (.github/copilot-instructions.md, AGENTS.md,
+      CLAUDE.md, .cursorrules) if SMARTFIX_INSTRUCTIONS.md is absent or disabled.
+    required: false
+    default: 'true'
   debug_mode:
     description: 'Enable debug mode for verbose logging'
     required: false
@@ -183,9 +188,26 @@ runs:
 
         echo Git verification completed successfully
 
-    # Checkout with reduced verbosity
+    # Check if repository is already checked out.
+    # This supports callers that pre-checkout (e.g., composite actions or local
+    # testing workflows). It only checks for *any* git repo in the workspace;
+    # callers are responsible for ensuring the correct repo is checked out.
+    - name: Check if already in git repository
+      id: check_git
+      shell: bash
+      run: |
+        if git rev-parse --git-dir > /dev/null 2>&1; then
+          echo "already_checked_out=true" >> $GITHUB_OUTPUT
+          echo "Repository already checked out, skipping checkout step"
+        else
+          echo "already_checked_out=false" >> $GITHUB_OUTPUT
+          echo "Repository not checked out, will perform checkout"
+        fi
+
+    # Checkout with reduced verbosity (only if not already checked out)
     - name: Checkout repository
-      uses: actions/checkout@v4
+      if: steps.check_git.outputs.already_checked_out != 'true'
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       with:
         fetch-depth: 0
 
@@ -201,7 +223,7 @@ runs:
 
     # Reduce Python setup verbosity
     - name: Set up Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
       with:
         python-version: '3.13'
 
@@ -402,8 +424,6 @@ runs:
       env:
         # --- Build Command ---
         BUILD_COMMAND: ${{ inputs.build_command }}
-        # --- Max QA Intervention Attempts ---
-        MAX_QA_ATTEMPTS: ${{ inputs.max_qa_attempts }}
         # --- Formatting Command ---
         FORMATTING_COMMAND: ${{ inputs.formatting_command }}
         # --- Max Open PRs ---
@@ -416,6 +436,7 @@ runs:
         CONTRAST_HOST: ${{ inputs.contrast_host }}
         CONTRAST_ORG_ID: ${{ inputs.contrast_org_id }}
         CONTRAST_APP_ID: ${{ inputs.contrast_app_id }}
+        CONTRAST_APP_IDS: ${{ inputs.contrast_app_ids }}
         CONTRAST_AUTHORIZATION_KEY: ${{ inputs.contrast_authorization_key }}
         CONTRAST_API_KEY: ${{ inputs.contrast_api_key }}
         # --- Google Gemini Credentials (LiteLLM) ---
@@ -434,8 +455,9 @@ runs:
         MAX_EVENTS_PER_AGENT: ${{ inputs.max_events_per_agent }}
         # --- Test Writing Configuration ---
         SKIP_WRITING_SECURITY_TEST: ${{ inputs.skip_writing_security_test }}
-        # --- QA Configuration ---
-        SKIP_QA_REVIEW: ${{ inputs.skip_qa_review }}
+        # --- Custom Instructions Configuration ---
+        USE_SMARTFIX_INSTRUCTIONS: ${{ inputs.use_smartfix_instructions }}
+        USE_REPO_AGENT_INSTRUCTIONS: ${{ inputs.use_repo_agent_instructions }}
         # --- Debug Mode ---
         DEBUG_MODE: ${{ inputs.debug_mode }}
         # --- Vulnerability Configuration ---

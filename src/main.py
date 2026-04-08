@@ -19,12 +19,7 @@
 
 import sys
 import re
-import asyncio
-import warnings
-import atexit
-import platform
 from datetime import datetime, timedelta
-from asyncio.proactor_events import _ProactorBasePipeTransport
 from urllib.parse import urlparse
 
 # Import configurations and utilities
@@ -33,7 +28,8 @@ from src.smartfix.shared.coding_agents import CodingAgents
 from src.utils import debug_log, log, error_exit
 from src import telemetry_handler
 from src.version_check import do_version_check
-from src.smartfix.domains.workflow.session_handler import create_session_handler, QASectionConfig
+from src.smartfix.domains.workflow.session_handler import handle_session_result, generate_qa_section
+from src.smartfix.domains.workflow.build_runner import run_build_command
 from src.smartfix.shared.failure_categories import FailureCategory
 
 # Import domain-specific handlers
@@ -45,8 +41,10 @@ from src.github.github_operations import GitHubOperations
 from src.smartfix.domains.vulnerability.context import RemediationContext, PromptConfiguration, BuildConfiguration, RepositoryConfiguration
 from src.smartfix.domains.vulnerability.models import Vulnerability
 
-# Import GitHub-specific agent factory
-from src.github.agent_factory import GitHubAgentFactory
+from src.smartfix.domains.agents.smartfix_agent import SmartFixAgent
+from src.smartfix.domains.agents.asyncio_workarounds import apply_asyncio_workarounds, cleanup_event_loop
+from src.github.external_coding_agent import ExternalCodingAgent
+from src.smartfix.domains.workflow.pr_reconciliation import reconcile_open_remediations
 
 config = get_config()
 telemetry_handler.initialize_telemetry()
@@ -55,188 +53,7 @@ telemetry_handler.initialize_telemetry()
 git_ops = GitOperations()
 github_ops = GitHubOperations()
 
-# NOTE: Google ADK appears to have issues with asyncio event loop cleanup, and has had attempts to address them in versions 1.4.0-1.5.0
-# Configure warnings to ignore asyncio ResourceWarnings during shutdown
-warnings.filterwarnings("ignore", category=ResourceWarning,
-                        message="unclosed.*<asyncio.sslproto._SSLProtocolTransport.*")
-warnings.filterwarnings("ignore", category=ResourceWarning,
-                        message="unclosed transport")
-warnings.filterwarnings("ignore", category=ResourceWarning,
-                        message="unclosed.*<asyncio.*")
-
-# Patch asyncio to handle event loop closed errors during shutdown
-_original_loop_check_closed = asyncio.base_events.BaseEventLoop._check_closed
-
-
-def _patched_loop_check_closed(self):
-    try:
-        _original_loop_check_closed(self)
-    except RuntimeError as e:
-        if "Event loop is closed" in str(e):
-            return  # Suppress the error
-        raise
-
-
-asyncio.BaseEventLoop._check_closed = _patched_loop_check_closed
-
-
-# Add a specific fix for _ProactorBasePipeTransport.__del__ on Windows
-if platform.system() == 'Windows':
-    # Import the specific module that contains ProactorBasePipeTransport
-    try:
-        # Store the original __del__ method
-        _original_pipe_del = _ProactorBasePipeTransport.__del__
-
-        # Define a safe replacement for __del__
-        def _patched_pipe_del(self):
-            try:
-                # Check if the event loop is closed or finalizing
-                if self._loop.is_closed() or sys.is_finalizing():
-                    # Skip the original __del__ which would trigger the error
-                    return
-
-                # Otherwise use the original __del__ implementation
-                _original_pipe_del(self)
-            except (AttributeError, RuntimeError, ImportError, TypeError):
-                # Catch and ignore all attribute or runtime errors during shutdown
-                pass
-
-        # Apply the patch to the __del__ method
-        _ProactorBasePipeTransport.__del__ = _patched_pipe_del
-
-        debug_log("Successfully patched _ProactorBasePipeTransport.__del__ for Windows")
-    except (ImportError, AttributeError) as e:
-        debug_log(f"Could not patch _ProactorBasePipeTransport: {str(e)}")
-
-    # Add a specific fix for BaseSubprocessTransport.__del__ on Windows
-    try:
-        from asyncio.base_subprocess import BaseSubprocessTransport
-
-        # Store the original __del__ method
-        _original_subprocess_del = BaseSubprocessTransport.__del__
-
-        # Define a safe replacement for __del__
-        def _patched_subprocess_del(self):
-            try:
-                # Check if the event loop is closed or finalizing
-                if hasattr(self, '_loop') and self._loop is not None and (self._loop.is_closed() or sys.is_finalizing()):
-                    # Skip the original __del__ which would trigger the error
-                    return
-
-                # Otherwise use the original __del__ implementation
-                _original_subprocess_del(self)
-            except (AttributeError, RuntimeError, ImportError, TypeError, ValueError):
-                # Catch and ignore all attribute, runtime, or value errors during shutdown
-                # ValueError specifically handles "I/O operation on closed pipe"
-                pass
-
-        # Apply the patch to the __del__ method
-        BaseSubprocessTransport.__del__ = _patched_subprocess_del
-
-        debug_log("Successfully patched BaseSubprocessTransport.__del__ for Windows")
-    except (ImportError, AttributeError) as e:
-        debug_log(f"Could not patch BaseSubprocessTransport: {str(e)}")
-
-
-def cleanup_asyncio():  # noqa: C901
-    """
-    Cleanup function registered with atexit to properly handle asyncio resources during shutdown.
-    This helps prevent the "Event loop is closed" errors during program exit.
-    """
-    # Suppress stderr temporarily to avoid printing shutdown errors
-    original_stderr = sys.stderr
-    try:
-        # Create a dummy stderr to suppress errors during cleanup
-        class DummyStderr:
-            def write(self, *args, **kwargs):
-                pass
-
-            def flush(self):
-                pass
-
-        # Only on Windows do we need the more aggressive error suppression
-        if platform.system() == 'Windows':
-            sys.stderr = DummyStderr()
-
-            # Windows-specific: ensure the proactor event loop resources are properly cleaned
-            try:
-                # Try to access the global WindowsProactorEventLoopPolicy
-                loop_policy = asyncio.get_event_loop_policy()
-
-                # If we have any running loops, close them properly
-                try:
-                    loop = loop_policy.get_event_loop()
-                    if not loop.is_closed():
-                        if loop.is_running():
-                            loop.stop()
-
-                        # Cancel all tasks
-                        pending = asyncio.all_tasks(loop)
-                        if pending:
-                            for task in pending:
-                                task.cancel()
-
-                            # Give tasks a chance to respond to cancellation with a timeout
-                            try:
-                                loop.run_until_complete(asyncio.wait_for(
-                                    asyncio.gather(*pending, return_exceptions=True),
-                                    timeout=1.0
-                                ))
-                            except (asyncio.CancelledError, asyncio.TimeoutError, Exception):
-                                pass
-
-                        # Close transports and other resources
-                        try:
-                            loop.run_until_complete(loop.shutdown_asyncgens())
-                        except Exception:
-                            pass
-
-                        try:
-                            loop.close()
-                        except Exception:
-                            pass
-                except Exception:
-                    pass
-
-                # Force garbage collection to ensure __del__ methods are called
-                try:
-                    import gc
-                    gc.collect()
-                except Exception:
-                    pass
-
-            except Exception:
-                pass  # Ignore any errors during Windows-specific cleanup
-        else:
-            # For non-Windows platforms, perform regular cleanup
-            try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    loop.stop()
-
-                # Cancel all tasks
-                pending = asyncio.all_tasks(loop)
-                if pending:
-                    for task in pending:
-                        task.cancel()
-
-                    # Give tasks a chance to respond to cancellation
-                    if not loop.is_closed():
-                        loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
-
-                # Close the loop
-                if not loop.is_closed():
-                    loop.run_until_complete(loop.shutdown_asyncgens())
-                    loop.close()
-            except Exception:
-                pass  # Ignore any errors during cleanup
-    finally:
-        # Restore stderr
-        sys.stderr = original_stderr
-
-
-# Register the cleanup function
-atexit.register(cleanup_asyncio)
+apply_asyncio_workarounds()
 
 
 def main():  # noqa: C901
@@ -255,15 +72,39 @@ def main():  # noqa: C901
 
     debug_log(f"Build command: {build_config.build_command}")
     debug_log(f"Formatting command: {build_config.formatting_command}")
-    debug_log(f"Max QA attempts: {config.MAX_QA_ATTEMPTS}")
     debug_log(f"Repository path: {repo_config.repo_path}")
 
     # Use the validated and normalized settings from config module
     # These values are already processed in config.py with appropriate validation and defaults
     max_open_prs_setting = config.MAX_OPEN_PRS
 
+    # --- Initial Build Validation ---
+    # If the user explicitly configured a build command, verify it works on the
+    # clean repo before spending LLM credits on vulnerability fixes
+    if build_config.user_build_command:
+        log("\n::group::--- Validating configured build command ---")
+        log(f"Running initial build: {build_config.user_build_command}")
+        build_success, build_output = run_build_command(
+            build_config.user_build_command, repo_config.repo_path, "initial-build-check"
+        )
+        if not build_success:
+            log("Initial build failed. The configured BUILD_COMMAND does not succeed on the "
+                "clean repository. Please verify the command and fix any build issues before "
+                "running SmartFix.", is_error=True)
+            debug_log(f"Build output:\n{build_output}")
+            log("\n::endgroup::")
+            # No remediation ID exists yet — exit directly without notifying the backend.
+            sys.exit(1)
+        log("Initial build succeeded. Proceeding with vulnerability processing.")
+        log("\n::endgroup::")
+
     # --- Initial Setup ---
     git_ops.configure_git_user()
+
+    # --- Reconcile Orphaned Open Remediations ---
+    log("\n::group::--- Reconciling open remediations against GitHub ---")
+    reconcile_open_remediations(config, github_ops)
+    log("\n::endgroup::")
 
     # Check Open PR Limit
     log("\n::group::--- Checking Open PR Limit ---")
@@ -291,6 +132,8 @@ def main():  # noqa: C901
     skipped_vulns = set()  # TS-39904
     remediation_id = "unknown"
     previous_vuln_uuid = None  # Track previous vulnerability UUID to detect duplicates
+    discovered_build_cmd = None   # Build command found by agent at runtime; carried forward across iterations
+    discovered_format_cmd = None  # Format command found by agent at runtime; carried forward across iterations
 
     # Log initial credit tracking status if using Contrast LLM (only for SMARTFIX agent)
     if config.CODING_AGENT == CodingAgents.SMARTFIX.name and config.USE_CONTRAST_LLM:
@@ -395,8 +238,7 @@ def main():  # noqa: C901
                 prompts = PromptConfiguration.for_smartfix_agent(
                     fix_system_prompt=vulnerability_data['fixSystemPrompt'],
                     fix_user_prompt=vulnerability_data['fixUserPrompt'],
-                    qa_system_prompt=vulnerability_data['qaSystemPrompt'],
-                    qa_user_prompt=vulnerability_data['qaUserPrompt']
+                    skip_writing_security_test=config.SKIP_WRITING_SECURITY_TEST,
                 )
             except ValueError as e:
                 log(f"Error: Invalid prompts from backend: {e}", is_error=True)
@@ -428,8 +270,8 @@ def main():  # noqa: C901
             remediation_id = vulnerability_data['remediationId']
             session_id = None  # External agents don't use Contrast LLM sessions
 
-            # Create prompt configuration for external agent (no prompts required)
-            prompts = PromptConfiguration.for_external_agent()
+            # No prompts required for external agents
+            prompts = PromptConfiguration()
 
         # Populate vulnInfo in telemetry
         telemetry_handler.update_telemetry("vulnInfo.vulnId", vuln_uuid)
@@ -464,19 +306,35 @@ def main():  # noqa: C901
         log(f"\n\033[0;33m Selected vuln to fix: {vuln_title} \033[0m")
 
         # --- Create Common Remediation Context ---
-        # Create vulnerability and context from config - single source of truth
         vulnerability = Vulnerability.from_api_data(vulnerability_data)
-        context = RemediationContext.from_config(remediation_id, vulnerability, config, prompts=prompts, session_id=session_id)
+        context = RemediationContext(
+            remediation_id=remediation_id,
+            vulnerability=vulnerability,
+            prompts=prompts,
+            build_config=build_config,
+            repo_config=repo_config,
+            skip_writing_security_test=config.SKIP_WRITING_SECURITY_TEST,
+            session_id=session_id,
+        )
+
+        # Propagate a build command discovered by a previous agent run so the next
+        # agent skips the discovery step.  Only applies when no command was
+        # user-configured (user_build_command is the sacred, user-supplied value).
+        if discovered_build_cmd and not context.build_config.user_build_command:
+            context.build_config = BuildConfiguration(
+                build_command=discovered_build_cmd,
+                formatting_command=discovered_format_cmd,
+                build_command_source="agent_discovered",
+                format_command_source="agent_discovered" if discovered_format_cmd else "user_configured",
+                user_build_command=None,
+                user_format_command=None,
+            )
+            log(f"Reusing agent-discovered build command from previous run: {discovered_build_cmd}")
 
         # --- Check if we need to use the external coding agent ---
         if config.CODING_AGENT != CodingAgents.SMARTFIX.name:
-            # Create agent using GitHubAgentFactory
-            agent_type = CodingAgents[config.CODING_AGENT]
-            external_agent = GitHubAgentFactory.create_agent(agent_type, config)
-            # Assemble the issue body from vulnerability details
-            issue_body = external_agent.assemble_issue_body(vulnerability_data)
-            # Add issue_body for external agent compatibility
-            context.issue_body = issue_body
+            external_agent = ExternalCodingAgent(config)
+            context.issue_body = external_agent.assemble_issue_body(vulnerability_data)
 
             result = external_agent.remediate(context)
 
@@ -497,46 +355,65 @@ def main():  # noqa: C901
             continue
 
         # --- Run SmartFix Agent ---
-        # NOTE: The agent will validate the initial build before attempting fixes
-        # Create SmartFix agent (no config needed - gets everything from context)
-        smartfix_agent = GitHubAgentFactory.create_agent(CodingAgents.SMARTFIX)
+        smartfix_agent = SmartFixAgent()
 
         # Run the agent remediation process
-        # The agent will run the fix agent and QA loop without doing any git operations
+        # The agent will run the fix agent loop without doing any git operations
         # All git operations (staging, committing) happen in main.py after remediate() completes
         session = smartfix_agent.remediate(context)
 
         # Extract results from the session
-        session_handler = create_session_handler()
-        session_result = session_handler.handle_session_result(session)
+        session_result = handle_session_result(session)
 
         if not session_result.should_continue:
-            # QA Agent failed to fix the build
             log(f"Agent failed with reason: {session_result.failure_category}")
             git_ops.cleanup_branch(new_branch_name)
+
+            # Map internal failure categories to server-recognized values
+            api_failure_category = session_result.failure_category
+            if api_failure_category == FailureCategory.BUILD_VERIFICATION_FAILED.value:
+                api_failure_category = FailureCategory.AGENT_FAILURE.value
+
             contrast_api.notify_remediation_failed(
                 remediation_id=remediation_id,
-                failure_category=session_result.failure_category,
+                failure_category=api_failure_category,
                 contrast_host=config.CONTRAST_HOST,
                 contrast_org_id=config.CONTRAST_ORG_ID,
                 contrast_app_id=config.CONTRAST_APP_ID,
                 contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
                 contrast_api_key=config.CONTRAST_API_KEY
             )
-            continue  # Move to next vulnerability
+
+            # Build verification failure means the build environment is broken —
+            # continuing to the next vuln would waste LLM spend on the same failure
+            if session_result.failure_category == FailureCategory.BUILD_VERIFICATION_FAILED.value:
+                error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
+
+            continue  # Move to next vulnerability for other failure types
+
+        # Persist the agent-discovered build command for subsequent vulnerability iterations.
+        # Only save when there is no user-configured command (user_build_command is sacred).
+        if not context.build_config.user_build_command and smartfix_agent._build_state:
+            new_build_cmd = smartfix_agent._build_state.get("build_cmd")
+            new_format_cmd = smartfix_agent._build_state.get("format_cmd")
+            if new_build_cmd and new_build_cmd != discovered_build_cmd:
+                discovered_build_cmd = new_build_cmd
+                discovered_format_cmd = new_format_cmd
+                log(f"Saving agent-discovered build command for future runs: {discovered_build_cmd}")
 
         ai_fix_summary_full = session_result.ai_fix_summary
-        # Generate QA section based on session results
-        # The SmartFix agent already handled the QA loop internally
-        qa_config = QASectionConfig(
-            skip_qa_review=config.SKIP_QA_REVIEW,
-            has_build_command=build_config.has_build_command(),
-            build_command=build_config.build_command
+        # Prefer the command the agent actually verified over the pre-configured value.
+        # When no build command was configured, context.build_config.build_command is None
+        # even though the agent may have discovered and verified one at runtime.
+        verified_build_cmd = (
+            smartfix_agent._build_state.get("build_cmd")
+            if smartfix_agent._build_state
+            else context.build_config.build_command
         )
-        qa_section = session_handler.generate_qa_section(session, qa_config)
+        qa_section = generate_qa_section(verified_build_cmd)
 
         # --- Git and GitHub Operations ---
-        # All file changes from the agent (fix + QA + formatting) are uncommitted at this point
+        # All file changes from the agent (fix + formatting) are uncommitted at this point
         # Stage and commit everything together
         log("\n--- Proceeding with Git & GitHub Operations ---")
         git_ops.stage_changes()
@@ -558,7 +435,7 @@ def main():  # noqa: C901
             processed_one = True
             continue
 
-        # Commit all changes together (fix + QA fixes + formatting)
+        # Commit all changes together (fix + formatting)
         commit_message = git_ops.generate_commit_message(vuln_title, vuln_uuid)
         git_ops.commit_changes(commit_message)
         log("Committed all agent changes.")
@@ -576,11 +453,9 @@ def main():  # noqa: C901
 
         label_name, label_desc, label_color = github_ops.generate_label_details(vuln_uuid)
         label_created = github_ops.ensure_label(label_name, label_desc, label_color)
-
         if not label_created:
             log(f"Could not create GitHub label '{label_name}'. PR will be created without a label.", is_warning=True)
-            label_name = ""  # Clear label_name to avoid using it in PR creation
-
+            label_name = ""
         pr_title = github_ops.generate_pr_title(vuln_title)
 
         updated_pr_body = pr_body_base + qa_section
@@ -623,7 +498,7 @@ def main():  # noqa: C901
 
             # Try to create the PR using the GitHub CLI
             log("Attempting to create a pull request...")
-            pr_url = github_ops.create_pr(pr_title, updated_pr_body, remediation_id, config.BASE_BRANCH, label_name)
+            pr_url = github_ops.create_pr(pr_title, updated_pr_body, remediation_id, config.BASE_BRANCH)
 
             if pr_url:
                 pr_creation_success = True
@@ -643,6 +518,13 @@ def main():  # noqa: C901
                         log(f"Could not find PR number pattern in URL: {pr_url}", is_warning=True)
                 except (ValueError, IndexError, AttributeError) as e:
                     log(f"Could not extract PR number from URL: {pr_url} - Error: {str(e)}")
+
+                # Add labels to the PR (non-critical — don't fail the run)
+                if pr_number and label_name:
+                    try:
+                        github_ops.add_labels_to_pr(pr_number, [label_name])
+                    except Exception as label_err:
+                        log(f"Failed to add label to PR #{pr_number}: {label_err}", is_warning=True)
 
                 # Notify the Remediation backend service about the PR
                 if pr_number is None:
@@ -709,50 +591,7 @@ def main():  # noqa: C901
 
     log(f"\n--- Script finished (total runtime: {total_runtime}) ---")
 
-    # Clean up any dangling asyncio resources
-    try:
-        # Force asyncio resource cleanup before exit
-        loop = asyncio.get_event_loop_policy().get_event_loop()
-        if not loop.is_closed():
-            # Cancel all pending tasks
-            pending = asyncio.all_tasks(loop)
-            if pending:
-                for task in pending:
-                    try:
-                        task.cancel()
-                    except Exception:
-                        pass
-
-                # Give tasks a chance to respond to cancellation
-                try:
-                    # Wait with a timeout to prevent hanging
-                    loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
-                except (asyncio.CancelledError, Exception):
-                    pass
-
-            try:
-                # Shut down asyncgens
-                loop.run_until_complete(loop.shutdown_asyncgens())
-            except Exception:
-                pass
-
-            try:
-                # Close the loop
-                loop.close()
-            except Exception:
-                pass
-
-        # On Windows, specifically force garbage collection
-        if platform.system() == 'Windows':
-            try:
-                import gc
-                gc.collect()
-            except Exception:
-                pass
-    except Exception as e:
-        # Ignore any errors during cleanup
-        debug_log(f"Ignoring error during asyncio cleanup: {str(e)}")
-        pass
+    cleanup_event_loop()
 
 
 if __name__ == "__main__":

@@ -2,7 +2,7 @@
 # #%L
 # Contrast AI SmartFix
 # %%
-# Copyright (C) 2025 Contrast Security, Inc.
+# Copyright (C) 2026 Contrast Security, Inc.
 # %%
 # Contact: support@contrastsecurity.com
 # License: Commercial
@@ -20,7 +20,7 @@
 """
 Sub-Agent Executor Module
 
-Handles low-level sub-agent creation, execution, and event processing for Fix and QA agents.
+Handles low-level sub-agent creation, execution, and event processing for Fix agents.
 These sub-agents operate under the SmartFixAgent orchestrator.
 """
 
@@ -32,7 +32,6 @@ import re
 from pathlib import Path
 from typing import Optional
 
-from src.config import get_config
 from src.utils import debug_log, log, error_exit, tail_string
 from src.smartfix.shared.failure_categories import FailureCategory
 import src.telemetry_handler as telemetry_handler
@@ -45,6 +44,9 @@ ADK_AVAILABLE = False
 
 try:
     from google.adk.agents import Agent
+    from google.adk.artifacts.in_memory_artifact_service import InMemoryArtifactService
+    from google.adk.runners import Runner
+    from google.adk.sessions import InMemorySessionService
     from src.smartfix.extensions.smartfix_litellm import SmartFixLiteLlm
     from src.smartfix.extensions.smartfix_llm_agent import SmartFixLlmAgent
     from google.genai import types as genai_types
@@ -58,37 +60,103 @@ class SubAgentExecutor:
     Handles low-level sub-agent creation and execution.
 
     Encapsulates ADK agent lifecycle, event processing, and telemetry collection
-    for Fix and QA agents operating under the SmartFixAgent orchestrator.
+    for Fix agents operating under the SmartFixAgent orchestrator.
     """
 
-    def __init__(self, max_events: int = None):
+    def __init__(self, max_events: int = None) -> None:
         """
         Initialize sub-agent executor with configuration.
 
         Args:
             max_events: Maximum events per agent execution (defaults to config value)
         """
+        # Lazy import to avoid circular dependency with config module
+        from src.config import get_config
+
         self.config = get_config()
         self.max_events = max_events or self.config.MAX_EVENTS_PER_AGENT
         self.mcp_manager = MCPToolsetManager()
+
+    async def run(
+        self,
+        repo_root: Path,
+        query: str,
+        system_prompt: str,
+        remediation_id: str,
+        session_id: str = None,
+        additional_tools: list = None
+    ) -> str:
+        """
+        Run the agent end-to-end: create session, create agent, execute, return summary.
+
+        Args:
+            repo_root: Path to repository root
+            query: User query/prompt for the agent
+            system_prompt: System prompt for agent instructions
+            remediation_id: Remediation ID for error tracking
+            session_id: Session ID for Contrast LLM tracking
+            additional_tools: Optional list of extra tools to add to the agent
+
+        Returns:
+            str: Summary from the agent execution
+        """
+        debug_log(f"Using Agent Model ID: {self.config.AGENT_MODEL}")
+
+        if not ADK_AVAILABLE:
+            log("FATAL: Agent execution skipped: ADK libraries not available (import failed).")
+            error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
+
+        try:
+            session_service = InMemorySessionService()
+            artifacts_service = InMemoryArtifactService()
+            app_name = 'contrast_fix_app'
+            session = await session_service.create_session(
+                state={},
+                app_name=app_name,
+                user_id='github_action_fix'
+            )
+        except Exception as e:
+            log(f"FATAL: Failed to create fix agent session: {e}", is_error=True)
+            error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
+
+        agent = await self.create_agent(
+            repo_root, remediation_id, session_id, system_prompt=system_prompt,
+            additional_tools=additional_tools
+        )
+        if not agent:
+            log(
+                "AI Agent creation failed (fix agent). "
+                "Possible reasons: MCP server connection issue, missing prompts, "
+                "model configuration error, or internal ADK problem."
+            )
+            error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
+
+        runner = Runner(
+            app_name=app_name,
+            agent=agent,
+            artifact_service=artifacts_service,
+            session_service=session_service,
+        )
+
+        return await self.execute_agent(runner, agent, session, query, remediation_id)
 
     async def create_agent(
         self,
         target_folder: Path,
         remediation_id: str,
         session_id: str,
-        agent_type: str = "fix",
-        system_prompt: Optional[str] = None
+        system_prompt: Optional[str] = None,
+        additional_tools: list = None
     ) -> Optional[Agent]:
         """
-        Create an ADK Agent (either 'fix' or 'qa').
+        Create an ADK Agent.
 
         Args:
             target_folder: Path to the folder for filesystem access
             remediation_id: Remediation ID for error tracking
             session_id: Session ID for Contrast LLM tracking
-            agent_type: Type of agent ("fix" or "qa")
             system_prompt: System prompt for agent instructions
+            additional_tools: Optional list of extra tools (e.g., BuildTool) to include
 
         Returns:
             Agent: Configured ADK agent instance
@@ -99,17 +167,17 @@ class SubAgentExecutor:
         # Get MCP tools using the manager
         mcp_tools = await self.mcp_manager.get_tools(target_folder, remediation_id)
         if not mcp_tools:
-            log(f"Error: No MCP tools available for the {agent_type} agent. Cannot proceed.", is_error=True)
+            log("Error: No MCP tools available for the fix agent. Cannot proceed.", is_error=True)
             error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
 
         # Validate system prompt
         if not system_prompt:
-            log(f"Error: No system prompt available for {agent_type} agent")
+            log("Error: No system prompt available for fix agent")
             error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
 
         agent_instruction = system_prompt
-        agent_name = f"contrast_{agent_type}_agent"
-        debug_log(f"Using API-provided system prompt for {agent_type} agent")
+        agent_name = "contrast_fix_agent"
+        debug_log("Using API-provided system prompt for fix agent")
 
         # Create the agent
         try:
@@ -127,7 +195,7 @@ class SubAgentExecutor:
                         "x-contrast-llm-session-id": f"{session_id}"
                     }
                 )
-                debug_log(f"Creating {agent_type} agent ({agent_name}) with model contrast_llm")
+                debug_log(f"Creating fix agent ({agent_name}) with model contrast_llm")
             else:
                 model_instance = SmartFixLiteLlm(
                     model=self.config.AGENT_MODEL,
@@ -136,18 +204,22 @@ class SubAgentExecutor:
                     # (not supported by bedrock/anthropic atm - call throws error)
                     stream_options={"include_usage": True}
                 )
-                debug_log(f"Creating {agent_type} agent ({agent_name}) with model {self.config.AGENT_MODEL}")
+                debug_log(f"Creating agent ({agent_name}) with model {self.config.AGENT_MODEL}")
+
+            agent_tools = [mcp_tools]
+            if additional_tools:
+                agent_tools.extend(additional_tools)
 
             root_agent = SmartFixLlmAgent(
                 model=model_instance,
                 name=agent_name,
                 instruction=agent_instruction,
-                tools=[mcp_tools],
+                tools=agent_tools,
             )
-            debug_log(f"Created {agent_type} agent ({agent_name})")
+            debug_log(f"Created fix agent ({agent_name})")
             return root_agent
         except Exception as e:
-            log(f"Error creating ADK {agent_type} Agent: {e}", is_error=True)
+            log(f"Error creating ADK fix Agent: {e}", is_error=True)
             if "bedrock" in str(e).lower() or "aws" in str(e).lower():
                 log("Hint: Ensure AWS credentials and Bedrock model ID are correct.", is_error=True)
             error_exit(remediation_id, FailureCategory.INVALID_LLM_CONFIG.value)
@@ -158,8 +230,7 @@ class SubAgentExecutor:
         agent,
         session,
         user_query: str,
-        remediation_id: str,
-        agent_type: str = "fix"
+        remediation_id: str
     ) -> str:
         """
         Execute the agent with the given query and return the final response.
@@ -173,7 +244,6 @@ class SubAgentExecutor:
             session: ADK Session instance
             user_query: User query/prompt for the agent
             remediation_id: Remediation ID for error tracking
-            agent_type: Type of agent ("fix" or "qa")
 
         Returns:
             str: Final response from the agent
@@ -182,13 +252,13 @@ class SubAgentExecutor:
         start_time = datetime.datetime.now()
 
         # Validate prerequisites
-        session_id, user_id = await self._validate_prerequisites(remediation_id, runner, session, agent_type)
+        session_id, user_id = await self._validate_prerequisites(remediation_id, runner, session)
 
-        log(f"Running AI {agent_type.upper()} agent to analyze vulnerability and apply fix...")
+        log("Running AI fix agent to analyze vulnerability and apply fix...")
 
         # Initialize tracking variables
         event_count = 0
-        final_response = "AI agent did not provide a final summary."
+        final_response = "AI fix agent did not provide a final summary."
 
         # Create the async event stream
         events_async = await self._create_event_stream(runner, session_id, user_id, user_query, remediation_id)
@@ -208,15 +278,18 @@ class SubAgentExecutor:
                 event_count += 1
 
                 # Process the event and get updated state
+                prev_final_response = final_response
                 event_response, should_break = await self._process_event(
-                    event, event_count, agent_type, agent_tool_calls_telemetry
+                    event, event_count, agent_tool_calls_telemetry
                 )
 
                 if event_response:
                     final_response = event_response
 
-                # Handle agent messages and telemetry
-                if event.content and event_response and event_response != final_response:
+                # Handle agent messages and telemetry: when we get a new LLM response
+                # that differs from the previous one, flush the current telemetry segment
+                # and start a fresh one for the new response.
+                if event.content and event_response and event_response != prev_final_response:
                     if agent_event_telemetry is not None:
                         # Directly assign toolCalls rather than appending
                         agent_event_telemetry["toolCalls"] = agent_tool_calls_telemetry
@@ -251,8 +324,8 @@ class SubAgentExecutor:
             # Ensure we clean up the event stream
             await self._cleanup_event_stream(events_async)
 
-            debug_log(f"Closing MCP server connections for {agent_type.upper()} agent...")
-            log(f"{agent_type.upper()} agent run finished.")
+            debug_log("Closing MCP server connections for FIX agent...")
+            log("FIX agent run finished.")
 
             # Get accumulated statistics for telemetry
             total_tokens, total_cost = self._collect_statistics(agent)
@@ -264,7 +337,6 @@ class SubAgentExecutor:
             agent_event_payload = {
                 "startTime": start_time.isoformat() + "Z",
                 "durationMs": duration_ms,
-                "agentType": agent_type.upper(),
                 "result": agent_run_result,
                 "actions": agent_event_actions,
                 "totalTokens": total_tokens,
@@ -274,7 +346,7 @@ class SubAgentExecutor:
 
         return final_response
 
-    async def _validate_prerequisites(self, remediation_id: str, runner, session, agent_type: str) -> tuple:
+    async def _validate_prerequisites(self, remediation_id: str, runner, session) -> tuple:
         """Validate that all prerequisites for agent execution are met."""
         if not ADK_AVAILABLE or not runner or not session:
             log("AI Agent execution skipped: ADK libraries not available or runner/session invalid.")
@@ -307,14 +379,14 @@ class SubAgentExecutor:
             log(f"Failed to create agent event stream: {e}", is_error=True)
             error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
 
-    async def _process_event(self, event, event_count: int, agent_type: str, agent_tool_calls_telemetry: list) -> tuple:
+    async def _process_event(self, event, event_count: int, agent_tool_calls_telemetry: list) -> tuple:
         """Process a single agent event and return updated state."""
-        debug_log(f"\n\nAGENT EVENT #{event_count} ({agent_type.upper()}):")
+        debug_log(f"\n\nAGENT EVENT #{event_count}:")
 
         # Check if we've exceeded the event limit
         if event_count > self.max_events:
             log(
-                f"\n⚠️ Reached maximum event limit of {self.max_events} for {agent_type.upper()} agent. "
+                f"\n⚠️ Reached maximum event limit of {self.max_events} for FIX agent. "
                 f"Stopping agent execution early."
             )
             final_response = (
@@ -325,17 +397,17 @@ class SubAgentExecutor:
 
         # Process agent content/message
         final_response = None
-        content_response = self._process_content(event, agent_type)
+        content_response = self._process_content(event)
         if content_response:
             final_response = content_response
 
         # Process function calls and responses
-        self._process_function_calls(event, agent_type, agent_tool_calls_telemetry)
-        self._process_function_responses(event, agent_type, agent_tool_calls_telemetry)
+        self._process_function_calls(event, agent_tool_calls_telemetry)
+        self._process_function_responses(event, agent_tool_calls_telemetry)
 
         return final_response, False
 
-    def _process_content(self, event, agent_type: str) -> Optional[str]:
+    def _process_content(self, event) -> Optional[str]:
         """Process agent content/message from event."""
         if not event.content:
             return None
@@ -347,18 +419,18 @@ class SubAgentExecutor:
             message_text = event.content.parts[0].text or ""
 
         if message_text:
-            log(f"\n*** {agent_type.upper()} Agent Message: \033[1;36m {message_text} \033[0m")
+            log(f"\n*** Agent Message: \033[1;36m {message_text} \033[0m")
             return message_text
 
         return None
 
-    def _process_function_calls(self, event, agent_type: str, agent_tool_calls_telemetry: list):
+    def _process_function_calls(self, event, agent_tool_calls_telemetry: list) -> None:
         """Process function calls from event."""
         calls = event.get_function_calls()
         if calls:
             for call in calls:
                 args_str = str(call.args)
-                log(f"\n::group::  {agent_type.upper()} Agent calling tool {call.name}...")
+                log(f"\n::group::  Agent calling tool {call.name}...")
                 log(f"  Tool Call: {call.name}, Args: {args_str}")
                 log("\n::endgroup::")
                 agent_tool_calls_telemetry.append({
@@ -366,13 +438,13 @@ class SubAgentExecutor:
                     "result": "CALLING",
                 })
 
-    def _process_function_responses(self, event, agent_type: str, agent_tool_calls_telemetry: list):
+    def _process_function_responses(self, event, agent_tool_calls_telemetry: list) -> None:
         """Process function responses from event."""
         responses = event.get_function_responses()
         if responses:
             for response in responses:
                 result_str = str(response.response)
-                log(f"\n::group::  Response from tool {response.name} for {agent_type.upper()} Agent...")
+                log(f"\n::group::  Response from tool {response.name}...")
                 log(f"  Tool Result: {response.name} -> {result_str}")
                 log("\n::endgroup::")
 

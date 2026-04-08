@@ -43,6 +43,19 @@ class ScmOperations(ABC):
         pass
 
     @abstractmethod
+    def get_pr_actual_state(self, pr_number: int) -> Optional[str]:
+        """
+        Returns the actual SCM state of a PR: 'OPEN', 'MERGED', or 'CLOSED'.
+
+        Args:
+            pr_number (int): The PR number to check
+
+        Returns:
+            Optional[str]: 'OPEN', 'MERGED', 'CLOSED', or None on error
+        """
+        pass
+
+    @abstractmethod
     def get_pr_changed_files_count(self, pr_number: int) -> int:
         """
         Gets the number of changed files in a PR.
@@ -135,7 +148,7 @@ class ScmOperations(ABC):
 
     @abstractmethod
     def create_pr(self, title: str, body: str, remediation_id: str,
-                  base_branch: str, label: str) -> str:
+                  base_branch: str) -> str:
         """
         Creates a pull request and returns the PR URL.
 
@@ -144,7 +157,6 @@ class ScmOperations(ABC):
             body (str): PR body
             remediation_id (str): Remediation ID
             base_branch (str): Base branch name
-            label (str): Label to apply to the PR
 
         Returns:
             str: URL of the created PR

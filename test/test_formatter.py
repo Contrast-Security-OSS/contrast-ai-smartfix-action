@@ -147,7 +147,7 @@ class TestFormatter(unittest.TestCase):
             self.assertEqual(calls[1][0][0], self.original_cwd)
 
     def test_formatter_command_parsing(self):
-        """Test that formatter command is correctly split into arguments."""
+        """Test that formatter command is passed as string with shell=True."""
         # Setup mock
         self.mock_run_command.return_value = "Success"
 

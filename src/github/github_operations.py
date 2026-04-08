@@ -2,7 +2,7 @@
 # #%L
 # Contrast AI SmartFix
 # %%
-# Copyright (C) 2025 Contrast Security, Inc.
+# Copyright (C) 2026 Contrast Security, Inc.
 # %%
 # Contact: support@contrastsecurity.com
 # License: Commercial
@@ -171,6 +171,44 @@ class GitHubOperations(ScmOperations):
         else:
             log("NOTE: In testing mode, not exiting on Copilot assignment failure", is_warning=True)
 
+    def get_pr_actual_state(self, pr_number: int) -> Optional[str]:
+        """
+        Returns the actual GitHub state of a PR: 'OPEN', 'MERGED', or 'CLOSED'.
+        Returns None on error (caller should skip this PR).
+
+        Args:
+            pr_number: The PR number to check
+
+        Returns:
+            Optional[str]: 'OPEN', 'MERGED', 'CLOSED', or None on error
+        """
+        try:
+            result = run_command(
+                ['gh', 'pr', 'view', str(pr_number), '--repo', self.config.GITHUB_REPOSITORY,
+                 '--json', 'state'],
+                env=self.get_gh_env(),
+                check=False
+            )
+            if result is None:
+                debug_log(f"Failed to get PR state for PR #{pr_number}")
+                return None
+
+            data = json.loads(result.strip())
+            state = data.get('state', '').upper()
+
+            if state in ('OPEN', 'MERGED', 'CLOSED'):
+                return state
+            else:
+                debug_log(f"Unexpected PR state '{state}' for PR #{pr_number}")
+                return None
+
+        except (json.JSONDecodeError, ValueError) as e:
+            debug_log(f"Error parsing PR state for PR #{pr_number}: {e}")
+            return None
+        except Exception as e:
+            debug_log(f"Exception while getting PR state for PR #{pr_number}: {e}")
+            return None
+
     def get_pr_changed_files_count(self, pr_number: int) -> int:
         """
         Get the number of changed files in a PR using GitHub CLI.
@@ -283,27 +321,16 @@ class GitHubOperations(ScmOperations):
         ]
 
         try:
-            # Run with check=False to handle the label already existing
-            import subprocess
-            process = subprocess.run(
-                label_command,
-                env=gh_env,
-                capture_output=True,
-                text=True,
-                check=False
-            )
-
-            if process.returncode == 0:
-                debug_log(f"Label '{label_name}' created successfully.")
+            run_command(label_command, env=gh_env, check=True)
+            debug_log(f"Label '{label_name}' created successfully.")
+            return True
+        except CommandExecutionError as e:
+            # Race condition: label was created between our check and create
+            if e.stderr and "already exists" in e.stderr.lower():
+                debug_log(f"Label '{label_name}' already exists (race condition).")
                 return True
-            else:
-                # Check for "already exists" type of error which is OK
-                if "already exists" in process.stderr.lower():
-                    log(f"Label '{label_name}' already exists.")
-                    return True
-                else:
-                    log(f"Error creating label: {process.stderr}", is_error=True)
-                    return False
+            log(f"Failed to create label '{label_name}': {e.stderr or e}", is_error=True)
+            return False
         except Exception as e:
             log(f"Exception while creating label: {e}", is_error=True)
             return False
@@ -486,7 +513,7 @@ class GitHubOperations(ScmOperations):
         """Generates the Pull Request title."""
         return f"Fix: {vuln_title[:100]}"
 
-    def create_pr(self, title: str, body: str, remediation_id: str, base_branch: str, label: str) -> str:
+    def create_pr(self, title: str, body: str, remediation_id: str, base_branch: str) -> str:
         """Creates a GitHub Pull Request.
 
         Returns:
@@ -540,16 +567,6 @@ class GitHubOperations(ScmOperations):
             pr_url = run_command(pr_command, env=gh_env, check=True)
             if pr_url:
                 log(f"Successfully created PR: {pr_url}")
-
-                # Add labels separately using gh pr edit (works with GITHUB_TOKEN)
-                if label:
-                    try:
-                        # Extract PR number from URL (format: https://github.com/owner/repo/pull/123)
-                        pr_number = int(pr_url.strip().split('/')[-1])
-                        debug_log(f"Extracted PR number {pr_number} from URL, adding label: {label}")
-                        self.add_labels_to_pr(pr_number, [label])
-                    except (ValueError, IndexError) as e:
-                        log(f"Could not extract PR number from URL to add label: {e}", is_warning=True)
             return pr_url
 
         except FileNotFoundError:

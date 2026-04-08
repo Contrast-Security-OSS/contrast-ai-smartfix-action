@@ -2,7 +2,7 @@
 # #%L
 # Contrast AI SmartFix
 # %%
-# Copyright (C) 2025 Contrast Security, Inc.
+# Copyright (C) 2026 Contrast Security, Inc.
 # %%
 # Contact: support@contrastsecurity.com
 # License: Commercial
@@ -81,7 +81,6 @@ class TestAllowedCommands(unittest.TestCase):
         valid_commands = [
             "make all",
             "cmake .",
-            "echo 'Building...'",
         ]
         for cmd in valid_commands:
             validate_command("BUILD_COMMAND", cmd)  # Should not raise
@@ -97,7 +96,7 @@ class TestCommandChaining(unittest.TestCase):
 
     def test_or_operator(self):
         """Test || operator for fallback."""
-        cmd = "npm test || echo 'Tests failed'"
+        cmd = "npm test || gradle test"
         validate_command("BUILD_COMMAND", cmd)  # Should not raise
 
     def test_semicolon_operator(self):
@@ -112,40 +111,8 @@ class TestCommandChaining(unittest.TestCase):
 
     def test_complex_chain(self):
         """Test complex command chain."""
-        cmd = "npm install && npm test || echo 'Build failed'"
+        cmd = "npm install && npm test || gradle build"
         validate_command("BUILD_COMMAND", cmd)  # Should not raise
-
-
-class TestShellScriptValidation(unittest.TestCase):
-    """Test shell script execution validation."""
-
-    def test_sh_with_script_file(self):
-        """Test sh executing .sh file is allowed."""
-        cmd = "sh ./build.sh"
-        validate_command("BUILD_COMMAND", cmd)  # Should not raise
-
-    def test_bash_with_script_file(self):
-        """Test bash executing .sh file is allowed."""
-        cmd = "bash ./scripts/test.sh"
-        validate_command("BUILD_COMMAND", cmd)  # Should not raise
-
-    def test_sh_with_c_flag_blocked(self):
-        """Test sh -c is blocked."""
-        cmd = "sh -c 'npm install'"
-        with self.assertRaisesRegex(CommandValidationError, "shell command incorrectly"):
-            validate_command("BUILD_COMMAND", cmd)
-
-    def test_bash_with_c_flag_blocked(self):
-        """Test bash -c is blocked."""
-        cmd = "bash -c 'make build'"
-        with self.assertRaisesRegex(CommandValidationError, "shell command incorrectly"):
-            validate_command("BUILD_COMMAND", cmd)
-
-    def test_sh_without_sh_extension_blocked(self):
-        """Test sh with non-.sh file is blocked."""
-        cmd = "sh ./build"
-        with self.assertRaisesRegex(CommandValidationError, "shell command incorrectly"):
-            validate_command("BUILD_COMMAND", cmd)
 
 
 class TestRedirectValidation(unittest.TestCase):
@@ -306,15 +273,6 @@ class TestErrorMessages(unittest.TestCase):
         with self.assertRaisesRegex(
             CommandValidationError,
             "BUILD_COMMAND contains dangerous pattern"
-        ):
-            validate_command("BUILD_COMMAND", cmd)
-
-    def test_shell_command_error_message(self):
-        """Test error message for improper shell usage."""
-        cmd = "sh -c 'npm install'"
-        with self.assertRaisesRegex(
-            CommandValidationError,
-            "Shell commands \\(sh/bash\\) can only execute \\.sh files"
         ):
             validate_command("BUILD_COMMAND", cmd)
 

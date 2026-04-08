@@ -1,0 +1,427 @@
+# -
+# #%L
+# Contrast AI SmartFix
+# %%
+# Copyright (C) 2026 Contrast Security, Inc.
+# %%
+# Contact: support@contrastsecurity.com
+# License: Commercial
+# NOTICE: This Software and the patented inventions embodied within may only be
+# used as part of Contrast Security's commercial offerings. Even though it is
+# made available through public repositories, use of this Software is subject to
+# the applicable End User Licensing Agreement found at
+# https://www.contrastsecurity.com/enduser-terms-0317a or as otherwise agreed
+# between Contrast Security and the End User. The Software may not be reverse
+# engineered, modified, repackaged, sold, redistributed or otherwise used in a
+# way not consistent with the End User License Agreement.
+# #L%
+#
+
+"""
+Command Detector Module
+
+Detects build and format commands from project structure using file markers
+and Makefile inspection. Provides deterministic detection layer.
+"""
+
+import re
+import subprocess
+from pathlib import Path
+from typing import List, Optional
+
+from src.smartfix.config.command_validator import (
+    validate_command,
+    CommandValidationError,
+)
+
+
+def _is_safe_make_target(target: str) -> bool:
+    """
+    Validate that a make target name is safe to use in a command.
+
+    Only allows alphanumeric characters, underscores, hyphens, and dots.
+
+    Args:
+        target: Make target name to validate
+
+    Returns:
+        True if target name is safe, False otherwise
+    """
+    return bool(re.match(r'^[a-zA-Z0-9_.-]+$', target))
+
+
+def inspect_makefile_targets(makefile_path: Path) -> List[str]:
+    """
+    Extract target names from a Makefile.
+
+    Parses Makefile for targets matching pattern: ^([a-zA-Z_][a-zA-Z0-9_.-]*)\\s*:
+    Prioritizes common targets: test, check, build, all, default
+
+    Args:
+        makefile_path: Path to the Makefile
+
+    Returns:
+        List of target names, prioritized targets first
+    """
+    if not makefile_path.exists():
+        return []
+
+    priority_targets = ['test', 'check', 'build', 'all', 'default']
+    found_targets = []
+
+    try:
+        with open(makefile_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                # Skip comments and empty lines
+                stripped = line.strip()
+                if not stripped or stripped.startswith('#'):
+                    continue
+
+                # Match target pattern: target:
+                match = re.match(r'^([a-zA-Z_][a-zA-Z0-9_.-]*)\s*:', line)
+                if match:
+                    target = match.group(1)
+                    # Validate target name for safety (C1 fix)
+                    if _is_safe_make_target(target):
+                        found_targets.append(target)
+    except FileNotFoundError:
+        return []
+    except (IOError, PermissionError, UnicodeDecodeError, OSError):
+        # C2/C3 fix: Comprehensive error handling
+        return []
+
+    # Sort: priority targets first, then alphabetically
+    priority_found = [t for t in priority_targets if t in found_targets]
+    other_targets = [t for t in found_targets if t not in priority_targets]
+
+    return priority_found + other_targets
+
+
+def _detect_js_package_manager(search_dir: Path) -> str:
+    """Detect JS package manager from lock files. Defaults to npm."""
+    if (search_dir / 'yarn.lock').exists():
+        return 'yarn'
+    if (search_dir / 'pnpm-lock.yaml').exists():
+        return 'pnpm'
+    if (search_dir / 'bun.lockb').exists():
+        return 'bun'
+    return 'npm'
+
+
+def _js_monorepo_dir_flag(pkg_cmd: str, rel_path: str) -> str:
+    """Return the correct subdirectory flag for a JS package manager in monorepo context."""
+    if pkg_cmd == 'npm':
+        return f'--prefix {rel_path}'
+    elif pkg_cmd in ('yarn', 'bun'):
+        return f'--cwd {rel_path}'
+    elif pkg_cmd == 'pnpm':
+        return f'--dir {rel_path}'
+    return f'--prefix {rel_path}'  # fallback
+
+
+def generate_build_command_candidates(
+    repo_root: Path,
+    project_dir: Optional[Path] = None
+) -> List[str]:
+    """
+    Generate build command candidates based on project file markers.
+
+    Detects build system from marker files (pom.xml, build.gradle, package.json, etc.)
+    and generates prioritized list of test/build commands.
+
+    For monorepo structures, uses tool-specific directory flags instead of cd:
+    - Maven: mvn -f path/to/pom.xml
+    - Gradle: ./gradlew -p path/to/subdir
+    - npm: npm --prefix path/to/subdir
+    - yarn/bun: yarn/bun --cwd path/to/subdir
+    - pnpm: pnpm --dir path/to/subdir
+
+    Args:
+        repo_root: Repository root directory
+        project_dir: Optional subdirectory for monorepo projects
+
+    Returns:
+        List of build command candidates, prioritized by likelihood
+    """
+    candidates = []
+    search_dir = project_dir if project_dir else repo_root
+
+    # Calculate relative path for monorepo commands
+    rel_path = ""
+    if project_dir and project_dir != repo_root:
+        rel_path = str(project_dir.relative_to(repo_root))
+
+    # Maven
+    if (search_dir / 'pom.xml').exists():
+        if rel_path:
+            pom_path = f"{rel_path}/pom.xml"
+            candidates.extend([
+                f'mvn -f {pom_path} test',
+                f'mvn -f {pom_path} verify',
+                f'mvn -f {pom_path} clean install',
+            ])
+        else:
+            candidates.extend([
+                'mvn test',
+                'mvn verify',
+                'mvn clean install',
+            ])
+
+    # Gradle (prefer wrapper)
+    if (search_dir / 'build.gradle').exists() or (search_dir / 'build.gradle.kts').exists():
+        gradle_wrapper = (repo_root / 'gradlew').exists()
+        gradle_cmd = './gradlew' if gradle_wrapper else 'gradle'
+
+        if rel_path:
+            candidates.extend([
+                f'{gradle_cmd} -p {rel_path} test',
+                f'{gradle_cmd} -p {rel_path} build',
+                f'{gradle_cmd} -p {rel_path} check',
+            ])
+        else:
+            candidates.extend([
+                f'{gradle_cmd} test',
+                f'{gradle_cmd} build',
+                f'{gradle_cmd} check',
+            ])
+
+    # Python
+    if (search_dir / 'pytest.ini').exists() or (search_dir / 'setup.py').exists() or \
+       (search_dir / 'pyproject.toml').exists():
+        candidates.extend([
+            'pytest',
+            'python -m pytest',
+        ])
+
+    # Node.js / JavaScript — detect package manager from lock files
+    if (search_dir / 'package.json').exists():
+        pkg_cmd = _detect_js_package_manager(search_dir)
+
+        if rel_path:
+            dir_flag = _js_monorepo_dir_flag(pkg_cmd, rel_path)
+            candidates.extend([
+                f'{pkg_cmd} {dir_flag} test',
+                f'{pkg_cmd} {dir_flag} run build',
+                f'{pkg_cmd} {dir_flag} run test',
+            ])
+        else:
+            candidates.extend([
+                f'{pkg_cmd} test',
+                f'{pkg_cmd} run build',
+                f'{pkg_cmd} run test',
+            ])
+
+    # PHP
+    if (search_dir / 'composer.json').exists():
+        candidates.extend([
+            'composer test',
+            'phpunit',
+            './vendor/bin/phpunit',
+        ])
+
+    # .NET
+    if list(search_dir.glob('*.sln')) or list(search_dir.glob('*.csproj')):
+        candidates.extend([
+            'dotnet test',
+            'dotnet build',
+        ])
+
+    # Makefile
+    makefile_path = search_dir / 'Makefile'
+    if makefile_path.exists():
+        targets = inspect_makefile_targets(makefile_path)
+        for target in targets:
+            candidates.append(f'make {target}')
+
+    return candidates
+
+
+def generate_format_command_candidates(
+    repo_root: Path,
+    project_dir: Optional[Path] = None
+) -> List[str]:
+    """
+    Generate format command candidates based on project file markers.
+
+    Detects formatters from project structure and generates commands.
+
+    Args:
+        repo_root: Repository root directory
+        project_dir: Optional subdirectory for monorepo projects
+
+    Returns:
+        List of format command candidates
+    """
+    candidates = []
+    search_dir = project_dir if project_dir else repo_root
+
+    # Python formatters
+    if (search_dir / 'pyproject.toml').exists() or (search_dir / 'setup.py').exists():
+        candidates.extend([
+            'black .',
+            'ruff format .',
+            'autopep8 --in-place --recursive .',
+        ])
+
+    # JavaScript/TypeScript formatters
+    if (search_dir / 'package.json').exists():
+        pkg_cmd = _detect_js_package_manager(search_dir)
+        candidates.extend([
+            'prettier --write .',
+            f'{pkg_cmd} run format',
+        ])
+
+    # Java formatters
+    if (search_dir / 'pom.xml').exists():
+        candidates.extend([
+            'mvn spotless:apply',
+            'mvn com.coveo:fmt-maven-plugin:format',
+        ])
+
+    # Gradle Java formatters
+    if (search_dir / 'build.gradle').exists() or (search_dir / 'build.gradle.kts').exists():
+        gradle_wrapper = (repo_root / 'gradlew').exists()
+        gradle_cmd = './gradlew' if gradle_wrapper else 'gradle'
+        candidates.extend([
+            f'{gradle_cmd} spotlessApply',
+        ])
+
+    # .NET / C# formatters
+    if list(search_dir.glob('*.sln')) or list(search_dir.glob('*.csproj')):
+        candidates.extend([
+            'dotnet format',
+            'csharpier .',
+        ])
+
+    # PHP formatters
+    if (search_dir / 'composer.json').exists():
+        candidates.extend([
+            'php-cs-fixer fix',
+            './vendor/bin/php-cs-fixer fix',
+        ])
+
+    return candidates
+
+
+def _validate_command_exists(command: str, repo_root: Path, timeout: int = 5) -> bool:
+    """
+    Check if a command exists without running build operations.
+
+    Tests command availability using --version or --help flags instead of
+    executing the actual build/test command. This is safer and faster.
+
+    Args:
+        command: Command string to validate (e.g., "mvn clean install")
+        repo_root: Directory to run command in
+        timeout: Timeout in seconds
+
+    Returns:
+        True if command is available, False otherwise
+    """
+    import shlex
+
+    try:
+        # Extract base command (first token)
+        tokens = shlex.split(command)
+        if not tokens:
+            return False
+
+        base_cmd = tokens[0]
+
+        # Test with version/help flags (don't actually run builds)
+        test_flags = ['--version', '--help', '-v', '-h']
+
+        for flag in test_flags:
+            try:
+                result = subprocess.run(
+                    [base_cmd, flag],
+                    cwd=repo_root,
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    encoding='utf-8',
+                    errors='replace',
+                    timeout=timeout
+                )
+                # Accept exit 0 or 1: some tools (e.g., gradle --help) return 1
+                # for info flags. False positives are low-risk since this is just
+                # a pre-filter — the actual build will fail later if the tool is broken.
+                if result.returncode in (0, 1):
+                    return True
+            except (subprocess.TimeoutExpired, FileNotFoundError):
+                continue
+
+        return False
+    except Exception:
+        return False
+
+
+def detect_build_command(
+    repo_root: Path,
+    project_dir: Optional[Path] = None,
+) -> Optional[str]:
+    """
+    Detect build/test command from project structure (store-only, no build execution).
+
+    Generates candidates based on project markers, checks tool availability,
+    and validates against the security allowlist. Does NOT run actual builds —
+    the Fix agent's BuildTool handles build execution and verification.
+
+    Args:
+        repo_root: Repository root directory
+        project_dir: Optional subdirectory for monorepo projects
+
+    Returns:
+        First available and valid build command, or None if none found
+    """
+    candidates = generate_build_command_candidates(repo_root, project_dir)
+
+    for candidate in candidates:
+        # Check if command exists with --version (fast pre-check)
+        if not _validate_command_exists(candidate, repo_root):
+            continue
+
+        # Validate command against security allowlist
+        try:
+            validate_command("BUILD_COMMAND", candidate)
+            return candidate
+        except CommandValidationError:
+            continue
+
+    return None
+
+
+def detect_format_command(
+    repo_root: Path,
+    project_dir: Optional[Path] = None
+) -> Optional[str]:
+    """
+    Detect format command by validating candidate availability and security.
+
+    Generates candidates, tests each with --version flag to verify
+    the command exists, and validates against security allowlist.
+    Does NOT actually run formatters during detection.
+
+    Args:
+        repo_root: Repository root directory
+        project_dir: Optional subdirectory for monorepo projects
+
+    Returns:
+        First available and valid format command or None
+    """
+    candidates = generate_format_command_candidates(repo_root, project_dir)
+
+    for candidate in candidates:
+        # Check if command exists
+        if not _validate_command_exists(candidate, repo_root):
+            continue
+
+        # Validate command against security allowlist
+        try:
+            validate_command("FORMATTING_COMMAND", candidate)
+            return candidate
+        except CommandValidationError:
+            # Skip invalid commands, continue to next candidate
+            continue
+
+    return None

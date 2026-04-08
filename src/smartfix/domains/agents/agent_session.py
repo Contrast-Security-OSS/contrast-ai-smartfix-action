@@ -28,7 +28,6 @@ class AgentSession:
     """
     Tracks the state and history of a single, complete remediation attempt.
     """
-    qa_attempts: int = 0
     final_pr_body: Optional[str] = None
     failure_category: Optional[FailureCategory] = None
     is_complete: bool = False

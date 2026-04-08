@@ -1,14 +1,17 @@
+import sys
 import unittest
 import os
 import io
 import contextlib
+from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-# Test setup imports (path is set up by conftest.py)
-from setup_test_env import create_temp_repo_dir
-from src.config import reset_config, get_config
-from src.main import main
-from src.smartfix.shared.failure_categories import FailureCategory
+# Ensure test directory is on path (conftest.py only runs under pytest)
+sys.path.insert(0, str(Path(__file__).parent))
+from setup_test_env import create_temp_repo_dir  # noqa: E402
+from src.config import reset_config, get_config  # noqa: E402
+from src.main import main  # noqa: E402
+from src.smartfix.shared.failure_categories import FailureCategory  # noqa: E402
 
 
 class TestMain(unittest.TestCase):
@@ -64,6 +67,10 @@ class TestMain(unittest.TestCase):
         self.mock_api = self.api_patcher.start()
         self.mock_api.return_value = None
 
+        # Mock reconciliation to avoid real API calls
+        self.reconcile_patcher = patch('src.main.reconcile_open_remediations')
+        self.mock_reconcile = self.reconcile_patcher.start()
+
         # Mock requests for version checking
         self.requests_patcher = patch('src.version_check.requests.get')
         self.mock_requests_get = self.requests_patcher.start()
@@ -76,14 +83,28 @@ class TestMain(unittest.TestCase):
         self.exit_patcher = patch('sys.exit')
         self.mock_exit = self.exit_patcher.start()
 
+        # Mock count_open_prs_with_prefix to avoid JSON parse failure from mocked subprocess
+        self.pr_count_patcher = patch(
+            'src.github.github_operations.GitHubOperations.count_open_prs_with_prefix',
+            return_value=0
+        )
+        self.mock_pr_count = self.pr_count_patcher.start()
+
+        # Mock notify_remediation_failed to prevent real HTTP calls in error paths
+        self.notify_patcher = patch('src.contrast_api.notify_remediation_failed', return_value=False)
+        self.mock_notify = self.notify_patcher.start()
+
     def tearDown(self):
         """Clean up after each test."""
         # Stop all patches
         self.subproc_patcher.stop()
         self.git_patcher.stop()
         self.api_patcher.stop()
+        self.reconcile_patcher.stop()
         self.requests_patcher.stop()
         self.exit_patcher.stop()
+        self.pr_count_patcher.stop()
+        self.notify_patcher.stop()
         reset_config()
 
         # Clean up temp directory
@@ -147,9 +168,7 @@ class TestMain(unittest.TestCase):
             'remediationId': 'REM-TEST-123',
             'sessionId': 'session-123',
             'fixSystemPrompt': 'Fix the vulnerability',
-            'fixUserPrompt': 'Please fix',
-            'qaSystemPrompt': 'Review the fix',
-            'qaUserPrompt': 'Is it good?'
+            'fixUserPrompt': 'Please fix'
         }
 
         # Return same vuln twice, then None to stop loop
@@ -192,8 +211,6 @@ class TestMain(unittest.TestCase):
             'sessionId': 'session-456',
             'fixSystemPrompt': 'Fix the vulnerability',
             'fixUserPrompt': 'Please fix',
-            'qaSystemPrompt': 'Review the fix',
-            'qaUserPrompt': 'Is it good?',
         }
         # Return one vuln, then None to stop the loop
         self.mock_api.side_effect = [vuln_data, None]
@@ -204,14 +221,12 @@ class TestMain(unittest.TestCase):
         # AWS credentials check (which would fail with no AWS creds in test env).
         test_env = {**self.env_vars, 'USE_CONTRAST_LLM': 'false', 'AGENT_MODEL': 'mock-model'}
 
-        mock_session_result = MagicMock()
-        mock_session_result.should_continue = True
-        mock_session_result.ai_fix_summary = "No code changes needed - container-level issue"
-        mock_session_result.failure_category = None
-
-        mock_session_handler = MagicMock()
-        mock_session_handler.handle_session_result.return_value = mock_session_result
-        mock_session_handler.generate_qa_section.return_value = ""
+        from src.smartfix.domains.workflow.session_handler import SessionOutcome
+        mock_session_result = SessionOutcome(
+            should_continue=True,
+            failure_category=None,
+            ai_fix_summary="No code changes needed - container-level issue",
+        )
 
         with patch('src.github.github_operations.GitHubOperations.count_open_prs_with_prefix', return_value=0), \
              patch('src.github.github_operations.GitHubOperations.check_pr_status_for_label', return_value="NOT_FOUND"), \
@@ -221,12 +236,13 @@ class TestMain(unittest.TestCase):
              patch('src.smartfix.domains.scm.git_operations.GitOperations.stage_changes'), \
              patch('src.smartfix.domains.scm.git_operations.GitOperations.check_status', return_value=False), \
              patch('src.smartfix.domains.scm.git_operations.GitOperations.cleanup_branch') as mock_cleanup, \
-             patch('src.github.agent_factory.GitHubAgentFactory.create_agent') as mock_factory, \
-             patch('src.main.create_session_handler', return_value=mock_session_handler), \
+             patch('src.main.SmartFixAgent') as mock_agent_class, \
+             patch('src.main.handle_session_result', return_value=mock_session_result), \
+             patch('src.main.generate_qa_section', return_value=""), \
              patch('src.contrast_api.notify_remediation_failed') as mock_notify_failed:
 
             mock_agent = MagicMock()
-            mock_factory.return_value = mock_agent
+            mock_agent_class.return_value = mock_agent
 
             with patch.dict('os.environ', test_env, clear=True):
                 reset_config()

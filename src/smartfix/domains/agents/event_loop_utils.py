@@ -2,7 +2,7 @@
 # #%L
 # Contrast AI SmartFix
 # %%
-# Copyright (C) 2025 Contrast Security, Inc.
+# Copyright (C) 2026 Contrast Security, Inc.
 # %%
 # Contact: support@contrastsecurity.com
 # License: Commercial
@@ -27,27 +27,69 @@ high-level agent execution wrapper functions.
 import asyncio
 import logging
 import platform
-from pathlib import Path
+from typing import Any
 
-from src.config import get_config
-from src.utils import debug_log, log, error_exit
-from src.smartfix.shared.failure_categories import FailureCategory
-
-from .sub_agent_executor import SubAgentExecutor, ADK_AVAILABLE
+from src.utils import debug_log, log
 
 # Conditional imports
 try:
-    from google.adk.artifacts.in_memory_artifact_service import InMemoryArtifactService
-    from google.adk.runners import Runner
-    from google.adk.sessions import InMemorySessionService
     from asyncio import WindowsProactorEventLoopPolicy
 except ImportError:
     pass
 
 MAX_PENDING_TASKS = 100
+_cleanup_logging_configured = False
 
 
-def _run_agent_in_event_loop(coroutine_func, *args, **kwargs):
+def _configure_cleanup_logging() -> None:
+    """Configure logging to suppress benign asyncio and MCP cleanup errors.
+
+    Guards against duplicate filter accumulation: logging.addFilter() appends
+    without deduplication, so calling this more than once per process would
+    attach redundant filter instances to each logger.
+    """
+    global _cleanup_logging_configured
+    if _cleanup_logging_configured:
+        return
+    # Suppress anyio error logging
+    anyio_logger = logging.getLogger("anyio")
+    anyio_logger.setLevel(logging.CRITICAL)
+
+    # Suppress MCP client/stdio error logging
+    mcp_logger = logging.getLogger("mcp.client.stdio")
+    mcp_logger.setLevel(logging.CRITICAL)
+
+    # Silence the task exception was never retrieved warnings
+    asyncio_logger = logging.getLogger("asyncio")
+    asyncio_logger.setLevel(logging.CRITICAL)
+
+    # Add a comprehensive filter to specifically ignore common cancel scope and cleanup errors
+    class AsyncioCleanupFilter(logging.Filter):
+        def filter(self, record) -> bool:
+            message = record.getMessage()
+            # Filter out common cleanup errors
+            if any(pattern in message for pattern in [
+                "exit cancel scope in a different task",
+                "Task exception was never retrieved",
+                "unhandled errors in a TaskGroup",
+                "GeneratorExit",
+                "CancelledError",
+                "asyncio.exceptions",
+                "BaseExceptionGroup"
+            ]):
+                return False
+            return True
+
+    # Apply the filter to multiple loggers
+    cleanup_filter = AsyncioCleanupFilter()
+    anyio_logger.addFilter(cleanup_filter)
+    asyncio_logger.addFilter(cleanup_filter)
+    if mcp_logger:
+        mcp_logger.addFilter(cleanup_filter)
+    _cleanup_logging_configured = True
+
+
+def _run_agent_in_event_loop(coroutine_func, *args, **kwargs) -> Any:
     """
     Wrapper function to run an async coroutine in a controlled event loop.
     Handles proper setup and cleanup of the event loop and tasks.
@@ -60,6 +102,9 @@ def _run_agent_in_event_loop(coroutine_func, *args, **kwargs):
         The result returned by the coroutine
     """
     result = None
+
+    # Configure logging to suppress asyncio and anyio errors that typically occur during cleanup
+    _configure_cleanup_logging()
 
     # Platform-specific setup
     is_windows = platform.system() == 'Windows'
@@ -168,139 +213,3 @@ def _run_agent_in_event_loop(coroutine_func, *args, **kwargs):
             pass
 
     return result
-
-
-async def _run_agent_internal_with_prompts(
-    agent_type: str,
-    repo_root: Path,
-    query: str,
-    system_prompt: str,
-    remediation_id: str,
-    session_id: str = None
-) -> str:
-    """
-    Internal helper to run either fix or QA agent with API-provided prompts. Returns summary.
-
-    Args:
-        agent_type: Type of agent ("fix" or "qa")
-        repo_root: Path to repository root
-        query: User query/prompt for the agent
-        system_prompt: System prompt for agent instructions
-        remediation_id: Remediation ID for error tracking
-        session_id: Session ID for Contrast LLM tracking
-
-    Returns:
-        str: Summary from the agent execution
-    """
-    config = get_config()
-    debug_log(f"Using Agent Model ID: {config.AGENT_MODEL}")
-
-    # Set the correct event loop policy for Windows
-    # This is crucial for the MCP filesystem server connections to work on Windows
-    if platform.system() == 'Windows':
-        try:
-            # First ensure there's no active event loop that might conflict
-            try:
-                loop = asyncio.get_event_loop()
-                if not loop.is_closed():
-                    debug_log("Closing existing event loop before setting policy")
-                    loop.close()
-            except RuntimeError:
-                pass  # No event loop, which is fine
-
-            # IMPORTANT: On Windows, we MUST use the ProactorEventLoop
-            # SelectorEventLoop doesn't support subprocesses on Windows
-            # Explicitly set the WindowsProactorEventLoopPolicy to ensure subprocess support
-            asyncio.set_event_loop_policy(WindowsProactorEventLoopPolicy())
-            debug_log("Explicitly set WindowsProactorEventLoopPolicy for subprocess support")
-
-            # Create a fresh event loop with the WindowsProactorEventLoopPolicy
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            debug_log(f"Created and set new event loop with Windows default policy: {type(loop).__name__}")
-        except Exception as e:
-            debug_log(f"Warning: Error setting Windows event loop policy: {e}")
-            debug_log("Will continue with default event loop policy")
-
-    # Configure logging to suppress asyncio and anyio errors that typically occur during cleanup
-    # Suppress anyio error logging
-    anyio_logger = logging.getLogger("anyio")
-    anyio_logger.setLevel(logging.CRITICAL)  # Using CRITICAL instead of ERROR for stricter filtering
-
-    # Suppress MCP client/stdio error logging
-    mcp_logger = logging.getLogger("mcp.client.stdio")
-    mcp_logger.setLevel(logging.CRITICAL)
-
-    # Silence the task exception was never retrieved warnings
-    asyncio_logger = logging.getLogger("asyncio")
-    asyncio_logger.setLevel(logging.CRITICAL)
-
-    # Add a comprehensive filter to specifically ignore common cancel scope and cleanup errors
-    class AsyncioCleanupFilter(logging.Filter):
-        def filter(self, record):
-            message = record.getMessage()
-            # Filter out common cleanup errors
-            if any(pattern in message for pattern in [
-                "exit cancel scope in a different task",
-                "Task exception was never retrieved",
-                "unhandled errors in a TaskGroup",
-                "GeneratorExit",
-                "CancelledError",
-                "asyncio.exceptions",
-                "BaseExceptionGroup"
-            ]):
-                return False
-            return True
-
-    # Apply the filter to multiple loggers
-    cleanup_filter = AsyncioCleanupFilter()
-    anyio_logger.addFilter(cleanup_filter)
-    asyncio_logger.addFilter(cleanup_filter)
-    if mcp_logger:
-        mcp_logger.addFilter(cleanup_filter)
-
-    if not ADK_AVAILABLE:
-        log(f"FATAL: {agent_type.capitalize()} Agent execution skipped: ADK libraries not available (import failed).")
-        error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
-
-    session = None
-    runner = None
-
-    try:
-        session_service = InMemorySessionService()
-        artifacts_service = InMemoryArtifactService()
-        app_name = f'contrast_{agent_type}_app'
-        session = await session_service.create_session(
-            state={},
-            app_name=app_name,
-            user_id=f'github_action_{agent_type}'
-        )
-    except Exception as e:
-        # Handle any errors in session creation
-        log(f"FATAL: Failed to create {agent_type.capitalize()} agent session: {e}", is_error=True)
-        error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
-
-    # Use SubAgentExecutor to create and execute the agent
-    executor = SubAgentExecutor()
-
-    agent = await executor.create_agent(
-        repo_root, remediation_id, session_id, agent_type=agent_type, system_prompt=system_prompt
-    )
-    if not agent:
-        log(
-            f"AI Agent creation failed ({agent_type} agent). "
-            f"Possible reasons: MCP server connection issue, missing prompts, "
-            f"model configuration error, or internal ADK problem."
-        )
-        error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
-
-    runner = Runner(
-        app_name=app_name,
-        agent=agent,
-        artifact_service=artifacts_service,
-        session_service=session_service,
-    )
-
-    # Execute the agent using the executor
-    summary = await executor.execute_agent(runner, agent, session, query, remediation_id, agent_type)
-    return summary
