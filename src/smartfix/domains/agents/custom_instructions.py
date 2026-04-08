@@ -72,7 +72,7 @@ def _read_from_base_branch(repo_path: Path, base_branch: str, rel_path: str) -> 
             stderr = result.stderr.decode("utf-8", errors="replace").strip()
             log(f"Custom instructions: git show origin/{base_branch}:{rel_path} failed (exit {result.returncode}): {stderr}")
             return None
-        content = result.stdout.decode("utf-8", errors="replace").strip()
+        content = result.stdout.decode("utf-8", errors="replace")
         return content or None
     except (OSError, subprocess.TimeoutExpired):
         return None
