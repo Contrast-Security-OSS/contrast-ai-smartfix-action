@@ -10,6 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Setup git hooks: `./setup-hooks.sh`
 
 ### Testing
+- **Preferred**: `make test` — handles full environment setup automatically
 - Run all tests: `./test/run_tests.sh`
 - Run specific test file: `./test/run_tests.sh test_main.py`
 - Run multiple test files: `./test/run_tests.sh test_main.py test_config.py`

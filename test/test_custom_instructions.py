@@ -52,13 +52,12 @@ class TestLoadCustomInstructions(unittest.TestCase):
     def setUp(self):
         self.repo_path = Path("/fake/repo")
         self.config = _config()
-        # debug_log requires a config singleton; patch it for all tests so failure
-        # paths don't trigger config initialisation in the test environment.
-        self._debug_log_patcher = patch("src.smartfix.domains.agents.custom_instructions.debug_log")
-        self.mock_debug_log = self._debug_log_patcher.start()
+        # Patch log to suppress output during tests.
+        self._log_patcher = patch("src.smartfix.domains.agents.custom_instructions.log")
+        self.mock_log = self._log_patcher.start()
 
     def tearDown(self):
-        self._debug_log_patcher.stop()
+        self._log_patcher.stop()
 
     # --- Source A scenarios ---
 
@@ -216,14 +215,13 @@ class TestLoadCustomInstructions(unittest.TestCase):
         self.assertIsNone(result)
 
     @patch("subprocess.run")
-    def test_git_show_failure_emits_debug_log(self, mock_run):
-        """Non-zero git show exit code emits a debug_log with stderr."""
+    def test_git_show_failure_emits_log(self, mock_run):
+        """Non-zero git show exit code emits a log message with stderr."""
         mock_run.return_value = _git_show_result(returncode=128, stderr="fatal: not a git repository")
-        with patch("src.smartfix.domains.agents.custom_instructions.debug_log") as mock_debug:
-            load_custom_instructions(self.repo_path, self.config)
-            self.assertTrue(mock_debug.called, "Expected debug_log to be called on git show failure")
-            log_output = " ".join(str(c) for c in mock_debug.call_args_list)
-            self.assertIn("fatal: not a git repository", log_output)
+        load_custom_instructions(self.repo_path, self.config)
+        self.assertTrue(self.mock_log.called, "Expected log to be called on git show failure")
+        log_output = " ".join(str(c) for c in self.mock_log.call_args_list)
+        self.assertIn("fatal: not a git repository", log_output)
 
     @patch("subprocess.run")
     def test_large_file_included_without_truncation(self, mock_run):
