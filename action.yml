@@ -74,6 +74,16 @@ inputs:
     description: 'Whether to attempt writing security tests'
     required: false
     default: 'false'
+  use_smartfix_instructions:
+    description: 'Read SMARTFIX_INSTRUCTIONS.md from the repo root and inject it into the fix agent prompt.'
+    required: false
+    default: 'true'
+  use_repo_agent_instructions:
+    description: >
+      Fall back to existing agent instruction files (.github/copilot-instructions.md, AGENTS.md,
+      CLAUDE.md, .cursorrules) if SMARTFIX_INSTRUCTIONS.md is absent or disabled.
+    required: false
+    default: 'true'
   debug_mode:
     description: 'Enable debug mode for verbose logging'
     required: false
@@ -445,6 +455,9 @@ runs:
         MAX_EVENTS_PER_AGENT: ${{ inputs.max_events_per_agent }}
         # --- Test Writing Configuration ---
         SKIP_WRITING_SECURITY_TEST: ${{ inputs.skip_writing_security_test }}
+        # --- Custom Instructions Configuration ---
+        USE_SMARTFIX_INSTRUCTIONS: ${{ inputs.use_smartfix_instructions }}
+        USE_REPO_AGENT_INSTRUCTIONS: ${{ inputs.use_repo_agent_instructions }}
         # --- Debug Mode ---
         DEBUG_MODE: ${{ inputs.debug_mode }}
         # --- Vulnerability Configuration ---

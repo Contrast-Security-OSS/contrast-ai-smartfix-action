@@ -47,7 +47,7 @@ warnings.filterwarnings(
 try:
     from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset, StdioServerParameters, StdioConnectionParams
     MCP_AVAILABLE = True
-except ImportError:
+except Exception:
     MCP_AVAILABLE = False
 
 # Configure library loggers to reduce noise from ADK authentication warnings
