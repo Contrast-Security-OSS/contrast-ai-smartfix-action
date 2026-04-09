@@ -33,11 +33,33 @@ from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
 from litellm import Message
 from pydantic import Field
+from opentelemetry.trace import StatusCode
+
+from src import otel_provider
 from src.config import get_config
 from src.utils import debug_log, log
 
 # Suppress LiteLLM's "Give Feedback" and "LiteLLM.Info" messages unless debugging
 litellm.suppress_debug_info = os.environ.get("DEBUG_MODE", "").lower() != "true"
+
+
+def _derive_system(model: str) -> str:
+    """Map a LiteLLM model string to the OTel gen_ai.system attribute value."""
+    m = model.lower()
+    if m.startswith("contrast/"):
+        return "contrast"
+    if m.startswith("anthropic/") or m.startswith("claude"):
+        return "anthropic"
+    if m.startswith("bedrock/"):
+        return "aws.bedrock"
+    if m.startswith("gemini/") or m.startswith("google/"):
+        return "google"
+    if m.startswith("azure/"):
+        return "azure"
+    # Fallback: use prefix before '/', or 'unknown' for models without a provider prefix.
+    if "/" in model:
+        return model.split("/")[0]
+    return "unknown"
 
 
 class TokenCostAccumulator:
@@ -393,6 +415,10 @@ class SmartFixLiteLlm(LiteLlm):
     async def _call_llm_with_retry(self, completion_args: dict) -> dict:
         """Execute acompletion with exponential backoff retry.
 
+        Each attempt is wrapped in an OTel 'chat <model>' span (GenAI conventions).
+        _log_cost_analysis() is called here so both the cost accumulator and the
+        OTel span consume the same extracted token values.
+
         Args:
             completion_args: Arguments to pass to acompletion
 
@@ -403,35 +429,63 @@ class SmartFixLiteLlm(LiteLlm):
             The last exception if all retries are exhausted
         """
         last_error = None
+        # Avoid eagerly evaluating self.model (which may be a mock attribute in tests)
+        model = completion_args["model"] if "model" in completion_args else self.model
 
         for attempt in range(self._max_retries):
-            try:
-                return await self.llm_client.acompletion(**completion_args)
-            except Exception as e:
-                last_error = e
+            with otel_provider.start_span(f"chat {model}") as llm_span:
+                llm_span.set_attribute("gen_ai.system", _derive_system(model))
+                llm_span.set_attribute("gen_ai.request.model", model)
+                llm_span.set_attribute("gen_ai.operation.name", "chat")
+                llm_span.set_attribute("gen_ai.retry.attempt", attempt)
+                max_tokens = completion_args.get("max_tokens")
+                if max_tokens is not None:
+                    llm_span.set_attribute("gen_ai.request.max_tokens", max_tokens)
 
-                if not self._is_retryable_exception(e):
-                    log(f"LLM call failed with non-retryable error: {type(e).__name__}: {e}", is_error=True)
-                    raise
+                try:
+                    response = await self.llm_client.acompletion(**completion_args)
 
-                if attempt < self._max_retries - 1:
-                    delay = self._initial_retry_delay * (self._retry_multiplier ** attempt)
-                    jitter = delay * random.uniform(0, 0.25)
-                    delay += jitter
+                    input_tokens, output_tokens, cache_read, cache_write = self._log_cost_analysis(response)
 
-                    debug_log(
-                        f"LLM call failed (attempt {attempt + 1}/{self._max_retries}), retrying: "
-                        f"{type(e).__name__}: {e}"
-                    )
-                    debug_log(f"Waiting {delay:.1f}s before next retry...")
+                    response_model = getattr(response, "model", None) or model
+                    llm_span.set_attribute("gen_ai.response.model", response_model)
+                    llm_span.set_attribute("gen_ai.usage.input_tokens", input_tokens)
+                    llm_span.set_attribute("gen_ai.usage.output_tokens", output_tokens)
+                    if cache_read:
+                        llm_span.set_attribute("gen_ai.usage.cache_read_input_tokens", cache_read)
+                    if cache_write:
+                        llm_span.set_attribute("gen_ai.usage.cache_creation_input_tokens", cache_write)
 
-                    await asyncio.sleep(delay)
-                else:
-                    log(
-                        f"LLM call failed after {self._max_retries} retries: "
-                        f"{type(e).__name__}: {e}",
-                        is_error=True
-                    )
+                    return response
+
+                except Exception as e:
+                    last_error = e
+                    llm_span.set_status(StatusCode.ERROR)
+                    llm_span.set_attribute("error.type", type(e).__name__)
+                    llm_span.record_exception(e)
+
+                    if not self._is_retryable_exception(e):
+                        log(f"LLM call failed with non-retryable error: {type(e).__name__}: {e}", is_error=True)
+                        raise
+
+                    if attempt < self._max_retries - 1:
+                        delay = self._initial_retry_delay * (self._retry_multiplier ** attempt)
+                        jitter = delay * random.uniform(0, 0.25)
+                        delay += jitter
+
+                        debug_log(
+                            f"LLM call failed (attempt {attempt + 1}/{self._max_retries}), retrying: "
+                            f"{type(e).__name__}: {e}"
+                        )
+                        debug_log(f"Waiting {delay:.1f}s before next retry...")
+
+                        await asyncio.sleep(delay)
+                    else:
+                        log(
+                            f"LLM call failed after {self._max_retries} retries: "
+                            f"{type(e).__name__}: {e}",
+                            is_error=True
+                        )
 
         raise last_error
 
@@ -481,19 +535,20 @@ class SmartFixLiteLlm(LiteLlm):
 
         response = await self._call_llm_with_retry(completion_args)
 
-        # Call our override to capture cache tokens from raw response
-        self._log_cost_analysis(response)
-
         # Call the parent method to get the standard LlmResponse
         from google.adk.models.lite_llm import _model_response_to_generate_content_response
         yield _model_response_to_generate_content_response(response)
 
-    def _log_cost_analysis(self, response) -> None:
-        """Log detailed cost analysis with cache token information."""
+    def _log_cost_analysis(self, response) -> tuple:
+        """Log detailed cost analysis with cache token information.
 
+        Returns:
+            Tuple of (input_tokens, output_tokens, cache_read_tokens, cache_write_tokens).
+            Returns (0, 0, 0, 0) when usage data is absent.
+        """
         usage = response.get("usage", {})
         if not usage:
-            return
+            return (0, 0, 0, 0)
 
         # Extract tokens - handle both dict and Usage object cases
         if isinstance(usage, dict):
@@ -510,7 +565,7 @@ class SmartFixLiteLlm(LiteLlm):
             cache_read_tokens = getattr(usage, 'cache_read_input_tokens', 0)
             cache_write_tokens = getattr(usage, 'cache_creation_input_tokens', 0)
         else:
-            return
+            return (0, 0, 0, 0)
 
         # Log basic usage
         debug_log("Token Usage:")
@@ -563,6 +618,8 @@ class SmartFixLiteLlm(LiteLlm):
                 )
         except Exception as e:
             debug_log(f"Could not calculate costs: {e}")
+
+        return (input_tokens, output_tokens, cache_read_tokens, cache_write_tokens)
 
     def gather_accumulated_stats_dict(self) -> dict:
         """Gather accumulated token usage and cost statistics as dictionary.

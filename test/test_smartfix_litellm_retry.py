@@ -165,6 +165,8 @@ class TestSmartFixLiteLlmRetryAsync(unittest.TestCase):
         self.mock_instance._is_retryable_exception = lambda e: SmartFixLiteLlm._is_retryable_exception(
             self.mock_instance, e
         )
+        # _log_cost_analysis is mocked via spec; return a proper 4-tuple so it can be unpacked
+        self.mock_instance._log_cost_analysis.return_value = (0, 0, 0, 0)
 
     def _run_async(self, coro):
         """Helper to run async code in tests."""
