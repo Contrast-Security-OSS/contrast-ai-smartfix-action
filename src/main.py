@@ -17,6 +17,7 @@
 # #L%
 #
 
+import atexit
 import sys
 import re
 from datetime import datetime, timedelta
@@ -24,6 +25,7 @@ from urllib.parse import urlparse
 
 # Import configurations and utilities
 from src.config import get_config
+from src import otel_provider
 from src.smartfix.shared.coding_agents import CodingAgents
 from src.utils import debug_log, log, error_exit
 from src import telemetry_handler
@@ -56,8 +58,24 @@ github_ops = GitHubOperations()
 apply_asyncio_workarounds()
 
 
-def main():  # noqa: C901
+def main():
+    """Entry point: initialise OTel, start root span, then run the implementation."""
+    otel_provider.initialize_otel(config)
+    atexit.register(otel_provider.shutdown_otel)
+
+    vuln_count = 0
+    with otel_provider.start_span("smartfix-run") as run_span:
+        run_span.set_attribute("session.id", config.GITHUB_RUN_ID)
+        try:
+            vuln_count = _main_impl()
+        finally:
+            run_span.set_attribute("contrast.smartfix.vulnerabilities_total", vuln_count)
+            otel_provider.shutdown_otel()
+
+
+def _main_impl():  # noqa: C901
     """Main orchestration logic."""
+    vuln_count = 0
 
     start_time = datetime.now()
     log("--- Starting Contrast AI SmartFix Script ---")
@@ -302,6 +320,7 @@ def main():  # noqa: C901
 
         # Update tracking variable now that we know we're actually processing this vuln
         previous_vuln_uuid = vuln_uuid
+        vuln_count += 1
 
         log(f"\n\033[0;33m Selected vuln to fix: {vuln_title} \033[0m")
 
@@ -592,6 +611,7 @@ def main():  # noqa: C901
     log(f"\n--- Script finished (total runtime: {total_runtime}) ---")
 
     cleanup_event_loop()
+    return vuln_count
 
 
 if __name__ == "__main__":

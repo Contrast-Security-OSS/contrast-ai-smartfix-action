@@ -258,6 +258,34 @@ class TestMain(unittest.TestCase):
         mock_cleanup.assert_called_once_with("smartfix/remediation-REM-TEST-456")
         self.assertIn("No changes detected from agent execution", output)
 
+    def test_main_initializes_and_shuts_down_otel(self):
+        """main() calls initialize_otel, starts smartfix-run span, and calls shutdown_otel."""
+        mock_span = MagicMock()
+        mock_span_cm = MagicMock()
+        mock_span_cm.__enter__ = MagicMock(return_value=mock_span)
+        mock_span_cm.__exit__ = MagicMock(return_value=False)
+
+        with patch('src.otel_provider.initialize_otel') as mock_init, \
+             patch('src.otel_provider.start_span', return_value=mock_span_cm) as mock_start, \
+             patch('src.otel_provider.shutdown_otel') as mock_shutdown, \
+             patch.dict('os.environ', self.env_vars, clear=True):
+            reset_config()
+            with patch('src.main.config', get_config(testing=True)):
+                main()
+
+        mock_init.assert_called_once()
+        mock_start.assert_called_once_with("smartfix-run")
+        # session.id must be set
+        session_calls = [c for c in mock_span.set_attribute.call_args_list
+                         if c[0][0] == "session.id"]
+        self.assertTrue(len(session_calls) >= 1, "Expected session.id to be set on run span")
+        # vulnerabilities_total must be set; with no vulns processed it should be 0
+        total_calls = [c for c in mock_span.set_attribute.call_args_list
+                       if c[0][0] == "contrast.smartfix.vulnerabilities_total"]
+        self.assertTrue(len(total_calls) >= 1, "Expected contrast.smartfix.vulnerabilities_total to be set")
+        self.assertEqual(total_calls[-1][0][1], 0)
+        mock_shutdown.assert_called()
+
 
 if __name__ == '__main__':
     unittest.main()
