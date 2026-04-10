@@ -83,6 +83,7 @@ def initialize_otel(config) -> None:
         provider.add_span_processor(BatchSpanProcessor(exporter))
         trace.set_tracer_provider(provider)
         _tracer_provider = provider
+        log(f"OTel telemetry enabled: exporting to {endpoint}")
 
     except Exception as e:
         log(f"OTel initialisation failed, telemetry disabled: {e}", is_warning=True)
