@@ -38,7 +38,6 @@ Span hierarchy:
 
 import asyncio
 import unittest
-from contextlib import contextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from opentelemetry.sdk.trace import TracerProvider
