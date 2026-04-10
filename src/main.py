@@ -64,13 +64,15 @@ def main():
     atexit.register(otel_provider.shutdown_otel)
 
     vuln_count = 0
-    with otel_provider.start_span("smartfix-run") as run_span:
-        run_span.set_attribute("session.id", config.GITHUB_RUN_ID)
-        try:
-            vuln_count = _main_impl()
-        finally:
-            run_span.set_attribute("contrast.smartfix.vulnerabilities_total", vuln_count)
-            otel_provider.shutdown_otel()
+    try:
+        with otel_provider.start_span("smartfix-run") as run_span:
+            run_span.set_attribute("session.id", config.GITHUB_RUN_ID)
+            try:
+                vuln_count = _main_impl()
+            finally:
+                run_span.set_attribute("contrast.smartfix.vulnerabilities_total", vuln_count)
+    finally:
+        otel_provider.shutdown_otel()
 
 
 def _main_impl():  # noqa: C901
