@@ -28,6 +28,7 @@ services:
     image: grafana/otel-lgtm:latest
     ports:
       - "3000:3000"   # Grafana UI
+      - "3200:3200"   # Tempo HTTP API  ← verify_spans.py queries this
       - "4317:4317"   # OTLP/gRPC
       - "4318:4318"   # OTLP/HTTP  ← SmartFix uses this
     environment:
