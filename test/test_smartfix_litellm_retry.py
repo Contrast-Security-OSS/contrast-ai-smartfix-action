@@ -167,6 +167,8 @@ class TestSmartFixLiteLlmRetryAsync(unittest.TestCase):
         )
         # _log_cost_analysis is mocked via spec; return a proper 4-tuple so it can be unpacked
         self.mock_instance._log_cost_analysis.return_value = (0, 0, 0, 0)
+        # _otel_context is set in __init__; provide None so start_span uses ambient context
+        self.mock_instance._otel_context = None
 
     def _run_async(self, coro):
         """Helper to run async code in tests."""

@@ -33,6 +33,7 @@ from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
 from litellm import Message
 from pydantic import Field
+from opentelemetry import context as otel_context
 from opentelemetry.trace import StatusCode
 
 from src import otel_provider
@@ -183,6 +184,11 @@ class SmartFixLiteLlm(LiteLlm):
         debug_log(f"SmartFixLiteLlm initialized with model: {model}")
         # Store system prompt for use with Contrast models
         self._system_prompt = kwargs.get('system')
+
+        # Snapshot the current OTel context so chat spans created during LLM calls are
+        # always children of the fix-vulnerability span, regardless of whatever ADK-internal
+        # spans (call_llm, invocation, etc.) may be active at call time.
+        self._otel_context = otel_context.get_current()
 
         # Load retry configuration from config
         config = get_config()
@@ -433,7 +439,7 @@ class SmartFixLiteLlm(LiteLlm):
         model = completion_args["model"] if "model" in completion_args else self.model
 
         for attempt in range(self._max_retries):
-            with otel_provider.start_span(f"chat {model}") as llm_span:
+            with otel_provider.start_span(f"chat {model}", context=self._otel_context) as llm_span:
                 llm_span.set_attribute("gen_ai.system", _derive_system(model))
                 llm_span.set_attribute("gen_ai.request.model", model)
                 llm_span.set_attribute("gen_ai.operation.name", "chat")

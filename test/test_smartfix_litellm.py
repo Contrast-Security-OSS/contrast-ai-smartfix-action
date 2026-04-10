@@ -491,7 +491,7 @@ class TestCallLlmWithRetryOtelSpan(unittest.TestCase):
 
         span_names = []
 
-        def mock_start_span(name):
+        def mock_start_span(name, context=None):
             span_names.append(name)
             mock_span = MagicMock()
             mock_span_cm = MagicMock()
@@ -513,7 +513,7 @@ class TestCallLlmWithRetryOtelSpan(unittest.TestCase):
 
         captured_span = None
 
-        def mock_start_span(name):
+        def mock_start_span(name, context=None):
             nonlocal captured_span
             mock_span = MagicMock()
             captured_span = mock_span
@@ -540,7 +540,7 @@ class TestCallLlmWithRetryOtelSpan(unittest.TestCase):
 
         captured_span = None
 
-        def mock_start_span(name):
+        def mock_start_span(name, context=None):
             nonlocal captured_span
             mock_span = MagicMock()
             captured_span = mock_span
@@ -569,7 +569,7 @@ class TestCallLlmWithRetryOtelSpan(unittest.TestCase):
 
         captured_span = None
 
-        def mock_start_span(name):
+        def mock_start_span(name, context=None):
             nonlocal captured_span
             mock_span = MagicMock()
             captured_span = mock_span

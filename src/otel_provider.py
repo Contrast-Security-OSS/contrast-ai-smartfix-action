@@ -89,14 +89,21 @@ def initialize_otel(config) -> None:
         log(f"OTel initialisation failed, telemetry disabled: {e}", is_warning=True)
 
 
-def start_span(name: str):
+def start_span(name: str, context=None):
     """
     Return a context manager that starts a span with the given name.
 
     Always safe to call regardless of whether OTel is initialised — returns a
     no-op span when the TracerProvider has not been set.
+
+    Args:
+        name: The span name.
+        context: Optional OTel context to use as the parent. When None the
+                 ambient current context is used (standard behaviour). Pass an
+                 explicitly captured context to pin the parent span regardless
+                 of whatever spans may be active at call time.
     """
-    return trace.get_tracer("smartfix").start_as_current_span(name)
+    return trace.get_tracer("smartfix").start_as_current_span(name, context=context)
 
 
 def shutdown_otel() -> None:

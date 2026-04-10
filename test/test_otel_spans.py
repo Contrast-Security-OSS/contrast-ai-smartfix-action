@@ -69,7 +69,7 @@ def _make_span_recorder():
 
     patch_ctx = patch(
         "src.otel_provider.start_span",
-        side_effect=lambda name: tracer.start_as_current_span(name),
+        side_effect=lambda name, context=None: tracer.start_as_current_span(name, context=context),
     )
     return exporter, patch_ctx
 
@@ -330,6 +330,7 @@ class TestLlmCallSpan(unittest.TestCase):
         mock_instance._is_retryable_exception = lambda e: False
         mock_instance._log_cost_analysis.return_value = (10, 5, 0, 0)
         mock_instance.llm_client = MagicMock()
+        mock_instance._otel_context = None  # use ambient context (fix-vulnerability is current)
 
         mock_response = MagicMock()
         mock_response.model = "test-model"
@@ -369,6 +370,7 @@ class TestLlmCallSpan(unittest.TestCase):
         mock_instance._is_retryable_exception = lambda e: False
         mock_instance._log_cost_analysis.return_value = (200, 80, 0, 0)
         mock_instance.llm_client = MagicMock()
+        mock_instance._otel_context = None
 
         mock_response = MagicMock()
         mock_response.model = "usage-model"
