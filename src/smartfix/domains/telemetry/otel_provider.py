@@ -76,7 +76,6 @@ def initialize_otel(config) -> None:
         resource = Resource.create({
             SERVICE_NAME: "smartfix",
             "service.version": config.VERSION,
-            "contrast.org_id": config.CONTRAST_ORG_ID,
             "vcs.repository.url.full": f"{config.GITHUB_SERVER_URL}/{config.GITHUB_REPOSITORY}",
             "vcs.repository.name": config.GITHUB_REPOSITORY.split("/")[-1],
             "vcs.owner.name": config.GITHUB_REPOSITORY.split("/")[0],

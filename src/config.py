@@ -56,7 +56,7 @@ class Config:
         self.testing = testing
 
         # --- Preset ---
-        self.VERSION = "v1.0.11"
+        self.VERSION = "v1.0.15"
         self.USER_AGENT = f"contrast-smart-fix {self.VERSION}"
 
         # --- Paths (initialized early for use in command detection) ---

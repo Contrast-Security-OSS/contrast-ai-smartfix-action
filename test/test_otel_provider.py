@@ -86,7 +86,6 @@ class TestOtelProvider(unittest.TestCase):
         attrs = otel_provider._tracer_provider.resource.attributes
         self.assertEqual(attrs["service.name"], "smartfix")
         self.assertEqual(attrs["service.version"], cfg.VERSION)
-        self.assertEqual(attrs["contrast.org_id"], cfg.CONTRAST_ORG_ID)
         self.assertEqual(
             attrs["vcs.repository.url.full"],
             f"{cfg.GITHUB_SERVER_URL}/{cfg.GITHUB_REPOSITORY}",
