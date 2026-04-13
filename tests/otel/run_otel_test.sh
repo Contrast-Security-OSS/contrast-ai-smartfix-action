@@ -122,12 +122,14 @@ fi
 if [[ "$VERIFY" == "true" ]]; then
     echo
     echo "═══ Verifying OTel spans ═══"
-    python3 "$SMARTFIX_REPO/tests/otel/verify_spans.py" \
+    if python3 "$SMARTFIX_REPO/tests/otel/verify_spans.py" \
         --tempo-url "$TEMPO_URL" \
         --since "$SINCE" \
-        --wait 30
-
-    VERIFY_EXIT=$?
+        --wait 30; then
+        VERIFY_EXIT=0
+    else
+        VERIFY_EXIT=$?
+    fi
     echo
     if [[ "$VERIFY_EXIT" -eq 0 ]]; then
         echo "✅ OTel span verification passed"
