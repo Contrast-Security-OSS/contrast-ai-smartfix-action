@@ -506,7 +506,7 @@ class TestCallLlmWithRetryOtelSpan(unittest.TestCase):
 
     @patch('src.smartfix.extensions.smartfix_litellm.debug_log')
     def test_span_has_request_attributes(self, _mock_log):
-        """gen_ai.system, gen_ai.request.model, gen_ai.operation.name, gen_ai.retry.attempt are set."""
+        """gen_ai.system, gen_ai.request.model, gen_ai.operation.name, contrast.smartfix.retry_attempt are set."""
         mock_response = self._make_mock_response()
         self.model.llm_client = MagicMock()
         self.model.llm_client.acompletion = AsyncMock(return_value=mock_response)
@@ -529,7 +529,7 @@ class TestCallLlmWithRetryOtelSpan(unittest.TestCase):
         self.assertEqual(attrs.get("gen_ai.system"), "anthropic")
         self.assertEqual(attrs.get("gen_ai.request.model"), "anthropic/claude-3-opus")
         self.assertEqual(attrs.get("gen_ai.operation.name"), "chat")
-        self.assertEqual(attrs.get("gen_ai.retry.attempt"), 0)
+        self.assertEqual(attrs.get("contrast.smartfix.retry_attempt"), 0)
 
     @patch('src.smartfix.extensions.smartfix_litellm.debug_log')
     def test_span_has_response_model_attribute(self, _mock_log):

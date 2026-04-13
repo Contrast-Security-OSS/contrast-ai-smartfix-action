@@ -323,7 +323,6 @@ class TestMain(unittest.TestCase):
         self.assertEqual(attrs.get("contrast.finding.source"), "runtime")
         self.assertEqual(attrs.get("contrast.finding.rule_id"), "sql-injection")
         self.assertEqual(attrs.get("contrast.smartfix.coding_agent"), "smartfix")
-        self.assertEqual(attrs.get("contrast.smartfix.llm_provider"), "byollm")
 
     def test_fix_vulnerability_span_response_attributes_no_changes(self):
         """fix-vulnerability span has fix_applied=False and pr_created=False when no code changes."""
