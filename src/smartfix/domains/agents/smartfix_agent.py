@@ -16,7 +16,7 @@ from src.smartfix.domains.agents.custom_instructions import load_custom_instruct
 from src.config import get_config
 from src.utils import debug_log, log, error_exit
 from src.smartfix.shared.failure_categories import FailureCategory
-from src import telemetry_handler
+from src.smartfix.domains.telemetry import telemetry_handler
 
 from .coding_agent import CodingAgentStrategy
 from .directory_tree_utils import get_directory_tree_for_agent_prompt

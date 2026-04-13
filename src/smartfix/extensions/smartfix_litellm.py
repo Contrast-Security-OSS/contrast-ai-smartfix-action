@@ -36,7 +36,7 @@ from pydantic import Field
 from opentelemetry import context as otel_context
 from opentelemetry.trace import StatusCode
 
-from src import otel_provider
+from src.smartfix.domains.telemetry import otel_provider
 from src.config import get_config
 from src.utils import debug_log, log
 

@@ -301,9 +301,9 @@ class TestMain(unittest.TestCase):
              patch('src.smartfix.domains.scm.git_operations.GitOperations.cleanup_branch'), \
              patch('src.main.SmartFixAgent') as mock_agent_class, \
              patch('src.main.handle_session_result', return_value=mock_session_result), \
-             patch('src.otel_provider.start_span', side_effect=mock_start_span), \
-             patch('src.otel_provider.initialize_otel'), \
-             patch('src.otel_provider.shutdown_otel'):
+             patch('src.smartfix.domains.telemetry.otel_provider.start_span', side_effect=mock_start_span), \
+             patch('src.smartfix.domains.telemetry.otel_provider.initialize_otel'), \
+             patch('src.smartfix.domains.telemetry.otel_provider.shutdown_otel'):
 
             mock_agent_class.return_value = MagicMock()
 
@@ -369,9 +369,9 @@ class TestMain(unittest.TestCase):
              patch('src.main.SmartFixAgent') as mock_agent_class, \
              patch('src.main.handle_session_result', return_value=mock_session_result), \
              patch('src.main.generate_qa_section', return_value=""), \
-             patch('src.otel_provider.start_span', side_effect=mock_start_span), \
-             patch('src.otel_provider.initialize_otel'), \
-             patch('src.otel_provider.shutdown_otel'):
+             patch('src.smartfix.domains.telemetry.otel_provider.start_span', side_effect=mock_start_span), \
+             patch('src.smartfix.domains.telemetry.otel_provider.initialize_otel'), \
+             patch('src.smartfix.domains.telemetry.otel_provider.shutdown_otel'):
 
             mock_agent_class.return_value = MagicMock()
 
@@ -394,9 +394,9 @@ class TestMain(unittest.TestCase):
         mock_span_cm.__enter__ = MagicMock(return_value=mock_span)
         mock_span_cm.__exit__ = MagicMock(return_value=False)
 
-        with patch('src.otel_provider.initialize_otel') as mock_init, \
-             patch('src.otel_provider.start_span', return_value=mock_span_cm) as mock_start, \
-             patch('src.otel_provider.shutdown_otel') as mock_shutdown, \
+        with patch('src.smartfix.domains.telemetry.otel_provider.initialize_otel') as mock_init, \
+             patch('src.smartfix.domains.telemetry.otel_provider.start_span', return_value=mock_span_cm) as mock_start, \
+             patch('src.smartfix.domains.telemetry.otel_provider.shutdown_otel') as mock_shutdown, \
              patch.dict('os.environ', self.env_vars, clear=True):
             reset_config()
             with patch('src.main.config', get_config(testing=True)):

@@ -26,7 +26,7 @@ and parent-child relationships — no network calls required.
 
 The OTel SDK uses a Once pattern for set_tracer_provider(), so we cannot swap
 the global TracerProvider between tests. Instead, each test class patches
-src.otel_provider.start_span to forward calls to a private tracer backed by
+src.smartfix.domains.telemetry.otel_provider.start_span to forward calls to a private tracer backed by
 an InMemorySpanExporter.  This preserves real span creation, context propagation,
 and parent-child relationships without touching the global SDK state.
 
@@ -52,7 +52,7 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 def _make_span_recorder():
     """
     Return (exporter, patch_ctx) where patch_ctx is a context manager that patches
-    src.otel_provider.start_span to use a private InMemorySpanExporter-backed tracer.
+    src.smartfix.domains.telemetry.otel_provider.start_span to use a private InMemorySpanExporter-backed tracer.
 
     Usage::
 
@@ -68,7 +68,7 @@ def _make_span_recorder():
     tracer = provider.get_tracer("smartfix")
 
     patch_ctx = patch(
-        "src.otel_provider.start_span",
+        "src.smartfix.domains.telemetry.otel_provider.start_span",
         side_effect=lambda name, context=None: tracer.start_as_current_span(name, context=context),
     )
     return exporter, patch_ctx
@@ -93,7 +93,7 @@ class TestSmartFixRunSpan(unittest.TestCase):
         self.patch_ctx.__exit__(None, None, None)
 
     def _emit_run_span(self, session_id="run-99999", vuln_count=2):
-        import src.otel_provider as otel_provider
+        import src.smartfix.domains.telemetry.otel_provider as otel_provider
         with otel_provider.start_span("smartfix-run") as span:
             span.set_attribute("session.id", session_id)
             span.set_attribute("contrast.smartfix.vulnerabilities_total", vuln_count)
@@ -143,7 +143,7 @@ class TestFixVulnerabilitySpan(unittest.TestCase):
         self.patch_ctx.__exit__(None, None, None)
 
     def _emit(self, **overrides):
-        import src.otel_provider as otel_provider
+        import src.smartfix.domains.telemetry.otel_provider as otel_provider
         attrs = dict(
             fingerprint="fp-abc123",
             source="runtime",
@@ -232,7 +232,7 @@ class TestLlmCallSpan(unittest.TestCase):
 
     def test_llm_span_name_follows_chat_model_format(self):
         """Span names are 'chat {model}'."""
-        import src.otel_provider as otel_provider
+        import src.smartfix.domains.telemetry.otel_provider as otel_provider
         model = "contrast/claude-sonnet-4-5"
         with otel_provider.start_span(f"chat {model}") as span:
             span.set_attribute("gen_ai.operation.name", "chat")
@@ -240,7 +240,7 @@ class TestLlmCallSpan(unittest.TestCase):
         self.assertEqual(len(_spans_named(self.exporter, f"chat {model}")), 1)
 
     def test_llm_span_has_gen_ai_system(self):
-        import src.otel_provider as otel_provider
+        import src.smartfix.domains.telemetry.otel_provider as otel_provider
         model = "anthropic/claude-3-opus"
         with otel_provider.start_span(f"chat {model}") as span:
             span.set_attribute("gen_ai.system", "anthropic")
@@ -251,7 +251,7 @@ class TestLlmCallSpan(unittest.TestCase):
         self.assertEqual(spans[0].attributes["gen_ai.system"], "anthropic")
 
     def test_llm_span_has_gen_ai_request_model(self):
-        import src.otel_provider as otel_provider
+        import src.smartfix.domains.telemetry.otel_provider as otel_provider
         model = "bedrock/anthropic.claude-3"
         with otel_provider.start_span(f"chat {model}") as span:
             span.set_attribute("gen_ai.system", "aws.bedrock")
@@ -262,7 +262,7 @@ class TestLlmCallSpan(unittest.TestCase):
         self.assertEqual(spans[0].attributes["gen_ai.request.model"], model)
 
     def test_llm_span_has_gen_ai_operation_name_chat(self):
-        import src.otel_provider as otel_provider
+        import src.smartfix.domains.telemetry.otel_provider as otel_provider
         model = "gemini/gemini-pro"
         with otel_provider.start_span(f"chat {model}") as span:
             span.set_attribute("gen_ai.operation.name", "chat")
@@ -272,7 +272,7 @@ class TestLlmCallSpan(unittest.TestCase):
         self.assertEqual(spans[0].attributes["gen_ai.operation.name"], "chat")
 
     def test_llm_span_has_gen_ai_retry_attempt(self):
-        import src.otel_provider as otel_provider
+        import src.smartfix.domains.telemetry.otel_provider as otel_provider
         model = "test-retry-model"
         with otel_provider.start_span(f"chat {model}") as span:
             span.set_attribute("gen_ai.retry.attempt", 0)
@@ -281,7 +281,7 @@ class TestLlmCallSpan(unittest.TestCase):
         self.assertEqual(spans[0].attributes["gen_ai.retry.attempt"], 0)
 
     def test_llm_span_has_usage_input_and_output_tokens(self):
-        import src.otel_provider as otel_provider
+        import src.smartfix.domains.telemetry.otel_provider as otel_provider
         model = "contrast/claude-sonnet-4-5"
         with otel_provider.start_span(f"chat {model}") as span:
             span.set_attribute("gen_ai.usage.input_tokens", 120)
@@ -293,7 +293,7 @@ class TestLlmCallSpan(unittest.TestCase):
         self.assertEqual(spans[0].attributes["gen_ai.usage.output_tokens"], 60)
 
     def test_llm_span_has_gen_ai_response_model(self):
-        import src.otel_provider as otel_provider
+        import src.smartfix.domains.telemetry.otel_provider as otel_provider
         model = "contrast/claude-sonnet-4-5"
         with otel_provider.start_span(f"chat {model}") as span:
             span.set_attribute("gen_ai.response.model", model)
@@ -303,7 +303,7 @@ class TestLlmCallSpan(unittest.TestCase):
 
     def test_llm_span_is_child_of_fix_vulnerability_span(self):
         """'chat model' span must be nested inside a fix-vulnerability span."""
-        import src.otel_provider as otel_provider
+        import src.smartfix.domains.telemetry.otel_provider as otel_provider
         with otel_provider.start_span("fix-vulnerability") as op_span:
             op_span.set_attribute("contrast.finding.fingerprint", "fp-parent")
             with otel_provider.start_span("chat parent-test") as llm_span:
@@ -320,7 +320,7 @@ class TestLlmCallSpan(unittest.TestCase):
 
     def test_call_llm_with_retry_creates_child_span_of_operation_span(self):
         """_call_llm_with_retry() emits a 'chat model' span nested under the active span."""
-        import src.otel_provider as otel_provider
+        import src.smartfix.domains.telemetry.otel_provider as otel_provider
         from src.smartfix.extensions.smartfix_litellm import SmartFixLiteLlm
 
         mock_instance = MagicMock(spec=SmartFixLiteLlm)

@@ -25,10 +25,10 @@ from urllib.parse import urlparse
 
 # Import configurations and utilities
 from src.config import get_config
-from src import otel_provider
+from src.smartfix.domains.telemetry import otel_provider
 from src.smartfix.shared.coding_agents import CodingAgents
 from src.utils import debug_log, log, error_exit
-from src import telemetry_handler
+from src.smartfix.domains.telemetry import telemetry_handler
 from src.version_check import do_version_check
 from src.smartfix.domains.workflow.session_handler import handle_session_result, generate_qa_section
 from src.smartfix.domains.workflow.build_runner import run_build_command

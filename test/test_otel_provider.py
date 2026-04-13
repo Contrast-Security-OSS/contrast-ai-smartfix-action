@@ -26,7 +26,7 @@ from unittest.mock import patch, MagicMock
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
 
-import src.otel_provider as otel_provider
+import src.smartfix.domains.telemetry.otel_provider as otel_provider
 
 
 def _config(**kwargs):
@@ -64,7 +64,7 @@ class TestOtelProvider(unittest.TestCase):
 
     # --- initialize_otel ---
 
-    @patch("src.otel_provider.OTLPSpanExporter")
+    @patch("src.smartfix.domains.telemetry.otel_provider.OTLPSpanExporter")
     def test_initialize_sets_tracer_provider_when_endpoint_present(self, mock_exporter_cls):
         """initialize_otel() creates a real TracerProvider when endpoint env var is set."""
         os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = "http://localhost:4318"
@@ -74,7 +74,7 @@ class TestOtelProvider(unittest.TestCase):
 
         self.assertIsNotNone(otel_provider._tracer_provider)
 
-    @patch("src.otel_provider.OTLPSpanExporter")
+    @patch("src.smartfix.domains.telemetry.otel_provider.OTLPSpanExporter")
     def test_initialize_sets_correct_resource_attributes(self, mock_exporter_cls):
         """Resource attributes on the TracerProvider match config values."""
         os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = "http://localhost:4318"
@@ -95,7 +95,7 @@ class TestOtelProvider(unittest.TestCase):
         self.assertEqual(attrs["vcs.owner.name"], "Contrast-Security-OSS")
         self.assertEqual(attrs["vcs.provider.name"], "github")
 
-    @patch("src.otel_provider.OTLPSpanExporter")
+    @patch("src.smartfix.domains.telemetry.otel_provider.OTLPSpanExporter")
     def test_initialize_also_accepts_traces_specific_endpoint_var(self, mock_exporter_cls):
         """OTEL_EXPORTER_OTLP_TRACES_ENDPOINT also enables OTel."""
         os.environ["OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"] = "http://localhost:4318/v1/traces"
@@ -121,8 +121,8 @@ class TestOtelProvider(unittest.TestCase):
             # The span may be a NonRecordingSpan (no-op) but must be non-None.
             self.assertIsNotNone(span)
 
-    @patch("src.otel_provider.OTLPSpanExporter")
-    @patch("src.otel_provider.log")
+    @patch("src.smartfix.domains.telemetry.otel_provider.OTLPSpanExporter")
+    @patch("src.smartfix.domains.telemetry.otel_provider.log")
     def test_initialize_logs_warning_and_does_not_crash_on_setup_failure(
         self, mock_log, mock_exporter_cls
     ):
@@ -172,7 +172,7 @@ class TestOtelProvider(unittest.TestCase):
 
     # --- start_span ---
 
-    @patch("src.otel_provider.OTLPSpanExporter")
+    @patch("src.smartfix.domains.telemetry.otel_provider.OTLPSpanExporter")
     def test_start_span_returns_context_manager_when_provider_active(self, mock_exporter_cls):
         """start_span() returns a usable context manager when OTel is initialised."""
         os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = "http://localhost:4318"

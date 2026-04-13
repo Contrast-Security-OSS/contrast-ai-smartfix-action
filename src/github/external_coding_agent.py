@@ -24,7 +24,7 @@ from typing import Optional
 from src.utils import log, debug_log, error_exit, tail_string
 from src.config import Config
 from src.github.github_operations import GitHubOperations
-from src import telemetry_handler
+from src.smartfix.domains.telemetry import telemetry_handler
 from src.contrast_api import notify_remediation_pr_opened
 from src.smartfix.shared.failure_categories import FailureCategory
 from src.smartfix.shared.coding_agents import CodingAgents

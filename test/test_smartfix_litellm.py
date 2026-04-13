@@ -499,7 +499,7 @@ class TestCallLlmWithRetryOtelSpan(unittest.TestCase):
             mock_span_cm.__exit__ = MagicMock(return_value=False)
             return mock_span_cm
 
-        with patch('src.otel_provider.start_span', side_effect=mock_start_span):
+        with patch('src.smartfix.domains.telemetry.otel_provider.start_span', side_effect=mock_start_span):
             asyncio.run(self.model._call_llm_with_retry({"model": "anthropic/claude-3-opus"}))
 
         self.assertEqual(span_names, ["chat anthropic/claude-3-opus"])
@@ -522,7 +522,7 @@ class TestCallLlmWithRetryOtelSpan(unittest.TestCase):
             mock_span_cm.__exit__ = MagicMock(return_value=False)
             return mock_span_cm
 
-        with patch('src.otel_provider.start_span', side_effect=mock_start_span):
+        with patch('src.smartfix.domains.telemetry.otel_provider.start_span', side_effect=mock_start_span):
             asyncio.run(self.model._call_llm_with_retry({"model": "anthropic/claude-3-opus"}))
 
         attrs = {call[0][0]: call[0][1] for call in captured_span.set_attribute.call_args_list}
@@ -549,7 +549,7 @@ class TestCallLlmWithRetryOtelSpan(unittest.TestCase):
             mock_span_cm.__exit__ = MagicMock(return_value=False)
             return mock_span_cm
 
-        with patch('src.otel_provider.start_span', side_effect=mock_start_span):
+        with patch('src.smartfix.domains.telemetry.otel_provider.start_span', side_effect=mock_start_span):
             asyncio.run(self.model._call_llm_with_retry({"model": "anthropic/claude-3-opus"}))
 
         attrs = {call[0][0]: call[0][1] for call in captured_span.set_attribute.call_args_list}
@@ -578,7 +578,7 @@ class TestCallLlmWithRetryOtelSpan(unittest.TestCase):
             mock_span_cm.__exit__ = MagicMock(return_value=False)
             return mock_span_cm
 
-        with patch('src.otel_provider.start_span', side_effect=mock_start_span):
+        with patch('src.smartfix.domains.telemetry.otel_provider.start_span', side_effect=mock_start_span):
             with self.assertRaises(Exception):
                 asyncio.run(self.model._call_llm_with_retry({"model": "anthropic/claude-3-opus"}))
 
