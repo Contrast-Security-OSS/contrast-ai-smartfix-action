@@ -118,7 +118,7 @@ class TestMergeHandler(unittest.TestCase):
     @patch('src.merge_handler._extract_remediation_info')
     @patch('src.merge_handler._validate_pr_event')
     @patch('src.merge_handler._load_github_event')
-    @patch('src.telemetry_handler.initialize_telemetry')
+    @patch('src.smartfix.domains.telemetry.telemetry_handler.initialize_telemetry')
     def test_handle_merged_pr_integration(self, mock_init_telemetry, mock_load_event,
                                           mock_validate, mock_extract_remediation,
                                           mock_extract_vuln, mock_notify, mock_send_telemetry):
@@ -161,7 +161,7 @@ class TestMergeHandler(unittest.TestCase):
             with patch('src.merge_handler.GitHubOperations') as mock_github_ops_class:
                 # Return our mock instance when the class is instantiated
                 mock_github_ops_class.return_value = github_ops_mock
-                with patch('src.telemetry_handler.update_telemetry', telemetry_mock):
+                with patch('src.smartfix.domains.telemetry.telemetry_handler.update_telemetry', telemetry_mock):
                     # Execute
                     result = merge_handler._extract_remediation_info(pull_request)
         # Assert - only check the result and that functions were called
@@ -186,7 +186,7 @@ class TestMergeHandler(unittest.TestCase):
             with patch('src.merge_handler.GitHubOperations') as mock_github_ops_class:
                 # Return our mock instance when the class is instantiated
                 mock_github_ops_class.return_value = github_ops_mock
-                with patch('src.telemetry_handler.update_telemetry', telemetry_mock):
+                with patch('src.smartfix.domains.telemetry.telemetry_handler.update_telemetry', telemetry_mock):
                     # Execute
                     result = merge_handler._extract_remediation_info(pull_request)
         # Assert - only check the result and that functions were called
@@ -211,7 +211,7 @@ class TestMergeHandler(unittest.TestCase):
             with patch('src.merge_handler.GitHubOperations') as mock_github_ops_class:
                 # Return our mock instance when the class is instantiated
                 mock_github_ops_class.return_value = github_ops_mock
-                with patch('src.telemetry_handler.update_telemetry', telemetry_mock):
+                with patch('src.smartfix.domains.telemetry.telemetry_handler.update_telemetry', telemetry_mock):
                     # Execute
                     result = merge_handler._extract_remediation_info(pull_request)
         # Assert - only check the result and that functions were called
@@ -252,7 +252,7 @@ class TestMergeHandler(unittest.TestCase):
             "labels": []
         }
         with patch('src.merge_handler.extract_remediation_id_from_branch', mock_extract_from_branch):
-            with patch('src.telemetry_handler.update_telemetry', telemetry_mock):
+            with patch('src.smartfix.domains.telemetry.telemetry_handler.update_telemetry', telemetry_mock):
                 result = merge_handler._extract_remediation_info(pull_request)
         self.assertEqual(result, ("REM-555", []))
         mock_extract_from_branch.assert_called_once_with("smartfix/REM-555-fix-sql-injection")
@@ -266,7 +266,7 @@ class TestMergeHandler(unittest.TestCase):
         }
         with patch('src.merge_handler.extract_remediation_id_from_labels', mock_extract_from_labels):
             with patch('src.merge_handler.GitHubOperations'):
-                with patch('src.telemetry_handler.update_telemetry'):
+                with patch('src.smartfix.domains.telemetry.telemetry_handler.update_telemetry'):
                     with patch('src.merge_handler.sys.exit', side_effect=SystemExit) as mock_exit:
                         with self.assertRaises(SystemExit):
                             merge_handler._extract_remediation_info(pull_request)
@@ -280,7 +280,7 @@ class TestMergeHandler(unittest.TestCase):
             "labels": []
         }
         with patch('src.merge_handler.extract_remediation_id_from_branch', mock_extract_from_branch):
-            with patch('src.telemetry_handler.update_telemetry'):
+            with patch('src.smartfix.domains.telemetry.telemetry_handler.update_telemetry'):
                 with patch('src.merge_handler.sys.exit', side_effect=SystemExit) as mock_exit:
                     with self.assertRaises(SystemExit):
                         merge_handler._extract_remediation_info(pull_request)

@@ -108,6 +108,21 @@ class TestGitOperations(unittest.TestCase):
             self.assertEqual(env.get('GIT_USERNAME'), 'x-access-token')
             self.assertEqual(env.get('GIT_PASSWORD'), 'mock-token')
 
+    @patch('src.smartfix.domains.scm.git_operations.run_command')
+    def test_get_staged_files_count_returns_file_count(self, mock_run_command):
+        """get_staged_files_count() returns the number of staged files."""
+        mock_run_command.return_value = "src/foo.py\nsrc/bar.py\nREADME.md"
+        result = self.git_ops.get_staged_files_count()
+        self.assertEqual(result, 3)
+        mock_run_command.assert_called_once_with(["git", "diff", "--cached", "--name-only"], check=False)
+
+    @patch('src.smartfix.domains.scm.git_operations.run_command')
+    def test_get_staged_files_count_returns_zero_when_nothing_staged(self, mock_run_command):
+        """get_staged_files_count() returns 0 when nothing is staged."""
+        mock_run_command.return_value = ""
+        result = self.git_ops.get_staged_files_count()
+        self.assertEqual(result, 0)
+
     # NOTE: test_extract_issue_number_from_branch moved to test_github_operations.py
     # This method is now in GitHubOperations (GitHub-specific operation using GraphQL)
 

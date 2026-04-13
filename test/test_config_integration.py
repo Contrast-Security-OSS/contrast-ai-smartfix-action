@@ -245,6 +245,21 @@ class TestConfigIntegration(unittest.TestCase):
         self.assertEqual(config.BUILD_COMMAND, 'npm test')
         self.assertEqual(config.FORMATTING_COMMAND, 'prettier --write .')
 
+    def test_github_run_id_defaults_to_empty_string(self):
+        """GITHUB_RUN_ID defaults to empty string when not set."""
+        if 'GITHUB_RUN_ID' in os.environ:
+            del os.environ['GITHUB_RUN_ID']
+        reset_config()
+        config = get_config(testing=True)
+        self.assertEqual(config.GITHUB_RUN_ID, "")
+
+    def test_github_run_id_reads_from_env(self):
+        """GITHUB_RUN_ID reads from the GITHUB_RUN_ID environment variable."""
+        os.environ['GITHUB_RUN_ID'] = '12345678'
+        reset_config()
+        config = get_config(testing=True)
+        self.assertEqual(config.GITHUB_RUN_ID, '12345678')
+
 
 class TestCommandAutoDetection(unittest.TestCase):
     """Test command auto-detection when commands are not provided."""

@@ -26,7 +26,7 @@ from src import contrast_api
 from src.config import get_config  # Using get_config function instead of direct import
 from src.utils import debug_log, extract_remediation_id_from_branch, extract_remediation_id_from_labels, log
 from src.github.github_operations import GitHubOperations
-import src.telemetry_handler as telemetry_handler
+from src.smartfix.domains.telemetry import telemetry_handler
 
 
 def _load_github_event() -> dict:

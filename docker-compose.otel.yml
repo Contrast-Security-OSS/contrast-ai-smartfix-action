@@ -1,0 +1,36 @@
+# docker-compose.otel.yml
+#
+# Local E2E OTel verification stack for SmartFix (SS-90).
+#
+# Uses grafana/otel-lgtm: a single container bundling OTel Collector,
+# Grafana, Tempo (traces), Loki (logs), and Prometheus (metrics).
+#
+# Usage:
+#   docker compose -f docker-compose.otel.yml up -d
+#   export OTEL_EXPORTER_OTLP_ENDPOINT='http://localhost:4318'
+#   python src/main.py
+#   # Browse to http://localhost:3000 -> Explore -> Tempo datasource
+#
+# What to verify in Tempo:
+#   - smartfix-run root span: session.id, vulnerabilities_total (no files_modified)
+#   - fix-vulnerability child spans: all contrast.finding.* and contrast.smartfix.*
+#     attributes (including files_modified, pr_created, pr_url)
+#   - chat {model} spans as children of fix-vulnerability: gen_ai.* attributes present
+#   - Failed LLM attempts: StatusCode=ERROR with error.type set
+#
+# Notes:
+#   - The SDK automatically appends /v1/traces to OTEL_EXPORTER_OTLP_ENDPOINT.
+#   - lgtm ignores auth headers; OTEL_EXPORTER_OTLP_HEADERS is optional here.
+#   - Works with both Docker Desktop and Rancher Desktop.
+
+services:
+  lgtm:
+    image: grafana/otel-lgtm:latest
+    ports:
+      - "3000:3000"   # Grafana UI
+      - "3200:3200"   # Tempo HTTP API  ← verify_spans.py queries this
+      - "4317:4317"   # OTLP/gRPC
+      - "4318:4318"   # OTLP/HTTP  ← SmartFix uses this
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin

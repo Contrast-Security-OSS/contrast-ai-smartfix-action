@@ -28,12 +28,13 @@ This module tests the extended LiteLLM functionality including:
 - Proper integration with LiteLLM base functionality
 """
 
+import asyncio
 import unittest
 import json
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock, AsyncMock
 
 # Test setup imports (path is set up by conftest.py)
-from src.smartfix.extensions.smartfix_litellm import SmartFixLiteLlm, TokenCostAccumulator
+from src.smartfix.extensions.smartfix_litellm import SmartFixLiteLlm, TokenCostAccumulator, _derive_system
 
 
 class TestTokenCostAccumulator(unittest.TestCase):
@@ -376,6 +377,214 @@ class TestSmartFixLiteLlmIntegration(unittest.TestCase):
         # Test reset functionality
         model.reset_accumulated_stats()
         self.assertEqual(model.cost_accumulator.call_count, 0)
+
+
+class TestDeriveSystem(unittest.TestCase):
+    """Tests for the _derive_system() module-level function."""
+
+    def test_contrast_model_returns_contrast(self):
+        self.assertEqual(_derive_system("contrast/claude-3-7-sonnet"), "contrast")
+
+    def test_anthropic_prefix_returns_anthropic(self):
+        self.assertEqual(_derive_system("anthropic/claude-3-opus"), "anthropic")
+
+    def test_claude_prefix_without_provider_returns_anthropic(self):
+        self.assertEqual(_derive_system("claude-3-7-sonnet-20250219"), "anthropic")
+
+    def test_bedrock_prefix_returns_aws_bedrock(self):
+        self.assertEqual(_derive_system("bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0"), "aws.bedrock")
+
+    def test_gemini_prefix_returns_google(self):
+        self.assertEqual(_derive_system("gemini/gemini-1.5-pro"), "google")
+
+    def test_google_prefix_returns_google(self):
+        self.assertEqual(_derive_system("google/gemini-2.0-flash"), "google")
+
+    def test_azure_prefix_returns_azure(self):
+        self.assertEqual(_derive_system("azure/gpt-4o"), "azure")
+
+    def test_unknown_with_slash_returns_prefix(self):
+        self.assertEqual(_derive_system("openai/gpt-4o"), "openai")
+
+    def test_unknown_without_slash_returns_unknown(self):
+        self.assertEqual(_derive_system("some-unknown-model"), "unknown")
+
+
+class TestLogCostAnalysisReturnValue(unittest.TestCase):
+    """_log_cost_analysis() must return (input_tokens, output_tokens, cache_read, cache_write)."""
+
+    def setUp(self):
+        with patch('litellm.completion'):
+            self.model = SmartFixLiteLlm(model="test-model")
+
+    @patch('src.smartfix.extensions.smartfix_litellm.debug_log')
+    def test_returns_token_tuple_from_dict_usage(self, _mock_log):
+        """Returns correct 4-tuple when usage is a dict."""
+        response = MagicMock()
+        response.get = lambda key, default=None: {
+            "usage": {
+                "prompt_tokens": 100,
+                "completion_tokens": 50,
+                "total_tokens": 150,
+                "cache_read_input_tokens": 20,
+                "cache_creation_input_tokens": 10,
+            }
+        }.get(key, default)
+
+        result = self.model._log_cost_analysis(response)
+
+        self.assertEqual(result, (100, 50, 20, 10))
+
+    @patch('src.smartfix.extensions.smartfix_litellm.debug_log')
+    def test_returns_zeros_when_no_usage(self, _mock_log):
+        """Returns (0, 0, 0, 0) when no usage data is present."""
+        response = MagicMock()
+        response.get = lambda key, default=None: default
+
+        result = self.model._log_cost_analysis(response)
+
+        self.assertEqual(result, (0, 0, 0, 0))
+
+
+class TestCallLlmWithRetryOtelSpan(unittest.TestCase):
+    """OTel span is created per attempt in _call_llm_with_retry()."""
+
+    def setUp(self):
+        with patch('litellm.completion'):
+            self.model = SmartFixLiteLlm(model="anthropic/claude-3-opus")
+
+    def _make_mock_response(self, input_tokens=100, output_tokens=50,
+                            cache_read=0, cache_write=0, model_name="claude-3-opus"):
+        """Build a minimal fake acompletion response."""
+        usage = MagicMock()
+        usage.__class__.__name__ = "Usage"
+        # Make response.get("usage", {}) return the usage object
+        resp = MagicMock()
+        resp.model = model_name
+        resp.get = lambda key, default=None: usage if key == "usage" else default
+
+        usage.__bool__ = lambda self: True
+        # Make isinstance(usage, dict) return False
+        usage.__class__ = type("Usage", (), {
+            "__bool__": lambda s: True,
+            "prompt_tokens": input_tokens,
+            "completion_tokens": output_tokens,
+            "total_tokens": input_tokens + output_tokens,
+            "cache_read_input_tokens": cache_read,
+            "cache_creation_input_tokens": cache_write,
+            "__dict__": {
+                "prompt_tokens": input_tokens,
+                "completion_tokens": output_tokens,
+                "total_tokens": input_tokens + output_tokens,
+                "cache_read_input_tokens": cache_read,
+                "cache_creation_input_tokens": cache_write,
+            }
+        })
+        return resp
+
+    @patch('src.smartfix.extensions.smartfix_litellm.debug_log')
+    def test_chat_span_is_created(self, _mock_log):
+        """start_span('chat <model>') is called once for a successful call."""
+        mock_response = self._make_mock_response()
+        self.model.llm_client = MagicMock()
+        self.model.llm_client.acompletion = AsyncMock(return_value=mock_response)
+
+        span_names = []
+
+        def mock_start_span(name, context=None):
+            span_names.append(name)
+            mock_span = MagicMock()
+            mock_span_cm = MagicMock()
+            mock_span_cm.__enter__ = MagicMock(return_value=mock_span)
+            mock_span_cm.__exit__ = MagicMock(return_value=False)
+            return mock_span_cm
+
+        with patch('src.smartfix.domains.telemetry.otel_provider.start_span', side_effect=mock_start_span):
+            asyncio.run(self.model._call_llm_with_retry({"model": "anthropic/claude-3-opus"}))
+
+        self.assertEqual(span_names, ["chat anthropic/claude-3-opus"])
+
+    @patch('src.smartfix.extensions.smartfix_litellm.debug_log')
+    def test_span_has_request_attributes(self, _mock_log):
+        """gen_ai.system, gen_ai.request.model, gen_ai.operation.name, gen_ai.retry.attempt are set."""
+        mock_response = self._make_mock_response()
+        self.model.llm_client = MagicMock()
+        self.model.llm_client.acompletion = AsyncMock(return_value=mock_response)
+
+        captured_span = None
+
+        def mock_start_span(name, context=None):
+            nonlocal captured_span
+            mock_span = MagicMock()
+            captured_span = mock_span
+            mock_span_cm = MagicMock()
+            mock_span_cm.__enter__ = MagicMock(return_value=mock_span)
+            mock_span_cm.__exit__ = MagicMock(return_value=False)
+            return mock_span_cm
+
+        with patch('src.smartfix.domains.telemetry.otel_provider.start_span', side_effect=mock_start_span):
+            asyncio.run(self.model._call_llm_with_retry({"model": "anthropic/claude-3-opus"}))
+
+        attrs = {call[0][0]: call[0][1] for call in captured_span.set_attribute.call_args_list}
+        self.assertEqual(attrs.get("gen_ai.system"), "anthropic")
+        self.assertEqual(attrs.get("gen_ai.request.model"), "anthropic/claude-3-opus")
+        self.assertEqual(attrs.get("gen_ai.operation.name"), "chat")
+        self.assertEqual(attrs.get("gen_ai.retry.attempt"), 0)
+
+    @patch('src.smartfix.extensions.smartfix_litellm.debug_log')
+    def test_span_has_response_model_attribute(self, _mock_log):
+        """gen_ai.response.model is set from the response object."""
+        mock_response = self._make_mock_response(model_name="claude-3-opus-20240229")
+        self.model.llm_client = MagicMock()
+        self.model.llm_client.acompletion = AsyncMock(return_value=mock_response)
+
+        captured_span = None
+
+        def mock_start_span(name, context=None):
+            nonlocal captured_span
+            mock_span = MagicMock()
+            captured_span = mock_span
+            mock_span_cm = MagicMock()
+            mock_span_cm.__enter__ = MagicMock(return_value=mock_span)
+            mock_span_cm.__exit__ = MagicMock(return_value=False)
+            return mock_span_cm
+
+        with patch('src.smartfix.domains.telemetry.otel_provider.start_span', side_effect=mock_start_span):
+            asyncio.run(self.model._call_llm_with_retry({"model": "anthropic/claude-3-opus"}))
+
+        attrs = {call[0][0]: call[0][1] for call in captured_span.set_attribute.call_args_list}
+        self.assertEqual(attrs.get("gen_ai.response.model"), "claude-3-opus-20240229")
+
+    @patch('src.smartfix.extensions.smartfix_litellm.debug_log')
+    @patch('src.smartfix.extensions.smartfix_litellm.log')
+    def test_span_set_error_status_on_non_retryable_failure(self, _mock_log, _mock_debug):
+        """Span gets ERROR status when a non-retryable exception is raised."""
+        import litellm as _litellm
+
+        non_retryable_err = _litellm.AuthenticationError(
+            message="bad key", llm_provider="anthropic", model="claude-3-opus"
+        )
+        self.model.llm_client = MagicMock()
+        self.model.llm_client.acompletion = AsyncMock(side_effect=non_retryable_err)
+
+        captured_span = None
+
+        def mock_start_span(name, context=None):
+            nonlocal captured_span
+            mock_span = MagicMock()
+            captured_span = mock_span
+            mock_span_cm = MagicMock()
+            mock_span_cm.__enter__ = MagicMock(return_value=mock_span)
+            mock_span_cm.__exit__ = MagicMock(return_value=False)
+            return mock_span_cm
+
+        with patch('src.smartfix.domains.telemetry.otel_provider.start_span', side_effect=mock_start_span):
+            with self.assertRaises(Exception):
+                asyncio.run(self.model._call_llm_with_retry({"model": "anthropic/claude-3-opus"}))
+
+        captured_span.record_exception.assert_called_once()
+        attrs = {call[0][0]: call[0][1] for call in captured_span.set_attribute.call_args_list}
+        self.assertIn("error.type", attrs)
 
 
 if __name__ == '__main__':

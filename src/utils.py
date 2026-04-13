@@ -94,7 +94,7 @@ def safe_print(message, file=None, flush=True):
 
 def log(message: str, is_error: bool = False, is_warning: bool = False):
     """Logs a message to telemetry and prints to stdout/stderr."""
-    from src import telemetry_handler  # Local import to break circular dependency
+    from src.smartfix.domains.telemetry import telemetry_handler  # Local import to break circular dependency
     telemetry_handler.add_log_message(message)
     if is_error:
         safe_print(message, file=sys.stderr, flush=True)
@@ -108,7 +108,7 @@ def log(message: str, is_error: bool = False, is_warning: bool = False):
 def debug_log(*args, **kwargs):
     """Prints only if DEBUG_MODE is True and logs to telemetry."""
     config = get_config()
-    from src import telemetry_handler  # Local import to break circular dependency
+    from src.smartfix.domains.telemetry import telemetry_handler  # Local import to break circular dependency
     message = " ".join(map(str, args))
     # Log debug messages to telemetry, possibly with a DEBUG prefix or separate field if needed
     # For now, adding to the main log.

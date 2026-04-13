@@ -232,7 +232,7 @@ class TestClosedHandler(unittest.TestCase):
     @patch('src.closed_handler._extract_remediation_info')
     @patch('src.closed_handler._validate_pr_event')
     @patch('src.closed_handler._load_github_event')
-    @patch('src.telemetry_handler.initialize_telemetry')
+    @patch('src.smartfix.domains.telemetry.telemetry_handler.initialize_telemetry')
     def test_handle_closed_pr_integration(self, mock_init_telemetry, mock_load_event,
                                           mock_validate, mock_extract_remediation,
                                           mock_extract_vuln, mock_notify, mock_send_telemetry):
@@ -276,7 +276,7 @@ class TestClosedHandler(unittest.TestCase):
             with patch('src.closed_handler.GitHubOperations') as mock_github_ops_class:
                 # Return our mock instance when the class is instantiated
                 mock_github_ops_class.return_value = github_ops_mock
-                with patch('src.telemetry_handler.update_telemetry', telemetry_mock):
+                with patch('src.smartfix.domains.telemetry.telemetry_handler.update_telemetry', telemetry_mock):
                     # Execute
                     result = closed_handler._extract_remediation_info(pull_request)
         # Assert - only check the result and that functions were called
@@ -301,7 +301,7 @@ class TestClosedHandler(unittest.TestCase):
             with patch('src.closed_handler.GitHubOperations') as mock_github_ops_class:
                 # Return our mock instance when the class is instantiated
                 mock_github_ops_class.return_value = github_ops_mock
-                with patch('src.telemetry_handler.update_telemetry', telemetry_mock):
+                with patch('src.smartfix.domains.telemetry.telemetry_handler.update_telemetry', telemetry_mock):
                     # Execute
                     result = closed_handler._extract_remediation_info(pull_request)
         # Assert - only check the result and that functions were called
@@ -326,7 +326,7 @@ class TestClosedHandler(unittest.TestCase):
             with patch('src.closed_handler.GitHubOperations') as mock_github_ops_class:
                 # Return our mock instance when the class is instantiated
                 mock_github_ops_class.return_value = github_ops_mock
-                with patch('src.telemetry_handler.update_telemetry', telemetry_mock):
+                with patch('src.smartfix.domains.telemetry.telemetry_handler.update_telemetry', telemetry_mock):
                     # Execute
                     result = closed_handler._extract_remediation_info(pull_request)
         # Assert - only check the result and that functions were called

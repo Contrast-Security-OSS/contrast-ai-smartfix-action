@@ -17,7 +17,7 @@ class TestBuildRunner(unittest.TestCase):
     def setUp(self):
         """Set up mocks for each test."""
         # Mock telemetry to prevent actual telemetry calls
-        self.telemetry_patcher = patch('src.telemetry_handler.update_telemetry')
+        self.telemetry_patcher = patch('src.smartfix.domains.telemetry.telemetry_handler.update_telemetry')
         self.mock_telemetry = self.telemetry_patcher.start()
 
         # Mock subprocess.run

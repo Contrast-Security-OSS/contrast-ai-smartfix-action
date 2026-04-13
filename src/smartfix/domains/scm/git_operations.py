@@ -100,6 +100,19 @@ class GitOperations:
         log(f"Committing changes with message: '{message}'")
         run_command(["git", "commit", "-m", message])  # run_command exits on failure
 
+    def get_staged_files_count(self) -> int:
+        """Returns the count of files staged for commit.
+
+        Uses 'git diff --cached --name-only' to list staged files.
+
+        Returns:
+            int: Number of staged files
+        """
+        output = run_command(["git", "diff", "--cached", "--name-only"], check=False)
+        if not output:
+            return 0
+        return len([f for f in output.splitlines() if f.strip()])
+
     def get_uncommitted_changed_files(self) -> List[str]:
         """Gets the list of files that have been modified but not yet committed.
 
