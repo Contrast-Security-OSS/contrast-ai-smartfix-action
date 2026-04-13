@@ -271,7 +271,7 @@ class TestLlmCallSpan(unittest.TestCase):
         spans = _spans_named(self.exporter, f"chat {model}")
         self.assertEqual(spans[0].attributes["gen_ai.operation.name"], "chat")
 
-    def test_llm_span_has_gen_ai_retry_attempt(self):
+    def test_llm_span_has_contrast_smartfix_retry_attempt(self):
         import src.smartfix.domains.telemetry.otel_provider as otel_provider
         model = "test-retry-model"
         with otel_provider.start_span(f"chat {model}") as span:
