@@ -29,6 +29,11 @@ Design notes:
   no-ops with no guards needed in callers.
 - force_flush() called before shutdown() to flush the BatchSpanProcessor background thread
   before sys.exit() can kill it.
+- trace.set_tracer_provider() is a one-time global; subsequent calls are silently ignored
+  by the SDK. No SmartFix dependency installs a TracerProvider ahead of initialize_otel():
+  ADK's OTel setup (maybe_set_otel_providers) is only called from the ADK CLI web server,
+  not from the Runner API that SmartFix uses; LiteLLM's OTel integration requires explicit
+  callback configuration. initialize_otel() is therefore always the first caller.
 """
 
 import os
