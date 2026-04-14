@@ -443,7 +443,7 @@ class SmartFixLiteLlm(LiteLlm):
                 llm_span.set_attribute("gen_ai.system", _derive_system(model))
                 llm_span.set_attribute("gen_ai.request.model", model)
                 llm_span.set_attribute("gen_ai.operation.name", "chat")
-                llm_span.set_attribute("gen_ai.retry.attempt", attempt)
+                llm_span.set_attribute("contrast.smartfix.retry_attempt", attempt)
                 max_tokens = completion_args.get("max_tokens")
                 if max_tokens is not None:
                     llm_span.set_attribute("gen_ai.request.max_tokens", max_tokens)
@@ -458,9 +458,9 @@ class SmartFixLiteLlm(LiteLlm):
                     llm_span.set_attribute("gen_ai.usage.input_tokens", input_tokens)
                     llm_span.set_attribute("gen_ai.usage.output_tokens", output_tokens)
                     if cache_read:
-                        llm_span.set_attribute("gen_ai.usage.cache_read_input_tokens", cache_read)
+                        llm_span.set_attribute("gen_ai.usage.cache_read.input_tokens", cache_read)
                     if cache_write:
-                        llm_span.set_attribute("gen_ai.usage.cache_creation_input_tokens", cache_write)
+                        llm_span.set_attribute("gen_ai.usage.cache_creation.input_tokens", cache_write)
 
                     return response
 

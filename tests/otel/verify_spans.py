@@ -243,8 +243,8 @@ def verify_llm_span(span: Span, parent_id: str) -> Checker:
             str(span.attr("gen_ai.request.model")))
     c.check(span.attr("gen_ai.operation.name") == "chat",
             "gen_ai.operation.name == 'chat'", str(span.attr("gen_ai.operation.name")))
-    c.check(span.has_attr("gen_ai.retry.attempt"), "Has gen_ai.retry.attempt",
-            str(span.attr("gen_ai.retry.attempt")))
+    c.check(span.has_attr("contrast.smartfix.retry_attempt"), "Has contrast.smartfix.retry_attempt",
+            str(span.attr("contrast.smartfix.retry_attempt")))
     c.check(span.has_attr("gen_ai.usage.input_tokens"), "Has gen_ai.usage.input_tokens",
             str(span.attr("gen_ai.usage.input_tokens")))
     c.check(span.has_attr("gen_ai.usage.output_tokens"), "Has gen_ai.usage.output_tokens",
@@ -319,7 +319,7 @@ def verify_trace(spans: List[Span]) -> bool:
         else:
             print(f"\n    ── chat spans ({len(llm_spans)} LLM calls) ──")
             for j, llm in enumerate(llm_spans):
-                attempt = llm.attr("gen_ai.retry.attempt", "?")
+                attempt = llm.attr("contrast.smartfix.retry_attempt", "?")
                 model = llm.attr("gen_ai.request.model", llm.name)
                 print(f"\n      [{j+1}] {llm.name}  attempt={attempt}  model={model}")
                 c = verify_llm_span(llm, op.span_id)

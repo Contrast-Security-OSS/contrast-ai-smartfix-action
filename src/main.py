@@ -341,11 +341,6 @@ def _main_impl(vuln_count):  # noqa: C901
             op_span.set_attribute("contrast.finding.source", "runtime")
             op_span.set_attribute("contrast.finding.rule_id", vulnerability.rule_name)
             op_span.set_attribute("contrast.smartfix.coding_agent", config.CODING_AGENT.lower())
-            if config.CODING_AGENT == CodingAgents.SMARTFIX.name:
-                op_span.set_attribute(
-                    "contrast.smartfix.llm_provider",
-                    "contrast" if config.USE_CONTRAST_LLM else "byollm",
-                )
 
             try:
                 context = RemediationContext(
