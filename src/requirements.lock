@@ -187,6 +187,8 @@ googleapis-common-protos==1.70.0
     #   opentelemetry-exporter-otlp-proto-http
 graphviz==0.20.3
     # via google-adk
+greenlet==3.3.2
+    # via sqlalchemy
 grpc-google-iam-v1==0.14.2
     # via
     #   google-cloud-bigtable
@@ -411,7 +413,7 @@ referencing==0.36.2
     #   jsonschema-specifications
 regex==2024.11.6
     # via tiktoken
-requests==2.32.5
+requests==2.33.1
     # via
     #   -r src/requirements.txt
     #   google-adk
