@@ -127,13 +127,21 @@ class TestGetOrgRemediationDetails(unittest.TestCase):
 
     @patch('src.contrast_api.requests.post')
     def test_returns_dict_on_200(self, mock_post):
-        payload = {'remediationId': REMEDIATION_ID, 'vulnerabilityUuid': 'vuln-1',
-                   'vulnerabilityTitle': 'SQL Injection', 'applicationId': 'app-id-1',
-                   'skippedAppIds': ['app-id-2']}
+        payload = {
+            'remediationId': REMEDIATION_ID,
+            'vulnerabilityUuid': 'vuln-1',
+            'vulnerabilityTitle': 'SQL Injection',
+            'vulnerabilityRuleName': 'sql-injection',
+            'vulnerabilitySeverity': 'HIGH',
+            'applicationId': 'app-id-1',
+            'skippedAppIds': ['app-id-2'],
+        }
         mock_post.return_value = MagicMock(status_code=200, json=lambda: payload)
         result = self._call()
         self.assertEqual(result['remediationId'], REMEDIATION_ID)
         self.assertEqual(result['applicationId'], 'app-id-1')
+        self.assertEqual(result['vulnerabilityRuleName'], 'sql-injection')
+        self.assertEqual(result['vulnerabilitySeverity'], 'HIGH')
 
     @patch('src.contrast_api.requests.post')
     def test_posts_to_org_url_without_app_id(self, mock_post):

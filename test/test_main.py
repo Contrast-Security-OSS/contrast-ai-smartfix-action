@@ -414,6 +414,37 @@ class TestMain(unittest.TestCase):
         self.assertEqual(total_calls[-1][0][1], 0)
         mock_shutdown.assert_called()
 
+    def test_skipped_app_ids_warning_is_logged(self):
+        """When skippedAppIds is non-empty, a warning including the count and IDs is logged."""
+        vuln_data = {
+            'vulnerabilityUuid': 'TEST-VULN-UUID-SKIP',
+            'vulnerabilityTitle': 'Test Injection',
+            'vulnerabilityRuleName': 'sql-injection',
+            'vulnerabilitySeverity': 'HIGH',
+            'remediationId': 'REM-SKIP-001',
+            'sessionId': 'session-skip',
+            'fixSystemPrompt': 'Fix it',
+            'fixUserPrompt': 'Please fix',
+            'skippedAppIds': ['app-id-2', 'app-id-3'],
+        }
+
+        # Return vuln_data once then None to stop the loop
+        self.mock_api.side_effect = [vuln_data, None]
+
+        with patch('src.github.github_operations.GitHubOperations.check_pr_status_for_label') as mock_pr_check, \
+             patch('src.github.github_operations.GitHubOperations.generate_label_details') as mock_label:
+            mock_pr_check.return_value = "OPEN"
+            mock_label.return_value = ('contrast-vuln-id:TEST-VULN-UUID-SKIP', 'color', 'desc')
+
+            with patch.dict('os.environ', self.env_vars, clear=True):
+                with io.StringIO() as buf, contextlib.redirect_stdout(buf):
+                    main()
+                    output = buf.getvalue()
+
+        self.assertIn("2 app(s) were inaccessible and skipped", output)
+        self.assertIn("app-id-2", output)
+        self.assertIn("app-id-3", output)
+
 
 if __name__ == '__main__':
     unittest.main()

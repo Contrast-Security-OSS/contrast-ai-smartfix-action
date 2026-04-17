@@ -197,10 +197,11 @@ def get_org_remediation_details(contrast_host: str, contrast_org_id: str, app_id
             debug_log(f"Response keys: {list(response_json.keys())}")
 
             required_keys = ['remediationId', 'vulnerabilityUuid', 'vulnerabilityTitle',
-                             'vulnerabilityRuleName']
+                             'vulnerabilityRuleName', 'vulnerabilitySeverity']
             missing_keys = [key for key in required_keys if key not in response_json]
             if missing_keys:
-                log(f"Warning: Missing keys in org remediation-details response: {missing_keys}")
+                log(f"Missing required keys in org remediation-details response: {missing_keys}", is_error=True)
+                return None
 
             return response_json
         else:
