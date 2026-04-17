@@ -165,6 +165,26 @@ class TestGetOrgRemediationDetails(unittest.TestCase):
         mock_post.return_value = MagicMock(status_code=500, text='error')
         self.assertIsNone(self._call())
 
+    @patch('src.contrast_api.requests.post')
+    def test_returns_none_on_503(self, mock_post):
+        mock_post.return_value = MagicMock(status_code=503, text='all apps inaccessible')
+        self.assertIsNone(self._call())
+
+    @patch('src.contrast_api.get_sanitized_409_message')
+    @patch('src.contrast_api.requests.post')
+    def test_exits_on_409_is_error(self, mock_post, mock_409):
+        mock_post.return_value = MagicMock(status_code=409, text='credits exhausted')
+        mock_409.return_value = ('Credits exhausted', True)
+        with self.assertRaises(SystemExit):
+            self._call()
+
+    @patch('src.contrast_api.get_sanitized_409_message')
+    @patch('src.contrast_api.requests.post')
+    def test_returns_none_on_409_not_error(self, mock_post, mock_409):
+        mock_post.return_value = MagicMock(status_code=409, text='pr limit reached')
+        mock_409.return_value = ('PR limit reached', False)
+        self.assertIsNone(self._call())
+
 
 # =============================================================================
 # get_org_prompt_details
@@ -226,9 +246,35 @@ class TestGetOrgPromptDetails(unittest.TestCase):
         self.assertIsNone(self._call())
 
     @patch('src.contrast_api.requests.post')
-    def test_returns_none_on_request_exception(self, mock_post):
+    def test_exits_on_request_exception(self, mock_post):
         mock_post.side_effect = requests.exceptions.ConnectionError('err')
+        with self.assertRaises(SystemExit):
+            self._call()
+
+    @patch('src.contrast_api.get_sanitized_409_message')
+    @patch('src.contrast_api.requests.post')
+    def test_exits_on_409_is_error(self, mock_post, mock_409):
+        mock_post.return_value = MagicMock(status_code=409, text='credits exhausted')
+        mock_409.return_value = ('Credits exhausted', True)
+        with self.assertRaises(SystemExit):
+            self._call()
+
+    @patch('src.contrast_api.get_sanitized_409_message')
+    @patch('src.contrast_api.requests.post')
+    def test_returns_none_on_409_not_error(self, mock_post, mock_409):
+        mock_post.return_value = MagicMock(status_code=409, text='pr limit reached')
+        mock_409.return_value = ('PR limit reached', False)
         self.assertIsNone(self._call())
+
+    @patch('src.contrast_api.requests.post')
+    def test_exits_on_missing_required_keys(self, mock_post):
+        incomplete_payload = {
+            'remediationId': REMEDIATION_ID,
+            # missing vulnerabilityUuid, vulnerabilityTitle, etc.
+        }
+        mock_post.return_value = MagicMock(status_code=200, json=lambda: incomplete_payload)
+        with self.assertRaises(SystemExit):
+            self._call()
 
 
 # =============================================================================
@@ -429,6 +475,29 @@ class TestSendTelemetryDataOrg(unittest.TestCase):
     def test_returns_false_on_request_exception(self, mock_post):
         mock_post.side_effect = requests.exceptions.ConnectionError('err')
         self.assertFalse(self._call())
+
+
+# =============================================================================
+# FailureCategory enum
+# =============================================================================
+
+class TestFailureCategoryEnum(unittest.TestCase):
+
+    def test_all_expected_values_present(self):
+        from src.smartfix.shared.failure_categories import FailureCategory
+        expected = {
+            "INITIAL_BUILD_FAILURE",
+            "GIT_COMMAND_FAILURE",
+            "AGENT_FAILURE",
+            "GENERATE_PR_FAILURE",
+            "GENERAL_FAILURE",
+            "EXCEEDED_TIMEOUT",
+            "EXCEEDED_AGENT_EVENTS",
+            "INVALID_LLM_CONFIG",
+            "NO_CODE_CHANGED",
+            "BUILD_VERIFICATION_FAILED",
+        }
+        self.assertEqual(expected, {c.value for c in FailureCategory})
 
 
 if __name__ == '__main__':

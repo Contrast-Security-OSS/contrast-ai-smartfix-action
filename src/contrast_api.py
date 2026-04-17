@@ -182,6 +182,9 @@ def get_org_remediation_details(contrast_host: str, contrast_org_id: str, app_id
         if response.status_code == 204:
             log("No vulnerabilities found that need remediation")
             return None
+        elif response.status_code == 503:
+            log("All requested applications were inaccessible. Retry the request or verify application access.", is_warning=True)
+            return None
         elif response.status_code == 409:
             error_msg, is_error = get_sanitized_409_message(response.text, credit_info)
             log(f"{RED}{error_msg}{RESET}", is_error=is_error)
@@ -297,13 +300,13 @@ def get_org_prompt_details(contrast_host: str, contrast_org_id: str, app_ids: li
 
     except requests.exceptions.RequestException as e:
         log(f"Error fetching org vulnerability and prompts: {e}", is_error=True)
-        return None
+        sys.exit(1)
     except json.JSONDecodeError:
         log("Error decoding JSON response from org prompt-details API.", is_error=True)
-        return None
+        sys.exit(1)
     except Exception as e:
         log(f"Unexpected error calling org prompt-details API: {e}", is_error=True)
-        return None
+        sys.exit(1)
 
 
 def notify_remediation_pr_opened_org(remediation_id: str, pr_number: int, pr_url: str,
