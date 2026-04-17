@@ -76,15 +76,14 @@ class TestContrastAppIds(unittest.TestCase):
 
         self.assertEqual(config.CONTRAST_APP_ID, 'my-single-app')
 
-    def test_contrast_app_id_singular_wins_when_both_set(self):
-        """When both singular and plural are set, singular takes precedence."""
+    def test_both_set_raises_config_error(self):
+        """When both contrast_app_id and contrast_app_ids are set, raises ConfigurationError."""
         env = self._get_base_env()
-        env['CONTRAST_APP_ID'] = 'singular-wins'
+        env['CONTRAST_APP_ID'] = 'singular-app'
         env['CONTRAST_APP_IDS'] = '["plural-first", "plural-second"]'
 
-        config = Config(env=env, testing=False)
-
-        self.assertEqual(config.CONTRAST_APP_ID, 'singular-wins')
+        with self.assertRaises(ConfigurationError):
+            Config(env=env, testing=False)
 
     def test_neither_set_raises_config_error(self):
         """When neither contrast_app_id nor contrast_app_ids is set, raises ConfigurationError."""
@@ -125,14 +124,14 @@ class TestContrastAppIds(unittest.TestCase):
 
         self.assertEqual(config.CONTRAST_APP_IDS, ['app-id-1', 'app-id-2', 'app-id-3'])
 
-    def test_contrast_app_ids_empty_list_when_only_singular_set(self):
-        """When only contrast_app_id (singular) is set, CONTRAST_APP_IDS is empty list."""
+    def test_contrast_app_ids_contains_singular_when_only_singular_set(self):
+        """When only contrast_app_id (singular) is set, CONTRAST_APP_IDS is a one-element list."""
         env = self._get_base_env()
         env['CONTRAST_APP_ID'] = 'my-app'
 
         config = Config(env=env, testing=False)
 
-        self.assertEqual(config.CONTRAST_APP_IDS, [])
+        self.assertEqual(config.CONTRAST_APP_IDS, ['my-app'])
 
     # =========================================================================
     # Error cases: invalid contrast_app_ids values
@@ -203,6 +202,20 @@ class TestContrastAppIds(unittest.TestCase):
 
         self.assertEqual(config.CONTRAST_APP_IDS, ['app-id-1', 'app-id-2'])
         self.assertEqual(config.CONTRAST_APP_ID, 'app-id-1')
+
+    # =========================================================================
+    # _check_contrast_config_values_exist: CONTRAST_APP_IDS non-empty guard
+    # =========================================================================
+
+    def test_check_config_raises_when_app_ids_empty(self):
+        """_check_contrast_config_values_exist raises ConfigurationError when CONTRAST_APP_IDS is empty."""
+        env = self._get_base_env()
+        env['CONTRAST_APP_ID'] = 'my-app'
+        config = Config(env=env, testing=False)
+        # Manually corrupt the list to simulate the guard being needed
+        config.CONTRAST_APP_IDS = []
+        with self.assertRaises(ConfigurationError):
+            config._check_contrast_config_values_exist()
 
     # =========================================================================
     # Testing mode: defaults unchanged
