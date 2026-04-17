@@ -1,0 +1,28 @@
+name: "Pull Request Labeler"
+on:
+  pull_request_target:
+    types:
+      - opened
+      - ready_for_review
+      - reopened
+      - synchronize
+
+jobs:
+  labeler:
+    name: Add labels to PR
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/labeler@634933edcd8ababfe52f92936142cc22ac488b1b # v6.0.1
+        with:
+          repo-token: "${{ secrets.GITHUB_TOKEN }}"
+          sync-labels: true
+      - name: Team labeler
+        uses: JulienKode/team-labeler-action@edc2a1d3b252624ac7611293835edad9f1392ed4 # v2.0.2
+        with:
+          repo-token: ${{ secrets.PR_EDITOR_PAT }}
+          teams-repo: "common-github-actions"
+          teams-branch: "master"
