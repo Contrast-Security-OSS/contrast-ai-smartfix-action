@@ -93,7 +93,7 @@ class TestClosedHandler(unittest.TestCase):
 
             self.assertEqual(result, -1)
 
-    @patch('src.closed_handler.contrast_api.notify_remediation_failed')
+    @patch('src.closed_handler.contrast_api.notify_remediation_failed_org')
     @patch('src.github.github_operations.GitHubOperations.get_pr_changed_files_count')
     def test_notify_remediation_service_zero_changes(self, mock_get_count, mock_notify_failed):
         """Test _notify_remediation_service when PR has zero changed files"""
@@ -108,12 +108,11 @@ class TestClosedHandler(unittest.TestCase):
             failure_category="GENERATE_PR_FAILURE",
             contrast_host=self.config.CONTRAST_HOST,
             contrast_org_id=self.config.CONTRAST_ORG_ID,
-            contrast_app_id=self.config.CONTRAST_APP_ID,
             contrast_auth_key=self.config.CONTRAST_AUTHORIZATION_KEY,
             contrast_api_key=self.config.CONTRAST_API_KEY
         )
 
-    @patch('src.closed_handler.contrast_api.notify_remediation_pr_closed')
+    @patch('src.closed_handler.contrast_api.notify_remediation_pr_closed_org')
     @patch('src.github.github_operations.GitHubOperations.get_pr_changed_files_count')
     def test_notify_remediation_service_with_changes(self, mock_get_count, mock_notify_closed):
         """Test _notify_remediation_service when PR has changed files"""
@@ -127,12 +126,11 @@ class TestClosedHandler(unittest.TestCase):
             remediation_id="test-remediation-id",
             contrast_host=self.config.CONTRAST_HOST,
             contrast_org_id=self.config.CONTRAST_ORG_ID,
-            contrast_app_id=self.config.CONTRAST_APP_ID,
             contrast_auth_key=self.config.CONTRAST_AUTHORIZATION_KEY,
             contrast_api_key=self.config.CONTRAST_API_KEY
         )
 
-    @patch('src.closed_handler.contrast_api.notify_remediation_pr_closed')
+    @patch('src.closed_handler.contrast_api.notify_remediation_pr_closed_org')
     def test_notify_remediation_service_no_pr_number(self, mock_notify_closed):
         """Test _notify_remediation_service when no PR number provided (legacy behavior)"""
         mock_notify_closed.return_value = True
@@ -143,19 +141,18 @@ class TestClosedHandler(unittest.TestCase):
             remediation_id="test-remediation-id",
             contrast_host=self.config.CONTRAST_HOST,
             contrast_org_id=self.config.CONTRAST_ORG_ID,
-            contrast_app_id=self.config.CONTRAST_APP_ID,
             contrast_auth_key=self.config.CONTRAST_AUTHORIZATION_KEY,
             contrast_api_key=self.config.CONTRAST_API_KEY
         )
 
-    @patch('src.closed_handler.contrast_api.notify_remediation_failed')
+    @patch('src.closed_handler.contrast_api.notify_remediation_failed_org')
     @patch('src.github.github_operations.GitHubOperations.get_pr_changed_files_count')
     def test_notify_remediation_service_get_count_error(self, mock_get_count, mock_notify_failed):
         """Test _notify_remediation_service when getting changed files count fails"""
         mock_get_count.return_value = -1  # Error case
         mock_notify_failed.return_value = True
 
-        with patch('src.closed_handler.contrast_api.notify_remediation_pr_closed') as mock_notify_closed:
+        with patch('src.closed_handler.contrast_api.notify_remediation_pr_closed_org') as mock_notify_closed:
             mock_notify_closed.return_value = True
 
             closed_handler._notify_remediation_service("test-remediation-id", pr_number=123)
@@ -164,6 +161,28 @@ class TestClosedHandler(unittest.TestCase):
             # Should fall back to standard closed notification since count failed
             mock_notify_closed.assert_called_once()
             mock_notify_failed.assert_not_called()
+
+    def test_extract_remediation_info_smartfix_branch_with_label(self):
+        """Test _extract_remediation_info with SmartFix branch that has a smartfix-id label."""
+        pull_request = {
+            "head": {"ref": "smartfix/remediation-REM-555"},
+            "labels": [{"name": "smartfix-id:REM-555"}]
+        }
+        telemetry_mock = MagicMock()
+        with patch('src.smartfix.domains.telemetry.telemetry_handler.update_telemetry', telemetry_mock):
+            result = closed_handler._extract_remediation_info(pull_request)
+        self.assertEqual(result, ("REM-555", [{"name": "smartfix-id:REM-555"}]))
+
+    def test_extract_remediation_info_smartfix_branch_no_label(self):
+        """Test _extract_remediation_info with SmartFix branch falling back to branch name."""
+        pull_request = {
+            "head": {"ref": "smartfix/remediation-REM-999"},
+            "labels": []
+        }
+        telemetry_mock = MagicMock()
+        with patch('src.smartfix.domains.telemetry.telemetry_handler.update_telemetry', telemetry_mock):
+            result = closed_handler._extract_remediation_info(pull_request)
+        self.assertEqual(result[0], "REM-999")
 
     def test_load_github_event_missing_path(self):
         """Test _load_github_event when GITHUB_EVENT_PATH is not set"""

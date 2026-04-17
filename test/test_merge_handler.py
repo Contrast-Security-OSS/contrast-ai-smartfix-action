@@ -272,6 +272,32 @@ class TestMergeHandler(unittest.TestCase):
                             merge_handler._extract_remediation_info(pull_request)
                         mock_exit.assert_called_once_with(1)
 
+    def test_extract_remediation_info_smartfix_branch_with_label(self):
+        """Test _extract_remediation_info with SmartFix branch that has a smartfix-id label."""
+        pull_request = {
+            "head": {"ref": "smartfix/remediation-REM-777"},
+            "labels": [{"name": "smartfix-id:REM-777"}]
+        }
+        telemetry_mock = MagicMock()
+        with patch('src.smartfix.domains.telemetry.telemetry_handler.update_telemetry', telemetry_mock):
+            result = merge_handler._extract_remediation_info(pull_request)
+        self.assertEqual(result, ("REM-777", [{"name": "smartfix-id:REM-777"}]))
+
+    @patch('src.merge_handler.contrast_api.notify_remediation_pr_merged_org')
+    def test_notify_remediation_service_calls_org_endpoint(self, mock_notify_merged):
+        """Test _notify_remediation_service calls the org-level merged endpoint without appId."""
+        mock_notify_merged.return_value = True
+
+        merge_handler._notify_remediation_service("test-rem-id")
+
+        mock_notify_merged.assert_called_once_with(
+            remediation_id="test-rem-id",
+            contrast_host=self.config.CONTRAST_HOST,
+            contrast_org_id=self.config.CONTRAST_ORG_ID,
+            contrast_auth_key=self.config.CONTRAST_AUTHORIZATION_KEY,
+            contrast_api_key=self.config.CONTRAST_API_KEY
+        )
+
     def test_extract_remediation_info_no_remediation_id_smartfix(self):
         """Test _extract_remediation_info when remediation ID cannot be extracted from SmartFix branch"""
         mock_extract_from_branch = MagicMock(return_value=None)
@@ -308,13 +334,12 @@ class TestMergeHandler(unittest.TestCase):
         self.assertEqual(result, "unknown")
 
     @patch('src.merge_handler.get_config')
-    @patch('src.merge_handler.contrast_api.notify_remediation_pr_merged')
+    @patch('src.merge_handler.contrast_api.notify_remediation_pr_merged_org')
     def test_notify_remediation_service_success(self, mock_notify, mock_get_config):
         """Test _notify_remediation_service when notification succeeds"""
         mock_config = MagicMock()
         mock_config.CONTRAST_HOST = "test.contrastsecurity.com"
         mock_config.CONTRAST_ORG_ID = "test-org"
-        mock_config.CONTRAST_APP_ID = "test-app"
         mock_config.CONTRAST_AUTHORIZATION_KEY = "test-auth"
         mock_config.CONTRAST_API_KEY = "test-api"
         mock_get_config.return_value = mock_config
@@ -326,19 +351,17 @@ class TestMergeHandler(unittest.TestCase):
             remediation_id="REM-123",
             contrast_host="test.contrastsecurity.com",
             contrast_org_id="test-org",
-            contrast_app_id="test-app",
             contrast_auth_key="test-auth",
             contrast_api_key="test-api"
         )
 
     @patch('src.merge_handler.get_config')
-    @patch('src.merge_handler.contrast_api.notify_remediation_pr_merged')
+    @patch('src.merge_handler.contrast_api.notify_remediation_pr_merged_org')
     def test_notify_remediation_service_failure(self, mock_notify, mock_get_config):
         """Test _notify_remediation_service when notification fails"""
         mock_config = MagicMock()
         mock_config.CONTRAST_HOST = "test.contrastsecurity.com"
         mock_config.CONTRAST_ORG_ID = "test-org"
-        mock_config.CONTRAST_APP_ID = "test-app"
         mock_config.CONTRAST_AUTHORIZATION_KEY = "test-auth"
         mock_config.CONTRAST_API_KEY = "test-api"
         mock_get_config.return_value = mock_config
@@ -350,7 +373,6 @@ class TestMergeHandler(unittest.TestCase):
             remediation_id="REM-456",
             contrast_host="test.contrastsecurity.com",
             contrast_org_id="test-org",
-            contrast_app_id="test-app",
             contrast_auth_key="test-auth",
             contrast_api_key="test-api"
         )

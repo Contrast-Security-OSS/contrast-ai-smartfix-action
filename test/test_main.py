@@ -63,7 +63,7 @@ class TestMain(unittest.TestCase):
         self.mock_git = self.git_patcher.start()
 
         # Mock API calls
-        self.api_patcher = patch('src.contrast_api.get_vulnerability_with_prompts')
+        self.api_patcher = patch('src.contrast_api.get_org_prompt_details')
         self.mock_api = self.api_patcher.start()
         self.mock_api.return_value = None
 

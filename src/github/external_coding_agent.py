@@ -77,8 +77,9 @@ class ExternalCodingAgent(CodingAgentStrategy):
         vuln_http_details = tail_string(raw_http_details, 4000) if raw_http_details.strip() else None
 
         # Start building the issue body
+        application_id = vulnerability_details.get('applicationId', self.config.CONTRAST_APP_ID)
         contrast_url = (f"https://{self.config.CONTRAST_HOST}/Contrast/static/ng/index.html#/"
-                        f"{self.config.CONTRAST_ORG_ID}/applications/{self.config.CONTRAST_APP_ID}/vulns/{vuln_uuid}")
+                        f"{self.config.CONTRAST_ORG_ID}/applications/{application_id}/vulns/{vuln_uuid}")
 
         issue_body = f"""
 # Contrast AI SmartFix Issue Report

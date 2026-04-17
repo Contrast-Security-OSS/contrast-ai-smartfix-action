@@ -226,8 +226,8 @@ def _main_impl(vuln_count):  # noqa: C901
         if config.CODING_AGENT == CodingAgents.SMARTFIX.name:
             # For SMARTFIX, get vulnerability with prompts
             log("\n::group::--- Fetching next vulnerability and prompts from Contrast API ---")
-            vulnerability_data = contrast_api.get_vulnerability_with_prompts(
-                config.CONTRAST_HOST, config.CONTRAST_ORG_ID, config.CONTRAST_APP_ID,
+            vulnerability_data = contrast_api.get_org_prompt_details(
+                config.CONTRAST_HOST, config.CONTRAST_ORG_ID, config.CONTRAST_APP_IDS,
                 config.CONTRAST_AUTHORIZATION_KEY, config.CONTRAST_API_KEY,
                 max_open_prs_setting, github_repo_url, config.VULNERABILITY_SEVERITIES,
                 credit_info=current_credit_info if config.USE_CONTRAST_LLM else None
@@ -237,6 +237,10 @@ def _main_impl(vuln_count):  # noqa: C901
             if not vulnerability_data:
                 log("No more vulnerabilities found to process. Stopping processing.")
                 break
+
+            skipped_app_ids = vulnerability_data.get('skippedAppIds', [])
+            if skipped_app_ids:
+                log(f"Warning: {len(skipped_app_ids)} app(s) were inaccessible and skipped: {skipped_app_ids}", is_warning=True)
 
             # Extract vulnerability details and prompts from the response
             vuln_uuid = vulnerability_data['vulnerabilityUuid']
@@ -267,8 +271,8 @@ def _main_impl(vuln_count):  # noqa: C901
         else:
             # For external coding agents (GITHUB_COPILOT/CLAUDE_CODE), get vulnerability details
             log("\n::group::--- Fetching next vulnerability details from Contrast API ---")
-            vulnerability_data = contrast_api.get_vulnerability_details(
-                config.CONTRAST_HOST, config.CONTRAST_ORG_ID, config.CONTRAST_APP_ID,
+            vulnerability_data = contrast_api.get_org_remediation_details(
+                config.CONTRAST_HOST, config.CONTRAST_ORG_ID, config.CONTRAST_APP_IDS,
                 config.CONTRAST_AUTHORIZATION_KEY, config.CONTRAST_API_KEY,
                 github_repo_url, max_open_prs_setting, config.VULNERABILITY_SEVERITIES,
                 credit_info=current_credit_info if config.USE_CONTRAST_LLM else None
@@ -278,6 +282,10 @@ def _main_impl(vuln_count):  # noqa: C901
             if not vulnerability_data:
                 log("No more vulnerabilities found to process. Stopping processing.")
                 break
+
+            skipped_app_ids = vulnerability_data.get('skippedAppIds', [])
+            if skipped_app_ids:
+                log(f"Warning: {len(skipped_app_ids)} app(s) were inaccessible and skipped: {skipped_app_ids}", is_warning=True)
 
             # Extract vulnerability details from the response (no prompts for external agents)
             vuln_uuid = vulnerability_data['vulnerabilityUuid']
@@ -559,9 +567,12 @@ def _main_impl(vuln_count):  # noqa: C901
                             log(f"Could not extract PR number from URL: {pr_url} - Error: {str(e)}")
 
                         # Add labels to the PR (non-critical — don't fail the run)
-                        if pr_number and label_name:
+                        if pr_number:
+                            labels_to_add = [f"smartfix-id:{remediation_id}"]
+                            if label_name:
+                                labels_to_add.append(label_name)
                             try:
-                                github_ops.add_labels_to_pr(pr_number, [label_name])
+                                github_ops.add_labels_to_pr(pr_number, labels_to_add)
                             except Exception as label_err:
                                 log(f"Failed to add label to PR #{pr_number}: {label_err}", is_warning=True)
 
