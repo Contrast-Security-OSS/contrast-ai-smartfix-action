@@ -112,7 +112,7 @@ class TestMergeHandler(unittest.TestCase):
                 merge_handler._validate_pr_event(event_data)
             mock_module_exit.assert_called_once_with(0)
 
-    @patch('src.merge_handler.contrast_api.send_telemetry_data')
+    @patch('src.merge_handler.contrast_api.send_telemetry_data_org')
     @patch('src.merge_handler._notify_remediation_service')
     @patch('src.merge_handler._extract_vulnerability_info')
     @patch('src.merge_handler._extract_remediation_info')

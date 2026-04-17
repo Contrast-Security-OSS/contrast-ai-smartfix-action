@@ -245,7 +245,7 @@ class TestClosedHandler(unittest.TestCase):
         result = closed_handler._validate_pr_event(event_data)
         self.assertEqual(result, {"merged": False, "number": 123})
 
-    @patch('src.closed_handler.contrast_api.send_telemetry_data')
+    @patch('src.closed_handler.contrast_api.send_telemetry_data_org')
     @patch('src.closed_handler._notify_remediation_service')
     @patch('src.closed_handler._extract_vulnerability_info')
     @patch('src.closed_handler._extract_remediation_info')

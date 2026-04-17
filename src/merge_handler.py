@@ -172,7 +172,15 @@ def handle_merged_pr():
 
     # Complete telemetry and finish
     telemetry_handler.update_telemetry("additionalAttributes.prStatus", "MERGED")
-    contrast_api.send_telemetry_data()
+    config = get_config()
+    contrast_api.send_telemetry_data_org(
+        remediation_id=remediation_id,
+        telemetry_data=telemetry_handler.get_telemetry_data(),
+        contrast_host=config.CONTRAST_HOST,
+        contrast_org_id=config.CONTRAST_ORG_ID,
+        contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
+        contrast_api_key=config.CONTRAST_API_KEY
+    )
 
     log("--- Merged Contrast AI SmartFix Pull Request Handling Complete ---")
 
