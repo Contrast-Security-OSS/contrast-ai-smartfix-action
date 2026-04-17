@@ -158,10 +158,9 @@ def _main_impl(vuln_count):  # noqa: C901
 
     # Log initial credit tracking status if using Contrast LLM (only for SMARTFIX agent)
     if config.CODING_AGENT == CodingAgents.SMARTFIX.name and config.USE_CONTRAST_LLM:
-        initial_credit_info = contrast_api.get_credit_tracking(
+        initial_credit_info = contrast_api.get_credit_tracking_org(
             contrast_host=config.CONTRAST_HOST,
             contrast_org_id=config.CONTRAST_ORG_ID,
-            contrast_app_id=config.CONTRAST_APP_ID,
             contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
             contrast_api_key=config.CONTRAST_API_KEY
         )
@@ -209,10 +208,9 @@ def _main_impl(vuln_count):  # noqa: C901
 
         # Check credit exhaustion for Contrast LLM usage
         if config.USE_CONTRAST_LLM:
-            current_credit_info = contrast_api.get_credit_tracking(
+            current_credit_info = contrast_api.get_credit_tracking_org(
                 contrast_host=config.CONTRAST_HOST,
                 contrast_org_id=config.CONTRAST_ORG_ID,
-                contrast_app_id=config.CONTRAST_APP_ID,
                 contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
                 contrast_api_key=config.CONTRAST_API_KEY
             )
@@ -513,10 +511,9 @@ def _main_impl(vuln_count):  # noqa: C901
 
                 # Append credit tracking information to PR body if using Contrast LLM
                 if config.CODING_AGENT == CodingAgents.SMARTFIX.name and config.USE_CONTRAST_LLM:
-                    current_credit_info = contrast_api.get_credit_tracking(
+                    current_credit_info = contrast_api.get_credit_tracking_org(
                         contrast_host=config.CONTRAST_HOST,
                         contrast_org_id=config.CONTRAST_ORG_ID,
-                        contrast_app_id=config.CONTRAST_APP_ID,
                         contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
                         contrast_api_key=config.CONTRAST_API_KEY
                     )
@@ -599,10 +596,9 @@ def _main_impl(vuln_count):  # noqa: C901
 
                             # Log updated credit tracking status after PR notification (only for SMARTFIX agent)
                             if config.CODING_AGENT == CodingAgents.SMARTFIX.name and config.USE_CONTRAST_LLM:
-                                updated_credit_info = contrast_api.get_credit_tracking(
+                                updated_credit_info = contrast_api.get_credit_tracking_org(
                                     contrast_host=config.CONTRAST_HOST,
                                     contrast_org_id=config.CONTRAST_ORG_ID,
-                                    contrast_app_id=config.CONTRAST_APP_ID,
                                     contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
                                     contrast_api_key=config.CONTRAST_API_KEY
                                 )

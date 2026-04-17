@@ -1139,4 +1139,51 @@ def get_credit_tracking(contrast_host: str, contrast_org_id: str, contrast_app_i
         debug_log(f"Unexpected error calling credit-tracking API: {e}")
         return None
 
+
+def get_credit_tracking_org(contrast_host: str, contrast_org_id: str, contrast_auth_key: str, contrast_api_key: str) -> Optional[CreditTrackingResponse]:
+    """Get credit tracking information from the org-level Contrast API endpoint.
+
+    Args:
+        contrast_host: The Contrast Security host URL.
+        contrast_org_id: The organization ID.
+        contrast_auth_key: The Contrast authorization key.
+        contrast_api_key: The Contrast API key.
+
+    Returns:
+        CreditTrackingResponse object if successful, None if failed.
+    """
+    api_url = f"https://{normalize_host(contrast_host)}/api/v4/aiml-remediation/organizations/{contrast_org_id}/credit-tracking"
+
+    headers = {
+        "Authorization": contrast_auth_key,
+        "API-Key": contrast_api_key,
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": config.USER_AGENT
+    }
+
+    try:
+        debug_log(f"Fetching org-level credit tracking from: {api_url}")
+        response = requests.get(api_url, headers=headers, timeout=30)
+        response.raise_for_status()
+
+        debug_log(f"Org-level credit tracking API response status code: {response.status_code}")
+        debug_log(f"Raw org-level credit tracking response: {response.text}")
+
+        data = response.json()
+        return CreditTrackingResponse.from_api_response(data)
+
+    except requests.exceptions.HTTPError as e:
+        debug_log(f"HTTP error fetching org-level credit tracking: {e.response.status_code} - {e.response.text}")
+        return None
+    except requests.exceptions.RequestException as e:
+        debug_log(f"Request error fetching org-level credit tracking: {e}")
+        return None
+    except json.JSONDecodeError:
+        debug_log("Error decoding JSON response from org-level credit-tracking API.")
+        return None
+    except Exception as e:
+        debug_log(f"Unexpected error calling org-level credit-tracking API: {e}")
+        return None
+
 # %%
