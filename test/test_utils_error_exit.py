@@ -50,8 +50,8 @@ class TestErrorExit(unittest.TestCase):
     @patch('src.utils.log')  # Directly patch the module function
     @patch('src.smartfix.domains.scm.git_operations.GitOperations.cleanup_branch')
     @patch('src.smartfix.domains.scm.git_operations.GitOperations.get_branch_name')
-    @patch('src.contrast_api.send_telemetry_data')
-    @patch('src.contrast_api.notify_remediation_failed')
+    @patch('src.contrast_api.send_telemetry_data_org')
+    @patch('src.contrast_api.notify_remediation_failed_org')
     def test_error_exit_with_failure_code(self, mock_notify, mock_send_telemetry, mock_get_branch,
                                           mock_cleanup, mock_log, mock_exit):
         """Test error_exit when a specific failure code is provided"""
@@ -71,7 +71,6 @@ class TestErrorExit(unittest.TestCase):
             failure_category=failure_code,
             contrast_host=config.CONTRAST_HOST,
             contrast_org_id=config.CONTRAST_ORG_ID,
-            contrast_app_id=config.CONTRAST_APP_ID,
             contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
             contrast_api_key=config.CONTRAST_API_KEY
         )
@@ -88,8 +87,8 @@ class TestErrorExit(unittest.TestCase):
     @patch('src.utils.log')
     @patch('src.smartfix.domains.scm.git_operations.GitOperations.cleanup_branch')
     @patch('src.smartfix.domains.scm.git_operations.GitOperations.get_branch_name')
-    @patch('src.contrast_api.send_telemetry_data')
-    @patch('src.contrast_api.notify_remediation_failed')
+    @patch('src.contrast_api.send_telemetry_data_org')
+    @patch('src.contrast_api.notify_remediation_failed_org')
     def test_error_exit_default_failure_code(self, mock_notify, mock_send_telemetry, mock_get_branch,
                                              mock_cleanup, mock_log, mock_exit):
         """Test error_exit when no failure code is provided (uses default)"""
@@ -109,7 +108,6 @@ class TestErrorExit(unittest.TestCase):
             failure_category=default_failure_code,
             contrast_host=config.CONTRAST_HOST,
             contrast_org_id=config.CONTRAST_ORG_ID,
-            contrast_app_id=config.CONTRAST_APP_ID,
             contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
             contrast_api_key=config.CONTRAST_API_KEY
         )

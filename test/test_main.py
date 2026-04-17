@@ -63,7 +63,7 @@ class TestMain(unittest.TestCase):
         self.mock_git = self.git_patcher.start()
 
         # Mock API calls
-        self.api_patcher = patch('src.contrast_api.get_vulnerability_with_prompts')
+        self.api_patcher = patch('src.contrast_api.get_org_prompt_details')
         self.mock_api = self.api_patcher.start()
         self.mock_api.return_value = None
 
@@ -90,8 +90,8 @@ class TestMain(unittest.TestCase):
         )
         self.mock_pr_count = self.pr_count_patcher.start()
 
-        # Mock notify_remediation_failed to prevent real HTTP calls in error paths
-        self.notify_patcher = patch('src.contrast_api.notify_remediation_failed', return_value=False)
+        # Mock notify_remediation_failed_org to prevent real HTTP calls in error paths
+        self.notify_patcher = patch('src.contrast_api.notify_remediation_failed_org', return_value=False)
         self.mock_notify = self.notify_patcher.start()
 
     def tearDown(self):
@@ -239,7 +239,7 @@ class TestMain(unittest.TestCase):
              patch('src.main.SmartFixAgent') as mock_agent_class, \
              patch('src.main.handle_session_result', return_value=mock_session_result), \
              patch('src.main.generate_qa_section', return_value=""), \
-             patch('src.contrast_api.notify_remediation_failed') as mock_notify_failed:
+             patch('src.contrast_api.notify_remediation_failed_org') as mock_notify_failed:
 
             mock_agent = MagicMock()
             mock_agent_class.return_value = mock_agent
@@ -413,6 +413,37 @@ class TestMain(unittest.TestCase):
         self.assertTrue(len(total_calls) >= 1, "Expected contrast.smartfix.vulnerabilities_total to be set")
         self.assertEqual(total_calls[-1][0][1], 0)
         mock_shutdown.assert_called()
+
+    def test_skipped_app_ids_warning_is_logged(self):
+        """When skippedAppIds is non-empty, a warning including the count and IDs is logged."""
+        vuln_data = {
+            'vulnerabilityUuid': 'TEST-VULN-UUID-SKIP',
+            'vulnerabilityTitle': 'Test Injection',
+            'vulnerabilityRuleName': 'sql-injection',
+            'vulnerabilitySeverity': 'HIGH',
+            'remediationId': 'REM-SKIP-001',
+            'sessionId': 'session-skip',
+            'fixSystemPrompt': 'Fix it',
+            'fixUserPrompt': 'Please fix',
+            'skippedAppIds': ['app-id-2', 'app-id-3'],
+        }
+
+        # Return vuln_data once then None to stop the loop
+        self.mock_api.side_effect = [vuln_data, None]
+
+        with patch('src.github.github_operations.GitHubOperations.check_pr_status_for_label') as mock_pr_check, \
+             patch('src.github.github_operations.GitHubOperations.generate_label_details') as mock_label:
+            mock_pr_check.return_value = "OPEN"
+            mock_label.return_value = ('contrast-vuln-id:TEST-VULN-UUID-SKIP', 'color', 'desc')
+
+            with patch.dict('os.environ', self.env_vars, clear=True):
+                with io.StringIO() as buf, contextlib.redirect_stdout(buf):
+                    main()
+                    output = buf.getvalue()
+
+        self.assertIn("2 app(s) were inaccessible and skipped", output)
+        self.assertIn("app-id-2", output)
+        self.assertIn("app-id-3", output)
 
 
 if __name__ == '__main__':

@@ -28,10 +28,10 @@ def reconcile_open_remediations(config, github_ops):
     Best-effort: logs warnings on failure, never raises, never exits.
     """
     try:
-        open_remediations = contrast_api.get_open_remediations(
+        open_remediations = contrast_api.get_org_open_remediations(
             contrast_host=config.CONTRAST_HOST,
             contrast_org_id=config.CONTRAST_ORG_ID,
-            contrast_app_id=config.CONTRAST_APP_ID,
+            app_ids=config.CONTRAST_APP_IDS,
             contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
             contrast_api_key=config.CONTRAST_API_KEY,
         )
@@ -68,20 +68,18 @@ def reconcile_open_remediations(config, github_ops):
             log(f"Reconciling remediation {remediation_id} (vuln {vuln_id}, PR #{pr_number}): GitHub state is {actual_state}, notifying backend")
 
             if actual_state == 'MERGED':
-                contrast_api.notify_remediation_pr_merged(
+                contrast_api.notify_remediation_pr_merged_org(
                     remediation_id=remediation_id,
                     contrast_host=config.CONTRAST_HOST,
                     contrast_org_id=config.CONTRAST_ORG_ID,
-                    contrast_app_id=config.CONTRAST_APP_ID,
                     contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
                     contrast_api_key=config.CONTRAST_API_KEY,
                 )
             elif actual_state == 'CLOSED':
-                contrast_api.notify_remediation_pr_closed(
+                contrast_api.notify_remediation_pr_closed_org(
                     remediation_id=remediation_id,
                     contrast_host=config.CONTRAST_HOST,
                     contrast_org_id=config.CONTRAST_ORG_ID,
-                    contrast_app_id=config.CONTRAST_APP_ID,
                     contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
                     contrast_api_key=config.CONTRAST_API_KEY,
                 )
