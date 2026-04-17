@@ -299,20 +299,20 @@ def error_exit(remediation_id: str, failure_code: Optional[str] = None):
     config = get_config()
     # Local imports to avoid circular dependencies
     from src.smartfix.domains.scm.git_operations import GitOperations
-    from src.contrast_api import notify_remediation_failed, send_telemetry_data
+    from src.contrast_api import notify_remediation_failed_org, send_telemetry_data_org
     from src.smartfix.shared.failure_categories import FailureCategory
+    from src.smartfix.domains.telemetry import telemetry_handler
 
     # Set default failure code if none provided
     if not failure_code:
         failure_code = FailureCategory.GENERAL_FAILURE.value
 
     # Attempt to notify remediation service - continue even if this fails
-    remediation_notified = notify_remediation_failed(
+    remediation_notified = notify_remediation_failed_org(
         remediation_id=remediation_id,
         failure_category=failure_code,
         contrast_host=config.CONTRAST_HOST,
         contrast_org_id=config.CONTRAST_ORG_ID,
-        contrast_app_id=config.CONTRAST_APP_ID,
         contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
         contrast_api_key=config.CONTRAST_API_KEY
     )
@@ -333,7 +333,14 @@ def error_exit(remediation_id: str, failure_code: Optional[str] = None):
         git_ops.cleanup_branch(branch_name)
 
     # Always attempt to send final telemetry
-    send_telemetry_data()
+    send_telemetry_data_org(
+        remediation_id=remediation_id,
+        telemetry_data=telemetry_handler.get_telemetry_data(),
+        contrast_host=config.CONTRAST_HOST,
+        contrast_org_id=config.CONTRAST_ORG_ID,
+        contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
+        contrast_api_key=config.CONTRAST_API_KEY
+    )
 
     # Exit with error code
     sys.exit(1)

@@ -90,8 +90,8 @@ class TestMain(unittest.TestCase):
         )
         self.mock_pr_count = self.pr_count_patcher.start()
 
-        # Mock notify_remediation_failed to prevent real HTTP calls in error paths
-        self.notify_patcher = patch('src.contrast_api.notify_remediation_failed', return_value=False)
+        # Mock notify_remediation_failed_org to prevent real HTTP calls in error paths
+        self.notify_patcher = patch('src.contrast_api.notify_remediation_failed_org', return_value=False)
         self.mock_notify = self.notify_patcher.start()
 
     def tearDown(self):
@@ -239,7 +239,7 @@ class TestMain(unittest.TestCase):
              patch('src.main.SmartFixAgent') as mock_agent_class, \
              patch('src.main.handle_session_result', return_value=mock_session_result), \
              patch('src.main.generate_qa_section', return_value=""), \
-             patch('src.contrast_api.notify_remediation_failed') as mock_notify_failed:
+             patch('src.contrast_api.notify_remediation_failed_org') as mock_notify_failed:
 
             mock_agent = MagicMock()
             mock_agent_class.return_value = mock_agent

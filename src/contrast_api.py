@@ -885,7 +885,7 @@ def notify_remediation_pr_opened_org(remediation_id: str, pr_number: int, pr_url
 
     try:
         debug_log(f"Making PUT request to: {api_url}")
-        response = requests.put(api_url, headers=headers, json=payload)
+        response = requests.put(api_url, headers=headers, json=payload, timeout=30)
         response.raise_for_status()
 
         if response.status_code in [200, 204]:
@@ -932,10 +932,10 @@ def notify_remediation_pr_closed_org(remediation_id: str, contrast_host: str,
 
     try:
         debug_log(f"Making PUT request to: {api_url}")
-        response = requests.put(api_url, headers=headers)
+        response = requests.put(api_url, headers=headers, timeout=30)
         response.raise_for_status()
 
-        if response.status_code == 204:
+        if response.status_code in [200, 204]:
             debug_log(f"Successfully notified org-level Remediation service about closed PR for remediation {remediation_id}")
             return True
         else:
@@ -979,10 +979,10 @@ def notify_remediation_pr_merged_org(remediation_id: str, contrast_host: str,
 
     try:
         debug_log(f"Making PUT request to: {api_url}")
-        response = requests.put(api_url, headers=headers)
+        response = requests.put(api_url, headers=headers, timeout=30)
         response.raise_for_status()
 
-        if response.status_code == 204:
+        if response.status_code in [200, 204]:
             debug_log(f"Successfully notified org-level Remediation service about merged PR for remediation {remediation_id}")
             return True
         else:
@@ -1029,10 +1029,10 @@ def notify_remediation_failed_org(remediation_id: str, failure_category: str,
 
     try:
         debug_log(f"Making PUT request to: {api_url}")
-        response = requests.put(api_url, headers=headers, json=payload)
+        response = requests.put(api_url, headers=headers, json=payload, timeout=30)
         response.raise_for_status()
 
-        if response.status_code == 204:
+        if response.status_code in [200, 204]:
             debug_log(f"Successfully notified org-level Remediation service about failed remediation {remediation_id}")
             return True
         else:

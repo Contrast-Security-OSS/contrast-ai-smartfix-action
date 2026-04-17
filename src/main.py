@@ -186,12 +186,11 @@ def _main_impl(vuln_count):  # noqa: C901
         elapsed_time = current_time - start_time
         if elapsed_time > max_runtime:
             log(f"\n--- Maximum runtime of 3 hours exceeded (actual: {elapsed_time}). Stopping processing. ---")
-            remediation_notified = contrast_api.notify_remediation_failed(
+            remediation_notified = contrast_api.notify_remediation_failed_org(
                 remediation_id=remediation_id,
                 failure_category=FailureCategory.EXCEEDED_TIMEOUT.value,
                 contrast_host=config.CONTRAST_HOST,
                 contrast_org_id=config.CONTRAST_ORG_ID,
-                contrast_app_id=config.CONTRAST_APP_ID,
                 contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
                 contrast_api_key=config.CONTRAST_API_KEY
             )
@@ -385,7 +384,14 @@ def _main_impl(vuln_count):  # noqa: C901
                     if result.success:
                         log("\n\n--- External Coding Agent successfully generated fixes ---")
                         processed_one = True
-                        contrast_api.send_telemetry_data()
+                        contrast_api.send_telemetry_data_org(
+                            remediation_id=remediation_id,
+                            telemetry_data=telemetry_handler.get_telemetry_data(),
+                            contrast_host=config.CONTRAST_HOST,
+                            contrast_org_id=config.CONTRAST_ORG_ID,
+                            contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
+                            contrast_api_key=config.CONTRAST_API_KEY
+                        )
                     continue  # Skip the built-in SmartFix code and PR creation
 
                 telemetry_handler.update_telemetry("additionalAttributes.codingAgent", "INTERNAL-SMARTFIX")
@@ -418,12 +424,11 @@ def _main_impl(vuln_count):  # noqa: C901
                     if api_failure_category == FailureCategory.BUILD_VERIFICATION_FAILED.value:
                         api_failure_category = FailureCategory.AGENT_FAILURE.value
 
-                    contrast_api.notify_remediation_failed(
+                    contrast_api.notify_remediation_failed_org(
                         remediation_id=remediation_id,
                         failure_category=api_failure_category,
                         contrast_host=config.CONTRAST_HOST,
                         contrast_org_id=config.CONTRAST_ORG_ID,
-                        contrast_app_id=config.CONTRAST_APP_ID,
                         contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
                         contrast_api_key=config.CONTRAST_API_KEY
                     )
@@ -468,12 +473,11 @@ def _main_impl(vuln_count):  # noqa: C901
                     # No changes detected - agent didn't make any modifications
                     log("No changes detected from agent execution. Notifying backend and skipping PR creation.")
                     git_ops.cleanup_branch(new_branch_name)
-                    contrast_api.notify_remediation_failed(
+                    contrast_api.notify_remediation_failed_org(
                         remediation_id=remediation_id,
                         failure_category=FailureCategory.NO_CODE_CHANGED.value,
                         contrast_host=config.CONTRAST_HOST,
                         contrast_org_id=config.CONTRAST_ORG_ID,
-                        contrast_app_id=config.CONTRAST_APP_ID,
                         contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
                         contrast_api_key=config.CONTRAST_API_KEY
                     )
@@ -580,14 +584,13 @@ def _main_impl(vuln_count):  # noqa: C901
                         if pr_number is None:
                             pr_number = 1
 
-                        remediation_notified = contrast_api.notify_remediation_pr_opened(
+                        remediation_notified = contrast_api.notify_remediation_pr_opened_org(
                             remediation_id=remediation_id,
                             pr_number=pr_number,
                             pr_url=pr_url,
                             contrast_provided_llm=config.CODING_AGENT == CodingAgents.SMARTFIX.name and config.USE_CONTRAST_LLM,
                             contrast_host=config.CONTRAST_HOST,
                             contrast_org_id=config.CONTRAST_ORG_ID,
-                            contrast_app_id=config.CONTRAST_APP_ID,
                             contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
                             contrast_api_key=config.CONTRAST_API_KEY
                         )
@@ -631,7 +634,14 @@ def _main_impl(vuln_count):  # noqa: C901
                     log("\n--- PR creation failed ---")
                     error_exit(remediation_id, FailureCategory.GENERATE_PR_FAILURE.value)
 
-                contrast_api.send_telemetry_data()
+                contrast_api.send_telemetry_data_org(
+                    remediation_id=remediation_id,
+                    telemetry_data=telemetry_handler.get_telemetry_data(),
+                    contrast_host=config.CONTRAST_HOST,
+                    contrast_org_id=config.CONTRAST_ORG_ID,
+                    contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
+                    contrast_api_key=config.CONTRAST_API_KEY
+                )
 
             except BaseException:
                 raise

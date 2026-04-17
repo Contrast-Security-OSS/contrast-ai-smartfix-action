@@ -318,7 +318,7 @@ class TestExternalCodingAgent(unittest.TestCase):
 
     @patch('src.github.github_operations.GitHubOperations.add_labels_to_pr')
     @patch('src.github.external_coding_agent.ExternalCodingAgent._process_copilot_workflow_run')
-    @patch('src.github.external_coding_agent.notify_remediation_pr_opened')
+    @patch('src.github.external_coding_agent.notify_remediation_pr_opened_org')
     @patch('src.github.external_coding_agent.time.sleep')  # Mock sleep to speed up tests
     @patch('src.github.external_coding_agent.log')
     @patch('src.github.external_coding_agent.debug_log')
@@ -357,7 +357,6 @@ class TestExternalCodingAgent(unittest.TestCase):
             contrast_provided_llm=True,
             contrast_host=self.config.CONTRAST_HOST,
             contrast_org_id=self.config.CONTRAST_ORG_ID,
-            contrast_app_id=self.config.CONTRAST_APP_ID,
             contrast_auth_key=self.config.CONTRAST_AUTHORIZATION_KEY,
             contrast_api_key=self.config.CONTRAST_API_KEY
         )
@@ -366,7 +365,7 @@ class TestExternalCodingAgent(unittest.TestCase):
 
     @patch('src.github.github_operations.GitHubOperations.add_labels_to_pr')
     @patch('src.github.external_coding_agent.ExternalCodingAgent._process_copilot_workflow_run')
-    @patch('src.github.external_coding_agent.notify_remediation_pr_opened')
+    @patch('src.github.external_coding_agent.notify_remediation_pr_opened_org')
     @patch('src.github.external_coding_agent.time.sleep')
     @patch('src.github.external_coding_agent.log')
     @patch('src.github.external_coding_agent.debug_log')
@@ -446,7 +445,7 @@ class TestExternalCodingAgent(unittest.TestCase):
 
     @patch('src.github.github_operations.GitHubOperations.add_labels_to_pr')
     @patch('src.github.external_coding_agent.ExternalCodingAgent._process_copilot_workflow_run')
-    @patch('src.github.external_coding_agent.notify_remediation_pr_opened')
+    @patch('src.github.external_coding_agent.notify_remediation_pr_opened_org')
     @patch('src.github.external_coding_agent.time.sleep')
     @patch('src.github.external_coding_agent.log')
     @patch('src.github.external_coding_agent.debug_log')

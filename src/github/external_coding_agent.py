@@ -25,7 +25,7 @@ from src.utils import log, debug_log, error_exit, tail_string
 from src.config import Config
 from src.github.github_operations import GitHubOperations
 from src.smartfix.domains.telemetry import telemetry_handler
-from src.contrast_api import notify_remediation_pr_opened
+from src.contrast_api import notify_remediation_pr_opened_org
 from src.smartfix.shared.failure_categories import FailureCategory
 from src.smartfix.shared.coding_agents import CodingAgents
 from src.smartfix.domains.agents.coding_agent import CodingAgentStrategy
@@ -323,14 +323,13 @@ Please review this security vulnerability and implement appropriate fixes to add
                 debug_log(f"Found PR #{pr_number} for issue #{issue_number} after {attempt} attempts")
 
                 # Notify the Remediation backend about the PR
-                success = notify_remediation_pr_opened(
+                success = notify_remediation_pr_opened_org(
                     remediation_id=remediation_id,
                     pr_number=pr_number,
                     pr_url=pr_url,
                     contrast_provided_llm=self.config.USE_CONTRAST_LLM,
                     contrast_host=self.config.CONTRAST_HOST,
                     contrast_org_id=self.config.CONTRAST_ORG_ID,
-                    contrast_app_id=self.config.CONTRAST_APP_ID,
                     contrast_auth_key=self.config.CONTRAST_AUTHORIZATION_KEY,
                     contrast_api_key=self.config.CONTRAST_API_KEY
                 )
