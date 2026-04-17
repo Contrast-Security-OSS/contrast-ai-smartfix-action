@@ -76,14 +76,16 @@ class TestContrastAppIds(unittest.TestCase):
 
         self.assertEqual(config.CONTRAST_APP_ID, 'my-single-app')
 
-    def test_both_set_raises_config_error(self):
-        """When both contrast_app_id and contrast_app_ids are set, raises ConfigurationError."""
+    def test_both_set_singular_takes_precedence(self):
+        """When both contrast_app_id and contrast_app_ids are set, contrast_app_id takes precedence."""
         env = self._get_base_env()
         env['CONTRAST_APP_ID'] = 'singular-app'
         env['CONTRAST_APP_IDS'] = '["plural-first", "plural-second"]'
 
-        with self.assertRaises(ConfigurationError):
-            Config(env=env, testing=False)
+        config = Config(env=env, testing=False)
+
+        self.assertEqual(config.CONTRAST_APP_ID, 'singular-app')
+        self.assertEqual(config.CONTRAST_APP_IDS, ['singular-app'])
 
     def test_neither_set_raises_config_error(self):
         """When neither contrast_app_id nor contrast_app_ids is set, raises ConfigurationError."""

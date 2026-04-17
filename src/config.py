@@ -390,7 +390,8 @@ class Config:
         Resolve the active application ID from contrast_app_id or contrast_app_ids inputs.
 
         Precedence:
-          1. CONTRAST_APP_ID (singular) — takes precedence if set (backward compat)
+          1. CONTRAST_APP_ID (singular) — takes precedence if set (backward compat); if
+             CONTRAST_APP_IDS is also set, a warning is logged and the singular value is used.
           2. CONTRAST_APP_IDS (plural JSON array) — first element used if singular is absent
           3. Neither set — raises ConfigurationError
 
@@ -401,11 +402,12 @@ class Config:
         plural_raw = self._get_env_var("CONTRAST_APP_IDS", required=False)
 
         if singular and plural_raw:
-            raise ConfigurationError(
-                "Error: contrast_app_id and contrast_app_ids are mutually exclusive. "
-                "Use contrast_app_id for a single application or "
-                "contrast_app_ids for a JSON array of application IDs, but not both."
+            _log_config_message(
+                "Warning: Both contrast_app_id and contrast_app_ids are set. "
+                "Using contrast_app_id and ignoring contrast_app_ids.",
+                is_warning=True
             )
+            return singular, [singular]
 
         if singular:
             return singular, [singular]
