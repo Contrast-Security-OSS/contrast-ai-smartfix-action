@@ -633,6 +633,466 @@ def get_vulnerability_details(contrast_host: str, contrast_org_id: str, contrast
         return None
 
 
+def get_org_open_remediations(contrast_host: str, contrast_org_id: str, app_ids: list,
+                              contrast_auth_key: str, contrast_api_key: str) -> list:
+    """Returns open remediations across multiple apps from the org-level endpoint.
+
+    Best-effort: returns [] on any error. Must not block main flow.
+
+    Args:
+        contrast_host: The Contrast Security host URL
+        contrast_org_id: The organization ID
+        app_ids: List of application IDs to query
+        contrast_auth_key: The Contrast authorization key
+        contrast_api_key: The Contrast API key
+
+    Returns:
+        list: List of open remediation dicts, or empty list on error
+    """
+    api_url = (f"https://{normalize_host(contrast_host)}/api/v4/aiml-remediation/"
+               f"organizations/{contrast_org_id}/remediations/open")
+
+    headers = {
+        "Authorization": contrast_auth_key,
+        "API-Key": contrast_api_key,
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": config.USER_AGENT
+    }
+
+    payload = {"appIds": app_ids}
+
+    try:
+        debug_log(f"Fetching org-level open remediations from: {api_url}")
+        response = requests.post(api_url, headers=headers, json=payload, timeout=30)
+
+        if response.status_code == 200:
+            result = response.json()
+            debug_log(f"Found {len(result)} open remediations")
+            return result
+        else:
+            log(f"Unexpected status {response.status_code} fetching org open remediations", is_warning=True)
+            return []
+
+    except requests.exceptions.RequestException as e:
+        log(f"Error fetching org open remediations: {e}", is_warning=True)
+        return []
+    except json.JSONDecodeError:
+        log("Error decoding JSON from org open remediations endpoint", is_warning=True)
+        return []
+    except Exception as e:
+        log(f"Unexpected error fetching org open remediations: {e}", is_warning=True)
+        return []
+
+
+def get_org_remediation_details(contrast_host: str, contrast_org_id: str, app_ids: list,
+                                contrast_auth_key: str, contrast_api_key: str,
+                                github_repo_url: str, max_pull_requests: int = 5,
+                                severities: list = None, credit_info=None) -> Optional[dict]:
+    """Gets vulnerability remediation details from the org-level endpoint.
+
+    Args:
+        contrast_host: The Contrast Security host URL
+        contrast_org_id: The organization ID
+        app_ids: List of application IDs to query
+        contrast_auth_key: The Contrast authorization key
+        contrast_api_key: The Contrast API key
+        github_repo_url: The GitHub repository URL
+        max_pull_requests: Maximum number of pull requests (default: 5)
+        severities: List of vulnerability severities to filter by
+        credit_info: Optional CreditTrackingResponse for 409 message handling
+
+    Returns:
+        dict: Remediation details including applicationId and skippedAppIds, or None
+    """
+    if severities is None:
+        severities = ["CRITICAL", "HIGH"]
+
+    debug_log("\n--- Fetching org-level vulnerability details from remediation-details API ---")
+
+    api_url = (f"https://{normalize_host(contrast_host)}/api/v4/aiml-remediation/"
+               f"organizations/{contrast_org_id}/remediation-details")
+    debug_log(f"API URL: {api_url}")
+
+    headers = {
+        "Authorization": contrast_auth_key,
+        "API-Key": contrast_api_key,
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": config.USER_AGENT
+    }
+
+    payload = {
+        "appIds": app_ids,
+        "teamserverHost": f"https://{normalize_host(contrast_host)}",
+        "repoRootDir": str(config.REPO_ROOT),
+        "repoUrl": github_repo_url,
+        "maxPullRequests": max_pull_requests,
+        "severities": severities
+    }
+
+    try:
+        debug_log(f"Making POST request to: {api_url}")
+        response = requests.post(api_url, headers=headers, json=payload, timeout=30)
+
+        debug_log(f"Org remediation-details API Response Status Code: {response.status_code}")
+
+        if response.status_code == 204:
+            log("No vulnerabilities found that need remediation")
+            return None
+        elif response.status_code == 409:
+            error_msg, is_error = get_sanitized_409_message(response.text, credit_info)
+            log(f"{RED}{error_msg}{RESET}", is_error=is_error)
+            if is_error:
+                sys.exit(1)
+            return None
+        elif response.status_code == 200:
+            response_json = response.json()
+            debug_log("Successfully received org-level vulnerability details from API")
+            return response_json
+        else:
+            log(f"Unexpected status code {response.status_code} from org remediation-details API: {response.text}", is_error=True)
+            return None
+
+    except requests.exceptions.RequestException as e:
+        log(f"Error fetching org vulnerability details: {e}", is_error=True)
+        return None
+    except json.JSONDecodeError:
+        log("Error decoding JSON response from org remediation-details API.", is_error=True)
+        return None
+    except Exception as e:
+        log(f"Unexpected error calling org remediation-details API: {e}", is_error=True)
+        return None
+
+
+def get_org_prompt_details(contrast_host: str, contrast_org_id: str, app_ids: list,
+                           contrast_auth_key: str, contrast_api_key: str,
+                           max_open_prs: int, github_repo_url: str,
+                           vulnerability_severities: list, credit_info=None) -> Optional[dict]:
+    """Fetches a vulnerability and LLM-ready prompts from the org-level prompt-details endpoint.
+
+    Args:
+        contrast_host: The Contrast Security host URL
+        contrast_org_id: The organization ID
+        app_ids: List of application IDs to query
+        contrast_auth_key: The Contrast authorization key
+        contrast_api_key: The Contrast API key
+        max_open_prs: Maximum number of open PRs allowed
+        github_repo_url: The GitHub repository URL
+        vulnerability_severities: List of severity levels to filter by
+        credit_info: Optional CreditTrackingResponse for 409 message handling
+
+    Returns:
+        dict: Prompt details including applicationId and skippedAppIds, or None
+    """
+    debug_log("\n--- Fetching org-level vulnerability and prompts from prompt-details API ---")
+
+    api_url = (f"https://{normalize_host(contrast_host)}/api/v4/aiml-remediation/"
+               f"organizations/{contrast_org_id}/prompt-details")
+    debug_log(f"API URL: {api_url}")
+
+    headers = {
+        "Authorization": contrast_auth_key,
+        "API-Key": contrast_api_key,
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": config.USER_AGENT
+    }
+
+    payload = {
+        "appIds": app_ids,
+        "teamserverHost": f"https://{normalize_host(contrast_host)}",
+        "repoRootDir": str(config.REPO_ROOT),
+        "repoUrl": github_repo_url,
+        "maxPullRequests": max_open_prs,
+        "severities": vulnerability_severities,
+        "contrastProvidedLlm": config.USE_CONTRAST_LLM
+    }
+
+    try:
+        debug_log(f"Making POST request to: {api_url}")
+        response = requests.post(api_url, headers=headers, json=payload, timeout=30)
+
+        debug_log(f"Org prompt-details API Response Status Code: {response.status_code}")
+
+        if response.status_code == 204:
+            log("No vulnerabilities found that need remediation")
+            return None
+        elif response.status_code == 503:
+            log("All requested applications were inaccessible. Retry the request or verify application access.", is_warning=True)
+            return None
+        elif response.status_code == 409:
+            error_msg, is_error = get_sanitized_409_message(response.text, credit_info)
+            log(f"{RED}{error_msg}{RESET}", is_error=is_error)
+            if is_error:
+                sys.exit(1)
+            return None
+        elif response.status_code == 200:
+            response_json = response.json()
+            debug_log("Successfully received org-level vulnerability and prompts from API")
+            return response_json
+        else:
+            log(f"Unexpected status code {response.status_code} from org prompt-details API: {response.text}", is_error=True)
+            sys.exit(1)
+
+    except requests.exceptions.RequestException as e:
+        log(f"Error fetching org vulnerability and prompts: {e}", is_error=True)
+        return None
+    except json.JSONDecodeError:
+        log("Error decoding JSON response from org prompt-details API.", is_error=True)
+        return None
+    except Exception as e:
+        log(f"Unexpected error calling org prompt-details API: {e}", is_error=True)
+        return None
+
+
+def notify_remediation_pr_opened_org(remediation_id: str, pr_number: int, pr_url: str,
+                                     contrast_provided_llm: bool, contrast_host: str,
+                                     contrast_org_id: str, contrast_auth_key: str,
+                                     contrast_api_key: str) -> bool:
+    """Notifies the org-level Remediation backend that a PR has been opened.
+
+    Args:
+        remediation_id: The ID of the remediation.
+        pr_number: The PR number.
+        pr_url: The URL of the PR.
+        contrast_provided_llm: True if using Contrast LLM.
+        contrast_host: The Contrast Security host URL.
+        contrast_org_id: The organization ID.
+        contrast_auth_key: The Contrast authorization key.
+        contrast_api_key: The Contrast API key.
+
+    Returns:
+        bool: True if the notification was successful, False otherwise.
+    """
+    debug_log(f"--- Notifying org-level Remediation service about PR for remediation {remediation_id} ---")
+    api_url = (f"https://{normalize_host(contrast_host)}/api/v4/aiml-remediation/"
+               f"organizations/{contrast_org_id}/remediations/{remediation_id}/open")
+
+    headers = {
+        "Authorization": contrast_auth_key,
+        "API-Key": contrast_api_key,
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": config.USER_AGENT
+    }
+
+    payload = {
+        "pullRequestNumber": pr_number,
+        "pullRequestUrl": pr_url,
+        "contrastProvidedLlm": contrast_provided_llm
+    }
+
+    try:
+        debug_log(f"Making PUT request to: {api_url}")
+        response = requests.put(api_url, headers=headers, json=payload)
+        response.raise_for_status()
+
+        if response.status_code in [200, 204]:
+            debug_log(f"Successfully notified org-level Remediation service about PR for remediation {remediation_id}")
+            return True
+        else:
+            log(f"Failed to notify org-level Remediation service about PR for remediation {remediation_id}. Response: {response.text}", is_error=True)
+            return False
+
+    except requests.exceptions.HTTPError as e:
+        log(f"HTTP error notifying org-level Remediation service about PR for remediation {remediation_id}: {e.response.status_code} - {e.response.text}", is_error=True)
+        return False
+    except requests.exceptions.RequestException as e:
+        log(f"Request error notifying org-level Remediation service about PR for remediation {remediation_id}: {e}", is_error=True)
+        return False
+
+
+def notify_remediation_pr_closed_org(remediation_id: str, contrast_host: str,
+                                     contrast_org_id: str, contrast_auth_key: str,
+                                     contrast_api_key: str) -> bool:
+    """Notifies the org-level Remediation backend that a PR has been closed without merging.
+
+    Args:
+        remediation_id: The ID of the remediation.
+        contrast_host: The Contrast Security host URL.
+        contrast_org_id: The organization ID.
+        contrast_auth_key: The Contrast authorization key.
+        contrast_api_key: The Contrast API key.
+
+    Returns:
+        bool: True if the notification was successful, False otherwise.
+    """
+    debug_log(f"--- Notifying org-level Remediation service about closed PR for remediation {remediation_id} ---")
+    api_url = (f"https://{normalize_host(contrast_host)}/api/v4/aiml-remediation/"
+               f"organizations/{contrast_org_id}/remediations/{remediation_id}/closed")
+
+    headers = {
+        "Authorization": contrast_auth_key,
+        "API-Key": contrast_api_key,
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": config.USER_AGENT
+    }
+
+    try:
+        debug_log(f"Making PUT request to: {api_url}")
+        response = requests.put(api_url, headers=headers)
+        response.raise_for_status()
+
+        if response.status_code == 204:
+            debug_log(f"Successfully notified org-level Remediation service about closed PR for remediation {remediation_id}")
+            return True
+        else:
+            log(f"Failed to notify org-level Remediation service about closed PR for remediation {remediation_id}. Response: {response.text}", is_error=True)
+            return False
+
+    except requests.exceptions.HTTPError as e:
+        log(f"HTTP error notifying org-level Remediation service about closed PR for remediation {remediation_id}: {e.response.status_code} - {e.response.text}", is_error=True)
+        return False
+    except requests.exceptions.RequestException as e:
+        log(f"Request error notifying org-level Remediation service about closed PR for remediation {remediation_id}: {e}", is_error=True)
+        return False
+
+
+def notify_remediation_pr_merged_org(remediation_id: str, contrast_host: str,
+                                     contrast_org_id: str, contrast_auth_key: str,
+                                     contrast_api_key: str) -> bool:
+    """Notifies the org-level Remediation backend that a PR has been merged.
+
+    Args:
+        remediation_id: The ID of the remediation.
+        contrast_host: The Contrast Security host URL.
+        contrast_org_id: The organization ID.
+        contrast_auth_key: The Contrast authorization key.
+        contrast_api_key: The Contrast API key.
+
+    Returns:
+        bool: True if the notification was successful, False otherwise.
+    """
+    debug_log(f"--- Notifying org-level Remediation service about merged PR for remediation {remediation_id} ---")
+    api_url = (f"https://{normalize_host(contrast_host)}/api/v4/aiml-remediation/"
+               f"organizations/{contrast_org_id}/remediations/{remediation_id}/merged")
+
+    headers = {
+        "Authorization": contrast_auth_key,
+        "API-Key": contrast_api_key,
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": config.USER_AGENT
+    }
+
+    try:
+        debug_log(f"Making PUT request to: {api_url}")
+        response = requests.put(api_url, headers=headers)
+        response.raise_for_status()
+
+        if response.status_code == 204:
+            debug_log(f"Successfully notified org-level Remediation service about merged PR for remediation {remediation_id}")
+            return True
+        else:
+            log(f"Failed to notify org-level Remediation service about merged PR for remediation {remediation_id}. Response: {response.text}", is_error=True)
+            return False
+
+    except requests.exceptions.HTTPError as e:
+        log(f"HTTP error notifying org-level Remediation service about merged PR for remediation {remediation_id}: {e.response.status_code} - {e.response.text}", is_error=True)
+        return False
+    except requests.exceptions.RequestException as e:
+        log(f"Request error notifying org-level Remediation service about merged PR for remediation {remediation_id}: {e}", is_error=True)
+        return False
+
+
+def notify_remediation_failed_org(remediation_id: str, failure_category: str,
+                                  contrast_host: str, contrast_org_id: str,
+                                  contrast_auth_key: str, contrast_api_key: str) -> bool:
+    """Notifies the org-level Remediation backend that a remediation has failed.
+
+    Args:
+        remediation_id: The ID of the remediation.
+        failure_category: The category of failure.
+        contrast_host: The Contrast Security host URL.
+        contrast_org_id: The organization ID.
+        contrast_auth_key: The Contrast authorization key.
+        contrast_api_key: The Contrast API key.
+
+    Returns:
+        bool: True if the notification was successful, False otherwise.
+    """
+    debug_log(f"--- Notifying org-level Remediation service about failed remediation {remediation_id} ---")
+    api_url = (f"https://{normalize_host(contrast_host)}/api/v4/aiml-remediation/"
+               f"organizations/{contrast_org_id}/remediations/{remediation_id}/failed")
+
+    headers = {
+        "Authorization": contrast_auth_key,
+        "API-Key": contrast_api_key,
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": config.USER_AGENT
+    }
+
+    payload = {"failureCategory": failure_category}
+
+    try:
+        debug_log(f"Making PUT request to: {api_url}")
+        response = requests.put(api_url, headers=headers, json=payload)
+        response.raise_for_status()
+
+        if response.status_code == 204:
+            debug_log(f"Successfully notified org-level Remediation service about failed remediation {remediation_id}")
+            return True
+        else:
+            log(f"Failed to notify org-level Remediation service about failed remediation {remediation_id}. Response: {response.text}", is_error=True)
+            return False
+
+    except requests.exceptions.HTTPError as e:
+        log(f"HTTP error notifying org-level Remediation service about failed remediation {remediation_id}: {e.response.status_code} - {e.response.text}", is_error=True)
+        return False
+    except requests.exceptions.RequestException as e:
+        log(f"Request error notifying org-level Remediation service about failed remediation {remediation_id}: {e}", is_error=True)
+        return False
+
+
+def send_telemetry_data_org(remediation_id: str, telemetry_data: dict,
+                            contrast_host: str, contrast_org_id: str,
+                            contrast_auth_key: str, contrast_api_key: str) -> bool:
+    """Sends telemetry data to the org-level backend endpoint.
+
+    Args:
+        remediation_id: The remediation ID (used in the URL).
+        telemetry_data: The telemetry data dictionary.
+        contrast_host: The Contrast Security host URL.
+        contrast_org_id: The organization ID.
+        contrast_auth_key: The Contrast authorization key.
+        contrast_api_key: The Contrast API key.
+
+    Returns:
+        bool: True if sending was successful, False otherwise.
+    """
+    api_url = (f"https://{normalize_host(contrast_host)}/api/v4/aiml-remediation/"
+               f"organizations/{contrast_org_id}/remediations/{remediation_id}/telemetry")
+
+    headers = {
+        "Authorization": contrast_auth_key,
+        "API-Key": contrast_api_key,
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": config.USER_AGENT
+    }
+
+    debug_log(f"Sending org-level telemetry data to: {api_url}")
+
+    try:
+        response = requests.post(api_url, headers=headers, json=telemetry_data, timeout=30)
+
+        if response.status_code >= 200 and response.status_code < 300:
+            debug_log(f"Org-level telemetry data sent successfully. Status: {response.status_code}")
+            return True
+        else:
+            log(f"Failed to send org-level telemetry data. Status: {response.status_code} - Response: {response.text}", is_error=True)
+            return False
+    except requests.exceptions.RequestException as e:
+        log(f"Error sending org-level telemetry data: {e}", is_error=True)
+        return False
+    except Exception as e:
+        log(f"Unexpected error sending org-level telemetry: {e}", is_error=True)
+        return False
+
+
 def get_credit_tracking(contrast_host: str, contrast_org_id: str, contrast_app_id: str, contrast_auth_key: str, contrast_api_key: str) -> Optional[CreditTrackingResponse]:
     """Get credit tracking information from the Contrast API.
 
