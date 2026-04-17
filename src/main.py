@@ -579,35 +579,35 @@ def _main_impl(vuln_count):  # noqa: C901
 
                         # Notify the Remediation backend service about the PR
                         if pr_number is None:
-                            pr_number = 1
-
-                        remediation_notified = contrast_api.notify_remediation_pr_opened_org(
-                            remediation_id=remediation_id,
-                            pr_number=pr_number,
-                            pr_url=pr_url,
-                            contrast_provided_llm=config.CODING_AGENT == CodingAgents.SMARTFIX.name and config.USE_CONTRAST_LLM,
-                            contrast_host=config.CONTRAST_HOST,
-                            contrast_org_id=config.CONTRAST_ORG_ID,
-                            contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
-                            contrast_api_key=config.CONTRAST_API_KEY
-                        )
-                        if remediation_notified:
-                            log(f"Successfully notified Remediation service about PR for remediation {remediation_id}.")
-
-                            # Log updated credit tracking status after PR notification (only for SMARTFIX agent)
-                            if config.CODING_AGENT == CodingAgents.SMARTFIX.name and config.USE_CONTRAST_LLM:
-                                updated_credit_info = contrast_api.get_credit_tracking_org(
-                                    contrast_host=config.CONTRAST_HOST,
-                                    contrast_org_id=config.CONTRAST_ORG_ID,
-                                    contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
-                                    contrast_api_key=config.CONTRAST_API_KEY
-                                )
-                                if updated_credit_info:
-                                    log(updated_credit_info.to_log_message())
-                                else:
-                                    debug_log("Could not retrieve updated credit tracking information")
+                            log(f"Could not determine PR number from URL '{pr_url}' — skipping backend notification.", is_warning=True)
                         else:
-                            log(f"Failed to notify Remediation service about PR for remediation {remediation_id}.", is_warning=True)
+                            remediation_notified = contrast_api.notify_remediation_pr_opened_org(
+                                remediation_id=remediation_id,
+                                pr_number=pr_number,
+                                pr_url=pr_url,
+                                contrast_provided_llm=config.CODING_AGENT == CodingAgents.SMARTFIX.name and config.USE_CONTRAST_LLM,
+                                contrast_host=config.CONTRAST_HOST,
+                                contrast_org_id=config.CONTRAST_ORG_ID,
+                                contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
+                                contrast_api_key=config.CONTRAST_API_KEY
+                            )
+                            if remediation_notified:
+                                log(f"Successfully notified Remediation service about PR for remediation {remediation_id}.")
+
+                                # Log updated credit tracking status after PR notification (only for SMARTFIX agent)
+                                if config.CODING_AGENT == CodingAgents.SMARTFIX.name and config.USE_CONTRAST_LLM:
+                                    updated_credit_info = contrast_api.get_credit_tracking_org(
+                                        contrast_host=config.CONTRAST_HOST,
+                                        contrast_org_id=config.CONTRAST_ORG_ID,
+                                        contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
+                                        contrast_api_key=config.CONTRAST_API_KEY
+                                    )
+                                    if updated_credit_info:
+                                        log(updated_credit_info.to_log_message())
+                                    else:
+                                        debug_log("Could not retrieve updated credit tracking information")
+                            else:
+                                log(f"Failed to notify Remediation service about PR for remediation {remediation_id}.", is_warning=True)
                     else:
                         # This case should ideally be handled by create_pr exiting or returning empty
                         # and then the logic below for SKIP_PR_ON_FAILURE would trigger.

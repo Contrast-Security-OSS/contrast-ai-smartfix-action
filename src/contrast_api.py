@@ -671,7 +671,7 @@ def get_org_open_remediations(contrast_host: str, contrast_org_id: str, app_ids:
             debug_log(f"Found {len(result)} open remediations")
             return result
         else:
-            log(f"Unexpected status {response.status_code} fetching org open remediations", is_warning=True)
+            log(f"Unexpected status {response.status_code} fetching org open remediations: {response.text[:500]}", is_warning=True)
             return []
 
     except requests.exceptions.RequestException as e:
@@ -749,6 +749,14 @@ def get_org_remediation_details(contrast_host: str, contrast_org_id: str, app_id
         elif response.status_code == 200:
             response_json = response.json()
             debug_log("Successfully received org-level vulnerability details from API")
+            debug_log(f"Response keys: {list(response_json.keys())}")
+
+            required_keys = ['remediationId', 'vulnerabilityUuid', 'vulnerabilityTitle',
+                             'vulnerabilityRuleName']
+            missing_keys = [key for key in required_keys if key not in response_json]
+            if missing_keys:
+                log(f"Warning: Missing keys in org remediation-details response: {missing_keys}")
+
             return response_json
         else:
             log(f"Unexpected status code {response.status_code} from org remediation-details API: {response.text}", is_error=True)
@@ -830,6 +838,16 @@ def get_org_prompt_details(contrast_host: str, contrast_org_id: str, app_ids: li
         elif response.status_code == 200:
             response_json = response.json()
             debug_log("Successfully received org-level vulnerability and prompts from API")
+            debug_log(f"Response keys: {list(response_json.keys())}")
+
+            required_keys = ['remediationId', 'vulnerabilityUuid', 'vulnerabilityTitle',
+                             'vulnerabilityRuleName', 'vulnerabilityStatus', 'vulnerabilitySeverity',
+                             'fixSystemPrompt', 'fixUserPrompt']
+            missing_keys = [key for key in required_keys if key not in response_json]
+            if missing_keys:
+                log(f"Error: Missing required keys in org prompt-details response: {missing_keys}", is_error=True)
+                sys.exit(1)
+
             return response_json
         else:
             log(f"Unexpected status code {response.status_code} from org prompt-details API: {response.text}", is_error=True)
@@ -887,13 +905,8 @@ def notify_remediation_pr_opened_org(remediation_id: str, pr_number: int, pr_url
         debug_log(f"Making PUT request to: {api_url}")
         response = requests.put(api_url, headers=headers, json=payload, timeout=30)
         response.raise_for_status()
-
-        if response.status_code in [200, 204]:
-            debug_log(f"Successfully notified org-level Remediation service about PR for remediation {remediation_id}")
-            return True
-        else:
-            log(f"Failed to notify org-level Remediation service about PR for remediation {remediation_id}. Response: {response.text}", is_error=True)
-            return False
+        debug_log(f"Successfully notified org-level Remediation service about PR for remediation {remediation_id}")
+        return True
 
     except requests.exceptions.HTTPError as e:
         log(f"HTTP error notifying org-level Remediation service about PR for remediation {remediation_id}: {e.response.status_code} - {e.response.text}", is_error=True)
@@ -934,13 +947,8 @@ def notify_remediation_pr_closed_org(remediation_id: str, contrast_host: str,
         debug_log(f"Making PUT request to: {api_url}")
         response = requests.put(api_url, headers=headers, timeout=30)
         response.raise_for_status()
-
-        if response.status_code in [200, 204]:
-            debug_log(f"Successfully notified org-level Remediation service about closed PR for remediation {remediation_id}")
-            return True
-        else:
-            log(f"Failed to notify org-level Remediation service about closed PR for remediation {remediation_id}. Response: {response.text}", is_error=True)
-            return False
+        debug_log(f"Successfully notified org-level Remediation service about closed PR for remediation {remediation_id}")
+        return True
 
     except requests.exceptions.HTTPError as e:
         log(f"HTTP error notifying org-level Remediation service about closed PR for remediation {remediation_id}: {e.response.status_code} - {e.response.text}", is_error=True)
@@ -981,13 +989,8 @@ def notify_remediation_pr_merged_org(remediation_id: str, contrast_host: str,
         debug_log(f"Making PUT request to: {api_url}")
         response = requests.put(api_url, headers=headers, timeout=30)
         response.raise_for_status()
-
-        if response.status_code in [200, 204]:
-            debug_log(f"Successfully notified org-level Remediation service about merged PR for remediation {remediation_id}")
-            return True
-        else:
-            log(f"Failed to notify org-level Remediation service about merged PR for remediation {remediation_id}. Response: {response.text}", is_error=True)
-            return False
+        debug_log(f"Successfully notified org-level Remediation service about merged PR for remediation {remediation_id}")
+        return True
 
     except requests.exceptions.HTTPError as e:
         log(f"HTTP error notifying org-level Remediation service about merged PR for remediation {remediation_id}: {e.response.status_code} - {e.response.text}", is_error=True)
@@ -1031,13 +1034,8 @@ def notify_remediation_failed_org(remediation_id: str, failure_category: str,
         debug_log(f"Making PUT request to: {api_url}")
         response = requests.put(api_url, headers=headers, json=payload, timeout=30)
         response.raise_for_status()
-
-        if response.status_code in [200, 204]:
-            debug_log(f"Successfully notified org-level Remediation service about failed remediation {remediation_id}")
-            return True
-        else:
-            log(f"Failed to notify org-level Remediation service about failed remediation {remediation_id}. Response: {response.text}", is_error=True)
-            return False
+        debug_log(f"Successfully notified org-level Remediation service about failed remediation {remediation_id}")
+        return True
 
     except requests.exceptions.HTTPError as e:
         log(f"HTTP error notifying org-level Remediation service about failed remediation {remediation_id}: {e.response.status_code} - {e.response.text}", is_error=True)
