@@ -28,9 +28,9 @@ attrs==25.3.0
     #   referencing
 authlib==1.6.0
     # via google-adk
-boto3==1.42.48
+boto3==1.42.80
     # via -r src/requirements.txt
-botocore==1.42.52
+botocore==1.42.85
     # via
     #   boto3
     #   s3transfer
@@ -187,6 +187,8 @@ googleapis-common-protos==1.70.0
     #   opentelemetry-exporter-otlp-proto-http
 graphviz==0.20.3
     # via google-adk
+greenlet==3.3.2
+    # via sqlalchemy
 grpc-google-iam-v1==0.14.2
     # via
     #   google-cloud-bigtable
