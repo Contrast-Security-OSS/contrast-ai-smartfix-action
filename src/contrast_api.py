@@ -23,7 +23,7 @@ import sys
 from typing import Optional
 from src.config import get_config
 from src.utils import debug_log, log, normalize_host, RED, RESET
-from src import telemetry_handler
+from src.smartfix.domains.telemetry import telemetry_handler
 from src.smartfix.domains.workflow.credit_tracking import CreditTrackingResponse
 
 config = get_config()

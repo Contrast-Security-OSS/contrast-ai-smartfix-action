@@ -56,7 +56,7 @@ class Config:
         self.testing = testing
 
         # --- Preset ---
-        self.VERSION = "v1.0.11"
+        self.VERSION = "v1.0.15"
         self.USER_AGENT = f"contrast-smart-fix {self.VERSION}"
 
         # --- Paths (initialized early for use in command detection) ---
@@ -166,6 +166,7 @@ class Config:
             self.GITHUB_REPOSITORY = self._get_env_var("GITHUB_REPOSITORY", required=True)
             # GITHUB_SERVER_URL is automatically set by GitHub Actions (e.g., https://github.com or https://mycompany.ghe.com)
             self.GITHUB_SERVER_URL = self._get_env_var("GITHUB_SERVER_URL", required=True, default="https://github.com")
+        self.GITHUB_RUN_ID = self._get_env_var("GITHUB_RUN_ID", required=False, default="")
 
         # --- Contrast API Configuration ---
         if testing:

@@ -102,7 +102,7 @@ class TestExternalCodingAgent(unittest.TestCase):
     @patch('src.github.external_coding_agent.ExternalCodingAgent._process_copilot_workflow_run')
     @patch('src.contrast_api.notify_remediation_pr_opened')
     @patch('src.github.external_coding_agent.time.sleep')  # Mock sleep to speed up tests
-    @patch('src.telemetry_handler.update_telemetry')
+    @patch('src.smartfix.domains.telemetry.telemetry_handler.update_telemetry')
     @patch('src.github.external_coding_agent.debug_log')
     @patch('src.github.external_coding_agent.log')
     def test_remediate_with_external_agent_pr_created(self, mock_log, mock_debug_log, mock_update_telemetry,
@@ -154,7 +154,7 @@ class TestExternalCodingAgent(unittest.TestCase):
     @patch('src.github.github_operations.GitHubOperations.find_issue_with_label')
     @patch('src.github.github_operations.GitHubOperations.create_issue')
     @patch('src.github.external_coding_agent.time.sleep')
-    @patch('src.telemetry_handler.update_telemetry')
+    @patch('src.smartfix.domains.telemetry.telemetry_handler.update_telemetry')
     @patch('src.github.external_coding_agent.debug_log')
     @patch('src.github.external_coding_agent.log')
     def test_remediate_with_external_agent_pr_timeout(self, mock_log, mock_debug_log, mock_update_telemetry,
@@ -210,7 +210,7 @@ class TestExternalCodingAgent(unittest.TestCase):
     @patch('src.github.github_operations.GitHubOperations.reset_issue')
     @patch('src.contrast_api.notify_remediation_pr_opened')
     @patch('src.github.external_coding_agent.time.sleep')
-    @patch('src.telemetry_handler.update_telemetry')
+    @patch('src.smartfix.domains.telemetry.telemetry_handler.update_telemetry')
     @patch('src.github.external_coding_agent.debug_log')
     @patch('src.github.external_coding_agent.log')
     def test_remediate_with_existing_issue(self, mock_log, mock_debug_log, mock_update_telemetry,

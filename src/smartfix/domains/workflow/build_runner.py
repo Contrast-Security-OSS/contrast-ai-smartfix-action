@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Tuple
 
 from src.utils import debug_log, log, error_exit
-import src.telemetry_handler as telemetry_handler
+from src.smartfix.domains.telemetry import telemetry_handler
 
 
 def run_build_command(command: str, repo_root: Path, remediation_id: str) -> Tuple[bool, str]:

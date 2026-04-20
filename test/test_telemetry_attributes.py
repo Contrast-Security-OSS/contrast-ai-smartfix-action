@@ -24,7 +24,7 @@ from unittest.mock import patch
 
 # Test setup imports (path is set up by conftest.py)
 from src.config import reset_config
-from src.telemetry_handler import initialize_telemetry, get_telemetry_data
+from src.smartfix.domains.telemetry.telemetry_handler import initialize_telemetry, get_telemetry_data
 from src.smartfix.shared.llm_providers import LlmProvider
 from src.smartfix.shared.coding_agents import CodingAgents
 

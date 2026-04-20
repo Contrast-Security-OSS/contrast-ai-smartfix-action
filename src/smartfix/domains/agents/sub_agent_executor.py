@@ -34,7 +34,7 @@ from typing import Optional
 
 from src.utils import debug_log, log, error_exit, tail_string
 from src.smartfix.shared.failure_categories import FailureCategory
-import src.telemetry_handler as telemetry_handler
+from src.smartfix.domains.telemetry import telemetry_handler
 from src.smartfix.domains.providers import setup_contrast_provider, CONTRAST_CLAUDE_SONNET_4_5
 
 from .mcp_manager import MCPToolsetManager

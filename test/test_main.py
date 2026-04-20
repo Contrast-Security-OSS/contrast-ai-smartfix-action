@@ -258,6 +258,162 @@ class TestMain(unittest.TestCase):
         mock_cleanup.assert_called_once_with("smartfix/remediation-REM-TEST-456")
         self.assertIn("No changes detected from agent execution", output)
 
+    def test_fix_vulnerability_span_created_with_request_attributes(self):
+        """fix-vulnerability span is opened for each processed vulnerability with correct request attributes."""
+        vuln_data = {
+            'vulnerabilityUuid': 'SPAN-UUID-001',
+            'vulnerabilityTitle': 'Test SQL Injection',
+            'vulnerabilityRuleName': 'sql-injection',
+            'vulnerabilitySeverity': 'HIGH',
+            'remediationId': 'REM-SPAN-001',
+            'sessionId': 'session-span-001',
+            'fixSystemPrompt': 'Fix the vulnerability',
+            'fixUserPrompt': 'Please fix',
+        }
+        self.mock_api.side_effect = [vuln_data, None]
+
+        # Disable Contrast LLM; use non-Bedrock model to skip AWS validation.
+        test_env = {**self.env_vars, 'USE_CONTRAST_LLM': 'false', 'AGENT_MODEL': 'mock-model'}
+
+        from src.smartfix.domains.workflow.session_handler import SessionOutcome
+        mock_session_result = SessionOutcome(
+            should_continue=False,
+            failure_category=FailureCategory.AGENT_FAILURE.value,
+            ai_fix_summary="Agent failed",
+        )
+
+        # Track span calls keyed by span name
+        span_registry = {}
+
+        def mock_start_span(name):
+            mock_span = MagicMock()
+            mock_span_cm = MagicMock()
+            mock_span_cm.__enter__ = MagicMock(return_value=mock_span)
+            mock_span_cm.__exit__ = MagicMock(return_value=False)
+            span_registry[name] = mock_span
+            return mock_span_cm
+
+        with patch('src.github.github_operations.GitHubOperations.count_open_prs_with_prefix', return_value=0), \
+             patch('src.github.github_operations.GitHubOperations.check_pr_status_for_label', return_value="NOT_FOUND"), \
+             patch('src.github.github_operations.GitHubOperations.generate_label_details',
+                   return_value=('contrast-vuln-id:SPAN-UUID-001', 'desc', 'color')), \
+             patch('src.smartfix.domains.scm.git_operations.GitOperations.prepare_feature_branch'), \
+             patch('src.smartfix.domains.scm.git_operations.GitOperations.cleanup_branch'), \
+             patch('src.main.SmartFixAgent') as mock_agent_class, \
+             patch('src.main.handle_session_result', return_value=mock_session_result), \
+             patch('src.smartfix.domains.telemetry.otel_provider.start_span', side_effect=mock_start_span), \
+             patch('src.smartfix.domains.telemetry.otel_provider.initialize_otel'), \
+             patch('src.smartfix.domains.telemetry.otel_provider.shutdown_otel'):
+
+            mock_agent_class.return_value = MagicMock()
+
+            with patch.dict('os.environ', test_env, clear=True):
+                reset_config()
+                with patch('src.main.config', get_config(testing=True)):
+                    main()
+
+        # Verify the operation span was started
+        self.assertIn("fix-vulnerability", span_registry,
+                      "Expected start_span('fix-vulnerability') to be called")
+
+        op_span = span_registry["fix-vulnerability"]
+        attrs = {call[0][0]: call[0][1] for call in op_span.set_attribute.call_args_list}
+
+        self.assertEqual(attrs.get("contrast.finding.fingerprint"), "SPAN-UUID-001")
+        self.assertEqual(attrs.get("contrast.finding.source"), "runtime")
+        self.assertEqual(attrs.get("contrast.finding.rule_id"), "sql-injection")
+        self.assertEqual(attrs.get("contrast.smartfix.coding_agent"), "smartfix")
+
+    def test_fix_vulnerability_span_response_attributes_no_changes(self):
+        """fix-vulnerability span has fix_applied=False and pr_created=False when no code changes."""
+        vuln_data = {
+            'vulnerabilityUuid': 'SPAN-UUID-002',
+            'vulnerabilityTitle': 'Test Weak Hash',
+            'vulnerabilityRuleName': 'weak-hash',
+            'vulnerabilitySeverity': 'HIGH',
+            'remediationId': 'REM-SPAN-002',
+            'sessionId': 'session-span-002',
+            'fixSystemPrompt': 'Fix the vulnerability',
+            'fixUserPrompt': 'Please fix',
+        }
+        self.mock_api.side_effect = [vuln_data, None]
+
+        test_env = {**self.env_vars, 'USE_CONTRAST_LLM': 'false', 'AGENT_MODEL': 'mock-model'}
+
+        from src.smartfix.domains.workflow.session_handler import SessionOutcome
+        mock_session_result = SessionOutcome(
+            should_continue=True,
+            failure_category=None,
+            ai_fix_summary="No code changes needed",
+        )
+
+        span_registry = {}
+
+        def mock_start_span(name):
+            mock_span = MagicMock()
+            mock_span_cm = MagicMock()
+            mock_span_cm.__enter__ = MagicMock(return_value=mock_span)
+            mock_span_cm.__exit__ = MagicMock(return_value=False)
+            span_registry[name] = mock_span
+            return mock_span_cm
+
+        with patch('src.github.github_operations.GitHubOperations.count_open_prs_with_prefix', return_value=0), \
+             patch('src.github.github_operations.GitHubOperations.check_pr_status_for_label', return_value="NOT_FOUND"), \
+             patch('src.github.github_operations.GitHubOperations.generate_label_details',
+                   return_value=('contrast-vuln-id:SPAN-UUID-002', 'desc', 'color')), \
+             patch('src.smartfix.domains.scm.git_operations.GitOperations.prepare_feature_branch'), \
+             patch('src.smartfix.domains.scm.git_operations.GitOperations.stage_changes'), \
+             patch('src.smartfix.domains.scm.git_operations.GitOperations.check_status', return_value=False), \
+             patch('src.smartfix.domains.scm.git_operations.GitOperations.cleanup_branch'), \
+             patch('src.main.SmartFixAgent') as mock_agent_class, \
+             patch('src.main.handle_session_result', return_value=mock_session_result), \
+             patch('src.main.generate_qa_section', return_value=""), \
+             patch('src.smartfix.domains.telemetry.otel_provider.start_span', side_effect=mock_start_span), \
+             patch('src.smartfix.domains.telemetry.otel_provider.initialize_otel'), \
+             patch('src.smartfix.domains.telemetry.otel_provider.shutdown_otel'):
+
+            mock_agent_class.return_value = MagicMock()
+
+            with patch.dict('os.environ', test_env, clear=True):
+                reset_config()
+                with patch('src.main.config', get_config(testing=True)):
+                    main()
+
+        self.assertIn("fix-vulnerability", span_registry)
+        op_span = span_registry["fix-vulnerability"]
+        attrs = {call[0][0]: call[0][1] for call in op_span.set_attribute.call_args_list}
+
+        self.assertEqual(attrs.get("contrast.smartfix.fix_applied"), False)
+        self.assertEqual(attrs.get("contrast.smartfix.pr_created"), False)
+
+    def test_main_initializes_and_shuts_down_otel(self):
+        """main() calls initialize_otel, starts smartfix-run span, and calls shutdown_otel."""
+        mock_span = MagicMock()
+        mock_span_cm = MagicMock()
+        mock_span_cm.__enter__ = MagicMock(return_value=mock_span)
+        mock_span_cm.__exit__ = MagicMock(return_value=False)
+
+        with patch('src.smartfix.domains.telemetry.otel_provider.initialize_otel') as mock_init, \
+             patch('src.smartfix.domains.telemetry.otel_provider.start_span', return_value=mock_span_cm) as mock_start, \
+             patch('src.smartfix.domains.telemetry.otel_provider.shutdown_otel') as mock_shutdown, \
+             patch.dict('os.environ', self.env_vars, clear=True):
+            reset_config()
+            with patch('src.main.config', get_config(testing=True)):
+                main()
+
+        mock_init.assert_called_once()
+        mock_start.assert_called_once_with("smartfix-run")
+        # session.id must be set
+        session_calls = [c for c in mock_span.set_attribute.call_args_list
+                         if c[0][0] == "session.id"]
+        self.assertTrue(len(session_calls) >= 1, "Expected session.id to be set on run span")
+        # vulnerabilities_total must be set; with no vulns processed it should be 0
+        total_calls = [c for c in mock_span.set_attribute.call_args_list
+                       if c[0][0] == "contrast.smartfix.vulnerabilities_total"]
+        self.assertTrue(len(total_calls) >= 1, "Expected contrast.smartfix.vulnerabilities_total to be set")
+        self.assertEqual(total_calls[-1][0][1], 0)
+        mock_shutdown.assert_called()
+
 
 if __name__ == '__main__':
     unittest.main()
