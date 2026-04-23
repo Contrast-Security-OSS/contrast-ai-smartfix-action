@@ -251,6 +251,8 @@ class Config:
     def _check_contrast_config_values_exist(self) -> None:
         if not all([self.CONTRAST_HOST, self.CONTRAST_ORG_ID, self.CONTRAST_APP_ID, self.CONTRAST_AUTHORIZATION_KEY, self.CONTRAST_API_KEY]):
             raise ConfigurationError("Error: Missing one or more Contrast API configuration variables (HOST, ORG_ID, APP_ID, AUTH_KEY, API_KEY).")
+        if not self.CONTRAST_APP_IDS:
+            raise ConfigurationError("Error: CONTRAST_APP_IDS must not be empty.")
 
     def _validate_command(self, var_name: str, command: Optional[str], source: str = "config") -> None:
         """
@@ -388,7 +390,8 @@ class Config:
         Resolve the active application ID from contrast_app_id or contrast_app_ids inputs.
 
         Precedence:
-          1. CONTRAST_APP_ID (singular) — takes precedence if set (backward compat)
+          1. CONTRAST_APP_ID (singular) — takes precedence if set (backward compat); if
+             CONTRAST_APP_IDS is also set, a warning is logged and the singular value is used.
           2. CONTRAST_APP_IDS (plural JSON array) — first element used if singular is absent
           3. Neither set — raises ConfigurationError
 
@@ -396,10 +399,19 @@ class Config:
             Tuple[str, List[str]]: (resolved_app_id, parsed_app_ids_list)
         """
         singular = self._get_env_var("CONTRAST_APP_ID", required=False)
-        if singular:
-            return singular, []
-
         plural_raw = self._get_env_var("CONTRAST_APP_IDS", required=False)
+
+        if singular and plural_raw:
+            _log_config_message(
+                "Warning: Both contrast_app_id and contrast_app_ids are set. "
+                "Using contrast_app_id and ignoring contrast_app_ids.",
+                is_warning=True
+            )
+            return singular, [singular]
+
+        if singular:
+            return singular, [singular]
+
         if plural_raw:
             app_ids = self._parse_app_ids(plural_raw)
             return app_ids[0], app_ids

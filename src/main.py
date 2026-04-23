@@ -158,10 +158,9 @@ def _main_impl(vuln_count):  # noqa: C901
 
     # Log initial credit tracking status if using Contrast LLM (only for SMARTFIX agent)
     if config.CODING_AGENT == CodingAgents.SMARTFIX.name and config.USE_CONTRAST_LLM:
-        initial_credit_info = contrast_api.get_credit_tracking(
+        initial_credit_info = contrast_api.get_credit_tracking_org(
             contrast_host=config.CONTRAST_HOST,
             contrast_org_id=config.CONTRAST_ORG_ID,
-            contrast_app_id=config.CONTRAST_APP_ID,
             contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
             contrast_api_key=config.CONTRAST_API_KEY
         )
@@ -186,12 +185,11 @@ def _main_impl(vuln_count):  # noqa: C901
         elapsed_time = current_time - start_time
         if elapsed_time > max_runtime:
             log(f"\n--- Maximum runtime of 3 hours exceeded (actual: {elapsed_time}). Stopping processing. ---")
-            remediation_notified = contrast_api.notify_remediation_failed(
+            remediation_notified = contrast_api.notify_remediation_failed_org(
                 remediation_id=remediation_id,
                 failure_category=FailureCategory.EXCEEDED_TIMEOUT.value,
                 contrast_host=config.CONTRAST_HOST,
                 contrast_org_id=config.CONTRAST_ORG_ID,
-                contrast_app_id=config.CONTRAST_APP_ID,
                 contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
                 contrast_api_key=config.CONTRAST_API_KEY
             )
@@ -210,10 +208,9 @@ def _main_impl(vuln_count):  # noqa: C901
 
         # Check credit exhaustion for Contrast LLM usage
         if config.USE_CONTRAST_LLM:
-            current_credit_info = contrast_api.get_credit_tracking(
+            current_credit_info = contrast_api.get_credit_tracking_org(
                 contrast_host=config.CONTRAST_HOST,
                 contrast_org_id=config.CONTRAST_ORG_ID,
-                contrast_app_id=config.CONTRAST_APP_ID,
                 contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
                 contrast_api_key=config.CONTRAST_API_KEY
             )
@@ -226,8 +223,8 @@ def _main_impl(vuln_count):  # noqa: C901
         if config.CODING_AGENT == CodingAgents.SMARTFIX.name:
             # For SMARTFIX, get vulnerability with prompts
             log("\n::group::--- Fetching next vulnerability and prompts from Contrast API ---")
-            vulnerability_data = contrast_api.get_vulnerability_with_prompts(
-                config.CONTRAST_HOST, config.CONTRAST_ORG_ID, config.CONTRAST_APP_ID,
+            vulnerability_data = contrast_api.get_org_prompt_details(
+                config.CONTRAST_HOST, config.CONTRAST_ORG_ID, config.CONTRAST_APP_IDS,
                 config.CONTRAST_AUTHORIZATION_KEY, config.CONTRAST_API_KEY,
                 max_open_prs_setting, github_repo_url, config.VULNERABILITY_SEVERITIES,
                 credit_info=current_credit_info if config.USE_CONTRAST_LLM else None
@@ -237,6 +234,10 @@ def _main_impl(vuln_count):  # noqa: C901
             if not vulnerability_data:
                 log("No more vulnerabilities found to process. Stopping processing.")
                 break
+
+            skipped_app_ids = vulnerability_data.get('skippedAppIds', [])
+            if skipped_app_ids:
+                log(f"Warning: {len(skipped_app_ids)} app(s) were inaccessible and skipped: {skipped_app_ids}", is_warning=True)
 
             # Extract vulnerability details and prompts from the response
             vuln_uuid = vulnerability_data['vulnerabilityUuid']
@@ -267,8 +268,8 @@ def _main_impl(vuln_count):  # noqa: C901
         else:
             # For external coding agents (GITHUB_COPILOT/CLAUDE_CODE), get vulnerability details
             log("\n::group::--- Fetching next vulnerability details from Contrast API ---")
-            vulnerability_data = contrast_api.get_vulnerability_details(
-                config.CONTRAST_HOST, config.CONTRAST_ORG_ID, config.CONTRAST_APP_ID,
+            vulnerability_data = contrast_api.get_org_remediation_details(
+                config.CONTRAST_HOST, config.CONTRAST_ORG_ID, config.CONTRAST_APP_IDS,
                 config.CONTRAST_AUTHORIZATION_KEY, config.CONTRAST_API_KEY,
                 github_repo_url, max_open_prs_setting, config.VULNERABILITY_SEVERITIES,
                 credit_info=current_credit_info if config.USE_CONTRAST_LLM else None
@@ -278,6 +279,10 @@ def _main_impl(vuln_count):  # noqa: C901
             if not vulnerability_data:
                 log("No more vulnerabilities found to process. Stopping processing.")
                 break
+
+            skipped_app_ids = vulnerability_data.get('skippedAppIds', [])
+            if skipped_app_ids:
+                log(f"Warning: {len(skipped_app_ids)} app(s) were inaccessible and skipped: {skipped_app_ids}", is_warning=True)
 
             # Extract vulnerability details from the response (no prompts for external agents)
             vuln_uuid = vulnerability_data['vulnerabilityUuid']
@@ -377,7 +382,14 @@ def _main_impl(vuln_count):  # noqa: C901
                     if result.success:
                         log("\n\n--- External Coding Agent successfully generated fixes ---")
                         processed_one = True
-                        contrast_api.send_telemetry_data()
+                        contrast_api.send_telemetry_data_org(
+                            remediation_id=remediation_id,
+                            telemetry_data=telemetry_handler.get_telemetry_data(),
+                            contrast_host=config.CONTRAST_HOST,
+                            contrast_org_id=config.CONTRAST_ORG_ID,
+                            contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
+                            contrast_api_key=config.CONTRAST_API_KEY
+                        )
                     continue  # Skip the built-in SmartFix code and PR creation
 
                 telemetry_handler.update_telemetry("additionalAttributes.codingAgent", "INTERNAL-SMARTFIX")
@@ -410,12 +422,11 @@ def _main_impl(vuln_count):  # noqa: C901
                     if api_failure_category == FailureCategory.BUILD_VERIFICATION_FAILED.value:
                         api_failure_category = FailureCategory.AGENT_FAILURE.value
 
-                    contrast_api.notify_remediation_failed(
+                    contrast_api.notify_remediation_failed_org(
                         remediation_id=remediation_id,
                         failure_category=api_failure_category,
                         contrast_host=config.CONTRAST_HOST,
                         contrast_org_id=config.CONTRAST_ORG_ID,
-                        contrast_app_id=config.CONTRAST_APP_ID,
                         contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
                         contrast_api_key=config.CONTRAST_API_KEY
                     )
@@ -460,12 +471,11 @@ def _main_impl(vuln_count):  # noqa: C901
                     # No changes detected - agent didn't make any modifications
                     log("No changes detected from agent execution. Notifying backend and skipping PR creation.")
                     git_ops.cleanup_branch(new_branch_name)
-                    contrast_api.notify_remediation_failed(
+                    contrast_api.notify_remediation_failed_org(
                         remediation_id=remediation_id,
                         failure_category=FailureCategory.NO_CODE_CHANGED.value,
                         contrast_host=config.CONTRAST_HOST,
                         contrast_org_id=config.CONTRAST_ORG_ID,
-                        contrast_app_id=config.CONTRAST_APP_ID,
                         contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
                         contrast_api_key=config.CONTRAST_API_KEY
                     )
@@ -501,10 +511,9 @@ def _main_impl(vuln_count):  # noqa: C901
 
                 # Append credit tracking information to PR body if using Contrast LLM
                 if config.CODING_AGENT == CodingAgents.SMARTFIX.name and config.USE_CONTRAST_LLM:
-                    current_credit_info = contrast_api.get_credit_tracking(
+                    current_credit_info = contrast_api.get_credit_tracking_org(
                         contrast_host=config.CONTRAST_HOST,
                         contrast_org_id=config.CONTRAST_ORG_ID,
-                        contrast_app_id=config.CONTRAST_APP_ID,
                         contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
                         contrast_api_key=config.CONTRAST_API_KEY
                     )
@@ -559,45 +568,46 @@ def _main_impl(vuln_count):  # noqa: C901
                             log(f"Could not extract PR number from URL: {pr_url} - Error: {str(e)}")
 
                         # Add labels to the PR (non-critical — don't fail the run)
-                        if pr_number and label_name:
+                        if pr_number:
+                            labels_to_add = [f"smartfix-id:{remediation_id}"]
+                            if label_name:
+                                labels_to_add.append(label_name)
                             try:
-                                github_ops.add_labels_to_pr(pr_number, [label_name])
+                                github_ops.add_labels_to_pr(pr_number, labels_to_add)
                             except Exception as label_err:
                                 log(f"Failed to add label to PR #{pr_number}: {label_err}", is_warning=True)
 
                         # Notify the Remediation backend service about the PR
                         if pr_number is None:
-                            pr_number = 1
-
-                        remediation_notified = contrast_api.notify_remediation_pr_opened(
-                            remediation_id=remediation_id,
-                            pr_number=pr_number,
-                            pr_url=pr_url,
-                            contrast_provided_llm=config.CODING_AGENT == CodingAgents.SMARTFIX.name and config.USE_CONTRAST_LLM,
-                            contrast_host=config.CONTRAST_HOST,
-                            contrast_org_id=config.CONTRAST_ORG_ID,
-                            contrast_app_id=config.CONTRAST_APP_ID,
-                            contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
-                            contrast_api_key=config.CONTRAST_API_KEY
-                        )
-                        if remediation_notified:
-                            log(f"Successfully notified Remediation service about PR for remediation {remediation_id}.")
-
-                            # Log updated credit tracking status after PR notification (only for SMARTFIX agent)
-                            if config.CODING_AGENT == CodingAgents.SMARTFIX.name and config.USE_CONTRAST_LLM:
-                                updated_credit_info = contrast_api.get_credit_tracking(
-                                    contrast_host=config.CONTRAST_HOST,
-                                    contrast_org_id=config.CONTRAST_ORG_ID,
-                                    contrast_app_id=config.CONTRAST_APP_ID,
-                                    contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
-                                    contrast_api_key=config.CONTRAST_API_KEY
-                                )
-                                if updated_credit_info:
-                                    log(updated_credit_info.to_log_message())
-                                else:
-                                    debug_log("Could not retrieve updated credit tracking information")
+                            log(f"Could not determine PR number from URL '{pr_url}' — skipping backend notification.", is_warning=True)
                         else:
-                            log(f"Failed to notify Remediation service about PR for remediation {remediation_id}.", is_warning=True)
+                            remediation_notified = contrast_api.notify_remediation_pr_opened_org(
+                                remediation_id=remediation_id,
+                                pr_number=pr_number,
+                                pr_url=pr_url,
+                                contrast_provided_llm=config.CODING_AGENT == CodingAgents.SMARTFIX.name and config.USE_CONTRAST_LLM,
+                                contrast_host=config.CONTRAST_HOST,
+                                contrast_org_id=config.CONTRAST_ORG_ID,
+                                contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
+                                contrast_api_key=config.CONTRAST_API_KEY
+                            )
+                            if remediation_notified:
+                                log(f"Successfully notified Remediation service about PR for remediation {remediation_id}.")
+
+                                # Log updated credit tracking status after PR notification (only for SMARTFIX agent)
+                                if config.CODING_AGENT == CodingAgents.SMARTFIX.name and config.USE_CONTRAST_LLM:
+                                    updated_credit_info = contrast_api.get_credit_tracking_org(
+                                        contrast_host=config.CONTRAST_HOST,
+                                        contrast_org_id=config.CONTRAST_ORG_ID,
+                                        contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
+                                        contrast_api_key=config.CONTRAST_API_KEY
+                                    )
+                                    if updated_credit_info:
+                                        log(updated_credit_info.to_log_message())
+                                    else:
+                                        debug_log("Could not retrieve updated credit tracking information")
+                            else:
+                                log(f"Failed to notify Remediation service about PR for remediation {remediation_id}.", is_warning=True)
                     else:
                         # This case should ideally be handled by create_pr exiting or returning empty
                         # and then the logic below for SKIP_PR_ON_FAILURE would trigger.
@@ -620,7 +630,14 @@ def _main_impl(vuln_count):  # noqa: C901
                     log("\n--- PR creation failed ---")
                     error_exit(remediation_id, FailureCategory.GENERATE_PR_FAILURE.value)
 
-                contrast_api.send_telemetry_data()
+                contrast_api.send_telemetry_data_org(
+                    remediation_id=remediation_id,
+                    telemetry_data=telemetry_handler.get_telemetry_data(),
+                    contrast_host=config.CONTRAST_HOST,
+                    contrast_org_id=config.CONTRAST_ORG_ID,
+                    contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
+                    contrast_api_key=config.CONTRAST_API_KEY
+                )
 
             except BaseException:
                 raise

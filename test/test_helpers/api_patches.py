@@ -15,11 +15,11 @@ HTTP_PATCHES = [
 
 # Contrast API patches - prevent actual Contrast Security API calls
 CONTRAST_API_PATCHES = [
-    'src.contrast_api.fetch_prompt_details',
-    'src.contrast_api.notify_remediation_opened',
-    'src.contrast_api.notify_remediation_failed',
-    'src.contrast_api.notify_remediation_merged',
-    'src.contrast_api.check_credit_tracking',
+    'src.contrast_api.get_org_prompt_details',
+    'src.contrast_api.notify_remediation_pr_opened_org',
+    'src.contrast_api.notify_remediation_failed_org',
+    'src.contrast_api.notify_remediation_pr_merged_org',
+    'src.contrast_api.get_credit_tracking_org',
 ]
 
 # GitHub operations patches - prevent actual GitHub API calls
