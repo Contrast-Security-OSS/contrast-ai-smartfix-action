@@ -187,6 +187,8 @@ googleapis-common-protos==1.70.0
     #   opentelemetry-exporter-otlp-proto-http
 graphviz==0.20.3
     # via google-adk
+greenlet==3.4.0
+    # via sqlalchemy
 grpc-google-iam-v1==0.14.2
     # via
     #   google-cloud-bigtable
@@ -322,7 +324,7 @@ opentelemetry-semantic-conventions==0.58b0
     # via
     #   google-cloud-spanner
     #   opentelemetry-sdk
-packaging==26.0
+packaging==26.1
     # via
     #   -r src/requirements.txt
     #   google-cloud-aiplatform
