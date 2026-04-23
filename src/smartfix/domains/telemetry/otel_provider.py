@@ -24,7 +24,11 @@ Handles TracerProvider lifecycle for SmartFix.
 
 Design notes:
 - Enabled iff OTEL_EXPORTER_OTLP_ENDPOINT (or OTEL_EXPORTER_OTLP_TRACES_ENDPOINT) is set.
-- OTLPSpanExporter() constructed with no args; SDK reads endpoint/headers/timeout from env.
+- OTLPSpanExporter() is constructed with explicit endpoint and headers parsed from env vars.
+  This ensures the headers are used even when the action runs as a GitHub composite action,
+  where step-level env vars may not propagate into all sub-steps automatically.
+- Headers are parsed from OTEL_EXPORTER_OTLP_HEADERS (comma-separated key=value pairs).
+- Header keys (not values) are logged to confirm auth headers are present.
 - When disabled, the default SDK NoOpTracerProvider remains — all span calls are silent
   no-ops with no guards needed in callers.
 - force_flush() called before shutdown() to flush the BatchSpanProcessor background thread
@@ -64,10 +68,9 @@ def initialize_otel(config) -> None:
     global _tracer_provider, _shutdown_called
     _shutdown_called = False
 
-    endpoint = (
-        os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
-        or os.environ.get("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")
-    )
+    base_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
+    traces_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")
+    endpoint = base_endpoint or traces_endpoint
     if not endpoint:
         log("OTel telemetry disabled: OTEL_EXPORTER_OTLP_ENDPOINT is not set")
         return
@@ -82,12 +85,28 @@ def initialize_otel(config) -> None:
             "vcs.provider.name": "github",
         })
 
-        exporter = OTLPSpanExporter()  # reads OTEL_EXPORTER_OTLP_ENDPOINT/HEADERS from env
+        # Parse headers explicitly from env so they're passed directly to the exporter.
+        # This is necessary when running as a GitHub composite action where step-level
+        # env vars (OTEL_EXPORTER_OTLP_HEADERS) may not propagate automatically.
+        headers_raw = os.environ.get("OTEL_EXPORTER_OTLP_HEADERS", "")
+        headers: dict[str, str] = {}
+        if headers_raw:
+            for part in headers_raw.split(","):
+                if "=" in part:
+                    k, v = part.split("=", 1)
+                    headers[k.strip()] = v.strip()
+
+        # When using OTEL_EXPORTER_OTLP_ENDPOINT (base URL), the SDK would normally append
+        # /v1/traces. We replicate that here since we're passing the endpoint explicitly.
+        # When using OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, the value is already the full URL.
+        exporter_endpoint = traces_endpoint if traces_endpoint else endpoint.rstrip("/") + "/v1/traces"
+        exporter = OTLPSpanExporter(endpoint=exporter_endpoint, headers=headers if headers else None)
         provider = TracerProvider(resource=resource)
         provider.add_span_processor(BatchSpanProcessor(exporter))
         trace.set_tracer_provider(provider)
         _tracer_provider = provider
-        log(f"OTel telemetry enabled: exporting to {endpoint}")
+        header_keys = list(headers.keys()) if headers else []
+        log(f"OTel telemetry enabled: exporting to {endpoint}, auth header keys: {header_keys}")
 
     except Exception as e:
         log(f"OTel initialisation failed, telemetry disabled: {e}", is_warning=True)
