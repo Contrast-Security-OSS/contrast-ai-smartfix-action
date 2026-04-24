@@ -77,12 +77,25 @@ def initialize_otel(config) -> None:
     Reads OTEL_EXPORTER_OTLP_ENDPOINT (or the traces-specific variant). If neither
     is set, returns immediately leaving the SDK default NoOpTracerProvider in place.
 
+    Also sets OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT based on
+    ENABLE_FULL_TELEMETRY so that instrumentation libraries (LiteLLM, ADK) do not
+    attach prompt/completion content to spans unless the operator has opted in.
+    Uses setdefault so an explicit env-var override always wins.
+
     Args:
         config: Config object with VERSION, CONTRAST_ORG_ID, GITHUB_SERVER_URL,
                 GITHUB_REPOSITORY attributes.
     """
     global _tracer_provider, _meter_provider, _shutdown_called
     _shutdown_called = False
+
+    # Wire prompt/completion content capture to ENABLE_FULL_TELEMETRY.
+    # Instrumentation libraries (LiteLLM, ADK) respect this env var — when false
+    # they omit gen_ai.prompt / gen_ai.completion span attributes.
+    os.environ.setdefault(
+        "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT",
+        "true" if config.ENABLE_FULL_TELEMETRY else "false"
+    )
 
     base_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
     traces_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")
