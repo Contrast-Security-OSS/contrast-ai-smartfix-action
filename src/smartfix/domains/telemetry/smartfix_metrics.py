@@ -125,8 +125,8 @@ def _get_llm_retries_counter():
 # Public recording helpers
 # ---------------------------------------------------------------------------
 
-def record_vulnerability_duration(elapsed_s: float, outcome: str, rule_name: str,
-                                   language: str, source: str) -> None:
+def record_vulnerability_duration(
+        elapsed_s: float, outcome: str, rule_name: str, language: str, source: str) -> None:
     """Record end-to-end vulnerability fix duration.
 
     Args:
@@ -165,9 +165,9 @@ def record_pr_attempt(outcome: str, rule_name: str, coding_agent: str) -> None:
         pass
 
 
-def record_llm_call_tokens(input_tokens: int, output_tokens: int,
-                            cache_read_tokens: int, cache_write_tokens: int,
-                            model: str) -> None:
+def record_llm_call_tokens(
+        input_tokens: int, output_tokens: int,
+        cache_read_tokens: int, cache_write_tokens: int, model: str) -> None:
     """Record token usage for a single LLM call.
 
     Counters accumulate across calls, yielding per-vulnerability totals when
