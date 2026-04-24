@@ -135,7 +135,6 @@ class TestRecordVulnerabilityDuration(unittest.TestCase):
         import src.smartfix.domains.telemetry.smartfix_metrics as m
         m.record_vulnerability_duration(1.0, "failure", "xss", None, "runtime")
 
-        _, attrs = self.mock_histogram.record.call_args[0], self.mock_histogram.record.call_args[0]
         call_kwargs = self.mock_histogram.record.call_args
         self.assertEqual(call_kwargs[0][1]["language"], "unknown")
 
