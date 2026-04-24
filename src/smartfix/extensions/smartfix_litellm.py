@@ -37,8 +37,40 @@ from opentelemetry import context as otel_context
 from opentelemetry.trace import StatusCode
 
 from src.smartfix.domains.telemetry import otel_provider
+from src.smartfix.domains.telemetry import smartfix_metrics
 from src.config import get_config
 from src.utils import debug_log, log
+
+# GenAI semantic convention metrics (OTel spec: gen-ai-metrics)
+# Lazily initialised so that get_meter() is called after initialize_otel() has installed
+# the real MeterProvider.  Module-level creation runs before initialize_otel(), which means
+# get_meter() would return a no-op meter from the SDK default and all record() calls would
+# be silently discarded.
+_token_usage_histogram = None
+_operation_duration_histogram = None
+
+
+def _get_token_usage_histogram():
+    global _token_usage_histogram
+    if _token_usage_histogram is None:
+        _token_usage_histogram = otel_provider.get_meter("smartfix.litellm").create_histogram(
+            name="gen_ai.client.token.usage",
+            unit="{token}",
+            description="Number of input and output tokens used.",
+        )
+    return _token_usage_histogram
+
+
+def _get_operation_duration_histogram():
+    global _operation_duration_histogram
+    if _operation_duration_histogram is None:
+        _operation_duration_histogram = otel_provider.get_meter("smartfix.litellm").create_histogram(
+            name="gen_ai.client.operation.duration",
+            unit="s",
+            description="GenAI operation duration.",
+        )
+    return _operation_duration_histogram
+
 
 # Suppress LiteLLM's "Give Feedback" and "LiteLLM.Info" messages unless debugging
 litellm.suppress_debug_info = os.environ.get("DEBUG_MODE", "").lower() != "true"
@@ -434,13 +466,15 @@ class SmartFixLiteLlm(LiteLlm):
         Raises:
             The last exception if all retries are exhausted
         """
+        import time
         last_error = None
         # Avoid eagerly evaluating self.model (which may be a mock attribute in tests)
         model = completion_args["model"] if "model" in completion_args else self.model
+        provider_name = _derive_system(model)
 
         for attempt in range(self._max_retries):
             with otel_provider.start_span(f"chat {model}", context=self._otel_context) as llm_span:
-                llm_span.set_attribute("gen_ai.system", _derive_system(model))
+                llm_span.set_attribute("gen_ai.system", provider_name)
                 llm_span.set_attribute("gen_ai.request.model", model)
                 llm_span.set_attribute("gen_ai.operation.name", "chat")
                 llm_span.set_attribute("contrast.smartfix.retry_attempt", attempt)
@@ -448,8 +482,10 @@ class SmartFixLiteLlm(LiteLlm):
                 if max_tokens is not None:
                     llm_span.set_attribute("gen_ai.request.max_tokens", max_tokens)
 
+                t_start = time.monotonic()
                 try:
                     response = await self.llm_client.acompletion(**completion_args)
+                    elapsed = time.monotonic() - t_start
 
                     input_tokens, output_tokens, cache_read, cache_write = self._log_cost_analysis(response)
 
@@ -462,13 +498,45 @@ class SmartFixLiteLlm(LiteLlm):
                     if cache_write:
                         llm_span.set_attribute("gen_ai.usage.cache_creation.input_tokens", cache_write)
 
+                    # GenAI semantic convention metrics
+                    base_attrs = {
+                        "gen_ai.operation.name": "chat",
+                        "gen_ai.provider.name": provider_name,
+                        "gen_ai.request.model": model,
+                        "gen_ai.response.model": response_model,
+                    }
+                    try:
+                        total_input = int(input_tokens or 0) + int(cache_read or 0) + int(cache_write or 0)
+                        _get_token_usage_histogram().record(
+                            total_input, {**base_attrs, "gen_ai.token.type": "input"}
+                        )
+                        _get_token_usage_histogram().record(
+                            int(output_tokens or 0), {**base_attrs, "gen_ai.token.type": "output"}
+                        )
+                        _get_operation_duration_histogram().record(elapsed, base_attrs)
+                        # SmartFix domain metrics
+                        smartfix_metrics.record_llm_duration(elapsed, provider_name, model)
+                        smartfix_metrics.record_llm_call_tokens(
+                            int(input_tokens or 0), int(output_tokens or 0),
+                            int(cache_read or 0), int(cache_write or 0), model
+                        )
+                    except Exception as metric_err:
+                        debug_log(f"Failed to record OTel metrics: {metric_err}")
+
                     return response
 
                 except Exception as e:
+                    elapsed = time.monotonic() - t_start
                     last_error = e
                     llm_span.set_status(StatusCode.ERROR)
                     llm_span.set_attribute("error.type", type(e).__name__)
                     llm_span.record_exception(e)
+                    _get_operation_duration_histogram().record(elapsed, {
+                        "gen_ai.operation.name": "chat",
+                        "gen_ai.provider.name": provider_name,
+                        "gen_ai.request.model": model,
+                        "error.type": type(e).__name__,
+                    })
 
                     if not self._is_retryable_exception(e):
                         log(f"LLM call failed with non-retryable error: {type(e).__name__}: {e}", is_error=True)
@@ -478,6 +546,8 @@ class SmartFixLiteLlm(LiteLlm):
                         delay = self._initial_retry_delay * (self._retry_multiplier ** attempt)
                         jitter = delay * random.uniform(0, 0.25)
                         delay += jitter
+
+                        smartfix_metrics.record_llm_retry(model, type(e).__name__)
 
                         debug_log(
                             f"LLM call failed (attempt {attempt + 1}/{self._max_retries}), retrying: "

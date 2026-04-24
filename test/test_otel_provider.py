@@ -36,6 +36,7 @@ def _config(**kwargs):
         GITHUB_SERVER_URL="https://github.com",
         GITHUB_REPOSITORY="Contrast-Security-OSS/contrast-ai-smartfix-action",
         GITHUB_RUN_ID="12345678",
+        ENABLE_FULL_TELEMETRY=True,
     )
     defaults.update(kwargs)
     return SimpleNamespace(**defaults)
@@ -48,7 +49,11 @@ class TestOtelProvider(unittest.TestCase):
         otel_provider._tracer_provider = None
         otel_provider._shutdown_called = False
         # Clear any OTel-related env vars set in previous tests.
-        for var in ("OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"):
+        for var in (
+            "OTEL_EXPORTER_OTLP_ENDPOINT",
+            "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
+            "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT",
+        ):
             os.environ.pop(var, None)
         # Reset global tracer provider to a clean no-op SDK provider.
         # We use a bare TracerProvider (no exporters) so spans are valid objects
@@ -61,6 +66,7 @@ class TestOtelProvider(unittest.TestCase):
         trace.set_tracer_provider(TracerProvider())
         otel_provider._tracer_provider = None
         otel_provider._shutdown_called = False
+        os.environ.pop("OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT", None)
 
     # --- initialize_otel ---
 
@@ -139,6 +145,39 @@ class TestOtelProvider(unittest.TestCase):
             call.kwargs.get("is_warning") for call in mock_log.call_args_list
         )
         self.assertTrue(called_with_warning, "Expected log(is_warning=True) on setup failure")
+
+    # --- OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT ---
+
+    def test_genai_capture_content_set_to_false_when_full_telemetry_disabled(self):
+        """When ENABLE_FULL_TELEMETRY=False, capture-content env var is set to 'false'."""
+        otel_provider.initialize_otel(_config(ENABLE_FULL_TELEMETRY=False))
+        self.assertEqual(
+            os.environ.get("OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"), "false"
+        )
+
+    def test_genai_capture_content_set_to_true_when_full_telemetry_enabled(self):
+        """When ENABLE_FULL_TELEMETRY=True, capture-content env var is set to 'true'."""
+        otel_provider.initialize_otel(_config(ENABLE_FULL_TELEMETRY=True))
+        self.assertEqual(
+            os.environ.get("OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"), "true"
+        )
+
+    def test_genai_capture_content_defaults_to_true_when_attribute_absent(self):
+        """When config lacks ENABLE_FULL_TELEMETRY, capture-content defaults to 'true'."""
+        # _config() does not set ENABLE_FULL_TELEMETRY by default.
+        otel_provider.initialize_otel(_config())
+        self.assertEqual(
+            os.environ.get("OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"), "true"
+        )
+
+    def test_genai_capture_content_respects_existing_env_override(self):
+        """An explicit env var set before initialize_otel() is not overwritten (setdefault)."""
+        os.environ["OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"] = "false"
+        # Even with ENABLE_FULL_TELEMETRY=True, the pre-existing override must win.
+        otel_provider.initialize_otel(_config(ENABLE_FULL_TELEMETRY=True))
+        self.assertEqual(
+            os.environ.get("OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"), "false"
+        )
 
     # --- shutdown_otel ---
 
