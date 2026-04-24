@@ -52,6 +52,12 @@ from opentelemetry.sdk.resources import Resource, SERVICE_NAME
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
+try:
+    from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+    _HTTPX_INSTRUMENTATION_AVAILABLE = True
+except ImportError:
+    _HTTPX_INSTRUMENTATION_AVAILABLE = False
+
 from src.utils import log
 
 _tracer_provider = None
@@ -140,6 +146,12 @@ def initialize_otel(config) -> None:
         metrics.set_meter_provider(meter_provider)
         _meter_provider = meter_provider
 
+        # --- HTTP client auto-instrumentation ---
+        # Instruments httpx (used by LiteLLM) to emit http.client.* metrics
+        # (duration, request/response size) for every outbound LLM API call.
+        if _HTTPX_INSTRUMENTATION_AVAILABLE:
+            HTTPXClientInstrumentor().instrument()
+
         header_keys = list(headers.keys()) if headers else []
         log(f"OTel telemetry enabled: exporting to {endpoint}, auth header keys: {header_keys}")
 
@@ -203,3 +215,9 @@ def shutdown_otel() -> None:
             _meter_provider.shutdown()
         except Exception as e:
             log(f"OTel metrics shutdown error (non-fatal): {e}", is_warning=True)
+
+    if _HTTPX_INSTRUMENTATION_AVAILABLE:
+        try:
+            HTTPXClientInstrumentor().uninstrument()
+        except Exception:
+            pass
