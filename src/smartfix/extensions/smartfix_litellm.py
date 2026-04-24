@@ -37,6 +37,7 @@ from opentelemetry import context as otel_context
 from opentelemetry.trace import StatusCode
 
 from src.smartfix.domains.telemetry import otel_provider
+from src.smartfix.domains.telemetry import smartfix_metrics
 from src.config import get_config
 from src.utils import debug_log, log
 
@@ -513,6 +514,12 @@ class SmartFixLiteLlm(LiteLlm):
                             int(output_tokens or 0), {**base_attrs, "gen_ai.token.type": "output"}
                         )
                         _get_operation_duration_histogram().record(elapsed, base_attrs)
+                        # SmartFix domain metrics
+                        smartfix_metrics.record_llm_duration(elapsed, provider_name, model)
+                        smartfix_metrics.record_llm_call_tokens(
+                            int(input_tokens or 0), int(output_tokens or 0),
+                            int(cache_read or 0), int(cache_write or 0), model
+                        )
                     except Exception as metric_err:
                         debug_log(f"Failed to record OTel metrics: {metric_err}")
 
@@ -539,6 +546,8 @@ class SmartFixLiteLlm(LiteLlm):
                         delay = self._initial_retry_delay * (self._retry_multiplier ** attempt)
                         jitter = delay * random.uniform(0, 0.25)
                         delay += jitter
+
+                        smartfix_metrics.record_llm_retry(model, type(e).__name__)
 
                         debug_log(
                             f"LLM call failed (attempt {attempt + 1}/{self._max_retries}), retrying: "
