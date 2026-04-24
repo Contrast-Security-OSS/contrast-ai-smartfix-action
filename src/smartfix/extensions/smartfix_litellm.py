@@ -41,17 +41,35 @@ from src.config import get_config
 from src.utils import debug_log, log
 
 # GenAI semantic convention metrics (OTel spec: gen-ai-metrics)
-_meter = otel_provider.get_meter("smartfix.litellm")
-_token_usage_histogram = _meter.create_histogram(
-    name="gen_ai.client.token.usage",
-    unit="{token}",
-    description="Number of input and output tokens used.",
-)
-_operation_duration_histogram = _meter.create_histogram(
-    name="gen_ai.client.operation.duration",
-    unit="s",
-    description="GenAI operation duration.",
-)
+# Lazily initialised so that get_meter() is called after initialize_otel() has installed
+# the real MeterProvider.  Module-level creation runs before initialize_otel(), which means
+# get_meter() would return a no-op meter from the SDK default and all record() calls would
+# be silently discarded.
+_token_usage_histogram = None
+_operation_duration_histogram = None
+
+
+def _get_token_usage_histogram():
+    global _token_usage_histogram
+    if _token_usage_histogram is None:
+        _token_usage_histogram = otel_provider.get_meter("smartfix.litellm").create_histogram(
+            name="gen_ai.client.token.usage",
+            unit="{token}",
+            description="Number of input and output tokens used.",
+        )
+    return _token_usage_histogram
+
+
+def _get_operation_duration_histogram():
+    global _operation_duration_histogram
+    if _operation_duration_histogram is None:
+        _operation_duration_histogram = otel_provider.get_meter("smartfix.litellm").create_histogram(
+            name="gen_ai.client.operation.duration",
+            unit="s",
+            description="GenAI operation duration.",
+        )
+    return _operation_duration_histogram
+
 
 # Suppress LiteLLM's "Give Feedback" and "LiteLLM.Info" messages unless debugging
 litellm.suppress_debug_info = os.environ.get("DEBUG_MODE", "").lower() != "true"
@@ -488,13 +506,13 @@ class SmartFixLiteLlm(LiteLlm):
                     }
                     try:
                         total_input = int(input_tokens or 0) + int(cache_read or 0) + int(cache_write or 0)
-                        _token_usage_histogram.record(
+                        _get_token_usage_histogram().record(
                             total_input, {**base_attrs, "gen_ai.token.type": "input"}
                         )
-                        _token_usage_histogram.record(
+                        _get_token_usage_histogram().record(
                             int(output_tokens or 0), {**base_attrs, "gen_ai.token.type": "output"}
                         )
-                        _operation_duration_histogram.record(elapsed, base_attrs)
+                        _get_operation_duration_histogram().record(elapsed, base_attrs)
                     except Exception as metric_err:
                         debug_log(f"Failed to record OTel metrics: {metric_err}")
 
@@ -506,7 +524,7 @@ class SmartFixLiteLlm(LiteLlm):
                     llm_span.set_status(StatusCode.ERROR)
                     llm_span.set_attribute("error.type", type(e).__name__)
                     llm_span.record_exception(e)
-                    _operation_duration_histogram.record(elapsed, {
+                    _get_operation_duration_histogram().record(elapsed, {
                         "gen_ai.operation.name": "chat",
                         "gen_ai.provider.name": provider_name,
                         "gen_ai.request.model": model,
