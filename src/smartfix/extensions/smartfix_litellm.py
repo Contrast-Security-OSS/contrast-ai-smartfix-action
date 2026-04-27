@@ -531,12 +531,15 @@ class SmartFixLiteLlm(LiteLlm):
                     llm_span.set_status(StatusCode.ERROR)
                     llm_span.set_attribute("error.type", type(e).__name__)
                     llm_span.record_exception(e)
-                    _get_operation_duration_histogram().record(elapsed, {
-                        "gen_ai.operation.name": "chat",
-                        "gen_ai.provider.name": provider_name,
-                        "gen_ai.request.model": model,
-                        "error.type": type(e).__name__,
-                    })
+                    try:
+                        _get_operation_duration_histogram().record(elapsed, {
+                            "gen_ai.operation.name": "chat",
+                            "gen_ai.provider.name": provider_name,
+                            "gen_ai.request.model": model,
+                            "error.type": type(e).__name__,
+                        })
+                    except Exception:
+                        pass
 
                     if not self._is_retryable_exception(e):
                         log(f"LLM call failed with non-retryable error: {type(e).__name__}: {e}", is_error=True)
