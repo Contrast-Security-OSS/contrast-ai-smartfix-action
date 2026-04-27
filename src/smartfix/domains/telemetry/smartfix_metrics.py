@@ -38,6 +38,8 @@ Per-vulnerability (emitted from main.py):
   smartfix.pr.count                counter       PR creation attempts
 """
 
+from typing import Optional
+
 from src.smartfix.domains.telemetry import otel_provider
 
 _METER_NAME = "smartfix"
@@ -126,7 +128,8 @@ def _get_llm_retries_counter():
 # ---------------------------------------------------------------------------
 
 def record_vulnerability_duration(
-        elapsed_s: float, outcome: str, rule_name: str, language: str, source: str) -> None:
+    elapsed_s: float, outcome: str, rule_name: str, language: Optional[str], source: str,
+) -> None:
     """Record end-to-end vulnerability fix duration.
 
     Args:
@@ -166,8 +169,9 @@ def record_pr_attempt(outcome: str, rule_name: str, coding_agent: str) -> None:
 
 
 def record_llm_call_tokens(
-        input_tokens: int, output_tokens: int,
-        cache_read_tokens: int, cache_write_tokens: int, model: str) -> None:
+    input_tokens: int, output_tokens: int,
+    cache_read_tokens: int, cache_write_tokens: int, model: str,
+) -> None:
     """Record token usage for a single LLM call.
 
     Counters accumulate across calls, yielding per-vulnerability totals when
