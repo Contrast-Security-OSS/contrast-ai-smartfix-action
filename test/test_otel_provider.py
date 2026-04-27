@@ -180,9 +180,8 @@ class TestOtelProvider(unittest.TestCase):
             os.environ.get("OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"), "true"
         )
 
-    def test_genai_capture_content_defaults_to_true_when_attribute_absent(self):
-        """When config lacks ENABLE_FULL_TELEMETRY, capture-content defaults to 'true'."""
-        # _config() does not set ENABLE_FULL_TELEMETRY by default.
+    def test_genai_capture_content_defaults_to_true_when_full_telemetry_not_explicitly_set(self):
+        """When ENABLE_FULL_TELEMETRY is not passed to _config(), it defaults to True."""
         otel_provider.initialize_otel(_config())
         self.assertEqual(
             os.environ.get("OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"), "true"
