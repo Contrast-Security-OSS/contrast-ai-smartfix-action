@@ -110,6 +110,24 @@ class TestOtelProvider(unittest.TestCase):
 
         self.assertIsNotNone(otel_provider._tracer_provider)
 
+    @patch("src.smartfix.domains.telemetry.otel_provider.OTLPMetricExporter")
+    @patch("src.smartfix.domains.telemetry.otel_provider.OTLPSpanExporter")
+    def test_metrics_url_does_not_include_traces_path_when_only_traces_endpoint_set(
+        self, mock_span_cls, mock_metric_cls
+    ):
+        """When only OTEL_EXPORTER_OTLP_TRACES_ENDPOINT is set, metrics must not export to .../v1/traces/v1/metrics."""
+        os.environ["OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"] = "http://localhost:4318/v1/traces"
+        mock_span_cls.return_value = MagicMock()
+        mock_metric_cls.return_value = MagicMock()
+
+        otel_provider.initialize_otel(_config())
+
+        mock_metric_cls.assert_called_once()
+        self.assertEqual(
+            mock_metric_cls.call_args.kwargs["endpoint"],
+            "http://localhost:4318/v1/metrics",
+        )
+
     def test_initialize_is_noop_when_endpoint_absent(self):
         """initialize_otel() does nothing when OTEL_EXPORTER_OTLP_ENDPOINT is not set."""
         otel_provider.initialize_otel(_config())

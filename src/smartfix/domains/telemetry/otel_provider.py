@@ -130,7 +130,11 @@ def initialize_otel(config) -> None:
         # When using OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, use as-is (already the full URL).
         base = endpoint.rstrip("/")
         traces_url = traces_endpoint if traces_endpoint else base + "/v1/traces"
-        metrics_url = base + "/v1/metrics"
+        # Derive the metrics base from the explicit base endpoint when available; otherwise
+        # strip the /v1/traces signal path before appending /v1/metrics to avoid
+        # constructing .../v1/traces/v1/metrics when only the traces endpoint is set.
+        metrics_base = base_endpoint.rstrip("/") if base_endpoint else base.removesuffix("/v1/traces")
+        metrics_url = metrics_base + "/v1/metrics"
 
         # --- Traces ---
         span_exporter = OTLPSpanExporter(endpoint=traces_url, **exporter_kwargs)
