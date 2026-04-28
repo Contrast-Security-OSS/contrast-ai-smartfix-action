@@ -385,6 +385,10 @@ class TestDeriveSystem(unittest.TestCase):
     def test_contrast_model_returns_contrast(self):
         self.assertEqual(_derive_system("contrast/claude-3-7-sonnet"), "contrast")
 
+    def test_contrast_claude_sonnet_4_5_returns_contrast(self):
+        """Production Contrast LLM model string must report provider as 'contrast', not 'anthropic'."""
+        self.assertEqual(_derive_system("contrast/claude-sonnet-4-5"), "contrast")
+
     def test_anthropic_prefix_returns_anthropic(self):
         self.assertEqual(_derive_system("anthropic/claude-3-opus"), "anthropic")
 
