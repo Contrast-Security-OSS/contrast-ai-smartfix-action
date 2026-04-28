@@ -93,7 +93,7 @@ if [[ "$START" == "true" ]]; then
 
     echo "Waiting for Grafana to be ready..."
     for i in $(seq 1 30); do
-        if curl -sf "http://localhost:3000/api/health" >/dev/null 2>&1; then
+        if curl -sf --max-time 5 "http://localhost:3000/api/health" >/dev/null 2>&1; then
             echo "✅ Grafana ready  (http://localhost:3000)"
             break
         fi
@@ -103,7 +103,7 @@ if [[ "$START" == "true" ]]; then
 
     echo "Waiting for Tempo to be ready..."
     for i in $(seq 1 15); do
-        if curl -sf "${TEMPO_URL}/api/search?limit=1" >/dev/null 2>&1; then
+        if curl -sf --max-time 5 "${TEMPO_URL}/api/search?limit=1" >/dev/null 2>&1; then
             echo "✅ Tempo ready  ($TEMPO_URL)"
             break
         fi

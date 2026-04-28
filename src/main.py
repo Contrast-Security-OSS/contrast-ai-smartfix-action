@@ -20,12 +20,14 @@
 import atexit
 import sys
 import re
+import time
 from datetime import datetime, timedelta
 from urllib.parse import urlparse
 
 # Import configurations and utilities
 from src.config import get_config
 from src.smartfix.domains.telemetry import otel_provider
+from src.smartfix.domains.telemetry import smartfix_metrics
 from src.smartfix.shared.coding_agents import CodingAgents
 from src.utils import debug_log, log, error_exit
 from src.smartfix.domains.telemetry import telemetry_handler
@@ -335,6 +337,8 @@ def _main_impl(vuln_count):  # noqa: C901
         _op_files_modified = 0
         _op_pr_created = False
         _op_pr_url = ""
+        _op_outcome = "failure"
+        _op_fix_start = time.monotonic()
 
         with otel_provider.start_span("fix-vulnerability") as op_span:
             op_span.set_attribute("contrast.finding.fingerprint", vulnerability.uuid)
@@ -459,6 +463,7 @@ def _main_impl(vuln_count):  # noqa: C901
                 if not git_ops.check_status():
                     # No changes detected - agent didn't make any modifications
                     log("No changes detected from agent execution. Notifying backend and skipping PR creation.")
+                    _op_outcome = "no_code_changed"
                     git_ops.cleanup_branch(new_branch_name)
                     contrast_api.notify_remediation_failed(
                         remediation_id=remediation_id,
@@ -606,12 +611,21 @@ def _main_impl(vuln_count):  # noqa: C901
 
                     telemetry_handler.update_telemetry("resultInfo.prCreated", pr_creation_success)
 
+                    pr_metric_outcome = "success" if pr_creation_success else "failure"
+                    smartfix_metrics.record_pr_attempt(
+                        outcome=pr_metric_outcome,
+                        rule_name=vulnerability.rule_name,
+                        coding_agent=config.CODING_AGENT.lower(),
+                    )
+
                     if not pr_creation_success:
                         log("\n--- PR creation failed ---")
+                        _op_outcome = "pr_failed"
                         error_exit(remediation_id, FailureCategory.GENERATE_PR_FAILURE.value)
 
                     _op_pr_created = True
                     _op_pr_url = pr_url
+                    _op_outcome = "success"
 
                     processed_one = True  # Mark that we successfully processed one
                     log(f"\n--- Successfully processed vulnerability {vuln_uuid}. Continuing to look for next vulnerability... ---")
@@ -633,6 +647,13 @@ def _main_impl(vuln_count):  # noqa: C901
                 op_span.set_attribute("contrast.smartfix.pr_created", _op_pr_created)
                 if _op_pr_url:
                     op_span.set_attribute("contrast.smartfix.pr_url", _op_pr_url)
+                smartfix_metrics.record_vulnerability_duration(
+                    elapsed_s=time.monotonic() - _op_fix_start,
+                    outcome=_op_outcome,
+                    rule_name=vulnerability.rule_name,
+                    language=lang or "unknown",
+                    source="runtime",
+                )
 
     # Calculate total runtime
     end_time = datetime.now()
