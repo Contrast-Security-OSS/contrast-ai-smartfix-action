@@ -26,7 +26,7 @@ for resolving the active application ID:
   1. contrast_app_id (singular) set → use it directly (backward compat)
   2. contrast_app_ids (plural) set, singular not set → use first element
   3. Both set → singular wins
-  4. Neither set → ConfigurationError
+  4. Neither set → APP_ID=None, APP_IDS=[] (callers that need app IDs validate)
 """
 
 import unittest
@@ -87,13 +87,18 @@ class TestContrastAppIds(unittest.TestCase):
         self.assertEqual(config.CONTRAST_APP_ID, 'singular-app')
         self.assertEqual(config.CONTRAST_APP_IDS, ['singular-app'])
 
-    def test_neither_set_raises_config_error(self):
-        """When neither contrast_app_id nor contrast_app_ids is set, raises ConfigurationError."""
+    def test_neither_set_results_in_none_app_id(self):
+        """When neither contrast_app_id nor contrast_app_ids is set, APP_ID is None and APP_IDS is [].
+
+        Merge and closed handlers don't need app IDs — the backend resolves by remediation ID.
+        Callers that require app IDs (generate_fix flow) validate after config init.
+        """
         env = self._get_base_env()
         # Intentionally: no CONTRAST_APP_ID and no CONTRAST_APP_IDS
 
-        with self.assertRaises(ConfigurationError):
-            Config(env=env, testing=False)
+        config = Config(env=env, testing=False)
+        self.assertIsNone(config.CONTRAST_APP_ID)
+        self.assertEqual(config.CONTRAST_APP_IDS, [])
 
     # =========================================================================
     # New behavior: contrast_app_ids (plural) JSON array
@@ -204,20 +209,6 @@ class TestContrastAppIds(unittest.TestCase):
 
         self.assertEqual(config.CONTRAST_APP_IDS, ['app-id-1', 'app-id-2'])
         self.assertEqual(config.CONTRAST_APP_ID, 'app-id-1')
-
-    # =========================================================================
-    # _check_contrast_config_values_exist: CONTRAST_APP_IDS non-empty guard
-    # =========================================================================
-
-    def test_check_config_raises_when_app_ids_empty(self):
-        """_check_contrast_config_values_exist raises ConfigurationError when CONTRAST_APP_IDS is empty."""
-        env = self._get_base_env()
-        env['CONTRAST_APP_ID'] = 'my-app'
-        config = Config(env=env, testing=False)
-        # Manually corrupt the list to simulate the guard being needed
-        config.CONTRAST_APP_IDS = []
-        with self.assertRaises(ConfigurationError):
-            config._check_contrast_config_values_exist()
 
     # =========================================================================
     # Testing mode: defaults unchanged
