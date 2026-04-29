@@ -87,7 +87,7 @@ def _main_impl(vuln_count):  # noqa: C901
     debug_log(f"Start time: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
     # --- Validate app IDs ---
-    if not config.CONTRAST_APP_IDS:
+    if not config.CONTRAST_APP_ID and not config.CONTRAST_APP_IDS:
         log("Error: Must set either contrast_app_id or contrast_app_ids. "
             "Use contrast_app_id for a single application or "
             "contrast_app_ids for a JSON array of application IDs.", is_error=True)
