@@ -24,10 +24,12 @@ Handles TracerProvider and MeterProvider lifecycle for SmartFix.
 
 Design notes:
 - Enabled iff OTEL_EXPORTER_OTLP_ENDPOINT (or OTEL_EXPORTER_OTLP_TRACES_ENDPOINT) is set.
+- Auth headers (Authorization, API-Key) are always derived from Contrast config credentials
+  and are never overridable via environment variables. This keeps auth coupled to the Contrast
+  service account and prevents accidental misconfiguration.
 - Both OTLPSpanExporter and OTLPMetricExporter are constructed with explicit endpoint and
-  headers parsed from env vars. This ensures auth headers are used even when the action runs
+  headers passed directly. This ensures auth headers are used even when the action runs
   as a GitHub composite action, where step-level env vars may not propagate automatically.
-- Headers are parsed from OTEL_EXPORTER_OTLP_HEADERS (comma-separated key=value pairs).
 - Header keys (not values) are logged to confirm auth headers are present.
 - Traces export to <base_endpoint>/v1/traces, metrics to <base_endpoint>/v1/metrics.
 - When disabled, the default SDK NoOpTracerProvider remains — all span and metric calls are
@@ -65,23 +67,15 @@ _meter_provider = None
 _shutdown_called = False
 
 
-def _parse_headers(headers_raw: str) -> dict:
-    """Parse OTEL_EXPORTER_OTLP_HEADERS value (comma-separated key=value pairs) into a dict."""
-    headers = {}
-    if headers_raw:
-        for part in headers_raw.split(","):
-            if "=" in part:
-                k, v = part.split("=", 1)
-                headers[k.strip()] = v.strip()
-    return headers
-
-
 def initialize_otel(config) -> None:
     """
     Initialise the OTel TracerProvider and MeterProvider if an OTLP endpoint is configured.
 
     Reads OTEL_EXPORTER_OTLP_ENDPOINT (or the traces-specific variant). If neither
     is set, returns immediately leaving the SDK default NoOpTracerProvider in place.
+
+    Auth headers are always built from config.CONTRAST_AUTHORIZATION_KEY and
+    config.CONTRAST_API_KEY — they are not read from any environment variable.
 
     Also sets OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT based on
     ENABLE_FULL_TELEMETRY so that instrumentation libraries (LiteLLM, ADK) do not
@@ -90,7 +84,7 @@ def initialize_otel(config) -> None:
 
     Args:
         config: Config object with VERSION, CONTRAST_ORG_ID, GITHUB_SERVER_URL,
-                GITHUB_REPOSITORY attributes.
+                GITHUB_REPOSITORY, CONTRAST_AUTHORIZATION_KEY, CONTRAST_API_KEY attributes.
     """
     global _tracer_provider, _meter_provider, _shutdown_called
     _shutdown_called = False
@@ -120,11 +114,14 @@ def initialize_otel(config) -> None:
             "vcs.provider.name": "github",
         })
 
-        # Parse headers explicitly from env so they're passed directly to the exporters.
-        # This is necessary when running as a GitHub composite action where step-level
-        # env vars (OTEL_EXPORTER_OTLP_HEADERS) may not propagate automatically.
-        headers = _parse_headers(os.environ.get("OTEL_EXPORTER_OTLP_HEADERS", ""))
-        exporter_kwargs = {"headers": headers} if headers else {}
+        # Auth headers are always derived from Contrast credentials — not from any env var.
+        # This keeps telemetry auth coupled to the Contrast service account and ensures
+        # they propagate correctly within the GitHub composite action environment.
+        headers = {
+            "Authorization": config.CONTRAST_AUTHORIZATION_KEY,
+            "API-Key": config.CONTRAST_API_KEY,
+        }
+        exporter_kwargs = {"headers": headers}
 
         # When using OTEL_EXPORTER_OTLP_ENDPOINT (base URL), append signal-specific paths.
         # When using OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, use as-is (already the full URL).
