@@ -1485,6 +1485,26 @@ class TestGetPrChangedFiles(unittest.TestCase):
 
         self.assertEqual(result, [])
 
+    @patch('src.github.github_operations.run_command')
+    def test_command_includes_pr_number_and_repo(self, mock_run):
+        """get_pr_changed_files passes the PR number and repo to the gh command."""
+        mock_run.return_value = json.dumps([{"path": "src/main.py"}])
+
+        self.github_ops.get_pr_changed_files(99)
+
+        command = mock_run.call_args[0][0]
+        self.assertIn("99", command)
+        self.assertIn("test-owner/test-repo", command)
+
+    @patch('src.github.github_operations.run_command')
+    def test_returns_empty_list_on_null_or_empty_output(self, mock_run):
+        """get_pr_changed_files returns empty list when gh output is null, [], or blank."""
+        for empty_output in ("null", "[]", "", "  "):
+            with self.subTest(output=repr(empty_output)):
+                mock_run.return_value = empty_output
+                result = self.github_ops.get_pr_changed_files(42)
+                self.assertEqual(result, [])
+
 
 class TestAddReviewersToPr(unittest.TestCase):
 
@@ -1524,6 +1544,28 @@ class TestAddReviewersToPr(unittest.TestCase):
         result = self.github_ops.add_reviewers_to_pr(42, set())
 
         self.assertTrue(result)
+
+    @patch('src.github.github_operations.run_command')
+    def test_command_includes_pr_number_and_repo(self, mock_run):
+        """add_reviewers_to_pr passes the PR number and repo to the gh command."""
+        mock_run.return_value = ""
+
+        self.github_ops.add_reviewers_to_pr(99, {"alice"})
+
+        command = mock_run.call_args[0][0]
+        self.assertIn("99", command)
+        self.assertIn("test-owner/test-repo", command)
+
+    @patch('src.github.github_operations.run_command')
+    def test_reviewers_are_comma_joined_and_sorted(self, mock_run):
+        """add_reviewers_to_pr passes reviewers as a sorted comma-separated string."""
+        mock_run.return_value = ""
+
+        self.github_ops.add_reviewers_to_pr(42, {"charlie", "alice", "bob"})
+
+        command = mock_run.call_args[0][0]
+        reviewer_arg_index = command.index("--add-reviewer") + 1
+        self.assertEqual(command[reviewer_arg_index], "alice,bob,charlie")
 
 
 if __name__ == '__main__':
