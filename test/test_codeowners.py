@@ -20,7 +20,6 @@
 
 """Tests for CODEOWNERS file parsing and reviewer resolution (TS-38988)."""
 
-import os
 import unittest
 from pathlib import Path
 import tempfile
