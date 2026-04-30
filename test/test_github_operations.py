@@ -1443,5 +1443,88 @@ class TestGitHubOperations(unittest.TestCase):
         self.assertIsNone(result)
 
 
+class TestGetPrChangedFiles(unittest.TestCase):
+
+    def setUp(self):
+        with patch('src.github.github_operations.get_config') as mock_config:
+            mock_config.return_value = MagicMock(
+                GITHUB_TOKEN="test-token",
+                GITHUB_REPOSITORY="test-owner/test-repo",
+                testing=True,
+                coding_agent=None
+            )
+            self.github_ops = GitHubOperations()
+
+    @patch('src.github.github_operations.run_command')
+    def test_returns_list_of_changed_file_paths(self, mock_run):
+        """get_pr_changed_files returns file paths from gh pr view output."""
+        mock_run.return_value = json.dumps([
+            {"path": "src/main.py"},
+            {"path": "src/config.py"},
+        ])
+
+        result = self.github_ops.get_pr_changed_files(42)
+
+        self.assertEqual(result, ["src/main.py", "src/config.py"])
+
+    @patch('src.github.github_operations.run_command')
+    def test_returns_empty_list_on_error(self, mock_run):
+        """get_pr_changed_files returns empty list when gh command fails."""
+        mock_run.side_effect = Exception("gh failed")
+
+        result = self.github_ops.get_pr_changed_files(42)
+
+        self.assertEqual(result, [])
+
+    @patch('src.github.github_operations.run_command')
+    def test_returns_empty_list_on_invalid_json(self, mock_run):
+        """get_pr_changed_files returns empty list on malformed output."""
+        mock_run.return_value = "not json"
+
+        result = self.github_ops.get_pr_changed_files(42)
+
+        self.assertEqual(result, [])
+
+
+class TestAddReviewersToPr(unittest.TestCase):
+
+    def setUp(self):
+        with patch('src.github.github_operations.get_config') as mock_config:
+            mock_config.return_value = MagicMock(
+                GITHUB_TOKEN="test-token",
+                GITHUB_REPOSITORY="test-owner/test-repo",
+                testing=True,
+                coding_agent=None
+            )
+            self.github_ops = GitHubOperations()
+
+    @patch('src.github.github_operations.run_command')
+    def test_calls_gh_pr_edit_with_reviewers(self, mock_run):
+        """add_reviewers_to_pr calls gh pr edit --add-reviewer."""
+        mock_run.return_value = ""
+
+        result = self.github_ops.add_reviewers_to_pr(42, {"alice", "bob"})
+
+        self.assertTrue(result)
+        call_args = mock_run.call_args[0][0]
+        self.assertIn("gh", call_args)
+        self.assertIn("--add-reviewer", call_args)
+
+    @patch('src.github.github_operations.run_command')
+    def test_returns_false_on_error(self, mock_run):
+        """add_reviewers_to_pr returns False when gh command fails."""
+        mock_run.side_effect = Exception("gh failed")
+
+        result = self.github_ops.add_reviewers_to_pr(42, {"alice"})
+
+        self.assertFalse(result)
+
+    def test_returns_true_with_empty_reviewers(self):
+        """add_reviewers_to_pr returns True immediately with empty set."""
+        result = self.github_ops.add_reviewers_to_pr(42, set())
+
+        self.assertTrue(result)
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -40,6 +40,7 @@ from src.smartfix.shared.failure_categories import FailureCategory
 from src import contrast_api
 from src.smartfix.domains.scm.git_operations import GitOperations
 from src.github.github_operations import GitHubOperations
+from src.github.codeowners import get_reviewers_for_files
 
 # Import domain models
 from src.smartfix.domains.vulnerability.context import RemediationContext, PromptConfiguration, BuildConfiguration, RepositoryConfiguration
@@ -569,6 +570,18 @@ def _main_impl(vuln_count):  # noqa: C901
                                 github_ops.add_labels_to_pr(pr_number, [label_name])
                             except Exception as label_err:
                                 log(f"Failed to add label to PR #{pr_number}: {label_err}", is_warning=True)
+
+                        # Assign CODEOWNERS reviewers (non-critical — don't fail the run)
+                        if pr_number:
+                            try:
+                                changed_files = github_ops.get_pr_changed_files(pr_number)
+                                reviewers = get_reviewers_for_files(changed_files, config.REPO_ROOT)
+                                if reviewers:
+                                    github_ops.add_reviewers_to_pr(pr_number, reviewers)
+                                else:
+                                    debug_log("No CODEOWNERS reviewers found for changed files")
+                            except Exception as reviewer_err:
+                                log(f"Failed to assign CODEOWNERS reviewers to PR #{pr_number}: {reviewer_err}", is_warning=True)
 
                         # Notify the Remediation backend service about the PR
                         if pr_number is None:
