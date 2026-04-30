@@ -17,7 +17,12 @@
 # #L%
 #
 
-"""CODEOWNERS file parsing and reviewer resolution (TS-38988)."""
+"""CODEOWNERS file parsing and reviewer resolution (TS-38988).
+
+This module is SCM-agnostic: the CODEOWNERS convention is supported by
+GitHub, GitLab, and Bitbucket. The parsing logic lives here, in the scm
+domain, rather than in any platform-specific package.
+"""
 
 import fnmatch
 from pathlib import Path

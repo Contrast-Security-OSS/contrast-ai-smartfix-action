@@ -40,7 +40,7 @@ from src.smartfix.shared.failure_categories import FailureCategory
 from src import contrast_api
 from src.smartfix.domains.scm.git_operations import GitOperations
 from src.github.github_operations import GitHubOperations
-from src.github.codeowners import get_reviewers_for_files
+from src.smartfix.domains.scm.codeowners import get_reviewers_for_files
 
 # Import domain models
 from src.smartfix.domains.vulnerability.context import RemediationContext, PromptConfiguration, BuildConfiguration, RepositoryConfiguration

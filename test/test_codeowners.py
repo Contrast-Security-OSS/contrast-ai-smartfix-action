@@ -24,7 +24,7 @@ import unittest
 from pathlib import Path
 import tempfile
 
-from src.github.codeowners import find_codeowners_file, get_reviewers_for_files
+from src.smartfix.domains.scm.codeowners import find_codeowners_file, get_reviewers_for_files
 
 
 class TestFindCodeownersFile(unittest.TestCase):
