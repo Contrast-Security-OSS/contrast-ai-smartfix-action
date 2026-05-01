@@ -123,6 +123,24 @@ class TestGetReviewersForFiles(unittest.TestCase):
 
         self.assertEqual(result, {"python-owner"})
 
+    def test_ignores_inline_comments(self):
+        """Inline comments (# ...) are stripped; only owners before the # are returned."""
+        self._write_codeowners("*.py @alice @bob # backend team\n")
+
+        result = get_reviewers_for_files(["src/main.py"], self.repo_root)
+
+        self.assertEqual(result, {"alice", "bob"})
+
+    def test_inline_comment_words_not_treated_as_owners(self):
+        """Words after an inline # are not returned as reviewer handles."""
+        self._write_codeowners("*.py @alice # backend team\n")
+
+        result = get_reviewers_for_files(["src/main.py"], self.repo_root)
+
+        self.assertNotIn("backend", result)
+        self.assertNotIn("team", result)
+        self.assertNotIn("#", result)
+
     def test_ignores_empty_lines(self):
         """Empty lines are ignored."""
         self._write_codeowners("\n*.py @python-owner\n\n")

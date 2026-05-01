@@ -79,8 +79,8 @@ def _parse_codeowners(path: Path) -> List[tuple]:
     """
     entries = []
     for line in path.read_text().splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
+        line = line.split("#")[0].strip()  # strip inline comments and surrounding whitespace
+        if not line:
             continue
         parts = line.split()
         pattern = parts[0]
