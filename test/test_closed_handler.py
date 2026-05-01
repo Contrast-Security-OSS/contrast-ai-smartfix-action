@@ -353,7 +353,6 @@ class TestClosedHandler(unittest.TestCase):
         mock_extract_remediation_id.assert_called_once()
         github_ops_mock.extract_issue_number_from_branch.assert_called_once_with("claude/issue-75-20250908-1723")
 
-
     def test_extract_remediation_info_copilot_sets_telemetry_string(self):
         """codingAgent telemetry is set to 'EXTERNAL-GITHUB_COPILOT' for copilot branches."""
         telemetry_calls = []
@@ -408,6 +407,7 @@ class TestClosedHandler(unittest.TestCase):
             (v for k, v in telemetry_calls if k == "additionalAttributes.codingAgent"), None
         )
         self.assertEqual(coding_agent_call, "INTERNAL-SMARTFIX")
+
 
 if __name__ == '__main__':
     unittest.main()
