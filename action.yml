@@ -395,6 +395,16 @@ runs:
         echo "✅ Environment setup complete"
         echo ""
 
+    # Set default OTel endpoint to the Contrast backend if not already configured.
+    # Users can override by setting OTEL_EXPORTER_OTLP_ENDPOINT in their workflow env.
+    # Auth headers are always derived from Contrast credentials in code — not configurable here.
+    - name: Set OTel defaults
+      shell: bash
+      run: |
+        if [ -z "${OTEL_EXPORTER_OTLP_ENDPOINT}" ]; then
+          echo "OTEL_EXPORTER_OTLP_ENDPOINT=https://${{ inputs.contrast_host }}/aiml/otel" >> $GITHUB_ENV
+        fi
+
     # Run the main SmartFix analysis script with clear start/end markers - cross-platform compatible
     - name: Run Contrast AI SmartFix
       shell: bash
