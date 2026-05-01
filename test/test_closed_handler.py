@@ -409,6 +409,5 @@ class TestClosedHandler(unittest.TestCase):
         )
         self.assertEqual(coding_agent_call, "INTERNAL-SMARTFIX")
 
-
 if __name__ == '__main__':
     unittest.main()
