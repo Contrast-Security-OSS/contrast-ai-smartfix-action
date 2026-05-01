@@ -1442,6 +1442,113 @@ class TestGitHubOperations(unittest.TestCase):
 
         self.assertIsNone(result)
 
+    @patch('src.github.github_operations.run_command')
+    def test_remove_labels_from_pr_success(self, mock_run_command):
+        """remove_labels_from_pr issues a single gh pr edit --remove-label call against the configured repo."""
+        mock_run_command.return_value = "Success"
+
+        result = self.github_ops.remove_labels_from_pr(
+            123, ["smartfix-id:abc", "contrast-vuln-id:VULN-xyz"]
+        )
+
+        self.assertTrue(result)
+        mock_run_command.assert_called_once_with(
+            [
+                "gh", "pr", "edit",
+                "--repo", "test-owner/test-repo",
+                "123",
+                "--remove-label", "smartfix-id:abc,contrast-vuln-id:VULN-xyz",
+            ],
+            env=unittest.mock.ANY,
+            check=True,
+        )
+
+    @patch('src.github.github_operations.run_command')
+    def test_remove_labels_from_pr_empty_list_noop(self, mock_run_command):
+        """remove_labels_from_pr with no labels returns True without invoking gh."""
+        result = self.github_ops.remove_labels_from_pr(123, [])
+
+        self.assertTrue(result)
+        mock_run_command.assert_not_called()
+
+    @patch('src.github.github_operations.run_command')
+    def test_remove_labels_from_pr_failure(self, mock_run_command):
+        """remove_labels_from_pr returns False when gh fails."""
+        mock_run_command.side_effect = Exception("gh failure")
+
+        result = self.github_ops.remove_labels_from_pr(123, ["smartfix-id:abc"])
+
+        self.assertFalse(result)
+
+    @patch('src.github.github_operations.run_command')
+    def test_remove_labels_from_issue_success(self, mock_run_command):
+        """remove_labels_from_issue issues a single gh issue edit --remove-label call."""
+        mock_run_command.return_value = "Success"
+
+        result = self.github_ops.remove_labels_from_issue(
+            45, ["smartfix-id:abc", "contrast-vuln-id:VULN-xyz"]
+        )
+
+        self.assertTrue(result)
+        mock_run_command.assert_called_once_with(
+            [
+                "gh", "issue", "edit",
+                "--repo", "test-owner/test-repo",
+                "45",
+                "--remove-label", "smartfix-id:abc,contrast-vuln-id:VULN-xyz",
+            ],
+            env=unittest.mock.ANY,
+            check=True,
+        )
+
+    @patch('src.github.github_operations.run_command')
+    def test_remove_labels_from_issue_empty_list_noop(self, mock_run_command):
+        """remove_labels_from_issue with no labels returns True without invoking gh."""
+        result = self.github_ops.remove_labels_from_issue(45, [])
+
+        self.assertTrue(result)
+        mock_run_command.assert_not_called()
+
+    @patch('src.github.github_operations.run_command')
+    def test_remove_labels_from_issue_failure(self, mock_run_command):
+        """remove_labels_from_issue returns False when gh fails."""
+        mock_run_command.side_effect = Exception("gh failure")
+
+        result = self.github_ops.remove_labels_from_issue(45, ["smartfix-id:abc"])
+
+        self.assertFalse(result)
+
+    def test_filter_smartfix_labels_dict_input(self):
+        """filter_smartfix_labels picks SmartFix-prefixed names from event-payload dicts."""
+        labels = [
+            {"name": "smartfix-id:abc"},
+            {"name": "wontfix"},
+            {"name": "contrast-vuln-id:VULN-xyz"},
+            {"name": "bug"},
+        ]
+
+        result = self.github_ops.filter_smartfix_labels(labels)
+
+        self.assertEqual(result, ["smartfix-id:abc", "contrast-vuln-id:VULN-xyz"])
+
+    def test_filter_smartfix_labels_string_input(self):
+        """filter_smartfix_labels also accepts plain name strings."""
+        labels = ["smartfix-id:abc", "wontfix", "contrast-vuln-id:VULN-xyz"]
+
+        result = self.github_ops.filter_smartfix_labels(labels)
+
+        self.assertEqual(result, ["smartfix-id:abc", "contrast-vuln-id:VULN-xyz"])
+
+    def test_filter_smartfix_labels_empty(self):
+        """filter_smartfix_labels returns [] for empty input."""
+        self.assertEqual(self.github_ops.filter_smartfix_labels([]), [])
+
+    def test_filter_smartfix_labels_none_match(self):
+        """filter_smartfix_labels returns [] when nothing matches the SmartFix prefixes."""
+        labels = [{"name": "bug"}, {"name": "wontfix"}, {"name": "smartfix"}]
+
+        self.assertEqual(self.github_ops.filter_smartfix_labels(labels), [])
+
 
 class TestGetPrChangedFiles(unittest.TestCase):
 

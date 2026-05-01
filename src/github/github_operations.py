@@ -31,7 +31,8 @@ from src.github.constants import (
     GITHUB_MAX_PR_BODY_SIZE,
     GITHUB_MAX_ISSUE_BODY_SIZE,
     GITHUB_PR_LIST_LIMIT,
-    GITHUB_WORKFLOW_RUN_LIMIT
+    GITHUB_WORKFLOW_RUN_LIMIT,
+    SMARTFIX_LABEL_PREFIXES,
 )
 
 
@@ -768,6 +769,37 @@ class GitHubOperations(ScmOperations):
             log(f"Failed to add labels to issue #{issue_number}: {e}", is_error=True)
             return False
 
+    def remove_labels_from_issue(self, issue_number: int, labels: List[str]) -> bool:
+        """
+        Remove labels from an existing issue.
+
+        Args:
+            issue_number: The issue number to remove labels from
+            labels: List of label names to remove
+
+        Returns:
+            bool: True if labels were successfully removed (or there was nothing to remove), False otherwise
+        """
+        if not labels:
+            debug_log("No labels provided to remove from issue")
+            return True
+
+        log(f"Removing labels from issue #{issue_number}: {labels}")
+        remove_labels_command = [
+            "gh", "issue", "edit",
+            "--repo", self.config.GITHUB_REPOSITORY,
+            str(issue_number),
+            "--remove-label", ",".join(labels)
+        ]
+
+        try:
+            run_command(remove_labels_command, env=self.get_gh_env(), check=True)
+            log(f"Successfully removed labels from issue #{issue_number}: {labels}")
+            return True
+        except Exception as e:
+            log(f"Failed to remove labels from issue #{issue_number}: {e}", is_error=True)
+            return False
+
     def find_issue_with_label(self, label: str) -> int:
         """
         Searches for a GitHub issue with a specific label.
@@ -1141,6 +1173,58 @@ class GitHubOperations(ScmOperations):
         except Exception as e:
             log(f"Failed to add labels to PR #{pr_number}: {e}", is_error=True)
             return False
+
+    def remove_labels_from_pr(self, pr_number: int, labels: List[str]) -> bool:
+        """
+        Remove labels from an existing pull request.
+
+        Args:
+            pr_number: The PR number to remove labels from
+            labels: List of label names to remove
+
+        Returns:
+            bool: True if labels were successfully removed (or there was nothing to remove), False otherwise
+        """
+        if not labels:
+            debug_log("No labels provided to remove from PR")
+            return True
+
+        log(f"Removing labels from PR #{pr_number}: {labels}")
+        remove_labels_command = [
+            "gh", "pr", "edit",
+            "--repo", self.config.GITHUB_REPOSITORY,
+            str(pr_number),
+            "--remove-label", ",".join(labels)
+        ]
+
+        try:
+            run_command(remove_labels_command, env=self.get_gh_env(), check=True)
+            log(f"Successfully removed labels from PR #{pr_number}: {labels}")
+            return True
+        except Exception as e:
+            log(f"Failed to remove labels from PR #{pr_number}: {e}", is_error=True)
+            return False
+
+    def filter_smartfix_labels(self, labels: list) -> List[str]:
+        """
+        Filter a label list down to those SmartFix manages — labels prefixed
+        with smartfix-id: or contrast-vuln-id:.
+
+        Args:
+            labels: List of label dicts (each with a "name" key) or label name strings
+
+        Returns:
+            List[str]: Names of SmartFix-managed labels, in input order
+        """
+        names: List[str] = []
+        for label in labels:
+            if isinstance(label, dict):
+                name = label.get("name", "")
+            else:
+                name = str(label)
+            if name.startswith(SMARTFIX_LABEL_PREFIXES):
+                names.append(name)
+        return names
 
     def get_issue_comments(self, issue_number: int, author: str = None) -> List[dict]:
         """

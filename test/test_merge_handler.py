@@ -378,5 +378,135 @@ class TestMergeHandler(unittest.TestCase):
         )
 
 
+class TestCleanupSmartfixLabels(unittest.TestCase):
+    """Tests for merge_handler._cleanup_smartfix_labels."""
+
+    def setUp(self):
+        self.exit_patcher = patch('sys.exit')
+        self.mock_exit = self.exit_patcher.start()
+        reset_config()
+
+    def tearDown(self):
+        self.exit_patcher.stop()
+        reset_config()
+
+    def _build_mock_ops(self, smartfix_label_names, issue_number=None,
+                        remove_pr_ok=True, remove_issue_ok=True):
+        ops = MagicMock()
+        ops.filter_smartfix_labels.return_value = smartfix_label_names
+        ops.extract_issue_number_from_branch.return_value = issue_number
+        ops.remove_labels_from_pr.return_value = remove_pr_ok
+        ops.remove_labels_from_issue.return_value = remove_issue_ok
+        return ops
+
+    def test_internal_smartfix_branch_removes_pr_labels_only(self):
+        """Internal smartfix branch: remove from PR, never touch any issue."""
+        pull_request = {"number": 99, "head": {"ref": "smartfix/remediation-abc"}}
+        labels = [{"name": "smartfix-id:abc"}, {"name": "wontfix"},
+                  {"name": "contrast-vuln-id:VULN-xyz"}]
+        ops = self._build_mock_ops(["smartfix-id:abc", "contrast-vuln-id:VULN-xyz"])
+
+        with patch('src.merge_handler.GitHubOperations', return_value=ops):
+            merge_handler._cleanup_smartfix_labels(pull_request, labels)
+
+        ops.remove_labels_from_pr.assert_called_once_with(
+            99, ["smartfix-id:abc", "contrast-vuln-id:VULN-xyz"]
+        )
+        ops.remove_labels_from_issue.assert_not_called()
+        ops.extract_issue_number_from_branch.assert_not_called()
+
+    def test_claude_issue_branch_also_removes_issue_labels(self):
+        """External-agent claude/issue- branch: remove from PR and from linked issue."""
+        pull_request = {"number": 99, "head": {"ref": "claude/issue-75-20250908-1723"}}
+        labels = [{"name": "smartfix-id:abc"}, {"name": "contrast-vuln-id:VULN-xyz"}]
+        ops = self._build_mock_ops(
+            ["smartfix-id:abc", "contrast-vuln-id:VULN-xyz"], issue_number=75
+        )
+
+        with patch('src.merge_handler.GitHubOperations', return_value=ops):
+            merge_handler._cleanup_smartfix_labels(pull_request, labels)
+
+        ops.remove_labels_from_pr.assert_called_once_with(
+            99, ["smartfix-id:abc", "contrast-vuln-id:VULN-xyz"]
+        )
+        ops.extract_issue_number_from_branch.assert_called_once_with("claude/issue-75-20250908-1723")
+        ops.remove_labels_from_issue.assert_called_once_with(
+            75, ["smartfix-id:abc", "contrast-vuln-id:VULN-xyz"]
+        )
+
+    def test_copilot_fix_branch_also_removes_issue_labels(self):
+        """External-agent copilot/fix branch: remove from PR and from linked issue."""
+        pull_request = {"number": 99, "head": {"ref": "copilot/fix-42"}}
+        labels = [{"name": "smartfix-id:abc"}]
+        ops = self._build_mock_ops(["smartfix-id:abc"], issue_number=42)
+
+        with patch('src.merge_handler.GitHubOperations', return_value=ops):
+            merge_handler._cleanup_smartfix_labels(pull_request, labels)
+
+        ops.remove_labels_from_pr.assert_called_once_with(99, ["smartfix-id:abc"])
+        ops.remove_labels_from_issue.assert_called_once_with(42, ["smartfix-id:abc"])
+
+    def test_no_smartfix_labels_is_a_noop(self):
+        """No SmartFix labels: do not touch the PR or issue at all."""
+        pull_request = {"number": 99, "head": {"ref": "smartfix/remediation-abc"}}
+        labels = [{"name": "bug"}, {"name": "wontfix"}]
+        ops = self._build_mock_ops([])
+
+        with patch('src.merge_handler.GitHubOperations', return_value=ops):
+            merge_handler._cleanup_smartfix_labels(pull_request, labels)
+
+        ops.remove_labels_from_pr.assert_not_called()
+        ops.remove_labels_from_issue.assert_not_called()
+
+    def test_missing_pr_number_is_a_noop(self):
+        """No PR number: nothing to clean."""
+        pull_request = {"head": {"ref": "smartfix/remediation-abc"}}
+        labels = [{"name": "smartfix-id:abc"}]
+        ops = self._build_mock_ops(["smartfix-id:abc"])
+
+        with patch('src.merge_handler.GitHubOperations', return_value=ops):
+            merge_handler._cleanup_smartfix_labels(pull_request, labels)
+
+        ops.remove_labels_from_pr.assert_not_called()
+        ops.remove_labels_from_issue.assert_not_called()
+        ops.filter_smartfix_labels.assert_not_called()
+
+    def test_remove_failure_does_not_raise(self):
+        """remove_labels_from_pr returning False does not propagate as an exception."""
+        pull_request = {"number": 99, "head": {"ref": "smartfix/remediation-abc"}}
+        labels = [{"name": "smartfix-id:abc"}]
+        ops = self._build_mock_ops(["smartfix-id:abc"], remove_pr_ok=False)
+
+        with patch('src.merge_handler.GitHubOperations', return_value=ops):
+            try:
+                merge_handler._cleanup_smartfix_labels(pull_request, labels)
+            except Exception as e:
+                self.fail(f"_cleanup_smartfix_labels raised: {e}")
+
+    def test_external_agent_with_unparseable_issue_skips_issue_cleanup(self):
+        """External-agent branch but issue number can't be extracted: skip issue removal, not raise."""
+        pull_request = {"number": 99, "head": {"ref": "claude/issue-bogus"}}
+        labels = [{"name": "smartfix-id:abc"}]
+        ops = self._build_mock_ops(["smartfix-id:abc"], issue_number=None)
+
+        with patch('src.merge_handler.GitHubOperations', return_value=ops):
+            merge_handler._cleanup_smartfix_labels(pull_request, labels)
+
+        ops.remove_labels_from_pr.assert_called_once_with(99, ["smartfix-id:abc"])
+        ops.remove_labels_from_issue.assert_not_called()
+
+    def test_unexpected_exception_is_swallowed(self):
+        """An unexpected exception (e.g. GitHubOperations construction failure) is logged, not re-raised."""
+        pull_request = {"number": 99, "head": {"ref": "smartfix/remediation-abc"}}
+        labels = [{"name": "smartfix-id:abc"}]
+
+        with patch('src.merge_handler.GitHubOperations',
+                   side_effect=RuntimeError("config blew up")):
+            try:
+                merge_handler._cleanup_smartfix_labels(pull_request, labels)
+            except Exception as e:
+                self.fail(f"_cleanup_smartfix_labels propagated exception: {e}")
+
+
 if __name__ == '__main__':
     unittest.main()
