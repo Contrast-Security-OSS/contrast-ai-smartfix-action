@@ -394,7 +394,7 @@ class Config:
           3. Neither set — returns (None, []); callers that require app IDs must validate
 
         Returns:
-            Tuple[str, List[str]]: (resolved_app_id, parsed_app_ids_list)
+            Tuple[Optional[str], List[str]]: (resolved_app_id, parsed_app_ids_list)
         """
         singular = self._get_env_var("CONTRAST_APP_ID", required=False)
         plural_raw = self._get_env_var("CONTRAST_APP_IDS", required=False)

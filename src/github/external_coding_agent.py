@@ -77,9 +77,16 @@ class ExternalCodingAgent(CodingAgentStrategy):
         vuln_http_details = tail_string(raw_http_details, 4000) if raw_http_details.strip() else None
 
         # Start building the issue body
-        application_id = vulnerability_details.get('applicationId', self.config.CONTRAST_APP_ID)
-        contrast_url = (f"https://{self.config.CONTRAST_HOST}/Contrast/static/ng/index.html#/"
-                        f"{self.config.CONTRAST_ORG_ID}/applications/{application_id}/vulns/{vuln_uuid}")
+        # Prefer applicationId from the response (correct for monorepo); fall back to config.
+        # If neither is available (monorepo with no singular app configured), omit the app
+        # segment to avoid a broken link.
+        application_id = vulnerability_details.get('applicationId') or self.config.CONTRAST_APP_ID
+        if application_id:
+            contrast_url = (f"https://{self.config.CONTRAST_HOST}/Contrast/static/ng/index.html#/"
+                            f"{self.config.CONTRAST_ORG_ID}/applications/{application_id}/vulns/{vuln_uuid}")
+        else:
+            contrast_url = (f"https://{self.config.CONTRAST_HOST}/Contrast/static/ng/index.html#/"
+                            f"{self.config.CONTRAST_ORG_ID}/vulns/{vuln_uuid}")
 
         issue_body = f"""
 # Contrast AI SmartFix Issue Report

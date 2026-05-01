@@ -354,5 +354,61 @@ class TestClosedHandler(unittest.TestCase):
         github_ops_mock.extract_issue_number_from_branch.assert_called_once_with("claude/issue-75-20250908-1723")
 
 
+    def test_extract_remediation_info_copilot_sets_telemetry_string(self):
+        """codingAgent telemetry is set to 'EXTERNAL-GITHUB_COPILOT' for copilot branches."""
+        telemetry_calls = []
+        pull_request = {
+            "head": {"ref": "copilot/fix-99"},
+            "labels": [{"name": "smartfix-id:REM-001"}]
+        }
+        with patch('src.closed_handler.extract_remediation_id_from_labels', return_value="REM-001"):
+            with patch('src.closed_handler.GitHubOperations') as mock_cls:
+                mock_cls.return_value.extract_issue_number_from_branch.return_value = 99
+                with patch('src.smartfix.domains.telemetry.telemetry_handler.update_telemetry',
+                           side_effect=lambda k, v: telemetry_calls.append((k, v))):
+                    closed_handler._extract_remediation_info(pull_request)
+
+        coding_agent_call = next(
+            (v for k, v in telemetry_calls if k == "additionalAttributes.codingAgent"), None
+        )
+        self.assertEqual(coding_agent_call, "EXTERNAL-GITHUB_COPILOT")
+
+    def test_extract_remediation_info_claude_sets_telemetry_string(self):
+        """codingAgent telemetry is set to 'EXTERNAL-CLAUDE_CODE' for claude branches."""
+        telemetry_calls = []
+        pull_request = {
+            "head": {"ref": "claude/issue-42-20250101-1200"},
+            "labels": [{"name": "smartfix-id:REM-002"}]
+        }
+        with patch('src.closed_handler.extract_remediation_id_from_labels', return_value="REM-002"):
+            with patch('src.closed_handler.GitHubOperations') as mock_cls:
+                mock_cls.return_value.extract_issue_number_from_branch.return_value = 42
+                with patch('src.smartfix.domains.telemetry.telemetry_handler.update_telemetry',
+                           side_effect=lambda k, v: telemetry_calls.append((k, v))):
+                    closed_handler._extract_remediation_info(pull_request)
+
+        coding_agent_call = next(
+            (v for k, v in telemetry_calls if k == "additionalAttributes.codingAgent"), None
+        )
+        self.assertEqual(coding_agent_call, "EXTERNAL-CLAUDE_CODE")
+
+    def test_extract_remediation_info_smartfix_sets_telemetry_string(self):
+        """codingAgent telemetry is set to 'INTERNAL-SMARTFIX' for smartfix branches."""
+        telemetry_calls = []
+        pull_request = {
+            "head": {"ref": "smartfix/fix-some-vuln"},
+            "labels": [{"name": "smartfix-id:REM-003"}]
+        }
+        with patch('src.closed_handler.extract_remediation_id_from_labels', return_value="REM-003"):
+            with patch('src.smartfix.domains.telemetry.telemetry_handler.update_telemetry',
+                       side_effect=lambda k, v: telemetry_calls.append((k, v))):
+                closed_handler._extract_remediation_info(pull_request)
+
+        coding_agent_call = next(
+            (v for k, v in telemetry_calls if k == "additionalAttributes.codingAgent"), None
+        )
+        self.assertEqual(coding_agent_call, "INTERNAL-SMARTFIX")
+
+
 if __name__ == '__main__':
     unittest.main()

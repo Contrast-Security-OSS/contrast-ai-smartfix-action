@@ -105,6 +105,15 @@ class TestGetOrgOpenRemediations(unittest.TestCase):
         mock_post.return_value = MagicMock(status_code=200, json=MagicMock(side_effect=json.JSONDecodeError('', '', 0)))
         self.assertEqual(self._call(), [])
 
+    @patch('src.contrast_api.requests.post')
+    def test_strips_protocol_from_host_in_url(self, mock_post):
+        """normalize_host is applied — passing host with https:// prefix still builds a valid URL."""
+        mock_post.return_value = MagicMock(status_code=200, json=lambda: [])
+        self._call(contrast_host=f'https://{HOST}')
+        url = mock_post.call_args[0][0]
+        self.assertNotIn('https://https://', url)
+        self.assertIn(HOST, url)
+
 
 # =============================================================================
 # get_org_remediation_details

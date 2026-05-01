@@ -696,6 +696,49 @@ class TestExternalCodingAgent(unittest.TestCase):
             expected_length = len(result)
             mock_debug_log.assert_called_with(f"Assembled issue body with {expected_length} characters")
 
+    def test_assemble_issue_body_uses_application_id_from_response(self):
+        """applicationId from the response is used in the Contrast UI link."""
+        agent = ExternalCodingAgent(self.config)
+        vulnerability_details = {
+            'vulnerabilityTitle': 'SQL Injection',
+            'vulnerabilityUuid': 'vuln-uuid-123',
+            'applicationId': 'app-from-response-id',
+        }
+
+        result = agent.assemble_issue_body(vulnerability_details)
+
+        self.assertIn('app-from-response-id', result)
+        self.assertIn('vuln-uuid-123', result)
+
+    def test_assemble_issue_body_falls_back_to_config_app_id_when_response_has_none(self):
+        """Falls back to config.CONTRAST_APP_ID when applicationId is absent from response."""
+        self.config.CONTRAST_APP_ID = 'config-app-id'
+        agent = ExternalCodingAgent(self.config)
+        vulnerability_details = {
+            'vulnerabilityTitle': 'SQL Injection',
+            'vulnerabilityUuid': 'vuln-uuid-456',
+        }
+
+        result = agent.assemble_issue_body(vulnerability_details)
+
+        self.assertIn('config-app-id', result)
+
+    def test_assemble_issue_body_omits_app_segment_when_no_app_id_available(self):
+        """When both response applicationId and config.CONTRAST_APP_ID are None, link omits app segment."""
+        self.config.CONTRAST_APP_ID = None
+        agent = ExternalCodingAgent(self.config)
+        vulnerability_details = {
+            'vulnerabilityTitle': 'SQL Injection',
+            'vulnerabilityUuid': 'vuln-uuid-789',
+        }
+
+        result = agent.assemble_issue_body(vulnerability_details)
+
+        self.assertIn('vuln-uuid-789', result)
+        self.assertNotIn('/applications/None/', result)
+        self.assertIn('/vulns/vuln-uuid-789', result)
+        self.assertNotIn('/applications/', result)
+
     @patch('src.github.github_operations.GitHubOperations.get_claude_workflow_run_id')
     @patch('src.github.github_operations.GitHubOperations.watch_github_action_run')
     @patch('src.github.github_operations.GitHubOperations.get_issue_comments')

@@ -72,15 +72,12 @@ def _extract_remediation_info(pull_request: dict) -> tuple:
     # Determine coding agent from branch prefix (independent of remediation ID extraction)
     if branch_name.startswith("claude/issue-"):
         coding_agent = "EXTERNAL-CLAUDE_CODE"
-        github_ops = GitHubOperations()
-        issue_number = github_ops.extract_issue_number_from_branch(branch_name)
-        if issue_number:
-            telemetry_handler.update_telemetry("additionalAttributes.externalIssueNumber", issue_number)
-            debug_log(f"Extracted external issue number from branch name: {issue_number}")
-        else:
-            debug_log(f"Could not extract issue number from branch name: {branch_name}")
     elif branch_name.startswith("copilot/fix"):
         coding_agent = "EXTERNAL-GITHUB_COPILOT"
+    else:
+        coding_agent = "INTERNAL-SMARTFIX"
+
+    if coding_agent in ("EXTERNAL-CLAUDE_CODE", "EXTERNAL-GITHUB_COPILOT"):
         github_ops = GitHubOperations()
         issue_number = github_ops.extract_issue_number_from_branch(branch_name)
         if issue_number:
@@ -88,8 +85,6 @@ def _extract_remediation_info(pull_request: dict) -> tuple:
             debug_log(f"Extracted external issue number from branch name: {issue_number}")
         else:
             debug_log(f"Could not extract issue number from branch name: {branch_name}")
-    else:
-        coding_agent = "INTERNAL-SMARTFIX"
     debug_log(f"Determined coding agent to be: {coding_agent}")
     telemetry_handler.update_telemetry("additionalAttributes.codingAgent", coding_agent)
 
