@@ -238,6 +238,30 @@ class TestGetReviewersForFiles(unittest.TestCase):
 
         self.assertEqual(result, {"alice"})
 
+    def test_root_anchored_directory_pattern_matches(self):
+        """/docs/ matches files inside docs/ at the repo root."""
+        self._write_codeowners("/docs/ @docs-owner\n")
+
+        result = get_reviewers_for_files(["docs/guide.md"], self.repo_root)
+
+        self.assertEqual(result, {"docs-owner"})
+
+    def test_root_anchored_glob_pattern_matches(self):
+        """/src/*.py matches Python files directly inside src/."""
+        self._write_codeowners("/src/*.py @src-owner\n")
+
+        result = get_reviewers_for_files(["src/main.py"], self.repo_root)
+
+        self.assertEqual(result, {"src-owner"})
+
+    def test_root_anchored_pattern_does_not_produce_double_slash(self):
+        """/docs/ does not require the file path to start with //docs/."""
+        self._write_codeowners("/docs/ @docs-owner\n")
+
+        result = get_reviewers_for_files(["other/file.md"], self.repo_root)
+
+        self.assertEqual(result, set())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -93,16 +93,22 @@ def _parse_codeowners(path: Path) -> List[tuple]:
 def _matches(pattern: str, file_path: str) -> bool:
     """Return True if file_path matches the CODEOWNERS pattern.
 
+    A leading / in the pattern is stripped before matching (root-anchored patterns
+    like /docs/ or /src/*.py are treated the same as docs/ or src/*.py since
+    file_path values never carry a leading slash).
+
     Handles three cases:
     - Directory pattern (ends with /): matches any file whose path starts with it
     - Pattern with no path separator: matches against basename anywhere in tree
     - Otherwise: full-path glob match
     """
-    if pattern.endswith("/"):
-        return file_path.startswith(pattern) or ("/" + file_path).startswith("/" + pattern)
-    if "/" not in pattern:
+    normalized_pattern = pattern[1:] if pattern.startswith("/") else pattern
+    normalized_file_path = file_path.lstrip("/")
+    if normalized_pattern.endswith("/"):
+        return normalized_file_path.startswith(normalized_pattern)
+    if "/" not in normalized_pattern:
         # Matches any file with that name/extension in any directory
-        return fnmatch.fnmatch(file_path, pattern) or fnmatch.fnmatch(
-            file_path.split("/")[-1], pattern
+        return fnmatch.fnmatch(normalized_file_path, normalized_pattern) or fnmatch.fnmatch(
+            normalized_file_path.split("/")[-1], normalized_pattern
         )
-    return fnmatch.fnmatch(file_path, pattern)
+    return fnmatch.fnmatch(normalized_file_path, normalized_pattern)
