@@ -20,7 +20,7 @@
 import os
 import json
 import re
-from typing import List, Optional, TypedDict
+from typing import List, Optional, Set, TypedDict
 from src.utils import run_command, debug_log, log, error_exit, CommandExecutionError
 from src.smartfix.shared.failure_categories import FailureCategory
 from src.config import get_config
@@ -1548,7 +1548,7 @@ class GitHubOperations(ScmOperations):
             log(f"Could not retrieve changed files for PR #{pr_number}: {e}", is_warning=True)
             return []
 
-    def add_reviewers_to_pr(self, pr_number: int, reviewers: set) -> bool:
+    def add_reviewers_to_pr(self, pr_number: int, reviewers: Set[str]) -> bool:
         """Request review from the given set of GitHub handles on a pull request.
 
         Uses `gh pr edit --add-reviewer` to assign reviewers.
