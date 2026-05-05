@@ -405,6 +405,7 @@ runs:
           echo "OTEL_EXPORTER_OTLP_ENDPOINT=https://${{ inputs.contrast_host }}/aiml/otel" >> $GITHUB_ENV
         fi
 
+
     # Run the main SmartFix analysis script with clear start/end markers - cross-platform compatible
     - name: Run Contrast AI SmartFix
       shell: bash

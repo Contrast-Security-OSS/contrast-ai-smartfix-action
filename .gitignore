@@ -215,3 +215,4 @@ docs/adr/
 # Abacus
 .abacus/
 
+.beads/
