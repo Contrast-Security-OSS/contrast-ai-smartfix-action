@@ -51,9 +51,10 @@ def find_codeowners_file(repo_root: Path) -> Optional[Path]:
 def get_reviewers_for_files(changed_files: List[str], repo_root: Path) -> Set[str]:
     """Return the set of reviewer handles from CODEOWNERS that match any changed file.
 
-    Parses the CODEOWNERS file (if present) and returns all owners whose patterns
-    match at least one of the changed files. The @ prefix is stripped from each
-    handle; team refs (e.g. org/team) are kept intact.
+    Parses the CODEOWNERS file (if present) and follows gitignore-style last-match-wins
+    semantics: for each changed file the last matching pattern's owners apply. Owners are
+    then unioned across all changed files.  The @ prefix is stripped from each handle;
+    team refs (e.g. org/team) are kept intact.
 
     Returns an empty set when no CODEOWNERS file exists or no patterns match.
     """
@@ -65,9 +66,12 @@ def get_reviewers_for_files(changed_files: List[str], repo_root: Path) -> Set[st
     reviewers: Set[str] = set()
 
     for changed_file in changed_files:
+        last_match: Optional[List[str]] = None
         for pattern, owners in entries:
             if _matches(pattern, changed_file):
-                reviewers.update(owners)
+                last_match = owners
+        if last_match:
+            reviewers.update(last_match)
 
     return reviewers
 

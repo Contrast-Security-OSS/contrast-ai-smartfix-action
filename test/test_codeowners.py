@@ -221,14 +221,23 @@ class TestGetReviewersForFiles(unittest.TestCase):
 
         self.assertEqual(result, {"default-owner"})
 
-    def test_later_pattern_adds_owners_for_matching_files(self):
-        """All matching patterns contribute owners (union semantics)."""
+    def test_later_pattern_wins_for_same_file(self):
+        """Last matching pattern wins per file (gitignore-style semantics)."""
         self._write_codeowners("* @default-owner\n*.py @python-owner\n")
 
         result = get_reviewers_for_files(["src/main.py"], self.repo_root)
 
         self.assertIn("python-owner", result)
-        self.assertIn("default-owner", result)
+        self.assertNotIn("default-owner", result)
+
+    def test_last_match_per_file_unioned_across_files(self):
+        """Last match per file, owners unioned across all changed files."""
+        self._write_codeowners("* @default-owner\n*.py @python-owner\n")
+
+        result = get_reviewers_for_files(["src/main.py", "README.md"], self.repo_root)
+
+        self.assertIn("python-owner", result)   # last match for .py file
+        self.assertIn("default-owner", result)  # last (and only) match for .md file
 
     def test_no_duplicate_owners(self):
         """Same owner listed in multiple matching patterns appears only once."""
