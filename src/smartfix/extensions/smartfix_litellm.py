@@ -36,6 +36,7 @@ from pydantic import Field
 from opentelemetry import context as otel_context
 from opentelemetry.trace import StatusCode
 
+from src.smartfix.domains.providers import CONTRAST_CLAUDE_SONNET_4_5
 from src.smartfix.domains.telemetry import otel_provider
 from src.smartfix.domains.telemetry import smartfix_metrics
 from src.config import get_config
@@ -333,9 +334,10 @@ class SmartFixLiteLlm(LiteLlm):
         model_lower = self.model.lower()
         debug_log(f"_apply_role_conversion_and_caching called with model: {self.model}")
 
-        # Early return for Contrast models - no caching or role conversion needed
-        if ("contrast/" in model_lower and "claude" in model_lower):
-            debug_log(f"Contrast model detected: {self.model} - skipping caching and role conversion")
+        # Early return for Contrast LLM model - server-side caching is automatic, no client-side
+        # cache_control breakpoints or role conversion needed.
+        if self.model == CONTRAST_CLAUDE_SONNET_4_5:
+            debug_log(f"Contrast LLM model detected: {self.model} - skipping caching and role conversion")
             return
 
         # Early return if model doesn't support caching
