@@ -146,6 +146,24 @@ class TestContrastLlmConfig(unittest.TestCase):
         config = get_config(testing=True)
         self.assertFalse(config.USE_CONTRAST_LLM)
 
+    def test_setup_contrast_provider_uses_v2_endpoint(self):
+        """setup_contrast_provider() points ANTHROPIC_API_BASE at the v2 LLM proxy endpoint."""
+        from src.smartfix.domains.providers import setup_contrast_provider
+
+        # Use the env vars established in setUp (CONTRAST_HOST=test.contrastsecurity.com,
+        # CONTRAST_ORG_ID=test-org-id); reset_config() picks them up.
+        reset_config()
+
+        setup_contrast_provider()
+
+        api_base = os.environ.get('ANTHROPIC_API_BASE')
+        self.assertEqual(
+            api_base,
+            'https://test.contrastsecurity.com/api/llm-proxy/v2/organizations/test-org-id/anthropic'
+        )
+        # Guard against regression to the v1 path shape
+        self.assertNotIn('/api/v4/llm-proxy/', api_base)
+
 
 if __name__ == '__main__':
     unittest.main()

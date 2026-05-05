@@ -94,7 +94,7 @@ class SubAgentExecutor:
             query: User query/prompt for the agent
             system_prompt: System prompt for agent instructions
             remediation_id: Remediation ID for error tracking
-            session_id: Session ID for Contrast LLM tracking
+            session_id: ADK session ID for agent execution tracking
             additional_tools: Optional list of extra tools to add to the agent
 
         Returns:
@@ -154,7 +154,7 @@ class SubAgentExecutor:
         Args:
             target_folder: Path to the folder for filesystem access
             remediation_id: Remediation ID for error tracking
-            session_id: Session ID for Contrast LLM tracking
+            session_id: ADK session ID for agent execution tracking
             system_prompt: System prompt for agent instructions
             additional_tools: Optional list of extra tools (e.g., BuildTool) to include
 
@@ -192,7 +192,6 @@ class SubAgentExecutor:
                     extra_headers={
                         "Api-Key": f"{self.config.CONTRAST_API_KEY}",
                         "Authorization": f"{self.config.CONTRAST_AUTHORIZATION_KEY}",
-                        "x-contrast-llm-session-id": f"{session_id}"
                     }
                 )
                 debug_log(f"Creating fix agent ({agent_name}) with model contrast_llm")
