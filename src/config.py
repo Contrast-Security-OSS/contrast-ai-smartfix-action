@@ -448,9 +448,10 @@ class Config:
 
         if not app_ids:
             raise ConfigurationError(
-                "SmartFix could not automatically resolve a Contrast application ID for this "
-                "repository. To fix this, add one of the following inputs to your SmartFix "
-                "workflow step:\n\n"
+                "SmartFix could not find a Contrast application ID for this repository. "
+                "Make sure this repository is instrumented by the Contrast Agent so that it "
+                "has IAST findings in Contrast, then set one of the following inputs in your "
+                "SmartFix workflow step:\n\n"
                 "  contrast_app_id: '<your-app-id>'          # single application\n"
                 "  contrast_app_ids: '[\"id-1\", \"id-2\"]'  # monorepo with multiple applications"
             )
