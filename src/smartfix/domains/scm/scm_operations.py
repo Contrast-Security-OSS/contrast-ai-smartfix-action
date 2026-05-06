@@ -6,7 +6,7 @@ for implementing SCM platform-specific operations (GitHub, GitLab, BitBucket, et
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 
 class ScmOperations(ABC):
@@ -314,5 +314,32 @@ class ScmOperations(ABC):
 
         Returns:
             Optional[str]: The latest matching branch name or None if no matches found
+        """
+        pass
+
+    @abstractmethod
+    def get_pr_changed_files(self, pr_number: int) -> List[str]:
+        """
+        Returns the list of file paths changed in a pull request.
+
+        Args:
+            pr_number (int): The PR number
+
+        Returns:
+            List[str]: Changed file paths, or empty list on error
+        """
+        pass
+
+    @abstractmethod
+    def add_reviewers_to_pr(self, pr_number: int, reviewers: Set[str]) -> bool:
+        """
+        Requests review from the given handles on a pull request.
+
+        Args:
+            pr_number (int): The PR number
+            reviewers (Set[str]): GitHub/SCM handles to request review from
+
+        Returns:
+            bool: True on success or empty reviewers, False on error
         """
         pass

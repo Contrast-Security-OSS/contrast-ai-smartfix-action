@@ -26,7 +26,7 @@ for resolving the active application ID:
   1. contrast_app_id (singular) set → use it directly (backward compat)
   2. contrast_app_ids (plural) set, singular not set → use first element
   3. Both set → singular wins
-  4. Neither set → ConfigurationError
+  4. Neither set → APP_ID=None, APP_IDS=[] (callers that need app IDs validate)
 """
 
 import unittest
@@ -76,23 +76,29 @@ class TestContrastAppIds(unittest.TestCase):
 
         self.assertEqual(config.CONTRAST_APP_ID, 'my-single-app')
 
-    def test_contrast_app_id_singular_wins_when_both_set(self):
-        """When both singular and plural are set, singular takes precedence."""
+    def test_both_set_singular_takes_precedence(self):
+        """When both contrast_app_id and contrast_app_ids are set, contrast_app_id takes precedence."""
         env = self._get_base_env()
-        env['CONTRAST_APP_ID'] = 'singular-wins'
+        env['CONTRAST_APP_ID'] = 'singular-app'
         env['CONTRAST_APP_IDS'] = '["plural-first", "plural-second"]'
 
         config = Config(env=env, testing=False)
 
-        self.assertEqual(config.CONTRAST_APP_ID, 'singular-wins')
+        self.assertEqual(config.CONTRAST_APP_ID, 'singular-app')
+        self.assertEqual(config.CONTRAST_APP_IDS, ['singular-app'])
 
-    def test_neither_set_raises_config_error(self):
-        """When neither contrast_app_id nor contrast_app_ids is set, raises ConfigurationError."""
+    def test_neither_set_results_in_none_app_id(self):
+        """When neither contrast_app_id nor contrast_app_ids is set, APP_ID is None and APP_IDS is [].
+
+        Merge and closed handlers don't need app IDs — the backend resolves by remediation ID.
+        Callers that require app IDs (generate_fix flow) validate after config init.
+        """
         env = self._get_base_env()
         # Intentionally: no CONTRAST_APP_ID and no CONTRAST_APP_IDS
 
-        with self.assertRaises(ConfigurationError):
-            Config(env=env, testing=False)
+        config = Config(env=env, testing=False)
+        self.assertIsNone(config.CONTRAST_APP_ID)
+        self.assertEqual(config.CONTRAST_APP_IDS, [])
 
     # =========================================================================
     # New behavior: contrast_app_ids (plural) JSON array
@@ -125,14 +131,14 @@ class TestContrastAppIds(unittest.TestCase):
 
         self.assertEqual(config.CONTRAST_APP_IDS, ['app-id-1', 'app-id-2', 'app-id-3'])
 
-    def test_contrast_app_ids_empty_list_when_only_singular_set(self):
-        """When only contrast_app_id (singular) is set, CONTRAST_APP_IDS is empty list."""
+    def test_contrast_app_ids_contains_singular_when_only_singular_set(self):
+        """When only contrast_app_id (singular) is set, CONTRAST_APP_IDS is a one-element list."""
         env = self._get_base_env()
         env['CONTRAST_APP_ID'] = 'my-app'
 
         config = Config(env=env, testing=False)
 
-        self.assertEqual(config.CONTRAST_APP_IDS, [])
+        self.assertEqual(config.CONTRAST_APP_IDS, ['my-app'])
 
     # =========================================================================
     # Error cases: invalid contrast_app_ids values

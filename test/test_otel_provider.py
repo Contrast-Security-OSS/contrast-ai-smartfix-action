@@ -37,6 +37,8 @@ def _config(**kwargs):
         GITHUB_REPOSITORY="Contrast-Security-OSS/contrast-ai-smartfix-action",
         GITHUB_RUN_ID="12345678",
         ENABLE_FULL_TELEMETRY=True,
+        CONTRAST_AUTHORIZATION_KEY="test-auth-key",
+        CONTRAST_API_KEY="test-api-key",
     )
     defaults.update(kwargs)
     return SimpleNamespace(**defaults)
@@ -127,6 +129,21 @@ class TestOtelProvider(unittest.TestCase):
             mock_metric_cls.call_args.kwargs["endpoint"],
             "http://localhost:4318/v1/metrics",
         )
+
+    @patch("src.smartfix.domains.telemetry.otel_provider.OTLPMetricExporter")
+    @patch("src.smartfix.domains.telemetry.otel_provider.OTLPSpanExporter")
+    def test_auth_headers_come_from_config_not_env(self, mock_span_cls, mock_metric_cls):
+        """Auth headers are always derived from config credentials, never from env vars."""
+        os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = "http://localhost:4318"
+        mock_span_cls.return_value = MagicMock()
+        mock_metric_cls.return_value = MagicMock()
+        cfg = _config(CONTRAST_AUTHORIZATION_KEY="my-auth", CONTRAST_API_KEY="my-api")
+
+        otel_provider.initialize_otel(cfg)
+
+        expected_headers = {"Authorization": "my-auth", "API-Key": "my-api"}
+        self.assertEqual(mock_span_cls.call_args.kwargs["headers"], expected_headers)
+        self.assertEqual(mock_metric_cls.call_args.kwargs["headers"], expected_headers)
 
     def test_initialize_is_noop_when_endpoint_absent(self):
         """initialize_otel() does nothing when OTEL_EXPORTER_OTLP_ENDPOINT is not set."""

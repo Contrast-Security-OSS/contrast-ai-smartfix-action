@@ -93,7 +93,7 @@ class TestClosedHandler(unittest.TestCase):
 
             self.assertEqual(result, -1)
 
-    @patch('src.closed_handler.contrast_api.notify_remediation_failed')
+    @patch('src.closed_handler.contrast_api.notify_remediation_failed_org')
     @patch('src.github.github_operations.GitHubOperations.get_pr_changed_files_count')
     def test_notify_remediation_service_zero_changes(self, mock_get_count, mock_notify_failed):
         """Test _notify_remediation_service when PR has zero changed files"""
@@ -108,12 +108,11 @@ class TestClosedHandler(unittest.TestCase):
             failure_category="GENERATE_PR_FAILURE",
             contrast_host=self.config.CONTRAST_HOST,
             contrast_org_id=self.config.CONTRAST_ORG_ID,
-            contrast_app_id=self.config.CONTRAST_APP_ID,
             contrast_auth_key=self.config.CONTRAST_AUTHORIZATION_KEY,
             contrast_api_key=self.config.CONTRAST_API_KEY
         )
 
-    @patch('src.closed_handler.contrast_api.notify_remediation_pr_closed')
+    @patch('src.closed_handler.contrast_api.notify_remediation_pr_closed_org')
     @patch('src.github.github_operations.GitHubOperations.get_pr_changed_files_count')
     def test_notify_remediation_service_with_changes(self, mock_get_count, mock_notify_closed):
         """Test _notify_remediation_service when PR has changed files"""
@@ -127,12 +126,11 @@ class TestClosedHandler(unittest.TestCase):
             remediation_id="test-remediation-id",
             contrast_host=self.config.CONTRAST_HOST,
             contrast_org_id=self.config.CONTRAST_ORG_ID,
-            contrast_app_id=self.config.CONTRAST_APP_ID,
             contrast_auth_key=self.config.CONTRAST_AUTHORIZATION_KEY,
             contrast_api_key=self.config.CONTRAST_API_KEY
         )
 
-    @patch('src.closed_handler.contrast_api.notify_remediation_pr_closed')
+    @patch('src.closed_handler.contrast_api.notify_remediation_pr_closed_org')
     def test_notify_remediation_service_no_pr_number(self, mock_notify_closed):
         """Test _notify_remediation_service when no PR number provided (legacy behavior)"""
         mock_notify_closed.return_value = True
@@ -143,19 +141,18 @@ class TestClosedHandler(unittest.TestCase):
             remediation_id="test-remediation-id",
             contrast_host=self.config.CONTRAST_HOST,
             contrast_org_id=self.config.CONTRAST_ORG_ID,
-            contrast_app_id=self.config.CONTRAST_APP_ID,
             contrast_auth_key=self.config.CONTRAST_AUTHORIZATION_KEY,
             contrast_api_key=self.config.CONTRAST_API_KEY
         )
 
-    @patch('src.closed_handler.contrast_api.notify_remediation_failed')
+    @patch('src.closed_handler.contrast_api.notify_remediation_failed_org')
     @patch('src.github.github_operations.GitHubOperations.get_pr_changed_files_count')
     def test_notify_remediation_service_get_count_error(self, mock_get_count, mock_notify_failed):
         """Test _notify_remediation_service when getting changed files count fails"""
         mock_get_count.return_value = -1  # Error case
         mock_notify_failed.return_value = True
 
-        with patch('src.closed_handler.contrast_api.notify_remediation_pr_closed') as mock_notify_closed:
+        with patch('src.closed_handler.contrast_api.notify_remediation_pr_closed_org') as mock_notify_closed:
             mock_notify_closed.return_value = True
 
             closed_handler._notify_remediation_service("test-remediation-id", pr_number=123)
@@ -164,6 +161,28 @@ class TestClosedHandler(unittest.TestCase):
             # Should fall back to standard closed notification since count failed
             mock_notify_closed.assert_called_once()
             mock_notify_failed.assert_not_called()
+
+    def test_extract_remediation_info_smartfix_branch_with_label(self):
+        """Test _extract_remediation_info with SmartFix branch that has a smartfix-id label."""
+        pull_request = {
+            "head": {"ref": "smartfix/remediation-REM-555"},
+            "labels": [{"name": "smartfix-id:REM-555"}]
+        }
+        telemetry_mock = MagicMock()
+        with patch('src.smartfix.domains.telemetry.telemetry_handler.update_telemetry', telemetry_mock):
+            result = closed_handler._extract_remediation_info(pull_request)
+        self.assertEqual(result, ("REM-555", [{"name": "smartfix-id:REM-555"}]))
+
+    def test_extract_remediation_info_smartfix_branch_no_label(self):
+        """Test _extract_remediation_info with SmartFix branch falling back to branch name."""
+        pull_request = {
+            "head": {"ref": "smartfix/remediation-REM-999"},
+            "labels": []
+        }
+        telemetry_mock = MagicMock()
+        with patch('src.smartfix.domains.telemetry.telemetry_handler.update_telemetry', telemetry_mock):
+            result = closed_handler._extract_remediation_info(pull_request)
+        self.assertEqual(result[0], "REM-999")
 
     def test_load_github_event_missing_path(self):
         """Test _load_github_event when GITHUB_EVENT_PATH is not set"""
@@ -226,7 +245,7 @@ class TestClosedHandler(unittest.TestCase):
         result = closed_handler._validate_pr_event(event_data)
         self.assertEqual(result, {"merged": False, "number": 123})
 
-    @patch('src.closed_handler.contrast_api.send_telemetry_data')
+    @patch('src.closed_handler.contrast_api.send_telemetry_data_org')
     @patch('src.closed_handler._notify_remediation_service')
     @patch('src.closed_handler._extract_vulnerability_info')
     @patch('src.closed_handler._extract_remediation_info')
@@ -333,6 +352,61 @@ class TestClosedHandler(unittest.TestCase):
         self.assertEqual(result, ("REM-789", [{"name": "smartfix-id:REM-789"}]))
         mock_extract_remediation_id.assert_called_once()
         github_ops_mock.extract_issue_number_from_branch.assert_called_once_with("claude/issue-75-20250908-1723")
+
+    def test_extract_remediation_info_copilot_sets_telemetry_string(self):
+        """codingAgent telemetry is set to 'EXTERNAL-GITHUB_COPILOT' for copilot branches."""
+        telemetry_calls = []
+        pull_request = {
+            "head": {"ref": "copilot/fix-99"},
+            "labels": [{"name": "smartfix-id:REM-001"}]
+        }
+        with patch('src.closed_handler.extract_remediation_id_from_labels', return_value="REM-001"):
+            with patch('src.closed_handler.GitHubOperations') as mock_cls:
+                mock_cls.return_value.extract_issue_number_from_branch.return_value = 99
+                with patch('src.smartfix.domains.telemetry.telemetry_handler.update_telemetry',
+                           side_effect=lambda k, v: telemetry_calls.append((k, v))):
+                    closed_handler._extract_remediation_info(pull_request)
+
+        coding_agent_call = next(
+            (v for k, v in telemetry_calls if k == "additionalAttributes.codingAgent"), None
+        )
+        self.assertEqual(coding_agent_call, "EXTERNAL-GITHUB_COPILOT")
+
+    def test_extract_remediation_info_claude_sets_telemetry_string(self):
+        """codingAgent telemetry is set to 'EXTERNAL-CLAUDE_CODE' for claude branches."""
+        telemetry_calls = []
+        pull_request = {
+            "head": {"ref": "claude/issue-42-20250101-1200"},
+            "labels": [{"name": "smartfix-id:REM-002"}]
+        }
+        with patch('src.closed_handler.extract_remediation_id_from_labels', return_value="REM-002"):
+            with patch('src.closed_handler.GitHubOperations') as mock_cls:
+                mock_cls.return_value.extract_issue_number_from_branch.return_value = 42
+                with patch('src.smartfix.domains.telemetry.telemetry_handler.update_telemetry',
+                           side_effect=lambda k, v: telemetry_calls.append((k, v))):
+                    closed_handler._extract_remediation_info(pull_request)
+
+        coding_agent_call = next(
+            (v for k, v in telemetry_calls if k == "additionalAttributes.codingAgent"), None
+        )
+        self.assertEqual(coding_agent_call, "EXTERNAL-CLAUDE_CODE")
+
+    def test_extract_remediation_info_smartfix_sets_telemetry_string(self):
+        """codingAgent telemetry is set to 'INTERNAL-SMARTFIX' for smartfix branches."""
+        telemetry_calls = []
+        pull_request = {
+            "head": {"ref": "smartfix/fix-some-vuln"},
+            "labels": [{"name": "smartfix-id:REM-003"}]
+        }
+        with patch('src.closed_handler.extract_remediation_id_from_labels', return_value="REM-003"):
+            with patch('src.smartfix.domains.telemetry.telemetry_handler.update_telemetry',
+                       side_effect=lambda k, v: telemetry_calls.append((k, v))):
+                closed_handler._extract_remediation_info(pull_request)
+
+        coding_agent_call = next(
+            (v for k, v in telemetry_calls if k == "additionalAttributes.codingAgent"), None
+        )
+        self.assertEqual(coding_agent_call, "INTERNAL-SMARTFIX")
 
 
 if __name__ == '__main__':

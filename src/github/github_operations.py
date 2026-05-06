@@ -20,7 +20,7 @@
 import os
 import json
 import re
-from typing import List, Optional, TypedDict
+from typing import List, Optional, Set, TypedDict
 from src.utils import run_command, debug_log, log, error_exit, CommandExecutionError
 from src.smartfix.shared.failure_categories import FailureCategory
 from src.config import get_config
@@ -1524,3 +1524,52 @@ class GitHubOperations(ScmOperations):
         except Exception as e:
             log(f"Error finding latest branch: {str(e)}", is_error=True)
             return None
+
+    def get_pr_changed_files(self, pr_number: int) -> List[str]:
+        """Return the list of file paths changed in a pull request.
+
+        Uses `gh pr view --json files` to fetch the file list.
+        Returns an empty list on any error.
+        """
+        command = [
+            "gh", "pr", "view",
+            str(pr_number),
+            "--repo", self.config.GITHUB_REPOSITORY,
+            "--json", "files",
+            "--jq", ".files",
+        ]
+        try:
+            output = run_command(command, env=self.get_gh_env(), check=False)
+            if not output or output.strip() in ("null", "[]", ""):
+                return []
+            files = json.loads(output)
+            return [f["path"] for f in files if f.get("path")]
+        except Exception as e:
+            log(f"Could not retrieve changed files for PR #{pr_number}: {e}", is_warning=True)
+            return []
+
+    def add_reviewers_to_pr(self, pr_number: int, reviewers: Set[str]) -> bool:
+        """Request review from the given set of GitHub handles on a pull request.
+
+        Uses `gh pr edit --add-reviewer` to assign reviewers.
+        Returns True on success or when the reviewer set is empty, False on error.
+        """
+        if not reviewers:
+            debug_log("No reviewers to add to PR")
+            return True
+
+        reviewer_list = ",".join(sorted(reviewers))
+        log(f"Adding reviewers to PR #{pr_number}: {reviewer_list}")
+        command = [
+            "gh", "pr", "edit",
+            str(pr_number),
+            "--repo", self.config.GITHUB_REPOSITORY,
+            "--add-reviewer", reviewer_list,
+        ]
+        try:
+            run_command(command, env=self.get_gh_env(), check=True)
+            log(f"Successfully added reviewers to PR #{pr_number}: {reviewer_list}")
+            return True
+        except Exception as e:
+            log(f"Failed to add reviewers to PR #{pr_number}: {e}", is_warning=True)
+            return False
