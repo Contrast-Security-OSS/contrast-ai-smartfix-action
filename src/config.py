@@ -448,7 +448,11 @@ class Config:
 
         if not app_ids:
             raise ConfigurationError(
-                "Error: contrast_app_ids must not be an empty array."
+                "SmartFix could not automatically resolve a Contrast application ID for this "
+                "repository. To fix this, add one of the following inputs to your SmartFix "
+                "workflow step:\n\n"
+                "  contrast_app_id: '<your-app-id>'          # single application\n"
+                "  contrast_app_ids: '[\"id-1\", \"id-2\"]'  # monorepo with multiple applications"
             )
 
         cleaned_ids: List[str] = []
