@@ -451,7 +451,7 @@ class Config:
                 "SmartFix could not find a Contrast application ID for this repository. "
                 "Make sure this repository is instrumented by the Contrast Agent so that it "
                 "has IAST findings in Contrast, then set one of the following inputs in your "
-                "SmartFix workflow step:\n\n"
+                "SmartFix workflow step:\n"
                 "  contrast_app_id: '<your-app-id>'          # single application\n"
                 "  contrast_app_ids: '[\"id-1\", \"id-2\"]'      # monorepo with multiple applications"
             )
