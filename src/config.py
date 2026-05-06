@@ -453,7 +453,7 @@ class Config:
                 "has IAST findings in Contrast, then set one of the following inputs in your "
                 "SmartFix workflow step:\n\n"
                 "  contrast_app_id: '<your-app-id>'          # single application\n"
-                "  contrast_app_ids: '[\"id-1\", \"id-2\"]'  # monorepo with multiple applications"
+                "  contrast_app_ids: '[\"id-1\", \"id-2\"]'      # monorepo with multiple applications"
             )
 
         cleaned_ids: List[str] = []

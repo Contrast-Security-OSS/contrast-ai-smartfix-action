@@ -85,7 +85,6 @@ def _main_impl(vuln_count):  # noqa: C901
 
     start_time = datetime.now()
     log("--- Starting Contrast AI SmartFix Script ---")
-    debug_log(f"Start time: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
     # --- Validate app IDs ---
     if not config.CONTRAST_APP_ID and not config.CONTRAST_APP_IDS:
@@ -94,9 +93,11 @@ def _main_impl(vuln_count):  # noqa: C901
             "has IAST findings in Contrast, then set one of the following inputs in your "
             "SmartFix workflow step:\n\n"
             "  contrast_app_id: '<your-app-id>'          # single application\n"
-            "  contrast_app_ids: '[\"id-1\", \"id-2\"]'  # monorepo with multiple applications",
+            "  contrast_app_ids: '[\"id-1\", \"id-2\"]'      # monorepo with multiple applications",
             is_error=True)
         sys.exit(1)
+
+    debug_log(f"Start time: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
     # --- Version Check ---
     do_version_check()
