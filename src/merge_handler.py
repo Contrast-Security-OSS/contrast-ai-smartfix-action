@@ -147,6 +147,34 @@ def _notify_remediation_service(remediation_id: str):
         log(f"Failed to notify Remediation service about merged PR for remediation {remediation_id}.", is_error=True)
 
 
+def _cleanup_smartfix_labels(pull_request: dict, labels: list) -> None:
+    """Best-effort: remove SmartFix-managed labels from the PR (and linked issue
+    in the external-agent flow). Never raises — failures are logged and the
+    handler completes regardless."""
+    try:
+        pr_number = pull_request.get("number")
+        if not pr_number:
+            debug_log("No PR number in event payload; skipping label cleanup.")
+            return
+
+        github_ops = GitHubOperations()
+        smartfix_labels = github_ops.filter_smartfix_labels(labels)
+        if not smartfix_labels:
+            debug_log("No SmartFix labels on PR; skipping label cleanup.")
+            return
+
+        debug_log(f"Cleaning up SmartFix labels: {smartfix_labels}")
+        github_ops.remove_labels_from_pr(pr_number, smartfix_labels)
+
+        branch_name = pull_request.get("head", {}).get("ref") or ""
+        if branch_name.startswith(("claude/issue-", "copilot/fix")):
+            issue_number = github_ops.extract_issue_number_from_branch(branch_name)
+            if issue_number:
+                github_ops.remove_labels_from_issue(issue_number, smartfix_labels)
+    except Exception as e:
+        log(f"Best-effort SmartFix label cleanup raised: {e}", is_error=True)
+
+
 def handle_merged_pr():
     """Handles the logic when a pull request is merged."""
     telemetry_handler.initialize_telemetry()
@@ -181,6 +209,8 @@ def handle_merged_pr():
         contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
         contrast_api_key=config.CONTRAST_API_KEY
     )
+
+    _cleanup_smartfix_labels(pull_request, labels)
 
     log("--- Merged Contrast AI SmartFix Pull Request Handling Complete ---")
 
