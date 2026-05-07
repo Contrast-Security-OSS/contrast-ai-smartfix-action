@@ -146,6 +146,16 @@ class TestContrastLlmConfig(unittest.TestCase):
         config = get_config(testing=True)
         self.assertFalse(config.USE_CONTRAST_LLM)
 
+    def test_contrast_llm_defaults_agent_model_to_constant(self):
+        """When USE_CONTRAST_LLM=true and AGENT_MODEL is unset, config defaults to CONTRAST_CLAUDE_SONNET_4_5."""
+        from src.smartfix.domains.providers import CONTRAST_CLAUDE_SONNET_4_5
+        os.environ['USE_CONTRAST_LLM'] = 'true'
+        if 'AGENT_MODEL' in os.environ:
+            del os.environ['AGENT_MODEL']
+        reset_config()
+        config = get_config(testing=True)
+        self.assertEqual(config.AGENT_MODEL, CONTRAST_CLAUDE_SONNET_4_5)
+
     def test_setup_contrast_provider_uses_v2_endpoint(self):
         """setup_contrast_provider() points ANTHROPIC_API_BASE at the v2 LLM proxy endpoint."""
         from src.smartfix.domains.providers import setup_contrast_provider

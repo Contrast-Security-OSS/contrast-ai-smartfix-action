@@ -211,7 +211,7 @@ class Config:
         if (is_smartfix_coding_agent
                 and self.USE_CONTRAST_LLM
                 and self._get_env_var("AGENT_MODEL", required=False) is None):
-            self.AGENT_MODEL = "contrast/claude-sonnet-4-5"
+            self.AGENT_MODEL = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
 
         # Validate AWS Bedrock configuration if applicable
         self._validate_aws_bedrock_config()
