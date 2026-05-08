@@ -35,6 +35,7 @@ from unittest.mock import patch, MagicMock, AsyncMock
 
 # Test setup imports (path is set up by conftest.py)
 from src.smartfix.extensions.smartfix_litellm import SmartFixLiteLlm, TokenCostAccumulator, _derive_system
+from src.smartfix.domains.providers import CONTRAST_CLAUDE_SONNET_4_5
 
 
 class TestTokenCostAccumulator(unittest.TestCase):
@@ -389,6 +390,10 @@ class TestDeriveSystem(unittest.TestCase):
         """Production Contrast LLM model string must report provider as 'contrast', not 'anthropic'."""
         self.assertEqual(_derive_system("contrast/claude-sonnet-4-5"), "contrast")
 
+    def test_contrast_claude_sonnet_v2_model_id_returns_contrast(self):
+        """v2 model id (bare Bedrock id, no contrast/ prefix) must still resolve to 'contrast'."""
+        self.assertEqual(_derive_system(CONTRAST_CLAUDE_SONNET_4_5), "contrast")
+
     def test_anthropic_prefix_returns_anthropic(self):
         self.assertEqual(_derive_system("anthropic/claude-3-opus"), "anthropic")
 
@@ -602,7 +607,7 @@ class TestGenerateContentAsyncDoesNotStream(unittest.TestCase):
 
     def setUp(self):
         with patch('litellm.completion'):
-            self.model = SmartFixLiteLlm(model="contrast/claude-sonnet-4-5")
+            self.model = SmartFixLiteLlm(model=CONTRAST_CLAUDE_SONNET_4_5)
 
     def _consume(self, gen):
         async def _drain():
@@ -623,7 +628,7 @@ class TestGenerateContentAsyncDoesNotStream(unittest.TestCase):
         # Capture completion_args via _call_llm_with_retry mock
         fake_response = MagicMock()
         fake_response.get = lambda key, default=None: default
-        fake_response.model = "contrast/claude-sonnet-4-5"
+        fake_response.model = CONTRAST_CLAUDE_SONNET_4_5
         self.model._call_llm_with_retry = AsyncMock(return_value=fake_response)
 
         # Skip helpers that touch llm_request internals

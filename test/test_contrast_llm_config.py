@@ -3,6 +3,7 @@
 import unittest
 import os
 from src.config import get_config, reset_config
+from src.smartfix.domains.providers import CONTRAST_CLAUDE_SONNET_4_5
 
 
 class TestContrastLlmConfig(unittest.TestCase):
@@ -25,6 +26,7 @@ class TestContrastLlmConfig(unittest.TestCase):
             'CONTRAST_APP_ID': 'test-app-id',
             'CONTRAST_AUTHORIZATION_KEY': 'test-auth-key',
             'CONTRAST_API_KEY': 'test-api-key',
+            'GITHUB_SERVER_URL': 'https://github.com',
             # Use non-Bedrock model to avoid AWS validation when USE_CONTRAST_LLM=false
             'AGENT_MODEL': 'anthropic/claude-sonnet-4-5'
         }
@@ -148,7 +150,6 @@ class TestContrastLlmConfig(unittest.TestCase):
 
     def test_contrast_llm_defaults_agent_model_to_constant(self):
         """When USE_CONTRAST_LLM=true and AGENT_MODEL is unset, config defaults to CONTRAST_CLAUDE_SONNET_4_5."""
-        from src.smartfix.domains.providers import CONTRAST_CLAUDE_SONNET_4_5
         os.environ['USE_CONTRAST_LLM'] = 'true'
         if 'AGENT_MODEL' in os.environ:
             del os.environ['AGENT_MODEL']

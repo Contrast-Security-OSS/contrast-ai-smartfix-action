@@ -79,6 +79,8 @@ litellm.suppress_debug_info = os.environ.get("DEBUG_MODE", "").lower() != "true"
 
 def _derive_system(model: str) -> str:
     """Map a LiteLLM model string to the OTel gen_ai.system attribute value."""
+    if model == CONTRAST_CLAUDE_SONNET_4_5:
+        return "contrast"
     m = model.lower()
     if m.startswith("contrast/"):
         return "contrast"
@@ -591,8 +593,7 @@ class SmartFixLiteLlm(LiteLlm):
         )
 
         # For Contrast models, ensure we have a system message before role conversion
-        model_lower = self.model.lower()
-        if "contrast/" in model_lower and "claude" in model_lower:
+        if self.model == CONTRAST_CLAUDE_SONNET_4_5:
             debug_log("Pre-processing messages for Contrast model")
             messages = self._ensure_system_message_for_contrast(messages)
 
