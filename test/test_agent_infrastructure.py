@@ -258,7 +258,7 @@ class TestSubAgentExecutor(unittest.TestCase):
         headers = call_kwargs['extra_headers']
         self.assertEqual(headers['Api-Key'], 'test-api-key')
         self.assertEqual(headers['Authorization'], 'test-auth-key')
-        self.assertEqual(headers['x-contrast-llm-session-id'], 'session-456')
+        self.assertNotIn('x-contrast-llm-session-id', headers)
 
     @patch('src.smartfix.domains.agents.sub_agent_executor.error_exit')
     @patch('src.config.get_config')

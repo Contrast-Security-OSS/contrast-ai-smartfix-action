@@ -35,6 +35,7 @@ from unittest.mock import patch, MagicMock, AsyncMock
 
 # Test setup imports (path is set up by conftest.py)
 from src.smartfix.extensions.smartfix_litellm import SmartFixLiteLlm, TokenCostAccumulator, _derive_system
+from src.smartfix.domains.providers import CONTRAST_CLAUDE_SONNET_4_5
 
 
 class TestTokenCostAccumulator(unittest.TestCase):
@@ -389,6 +390,10 @@ class TestDeriveSystem(unittest.TestCase):
         """Production Contrast LLM model string must report provider as 'contrast', not 'anthropic'."""
         self.assertEqual(_derive_system("contrast/claude-sonnet-4-5"), "contrast")
 
+    def test_contrast_claude_sonnet_v2_model_id_returns_contrast(self):
+        """v2 model id (bare Bedrock id, no contrast/ prefix) must still resolve to 'contrast'."""
+        self.assertEqual(_derive_system(CONTRAST_CLAUDE_SONNET_4_5), "contrast")
+
     def test_anthropic_prefix_returns_anthropic(self):
         self.assertEqual(_derive_system("anthropic/claude-3-opus"), "anthropic")
 
@@ -589,6 +594,58 @@ class TestCallLlmWithRetryOtelSpan(unittest.TestCase):
         captured_span.record_exception.assert_called_once()
         attrs = {call[0][0]: call[0][1] for call in captured_span.set_attribute.call_args_list}
         self.assertIn("error.type", attrs)
+
+
+class TestGenerateContentAsyncDoesNotStream(unittest.TestCase):
+    """Regression: SmartFixLiteLlm must not set stream on the completion call.
+
+    The v2 Contrast LLM proxy returns HTTP 406 for streaming requests, so the
+    Contrast call path must never pass stream=True (or any truthy stream value)
+    into acompletion.  This test locks in the current non-streaming behaviour
+    so a future refactor cannot silently regress it.
+    """
+
+    def setUp(self):
+        with patch('litellm.completion'):
+            self.model = SmartFixLiteLlm(model=CONTRAST_CLAUDE_SONNET_4_5)
+
+    def _consume(self, gen):
+        async def _drain():
+            async for _ in gen:
+                pass
+        asyncio.run(_drain())
+
+    @patch('google.adk.models.lite_llm._model_response_to_generate_content_response')
+    @patch('src.smartfix.extensions.smartfix_litellm._get_completion_inputs')
+    def test_completion_args_omit_stream_for_contrast_model(
+        self, mock_inputs, mock_response_converter
+    ):
+        """generate_content_async must not insert 'stream' into completion_args."""
+        # _get_completion_inputs returns (messages, tools, response_format, generation_params)
+        mock_inputs.return_value = ([], None, None, None)
+        mock_response_converter.return_value = MagicMock()
+
+        # Capture completion_args via _call_llm_with_retry mock
+        fake_response = MagicMock()
+        fake_response.get = lambda key, default=None: default
+        fake_response.model = CONTRAST_CLAUDE_SONNET_4_5
+        self.model._call_llm_with_retry = AsyncMock(return_value=fake_response)
+
+        # Skip helpers that touch llm_request internals
+        self.model._maybe_append_user_content = MagicMock()
+        self.model._ensure_system_message_for_contrast = MagicMock(return_value=[])
+        self.model._apply_role_conversion_and_caching = MagicMock()
+        # Provide concrete value for the parent-class attribute the method reads
+        self.model._additional_args = {}
+
+        self._consume(self.model.generate_content_async(MagicMock(), stream=False))
+
+        self.model._call_llm_with_retry.assert_called_once()
+        completion_args = self.model._call_llm_with_retry.call_args[0][0]
+        self.assertNotIn(
+            "stream", completion_args,
+            "completion_args must not set 'stream'; v2 Contrast LLM proxy returns HTTP 406 on streaming"
+        )
 
 
 if __name__ == '__main__':

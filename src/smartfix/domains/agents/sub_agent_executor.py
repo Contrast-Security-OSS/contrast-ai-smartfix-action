@@ -35,7 +35,7 @@ from typing import Optional
 from src.utils import debug_log, log, error_exit, tail_string
 from src.smartfix.shared.failure_categories import FailureCategory
 from src.smartfix.domains.telemetry import telemetry_handler
-from src.smartfix.domains.providers import setup_contrast_provider, CONTRAST_CLAUDE_SONNET_4_5
+from src.smartfix.domains.providers import setup_contrast_provider
 
 from .mcp_manager import MCPToolsetManager
 
@@ -94,7 +94,7 @@ class SubAgentExecutor:
             query: User query/prompt for the agent
             system_prompt: System prompt for agent instructions
             remediation_id: Remediation ID for error tracking
-            session_id: Session ID for Contrast LLM tracking
+            session_id: ADK session ID for agent execution tracking
             additional_tools: Optional list of extra tools to add to the agent
 
         Returns:
@@ -154,7 +154,7 @@ class SubAgentExecutor:
         Args:
             target_folder: Path to the folder for filesystem access
             remediation_id: Remediation ID for error tracking
-            session_id: Session ID for Contrast LLM tracking
+            session_id: ADK session ID for agent execution tracking
             system_prompt: System prompt for agent instructions
             additional_tools: Optional list of extra tools (e.g., BuildTool) to include
 
@@ -185,14 +185,13 @@ class SubAgentExecutor:
             if hasattr(self.config, 'USE_CONTRAST_LLM') and self.config.USE_CONTRAST_LLM:
                 setup_contrast_provider()
                 model_instance = SmartFixLiteLlm(
-                    model=CONTRAST_CLAUDE_SONNET_4_5,
+                    model=self.config.AGENT_MODEL,
                     temperature=0.2,
                     stream_options={"include_usage": True},
                     system=system_prompt,  # Use standard system parameter
                     extra_headers={
                         "Api-Key": f"{self.config.CONTRAST_API_KEY}",
                         "Authorization": f"{self.config.CONTRAST_AUTHORIZATION_KEY}",
-                        "x-contrast-llm-session-id": f"{session_id}"
                     }
                 )
                 debug_log(f"Creating fix agent ({agent_name}) with model contrast_llm")

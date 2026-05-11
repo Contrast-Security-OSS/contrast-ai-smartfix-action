@@ -3,7 +3,7 @@ import os
 from src.utils import normalize_host
 
 # Contrast LLM model constants
-CONTRAST_CLAUDE_SONNET_4_5 = "contrast/claude-sonnet-4-5"
+CONTRAST_CLAUDE_SONNET_4_5 = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
 
 
 def setup_contrast_provider() -> None:
@@ -40,5 +40,5 @@ def setup_contrast_provider() -> None:
     })
 
     # Configure to use Contrast proxy (still uses Anthropic API format)
-    os.environ["ANTHROPIC_API_BASE"] = f"https://{normalize_host(config.CONTRAST_HOST)}/api/v4/llm-proxy/organizations/{config.CONTRAST_ORG_ID}"
+    os.environ["ANTHROPIC_API_BASE"] = f"https://{normalize_host(config.CONTRAST_HOST)}/api/llm-proxy/v2/organizations/{config.CONTRAST_ORG_ID}/anthropic"
     os.environ["ANTHROPIC_API_KEY"] = f"{config.CONTRAST_API_KEY}"
