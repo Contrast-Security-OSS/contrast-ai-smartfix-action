@@ -251,6 +251,9 @@ class SmartFixAgent(CodingAgentStrategy):
             context.remediation_id,
             context.session_id,
             additional_tools=[build_tool],
+            vuln_uuid=context.vulnerability.uuid,
+            repo_slug=get_config().GITHUB_REPOSITORY,
+            language=context.language or "",
         )
 
         log("--- AI Agent Fix Attempt Completed ---")

@@ -84,7 +84,10 @@ class SubAgentExecutor:
         system_prompt: str,
         remediation_id: str,
         session_id: str = None,
-        additional_tools: list = None
+        additional_tools: list = None,
+        vuln_uuid: str = "",
+        repo_slug: str = "",
+        language: str = "",
     ) -> str:
         """
         Run the agent end-to-end: create session, create agent, execute, return summary.
@@ -96,6 +99,9 @@ class SubAgentExecutor:
             remediation_id: Remediation ID for error tracking
             session_id: ADK session ID for agent execution tracking
             additional_tools: Optional list of extra tools to add to the agent
+            vuln_uuid: Vulnerability UUID for LLM usage attribution
+            repo_slug: GitHub repository slug for LLM usage attribution
+            language: Source language for LLM usage attribution
 
         Returns:
             str: Summary from the agent execution
@@ -121,7 +127,8 @@ class SubAgentExecutor:
 
         agent = await self.create_agent(
             repo_root, remediation_id, session_id, system_prompt=system_prompt,
-            additional_tools=additional_tools
+            additional_tools=additional_tools,
+            vuln_uuid=vuln_uuid, repo_slug=repo_slug, language=language,
         )
         if not agent:
             log(
@@ -146,7 +153,10 @@ class SubAgentExecutor:
         remediation_id: str,
         session_id: str,
         system_prompt: Optional[str] = None,
-        additional_tools: list = None
+        additional_tools: list = None,
+        vuln_uuid: str = "",
+        repo_slug: str = "",
+        language: str = "",
     ) -> Optional[Agent]:
         """
         Create an ADK Agent.
@@ -157,6 +167,9 @@ class SubAgentExecutor:
             session_id: ADK session ID for agent execution tracking
             system_prompt: System prompt for agent instructions
             additional_tools: Optional list of extra tools (e.g., BuildTool) to include
+            vuln_uuid: Vulnerability UUID for LLM usage attribution
+            repo_slug: GitHub repository slug for LLM usage attribution
+            language: Source language for LLM usage attribution
 
         Returns:
             Agent: Configured ADK agent instance
@@ -184,15 +197,25 @@ class SubAgentExecutor:
             # Check if we should use Contrast LLM with custom headers
             if hasattr(self.config, 'USE_CONTRAST_LLM') and self.config.USE_CONTRAST_LLM:
                 setup_contrast_provider()
+                headers = {
+                    "Api-Key": f"{self.config.CONTRAST_API_KEY}",
+                    "Authorization": f"{self.config.CONTRAST_AUTHORIZATION_KEY}",
+                    "x-contrast-llm-feature": "SMARTFIX",
+                }
+                if vuln_uuid:
+                    headers["x-contrast-llm-fingerprint"] = vuln_uuid
+                if remediation_id:
+                    headers["x-contrast-llm-session-id"] = remediation_id
+                if repo_slug:
+                    headers["x-contrast-llm-repo"] = repo_slug
+                if language:
+                    headers["x-contrast-llm-source-language"] = language
                 model_instance = SmartFixLiteLlm(
                     model=self.config.AGENT_MODEL,
                     temperature=0.2,
                     stream_options={"include_usage": True},
-                    system=system_prompt,  # Use standard system parameter
-                    extra_headers={
-                        "Api-Key": f"{self.config.CONTRAST_API_KEY}",
-                        "Authorization": f"{self.config.CONTRAST_AUTHORIZATION_KEY}",
-                    }
+                    system=system_prompt,
+                    extra_headers=headers,
                 )
                 debug_log(f"Creating fix agent ({agent_name}) with model contrast_llm")
             else:
