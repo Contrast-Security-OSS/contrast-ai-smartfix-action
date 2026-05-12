@@ -17,6 +17,7 @@
 # #L%
 #
 
+import atexit
 import os
 import json
 import sys
@@ -26,7 +27,7 @@ from src import contrast_api
 from src.config import get_config  # Using get_config function instead of direct import
 from src.utils import debug_log, extract_remediation_id_from_branch, extract_remediation_id_from_labels, log
 from src.github.github_operations import GitHubOperations
-from src.smartfix.domains.telemetry import telemetry_handler
+from src.smartfix.domains.telemetry import otel_provider, telemetry_handler
 
 
 def _load_github_event() -> dict:
@@ -177,40 +178,51 @@ def _cleanup_smartfix_labels(pull_request: dict, labels: list) -> None:
 
 def handle_merged_pr():
     """Handles the logic when a pull request is merged."""
+    config = get_config()
     telemetry_handler.initialize_telemetry()
+    otel_provider.initialize_otel(config)
+    atexit.register(otel_provider.shutdown_otel)
 
     log("--- Handling Merged Contrast AI SmartFix Pull Request ---")
 
-    # Load and validate GitHub event data
-    event_data = _load_github_event()
-    pull_request = _validate_pr_event(event_data)
+    try:
+        with otel_provider.start_span("smartfix-merge") as merge_span:
+            merge_span.set_attribute("contrast.smartfix.pr_merged", True)
 
-    # Extract remediation and vulnerability information
-    remediation_id, labels = _extract_remediation_info(pull_request)
-    vuln_uuid = _extract_vulnerability_info(labels)
+            # Load and validate GitHub event data
+            event_data = _load_github_event()
+            pull_request = _validate_pr_event(event_data)
 
-    # Update telemetry with extracted information
-    debug_log(f"Extracted Remediation ID: {remediation_id}")
-    telemetry_handler.update_telemetry("additionalAttributes.remediationId", remediation_id)
-    telemetry_handler.update_telemetry("vulnInfo.vulnId", vuln_uuid)
-    telemetry_handler.update_telemetry("vulnInfo.vulnRule", "unknown")
+            # Extract remediation and vulnerability information
+            remediation_id, labels = _extract_remediation_info(pull_request)
+            vuln_uuid = _extract_vulnerability_info(labels)
 
-    # Notify the Remediation backend service
-    _notify_remediation_service(remediation_id)
+            merge_span.set_attribute("contrast.smartfix.remediation_id", remediation_id)
+            merge_span.set_attribute("contrast.finding.fingerprint", vuln_uuid)
 
-    # Complete telemetry and finish
-    telemetry_handler.update_telemetry("additionalAttributes.prStatus", "MERGED")
-    config = get_config()
-    contrast_api.send_telemetry_data_org(
-        remediation_id=remediation_id,
-        telemetry_data=telemetry_handler.get_telemetry_data(),
-        contrast_host=config.CONTRAST_HOST,
-        contrast_org_id=config.CONTRAST_ORG_ID,
-        contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
-        contrast_api_key=config.CONTRAST_API_KEY
-    )
+            # Update telemetry with extracted information
+            debug_log(f"Extracted Remediation ID: {remediation_id}")
+            telemetry_handler.update_telemetry("additionalAttributes.remediationId", remediation_id)
+            telemetry_handler.update_telemetry("vulnInfo.vulnId", vuln_uuid)
+            telemetry_handler.update_telemetry("vulnInfo.vulnRule", "unknown")
 
-    _cleanup_smartfix_labels(pull_request, labels)
+            # Notify the Remediation backend service
+            _notify_remediation_service(remediation_id)
+
+            # Complete telemetry and finish
+            telemetry_handler.update_telemetry("additionalAttributes.prStatus", "MERGED")
+            contrast_api.send_telemetry_data_org(
+                remediation_id=remediation_id,
+                telemetry_data=telemetry_handler.get_telemetry_data(),
+                contrast_host=config.CONTRAST_HOST,
+                contrast_org_id=config.CONTRAST_ORG_ID,
+                contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
+                contrast_api_key=config.CONTRAST_API_KEY
+            )
+
+            _cleanup_smartfix_labels(pull_request, labels)
+    finally:
+        otel_provider.shutdown_otel()
 
     log("--- Merged Contrast AI SmartFix Pull Request Handling Complete ---")
 

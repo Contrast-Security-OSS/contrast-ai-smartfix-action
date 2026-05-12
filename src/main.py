@@ -66,21 +66,23 @@ def main():
     otel_provider.initialize_otel(config)
     atexit.register(otel_provider.shutdown_otel)
 
-    # Use a list so _main_impl can increment it and the finally block sees the
+    # Use lists so _main_impl can mutate them and the finally block sees the
     # correct value even when _main_impl exits via error_exit()/sys.exit().
     vuln_count = [0]
+    prs_created_count = [0]
     try:
         with otel_provider.start_span("smartfix-run") as run_span:
             run_span.set_attribute("session.id", config.GITHUB_RUN_ID)
             try:
-                _main_impl(vuln_count)
+                _main_impl(vuln_count, prs_created_count)
             finally:
                 run_span.set_attribute("contrast.smartfix.vulnerabilities_total", vuln_count[0])
+                run_span.set_attribute("contrast.smartfix.prs_created_total", prs_created_count[0])
     finally:
         otel_provider.shutdown_otel()
 
 
-def _main_impl(vuln_count):  # noqa: C901
+def _main_impl(vuln_count, prs_created_count):  # noqa: C901
     """Main orchestration logic."""
 
     start_time = datetime.now()
@@ -344,6 +346,7 @@ def _main_impl(vuln_count):  # noqa: C901
         # Update tracking variable now that we know we're actually processing this vuln
         previous_vuln_uuid = vuln_uuid
         vuln_count[0] += 1
+        smartfix_metrics.reset_vuln_token_accumulator()
 
         log(f"\n\033[0;33m Selected vuln to fix: {vuln_title} \033[0m")
 
@@ -661,6 +664,7 @@ def _main_impl(vuln_count):  # noqa: C901
                     _op_pr_created = True
                     _op_pr_url = pr_url
                     _op_outcome = "success"
+                    prs_created_count[0] += 1
 
                     processed_one = True  # Mark that we successfully processed one
                     log(f"\n--- Successfully processed vulnerability {vuln_uuid}. Continuing to look for next vulnerability... ---")
@@ -684,11 +688,15 @@ def _main_impl(vuln_count):  # noqa: C901
                 lang = (telemetry_handler.get_telemetry_data().get("appInfo") or {}).get("programmingLanguage")
                 if lang:
                     op_span.set_attribute("contrast.finding.language", lang)
+                op_span.set_attribute("contrast.finding.severity", vulnerability.severity.value)
                 op_span.set_attribute("contrast.smartfix.fix_applied", _op_fix_applied)
                 op_span.set_attribute("contrast.smartfix.files_modified", _op_files_modified)
                 op_span.set_attribute("contrast.smartfix.pr_created", _op_pr_created)
                 if _op_pr_url:
                     op_span.set_attribute("contrast.smartfix.pr_url", _op_pr_url)
+                _total_in, _total_out = smartfix_metrics.get_vuln_token_totals()
+                op_span.set_attribute("contrast.smartfix.total_input_tokens", _total_in)
+                op_span.set_attribute("contrast.smartfix.total_output_tokens", _total_out)
                 smartfix_metrics.record_vulnerability_duration(
                     elapsed_s=time.monotonic() - _op_fix_start,
                     outcome=_op_outcome,

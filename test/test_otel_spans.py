@@ -92,11 +92,12 @@ class TestSmartFixRunSpan(unittest.TestCase):
     def tearDown(self):
         self.patch_ctx.__exit__(None, None, None)
 
-    def _emit_run_span(self, session_id="run-99999", vuln_count=2):
+    def _emit_run_span(self, session_id="run-99999", vuln_count=2, prs_created_total=0):
         import src.smartfix.domains.telemetry.otel_provider as otel_provider
         with otel_provider.start_span("smartfix-run") as span:
             span.set_attribute("session.id", session_id)
             span.set_attribute("contrast.smartfix.vulnerabilities_total", vuln_count)
+            span.set_attribute("contrast.smartfix.prs_created_total", prs_created_total)
 
     def test_smartfix_run_span_has_session_id(self):
         self._emit_run_span(session_id="run-12345")
@@ -127,6 +128,16 @@ class TestSmartFixRunSpan(unittest.TestCase):
         spans = _spans_named(self.exporter, "smartfix-run")
         self.assertNotIn("contrast.smartfix.pr_url", spans[0].attributes)
 
+    def test_smartfix_run_span_has_prs_created_total(self):
+        self._emit_run_span(prs_created_total=3)
+        spans = _spans_named(self.exporter, "smartfix-run")
+        self.assertEqual(spans[0].attributes["contrast.smartfix.prs_created_total"], 3)
+
+    def test_smartfix_run_span_prs_created_total_zero_when_no_prs(self):
+        self._emit_run_span(prs_created_total=0)
+        spans = _spans_named(self.exporter, "smartfix-run")
+        self.assertEqual(spans[0].attributes["contrast.smartfix.prs_created_total"], 0)
+
 
 # ---------------------------------------------------------------------------
 # TestFixVulnerabilitySpan — operation span attributes
@@ -150,10 +161,13 @@ class TestFixVulnerabilitySpan(unittest.TestCase):
             rule_id="sql-injection",
             coding_agent="smartfix",
             language="java",
+            severity="HIGH",
             fix_applied=True,
             files_modified=2,
             pr_created=True,
             pr_url="https://github.com/org/repo/pull/42",
+            total_input_tokens=0,
+            total_output_tokens=0,
         )
         attrs.update(overrides)
         with otel_provider.start_span("fix-vulnerability") as span:
@@ -162,9 +176,12 @@ class TestFixVulnerabilitySpan(unittest.TestCase):
             span.set_attribute("contrast.finding.rule_id", attrs["rule_id"])
             span.set_attribute("contrast.smartfix.coding_agent", attrs["coding_agent"])
             span.set_attribute("contrast.finding.language", attrs["language"])
+            span.set_attribute("contrast.finding.severity", attrs["severity"])
             span.set_attribute("contrast.smartfix.fix_applied", attrs["fix_applied"])
             span.set_attribute("contrast.smartfix.files_modified", attrs["files_modified"])
             span.set_attribute("contrast.smartfix.pr_created", attrs["pr_created"])
+            span.set_attribute("contrast.smartfix.total_input_tokens", attrs["total_input_tokens"])
+            span.set_attribute("contrast.smartfix.total_output_tokens", attrs["total_output_tokens"])
             if attrs.get("pr_url"):
                 span.set_attribute("contrast.smartfix.pr_url", attrs["pr_url"])
 
@@ -214,6 +231,18 @@ class TestFixVulnerabilitySpan(unittest.TestCase):
         """pr_url should not be set when no PR was created."""
         self._emit(pr_url=None)
         self.assertNotIn("contrast.smartfix.pr_url", self._span().attributes)
+
+    def test_has_finding_severity(self):
+        self._emit(severity="CRITICAL")
+        self.assertEqual(self._span().attributes["contrast.finding.severity"], "CRITICAL")
+
+    def test_has_total_input_tokens(self):
+        self._emit(total_input_tokens=1500)
+        self.assertEqual(self._span().attributes["contrast.smartfix.total_input_tokens"], 1500)
+
+    def test_has_total_output_tokens(self):
+        self._emit(total_output_tokens=320)
+        self.assertEqual(self._span().attributes["contrast.smartfix.total_output_tokens"], 320)
 
 
 # ---------------------------------------------------------------------------
@@ -388,6 +417,48 @@ class TestLlmCallSpan(unittest.TestCase):
         self.assertEqual(len(llm_spans), 1)
         self.assertEqual(llm_spans[0].attributes["gen_ai.usage.input_tokens"], 200)
         self.assertEqual(llm_spans[0].attributes["gen_ai.usage.output_tokens"], 80)
+
+
+# ---------------------------------------------------------------------------
+# TestSmartFixMergeSpan — merge event span attributes
+# ---------------------------------------------------------------------------
+
+class TestSmartFixMergeSpan(unittest.TestCase):
+    """Verify the smartfix-merge span emitted by merge_handler."""
+
+    def setUp(self):
+        self.exporter, self.patch_ctx = _make_span_recorder()
+        self.patch_ctx.__enter__()
+
+    def tearDown(self):
+        self.patch_ctx.__exit__(None, None, None)
+
+    def _emit_merge_span(self, remediation_id="rem-abc", vuln_uuid="vuln-xyz"):
+        import src.smartfix.domains.telemetry.otel_provider as otel_provider
+        with otel_provider.start_span("smartfix-merge") as span:
+            span.set_attribute("contrast.smartfix.pr_merged", True)
+            span.set_attribute("contrast.smartfix.remediation_id", remediation_id)
+            span.set_attribute("contrast.finding.fingerprint", vuln_uuid)
+
+    def test_merge_span_emitted(self):
+        self._emit_merge_span()
+        spans = _spans_named(self.exporter, "smartfix-merge")
+        self.assertEqual(len(spans), 1)
+
+    def test_merge_span_has_pr_merged_true(self):
+        self._emit_merge_span()
+        spans = _spans_named(self.exporter, "smartfix-merge")
+        self.assertTrue(spans[0].attributes["contrast.smartfix.pr_merged"])
+
+    def test_merge_span_has_remediation_id(self):
+        self._emit_merge_span(remediation_id="rem-12345")
+        spans = _spans_named(self.exporter, "smartfix-merge")
+        self.assertEqual(spans[0].attributes["contrast.smartfix.remediation_id"], "rem-12345")
+
+    def test_merge_span_has_finding_fingerprint(self):
+        self._emit_merge_span(vuln_uuid="vuln-abc123")
+        spans = _spans_named(self.exporter, "smartfix-merge")
+        self.assertEqual(spans[0].attributes["contrast.finding.fingerprint"], "vuln-abc123")
 
 
 if __name__ == "__main__":
