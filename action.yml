@@ -400,9 +400,16 @@ runs:
     # Auth headers are always derived from Contrast credentials in code — not configurable here.
     - name: Set OTel defaults
       shell: bash
+      env:
+        INPUT_CONTRAST_HOST: ${{ inputs.contrast_host }}
       run: |
         if [ -z "${OTEL_EXPORTER_OTLP_ENDPOINT}" ]; then
-          echo "OTEL_EXPORTER_OTLP_ENDPOINT=https://${{ inputs.contrast_host }}/aiml/otel" >> $GITHUB_ENV
+          # Strip any scheme/trailing slash so we don't build "https://https://host/..." (fails DNS silently in OTel exporter).
+          HOST="${INPUT_CONTRAST_HOST}"
+          HOST="${HOST#https://}"
+          HOST="${HOST#http://}"
+          HOST="${HOST%/}"
+          echo "OTEL_EXPORTER_OTLP_ENDPOINT=https://${HOST}/aiml/otel" >> $GITHUB_ENV
         fi
 
 
