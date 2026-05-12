@@ -69,9 +69,6 @@ def main():
     # Use lists so _main_impl can mutate them and the finally block sees the
     # correct value even when _main_impl exits via error_exit()/sys.exit().
     vuln_count = [0]
-    # Only counts PRs created by the SmartFix-internal agent.  External-agent
-    # runs (Copilot, Claude Code) create their PR asynchronously after the
-    # GitHub Issue is filed, so they are not reflected here.
     prs_created_count = [0]
     try:
         with otel_provider.start_span("smartfix-run") as run_span:
@@ -85,7 +82,7 @@ def main():
         otel_provider.shutdown_otel()
 
 
-def _main_impl(vuln_count: list[int], prs_created_count: list[int]) -> None:  # noqa: C901
+def _main_impl(vuln_count, prs_created_count):  # noqa: C901
     """Main orchestration logic."""
 
     start_time = datetime.now()
@@ -200,7 +197,6 @@ def _main_impl(vuln_count: list[int], prs_created_count: list[int]) -> None:  # 
 
     while True:
         telemetry_handler.reset_vuln_specific_telemetry()
-        smartfix_metrics.reset_vuln_token_accumulator()
         # Check if we've exceeded the maximum runtime
         current_time = datetime.now()
         elapsed_time = current_time - start_time
@@ -274,7 +270,6 @@ def _main_impl(vuln_count: list[int], prs_created_count: list[int]) -> None:  # 
             vuln_title = vulnerability_data['vulnerabilityTitle']
             remediation_id = vulnerability_data['remediationId']
             session_id = vulnerability_data.get('sessionId')
-            vuln_language = vulnerability_data.get('language')
 
             # Validate and create prompt configuration for SmartFix agent
             try:
@@ -317,7 +312,6 @@ def _main_impl(vuln_count: list[int], prs_created_count: list[int]) -> None:  # 
             vuln_title = vulnerability_data['vulnerabilityTitle']
             remediation_id = vulnerability_data['remediationId']
             session_id = None  # External agents don't use Contrast LLM sessions
-            vuln_language = vulnerability_data.get('language')
 
             # No prompts required for external agents
             prompts = PromptConfiguration()
@@ -352,6 +346,7 @@ def _main_impl(vuln_count: list[int], prs_created_count: list[int]) -> None:  # 
         # Update tracking variable now that we know we're actually processing this vuln
         previous_vuln_uuid = vuln_uuid
         vuln_count[0] += 1
+        smartfix_metrics.reset_vuln_token_accumulator()
 
         log(f"\n\033[0;33m Selected vuln to fix: {vuln_title} \033[0m")
 
@@ -381,7 +376,6 @@ def _main_impl(vuln_count: list[int], prs_created_count: list[int]) -> None:  # 
                     repo_config=repo_config,
                     skip_writing_security_test=config.SKIP_WRITING_SECURITY_TEST,
                     session_id=session_id,
-                    language=vuln_language,
                 )
 
                 # Propagate a build command discovered by a previous agent run so the next

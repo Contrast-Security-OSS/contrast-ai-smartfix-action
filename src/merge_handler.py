@@ -181,27 +181,26 @@ def handle_merged_pr():
     config = get_config()
     telemetry_handler.initialize_telemetry()
     otel_provider.initialize_otel(config)
-    # atexit guard ensures flush even when sys.exit() is called deep in a
-    # helper.  The explicit finally below handles normal flow; shutdown_otel
-    # is idempotent (guarded by _shutdown_called) so double-calling is safe.
     atexit.register(otel_provider.shutdown_otel)
 
     log("--- Handling Merged Contrast AI SmartFix Pull Request ---")
 
-    # Validate event and extract all identifiers before opening the span so that
-    # sys.exit() in any helper does not flush a merge span with pr_merged=true
-    # but without remediation_id / fingerprint (which creates uncorrelatable events).
-    event_data = _load_github_event()
-    pull_request = _validate_pr_event(event_data)
-    remediation_id, labels = _extract_remediation_info(pull_request)
-    vuln_uuid = _extract_vulnerability_info(labels)
-
     try:
         with otel_provider.start_span("smartfix-merge") as merge_span:
             merge_span.set_attribute("contrast.smartfix.pr_merged", True)
+
+            # Load and validate GitHub event data
+            event_data = _load_github_event()
+            pull_request = _validate_pr_event(event_data)
+
+            # Extract remediation and vulnerability information
+            remediation_id, labels = _extract_remediation_info(pull_request)
+            vuln_uuid = _extract_vulnerability_info(labels)
+
             merge_span.set_attribute("contrast.smartfix.remediation_id", remediation_id)
             merge_span.set_attribute("contrast.finding.fingerprint", vuln_uuid)
 
+            # Update telemetry with extracted information
             debug_log(f"Extracted Remediation ID: {remediation_id}")
             telemetry_handler.update_telemetry("additionalAttributes.remediationId", remediation_id)
             telemetry_handler.update_telemetry("vulnInfo.vulnId", vuln_uuid)

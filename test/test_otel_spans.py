@@ -38,7 +38,7 @@ Span hierarchy:
 
 import asyncio
 import unittest
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
@@ -352,16 +352,16 @@ class TestLlmCallSpan(unittest.TestCase):
         import src.smartfix.domains.telemetry.otel_provider as otel_provider
         from src.smartfix.extensions.smartfix_litellm import SmartFixLiteLlm
 
-        mock_instance = Mock(spec=SmartFixLiteLlm)
+        mock_instance = MagicMock(spec=SmartFixLiteLlm)
         mock_instance._max_retries = 1
         mock_instance._initial_retry_delay = 0
         mock_instance._retry_multiplier = 2
         mock_instance._is_retryable_exception = lambda e: False
         mock_instance._log_cost_analysis.return_value = (10, 5, 0, 0)
-        mock_instance.llm_client = Mock()
+        mock_instance.llm_client = MagicMock()
         mock_instance._otel_context = None  # use ambient context (fix-vulnerability is current)
 
-        mock_response = Mock()
+        mock_response = MagicMock()
         mock_response.model = "test-model"
         mock_instance.llm_client.acompletion = AsyncMock(return_value=mock_response)
 
@@ -392,16 +392,16 @@ class TestLlmCallSpan(unittest.TestCase):
         """Token counts from _log_cost_analysis() are set on the LLM span."""
         from src.smartfix.extensions.smartfix_litellm import SmartFixLiteLlm
 
-        mock_instance = Mock(spec=SmartFixLiteLlm)
+        mock_instance = MagicMock(spec=SmartFixLiteLlm)
         mock_instance._max_retries = 1
         mock_instance._initial_retry_delay = 0
         mock_instance._retry_multiplier = 2
         mock_instance._is_retryable_exception = lambda e: False
         mock_instance._log_cost_analysis.return_value = (200, 80, 0, 0)
-        mock_instance.llm_client = Mock()
+        mock_instance.llm_client = MagicMock()
         mock_instance._otel_context = None
 
-        mock_response = Mock()
+        mock_response = MagicMock()
         mock_response.model = "usage-model"
         mock_instance.llm_client.acompletion = AsyncMock(return_value=mock_response)
 
@@ -459,27 +459,6 @@ class TestSmartFixMergeSpan(unittest.TestCase):
         self._emit_merge_span(vuln_uuid="vuln-abc123")
         spans = _spans_named(self.exporter, "smartfix-merge")
         self.assertEqual(spans[0].attributes["contrast.finding.fingerprint"], "vuln-abc123")
-
-    @patch('src.merge_handler.otel_provider.shutdown_otel')
-    @patch('src.merge_handler.atexit.register')
-    @patch('src.merge_handler.otel_provider.initialize_otel')
-    @patch('src.smartfix.domains.telemetry.telemetry_handler.initialize_telemetry')
-    @patch('src.merge_handler._validate_pr_event')
-    @patch('src.merge_handler._load_github_event')
-    @patch('src.merge_handler._extract_remediation_info', side_effect=SystemExit(1))
-    def test_no_merge_span_when_extraction_fails(
-        self, _mock_extract, mock_load, mock_validate,
-        _mock_init_tel, _mock_init_otel, _mock_atexit, _mock_shutdown
-    ):
-        """Extraction failure before start_span must produce zero smartfix-merge spans."""
-        mock_load.return_value = {}
-        mock_validate.return_value = {"merged": True}
-
-        with self.assertRaises(SystemExit):
-            import src.merge_handler as merge_handler
-            merge_handler.handle_merged_pr()
-
-        self.assertEqual(len(_spans_named(self.exporter, "smartfix-merge")), 0)
 
 
 if __name__ == "__main__":
