@@ -12,6 +12,7 @@ from setup_test_env import create_temp_repo_dir  # noqa: E402
 from src.config import reset_config, get_config  # noqa: E402
 from src.main import main  # noqa: E402
 from src.smartfix.shared.failure_categories import FailureCategory  # noqa: E402
+from src.smartfix.shared.exceptions import TokenBalanceExhaustedError  # noqa: E402
 
 
 class TestMain(unittest.TestCase):
@@ -444,6 +445,91 @@ class TestMain(unittest.TestCase):
         self.assertIn("2 app(s) were inaccessible and skipped", output)
         self.assertIn("app-id-2", output)
         self.assertIn("app-id-3", output)
+
+    def test_token_balance_exhausted_exits_cleanly(self):
+        """TokenBalanceExhaustedError from agent logs a paused message and exits 0.
+
+        No error_exit and no notify_remediation_failed_org should be called on this path.
+        """
+        vuln_data = {
+            'vulnerabilityUuid': 'TEST-VULN-UUID-402',
+            'vulnerabilityTitle': 'Test SQL Injection',
+            'vulnerabilityRuleName': 'sql-injection',
+            'vulnerabilitySeverity': 'HIGH',
+            'remediationId': 'REM-TEST-402',
+            'sessionId': 'session-402',
+            'fixSystemPrompt': 'Fix the vulnerability',
+            'fixUserPrompt': 'Please fix',
+        }
+        self.mock_api.side_effect = [vuln_data]
+
+        test_env = {**self.env_vars, 'USE_CONTRAST_LLM': 'false', 'AGENT_MODEL': 'mock-model'}
+
+        with patch('src.github.github_operations.GitHubOperations.count_open_prs_with_prefix', return_value=0), \
+             patch('src.github.github_operations.GitHubOperations.check_pr_status_for_label', return_value="NOT_FOUND"), \
+             patch('src.github.github_operations.GitHubOperations.generate_label_details',
+                   return_value=('contrast-vuln-id:TEST-VULN-UUID-402', 'desc', 'color')), \
+             patch('src.smartfix.domains.scm.git_operations.GitOperations.prepare_feature_branch'), \
+             patch('src.smartfix.domains.scm.git_operations.GitOperations.get_branch_name',
+                   return_value='smartfix/remediation-REM-TEST-402'), \
+             patch('src.main.SmartFixAgent') as mock_agent_class, \
+             patch('src.contrast_api.notify_remediation_failed_org') as mock_notify_failed, \
+             patch('src.utils.error_exit') as mock_error_exit:
+
+            mock_agent = MagicMock()
+            mock_agent.remediate.side_effect = TokenBalanceExhaustedError("HTTP 402")
+            mock_agent_class.return_value = mock_agent
+
+            with patch.dict('os.environ', test_env, clear=True):
+                reset_config()
+                with patch('src.main.config', get_config()):
+                    with io.StringIO() as buf, contextlib.redirect_stdout(buf):
+                        main()
+                        output = buf.getvalue()
+
+        self.assertIn("paused for token balance", output)
+        mock_notify_failed.assert_not_called()
+        mock_error_exit.assert_not_called()
+        # Clean exit: sys.exit is never called (function returns naturally, process exits 0)
+        self.mock_exit.assert_not_called()
+
+    def test_token_balance_exhausted_process_exits_zero(self):
+        """When TokenBalanceExhaustedError is raised, sys.exit is called with 0, not 1."""
+        vuln_data = {
+            'vulnerabilityUuid': 'TEST-VULN-UUID-402B',
+            'vulnerabilityTitle': 'Test XSS',
+            'vulnerabilityRuleName': 'xss',
+            'vulnerabilitySeverity': 'HIGH',
+            'remediationId': 'REM-TEST-402B',
+            'sessionId': 'session-402b',
+            'fixSystemPrompt': 'Fix it',
+            'fixUserPrompt': 'Please fix',
+        }
+        self.mock_api.side_effect = [vuln_data]
+
+        test_env = {**self.env_vars, 'USE_CONTRAST_LLM': 'false', 'AGENT_MODEL': 'mock-model'}
+
+        with patch('src.github.github_operations.GitHubOperations.count_open_prs_with_prefix', return_value=0), \
+             patch('src.github.github_operations.GitHubOperations.check_pr_status_for_label', return_value="NOT_FOUND"), \
+             patch('src.github.github_operations.GitHubOperations.generate_label_details',
+                   return_value=('contrast-vuln-id:TEST-VULN-UUID-402B', 'desc', 'color')), \
+             patch('src.smartfix.domains.scm.git_operations.GitOperations.prepare_feature_branch'), \
+             patch('src.smartfix.domains.scm.git_operations.GitOperations.get_branch_name',
+                   return_value='smartfix/remediation-REM-TEST-402B'), \
+             patch('src.main.SmartFixAgent') as mock_agent_class:
+
+            mock_agent = MagicMock()
+            mock_agent.remediate.side_effect = TokenBalanceExhaustedError("HTTP 402")
+            mock_agent_class.return_value = mock_agent
+
+            with patch.dict('os.environ', test_env, clear=True):
+                reset_config()
+                with patch('src.main.config', get_config()):
+                    with io.StringIO() as buf, contextlib.redirect_stdout(buf):
+                        main()
+
+        # sys.exit is never called; function returns naturally (process exits 0)
+        self.mock_exit.assert_not_called()
 
 
 if __name__ == '__main__':

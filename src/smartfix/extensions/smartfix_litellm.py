@@ -39,6 +39,7 @@ from opentelemetry.trace import StatusCode
 from src.smartfix.domains.providers import CONTRAST_CLAUDE_SONNET_4_5
 from src.smartfix.domains.telemetry import otel_provider
 from src.smartfix.domains.telemetry import smartfix_metrics
+from src.smartfix.shared.exceptions import TokenBalanceExhaustedError
 from src.config import get_config
 from src.utils import debug_log, log
 
@@ -544,6 +545,10 @@ class SmartFixLiteLlm(LiteLlm):
                         })
                     except Exception:
                         pass
+
+                    if isinstance(e, litellm.APIError) and getattr(e, 'status_code', None) == 402:
+                        llm_span.set_attribute("contrast.smartfix.token_balance_exhausted", True)
+                        raise TokenBalanceExhaustedError("Token balance exhausted (HTTP 402)") from e
 
                     if not self._is_retryable_exception(e):
                         log(f"LLM call failed with non-retryable error: {type(e).__name__}: {e}", is_error=True)

@@ -29,6 +29,7 @@ from src.config import get_config
 from src.smartfix.domains.telemetry import otel_provider
 from src.smartfix.domains.telemetry import smartfix_metrics
 from src.smartfix.shared.coding_agents import CodingAgents
+from src.smartfix.shared.exceptions import TokenBalanceExhaustedError
 from src.utils import debug_log, log, error_exit
 from src.smartfix.domains.telemetry import telemetry_handler
 from src.version_check import do_version_check
@@ -171,28 +172,6 @@ def _main_impl(vuln_count):  # noqa: C901
     discovered_build_cmd = None   # Build command found by agent at runtime; carried forward across iterations
     discovered_format_cmd = None  # Format command found by agent at runtime; carried forward across iterations
 
-    # Log initial credit tracking status if using Contrast LLM (only for SMARTFIX agent)
-    if config.CODING_AGENT == CodingAgents.SMARTFIX.name and config.USE_CONTRAST_LLM:
-        initial_credit_info = contrast_api.get_credit_tracking_org(
-            contrast_host=config.CONTRAST_HOST,
-            contrast_org_id=config.CONTRAST_ORG_ID,
-            contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
-            contrast_api_key=config.CONTRAST_API_KEY
-        )
-        if initial_credit_info:
-            log(initial_credit_info.to_log_message())
-            # Log any initial warnings
-            if initial_credit_info.should_log_warning():
-                warning_msg = initial_credit_info.get_credit_warning_message()
-                if initial_credit_info.is_exhausted:
-                    log(warning_msg, is_error=True)
-                    error_exit(remediation_id, FailureCategory.GENERAL_FAILURE.value)
-                else:
-                    log(warning_msg, is_warning=True)
-        else:
-            log("Could not retrieve initial credit tracking information", is_error=True)
-            error_exit(remediation_id, FailureCategory.GENERAL_FAILURE.value)
-
     while True:
         telemetry_handler.reset_vuln_specific_telemetry()
         # Check if we've exceeded the maximum runtime
@@ -221,19 +200,6 @@ def _main_impl(vuln_count):  # noqa: C901
             log(f"\n--- Reached max PR limit ({max_open_prs_setting}). Current open PRs: {current_open_pr_count}. Stopping processing. ---")
             break
 
-        # Check credit exhaustion for Contrast LLM usage
-        if config.USE_CONTRAST_LLM:
-            current_credit_info = contrast_api.get_credit_tracking_org(
-                contrast_host=config.CONTRAST_HOST,
-                contrast_org_id=config.CONTRAST_ORG_ID,
-                contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
-                contrast_api_key=config.CONTRAST_API_KEY
-            )
-            if current_credit_info and current_credit_info.is_exhausted:
-                log("\n--- Credits exhausted. Stopping processing. ---")
-                log("Credits have been exhausted. Contact your CSM to request additional credits.", is_error=True)
-                break
-
         # --- Fetch Next Vulnerability Data from API ---
         if config.CODING_AGENT == CodingAgents.SMARTFIX.name:
             # For SMARTFIX, get vulnerability with prompts
@@ -242,7 +208,6 @@ def _main_impl(vuln_count):  # noqa: C901
                 config.CONTRAST_HOST, config.CONTRAST_ORG_ID, config.CONTRAST_APP_IDS,
                 config.CONTRAST_AUTHORIZATION_KEY, config.CONTRAST_API_KEY,
                 max_open_prs_setting, github_repo_url, config.VULNERABILITY_SEVERITIES,
-                credit_info=current_credit_info if config.USE_CONTRAST_LLM else None
             )
             log("\n::endgroup::")
 
@@ -287,7 +252,6 @@ def _main_impl(vuln_count):  # noqa: C901
                 config.CONTRAST_HOST, config.CONTRAST_ORG_ID, config.CONTRAST_APP_IDS,
                 config.CONTRAST_AUTHORIZATION_KEY, config.CONTRAST_API_KEY,
                 github_repo_url, max_open_prs_setting, config.VULNERABILITY_SEVERITIES,
-                credit_info=current_credit_info if config.USE_CONTRAST_LLM else None
             )
             log("\n::endgroup::")
 
@@ -527,29 +491,6 @@ def _main_impl(vuln_count):  # noqa: C901
 
                 updated_pr_body = pr_body_base + qa_section
 
-                # Append credit tracking information to PR body if using Contrast LLM
-                if config.CODING_AGENT == CodingAgents.SMARTFIX.name and config.USE_CONTRAST_LLM:
-                    current_credit_info = contrast_api.get_credit_tracking_org(
-                        contrast_host=config.CONTRAST_HOST,
-                        contrast_org_id=config.CONTRAST_ORG_ID,
-                        contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
-                        contrast_api_key=config.CONTRAST_API_KEY
-                    )
-                    if current_credit_info:
-                        # Increment credits used to account for this PR about to be created
-                        projected_credit_info = current_credit_info.with_incremented_usage()
-                        updated_pr_body += projected_credit_info.to_pr_body_section()
-
-                        # Show countdown message and warnings
-                        credits_after = projected_credit_info.credits_remaining
-                        log(f"Credit consumed. {credits_after} credits remaining")
-                        if projected_credit_info.should_log_warning():
-                            warning_msg = projected_credit_info.get_credit_warning_message()
-                            if projected_credit_info.is_exhausted:
-                                log(warning_msg, is_error=True)
-                            else:
-                                log(warning_msg, is_warning=True)
-
                 # Create a brief summary for the telemetry aiSummaryReport (limited to 255 chars in DB)
                 # Generate an optimized summary using the dedicated function in telemetry_handler
                 brief_summary = telemetry_handler.create_ai_summary_report(updated_pr_body)
@@ -623,19 +564,6 @@ def _main_impl(vuln_count):  # noqa: C901
                             )
                             if remediation_notified:
                                 log(f"Successfully notified Remediation service about PR for remediation {remediation_id}.")
-
-                                # Log updated credit tracking status after PR notification (only for SMARTFIX agent)
-                                if config.CODING_AGENT == CodingAgents.SMARTFIX.name and config.USE_CONTRAST_LLM:
-                                    updated_credit_info = contrast_api.get_credit_tracking_org(
-                                        contrast_host=config.CONTRAST_HOST,
-                                        contrast_org_id=config.CONTRAST_ORG_ID,
-                                        contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
-                                        contrast_api_key=config.CONTRAST_API_KEY
-                                    )
-                                    if updated_credit_info:
-                                        log(updated_credit_info.to_log_message())
-                                    else:
-                                        debug_log("Could not retrieve updated credit tracking information")
                             else:
                                 log(f"Failed to notify Remediation service about PR for remediation {remediation_id}.", is_warning=True)
                     else:
@@ -678,6 +606,9 @@ def _main_impl(vuln_count):  # noqa: C901
                     contrast_api_key=config.CONTRAST_API_KEY
                 )
 
+            except TokenBalanceExhaustedError:
+                log("SmartFix paused for token balance — will resume on next allocation tick.")
+                break
             except BaseException:
                 raise
             finally:

@@ -31,6 +31,7 @@ from unittest.mock import patch, AsyncMock, MagicMock
 import litellm
 
 from src.smartfix.extensions.smartfix_litellm import SmartFixLiteLlm
+from src.smartfix.shared.exceptions import TokenBalanceExhaustedError
 
 
 class TestSmartFixLiteLlmRetry(unittest.TestCase):
@@ -267,6 +268,98 @@ class TestSmartFixLiteLlmRetryAsync(unittest.TestCase):
 
         # Should only be called once - no retries for non-retryable errors
         self.mock_instance.llm_client.acompletion.assert_called_once()
+
+    def test_call_llm_with_retry_402_raises_token_balance_exhausted(self):
+        """HTTP 402 raises TokenBalanceExhaustedError, not APIError, and is not retried."""
+        payment_error = litellm.APIError(
+            message="Payment Required",
+            llm_provider="test",
+            model="test",
+            status_code=402
+        )
+
+        self.mock_instance.llm_client.acompletion = AsyncMock(side_effect=payment_error)
+
+        async def run_test():
+            await SmartFixLiteLlm._call_llm_with_retry(
+                self.mock_instance, {"model": "test"}
+            )
+
+        with patch('src.smartfix.extensions.smartfix_litellm.debug_log'):
+            with self.assertRaises(TokenBalanceExhaustedError):
+                self._run_async(run_test())
+
+        # 402 must not be retried
+        self.mock_instance.llm_client.acompletion.assert_called_once()
+
+    def test_call_llm_with_retry_401_does_not_raise_token_balance_exhausted(self):
+        """HTTP 401 propagates as APIError, not TokenBalanceExhaustedError."""
+        auth_error = litellm.APIError(
+            message="Unauthorized",
+            llm_provider="test",
+            model="test",
+            status_code=401
+        )
+
+        self.mock_instance.llm_client.acompletion = AsyncMock(side_effect=auth_error)
+
+        async def run_test():
+            await SmartFixLiteLlm._call_llm_with_retry(
+                self.mock_instance, {"model": "test"}
+            )
+
+        with patch('src.smartfix.extensions.smartfix_litellm.debug_log'):
+            with self.assertRaises(litellm.APIError) as ctx:
+                self._run_async(run_test())
+            self.assertNotIsInstance(ctx.exception, TokenBalanceExhaustedError)
+
+    def test_call_llm_with_retry_403_does_not_raise_token_balance_exhausted(self):
+        """HTTP 403 propagates as APIError, not TokenBalanceExhaustedError."""
+        forbidden_error = litellm.APIError(
+            message="Forbidden",
+            llm_provider="test",
+            model="test",
+            status_code=403
+        )
+
+        self.mock_instance.llm_client.acompletion = AsyncMock(side_effect=forbidden_error)
+
+        async def run_test():
+            await SmartFixLiteLlm._call_llm_with_retry(
+                self.mock_instance, {"model": "test"}
+            )
+
+        with patch('src.smartfix.extensions.smartfix_litellm.debug_log'):
+            with self.assertRaises(litellm.APIError) as ctx:
+                self._run_async(run_test())
+            self.assertNotIsInstance(ctx.exception, TokenBalanceExhaustedError)
+
+    def test_call_llm_with_retry_429_retries_not_token_balance(self):
+        """HTTP 429 is retried and does not raise TokenBalanceExhaustedError."""
+        rate_limit_error = litellm.APIError(
+            message="Too Many Requests",
+            llm_provider="test",
+            model="test",
+            status_code=429
+        )
+        expected_response = {"choices": [{"message": {"content": "ok"}}]}
+
+        # Fail once with 429, then succeed
+        self.mock_instance.llm_client.acompletion = AsyncMock(
+            side_effect=[rate_limit_error, expected_response]
+        )
+
+        async def run_test():
+            return await SmartFixLiteLlm._call_llm_with_retry(
+                self.mock_instance, {"model": "test"}
+            )
+
+        with patch('src.smartfix.extensions.smartfix_litellm.debug_log'):
+            with patch('asyncio.sleep', new_callable=AsyncMock):
+                result = self._run_async(run_test())
+
+        self.assertEqual(result, expected_response)
+        self.assertEqual(self.mock_instance.llm_client.acompletion.call_count, 2)
 
 
 class TestSmartFixLiteLlmRetryConfig(unittest.TestCase):
