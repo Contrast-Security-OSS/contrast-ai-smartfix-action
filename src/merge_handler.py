@@ -181,6 +181,9 @@ def handle_merged_pr():
     config = get_config()
     telemetry_handler.initialize_telemetry()
     otel_provider.initialize_otel(config)
+    # atexit guard ensures flush even when sys.exit() is called deep in a
+    # helper.  The explicit finally below handles normal flow; shutdown_otel
+    # is idempotent (guarded by _shutdown_called) so double-calling is safe.
     atexit.register(otel_provider.shutdown_otel)
 
     log("--- Handling Merged Contrast AI SmartFix Pull Request ---")

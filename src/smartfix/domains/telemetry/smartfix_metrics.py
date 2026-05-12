@@ -36,6 +36,15 @@ Per-LLM-call (emitted from smartfix_litellm.py):
 Per-vulnerability (emitted from main.py):
   smartfix.vulnerability.duration  histogram(s)  end-to-end fix latency
   smartfix.pr.count                counter       PR creation attempts
+
+Per-vulnerability token accumulator
+------------------------------------
+Module-level integers (_vuln_input_tokens, _vuln_output_tokens) that are
+reset via reset_vuln_token_accumulator() at the start of each vulnerability
+loop iteration, and incremented by record_llm_call_tokens() on every LLM call.
+Call get_vuln_token_totals() in the fix-vulnerability span's finally block to
+attach total token usage as span attributes.  Accumulation happens outside the
+OTel try/except so a failed counter write never silently zeroes the totals.
 """
 
 from typing import Optional
@@ -139,7 +148,7 @@ def reset_vuln_token_accumulator() -> None:
     _vuln_output_tokens = 0
 
 
-def get_vuln_token_totals() -> tuple:
+def get_vuln_token_totals() -> tuple[int, int]:
     """Return (total_input_tokens, total_output_tokens) accumulated for the current vulnerability."""
     return _vuln_input_tokens, _vuln_output_tokens
 
@@ -206,9 +215,13 @@ def record_llm_call_tokens(
         model: LiteLLM model string (e.g. "contrast/claude-sonnet-4-5").
     """
     global _vuln_input_tokens, _vuln_output_tokens
+    total_input = input_tokens + cache_read_tokens + cache_write_tokens
+    # Accumulate outside the try block so that a failure in the OTel counter
+    # (e.g. meter not yet initialised) never silently zeroes the per-vulnerability totals.
+    _vuln_input_tokens += total_input
+    _vuln_output_tokens += output_tokens
     try:
         total_counter = _get_tokens_total_counter()
-        total_input = input_tokens + cache_read_tokens + cache_write_tokens
         total_counter.add(total_input, {"gen_ai.token.type": "input", "gen_ai.request.model": model})
         total_counter.add(output_tokens, {"gen_ai.token.type": "output", "gen_ai.request.model": model})
 
@@ -218,9 +231,6 @@ def record_llm_call_tokens(
                 cache_counter.add(cache_read_tokens, {"gen_ai.token.type": "read", "gen_ai.request.model": model})
             if cache_write_tokens:
                 cache_counter.add(cache_write_tokens, {"gen_ai.token.type": "write", "gen_ai.request.model": model})
-
-        _vuln_input_tokens += total_input
-        _vuln_output_tokens += output_tokens
     except Exception:
         pass
 
