@@ -205,6 +205,8 @@ class SubAgentExecutor:
                 if vuln_uuid:
                     headers["x-contrast-llm-fingerprint"] = vuln_uuid
                 if remediation_id:
+                    # session-id is the remediation_id, not the ADK session_id.
+                    # It groups all LLM calls for a single SmartFix PR attempt.
                     headers["x-contrast-llm-session-id"] = remediation_id
                 if repo_slug:
                     headers["x-contrast-llm-repo"] = repo_slug

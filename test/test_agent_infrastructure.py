@@ -195,7 +195,7 @@ class TestSubAgentExecutor(unittest.TestCase):
         # Mock config
         config_mock = MagicMock()
         config_mock.AGENT_MODEL = 'test-model'
-        config_mock.USE_CONTRAST_LLM = 'false'
+        config_mock.USE_CONTRAST_LLM = False
         mock_get_config.return_value = config_mock
 
         # Mock MCP manager
@@ -226,7 +226,7 @@ class TestSubAgentExecutor(unittest.TestCase):
         # Mock config with Contrast LLM enabled
         config_mock = MagicMock()
         config_mock.AGENT_MODEL = 'test-model'
-        config_mock.USE_CONTRAST_LLM = 'true'
+        config_mock.USE_CONTRAST_LLM = True
         config_mock.CONTRAST_API_KEY = 'test-api-key'
         config_mock.CONTRAST_AUTHORIZATION_KEY = 'test-auth-key'
         mock_get_config.return_value = config_mock
