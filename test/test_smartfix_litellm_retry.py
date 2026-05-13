@@ -28,6 +28,7 @@ import asyncio
 import unittest
 from unittest.mock import patch, AsyncMock, Mock
 
+import httpx
 import litellm
 
 from src.smartfix.extensions.smartfix_litellm import SmartFixLiteLlm
@@ -51,7 +52,7 @@ class TestSmartFixLiteLlmRetry(unittest.TestCase):
             message="Rate limit exceeded",
             llm_provider="test",
             model="test-model",
-            response=Mock()
+            response=httpx.Response(429)
         )
         result = SmartFixLiteLlm._is_retryable_exception(self.mock_instance, error)
         self.assertTrue(result)
@@ -72,7 +73,7 @@ class TestSmartFixLiteLlmRetry(unittest.TestCase):
             message="Service unavailable",
             llm_provider="test",
             model="test-model",
-            response=Mock()
+            response=httpx.Response(503)
         )
         result = SmartFixLiteLlm._is_retryable_exception(self.mock_instance, error)
         self.assertTrue(result)
@@ -198,7 +199,7 @@ class TestSmartFixLiteLlmRetryAsync(unittest.TestCase):
             message="Rate limit",
             llm_provider="test",
             model="test",
-            response=Mock()
+            response=httpx.Response(429)
         )
 
         # Fail twice, then succeed
@@ -225,7 +226,7 @@ class TestSmartFixLiteLlmRetryAsync(unittest.TestCase):
             message="Rate limit",
             llm_provider="test",
             model="test",
-            response=Mock()
+            response=httpx.Response(429)
         )
 
         # Fail all attempts

@@ -55,6 +55,7 @@ class TestMain(unittest.TestCase):
         mock_process = Mock()
         mock_process.returncode = 0
         mock_process.stdout = "Mock output"
+        mock_process.stderr = ""
         mock_process.communicate.return_value = (b"Mock stdout", b"Mock stderr")
         self.mock_subprocess.return_value = mock_process
 
