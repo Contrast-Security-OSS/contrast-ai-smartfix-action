@@ -29,7 +29,6 @@ Tests the SmartFixAgent remediation workflow including:
 
 import unittest
 from unittest.mock import patch
-from pathlib import Path
 
 from src.smartfix.domains.agents.smartfix_agent import SmartFixAgent
 from src.smartfix.shared.failure_categories import FailureCategory

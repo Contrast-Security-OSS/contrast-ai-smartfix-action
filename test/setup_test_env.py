@@ -5,7 +5,6 @@ temporary directory management and sample object factories.
 """
 
 from pathlib import Path
-from typing import Optional
 
 from src.smartfix.domains.vulnerability import RemediationContext
 from src.smartfix.domains.vulnerability.context import (

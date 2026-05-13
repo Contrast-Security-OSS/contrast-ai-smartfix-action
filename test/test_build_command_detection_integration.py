@@ -26,7 +26,7 @@ import unittest
 import tempfile
 import shutil
 from pathlib import Path
-from unittest.mock import patch, Mock
+from unittest.mock import patch
 
 from src.smartfix.config.command_detector import detect_build_command
 
