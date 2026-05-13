@@ -278,11 +278,15 @@ class TestVulnTokenAccumulator(unittest.TestCase):
 
     def setUp(self):
         import src.smartfix.domains.telemetry.smartfix_metrics as m
+        self._m = m
+        self._orig_total = m._tokens_total_counter
+        self._orig_cache = m._cache_tokens_counter
         m.reset_vuln_token_accumulator()
 
     def tearDown(self):
-        import src.smartfix.domains.telemetry.smartfix_metrics as m
-        m.reset_vuln_token_accumulator()
+        self._m._tokens_total_counter = self._orig_total
+        self._m._cache_tokens_counter = self._orig_cache
+        self._m.reset_vuln_token_accumulator()
 
     def test_reset_clears_counts(self):
         import src.smartfix.domains.telemetry.smartfix_metrics as m

@@ -188,13 +188,14 @@ def handle_merged_pr():
 
     log("--- Handling Merged Contrast AI SmartFix Pull Request ---")
 
+    # Load and validate event before starting the span so non-merge events
+    # don't produce a smartfix-merge span with pr_merged=true.
+    event_data = _load_github_event()
+    pull_request = _validate_pr_event(event_data)
+
     try:
         with otel_provider.start_span("smartfix-merge") as merge_span:
             merge_span.set_attribute("contrast.smartfix.pr_merged", True)
-
-            # Load and validate GitHub event data
-            event_data = _load_github_event()
-            pull_request = _validate_pr_event(event_data)
 
             # Extract remediation and vulnerability information
             remediation_id, labels = _extract_remediation_info(pull_request)
