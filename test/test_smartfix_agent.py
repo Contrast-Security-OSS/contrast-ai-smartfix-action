@@ -49,7 +49,7 @@ def _make_context(
     user_build_command=None,
     user_format_command=None,
     repo_path="/tmp/test",
-    language="Java",
+    language=None,
 ):
     """Build a real RemediationContext for tests that exercise _run_fix_agent_execution."""
     vulnerability = Vulnerability(
