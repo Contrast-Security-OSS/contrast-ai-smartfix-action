@@ -31,7 +31,7 @@ import subprocess
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import patch, Mock
+from unittest.mock import patch, Mock  # Mock kept for RemediationContext in _make_context
 
 from src.smartfix.domains.agents.directory_tree_utils import (
     get_directory_tree,
@@ -45,25 +45,22 @@ class TestGetDirectoryTree(unittest.TestCase):
 
     def test_uses_tree_cli_when_available(self):
         """When tree CLI succeeds (returncode=0), returns its stdout."""
-        mock_result = Mock()
-        mock_result.returncode = 0
-        mock_result.stdout = ".\n├── src\n└── test\n\n2 directories"
+        tree_output = ".\n├── src\n└── test\n\n2 directories"
+        completed = subprocess.CompletedProcess(args=[], returncode=0, stdout=tree_output)
 
-        with patch('subprocess.run', return_value=mock_result) as mock_run:
+        with patch('subprocess.run', return_value=completed) as mock_run:
             result = get_directory_tree(Path('/some/repo'), max_depth=3)
 
-        self.assertEqual(result, mock_result.stdout)
+        self.assertEqual(result, tree_output)
         mock_run.assert_called_once()
         call_args = mock_run.call_args
         self.assertIn('tree', call_args[0][0])
 
     def test_tree_cli_excludes_dotfiles_and_build_dirs(self):
         """The tree -I pattern uses .* to exclude all dotfiles/dotdirs and common build directories."""
-        mock_result = Mock()
-        mock_result.returncode = 0
-        mock_result.stdout = "tree output"
+        completed = subprocess.CompletedProcess(args=[], returncode=0, stdout="tree output")
 
-        with patch('subprocess.run', return_value=mock_result) as mock_run:
+        with patch('subprocess.run', return_value=completed) as mock_run:
             get_directory_tree(Path('/some/repo'), max_depth=3)
 
         cmd = mock_run.call_args[0][0]
@@ -74,11 +71,9 @@ class TestGetDirectoryTree(unittest.TestCase):
 
     def test_tree_cli_passes_gitignore_flag(self):
         """The tree CLI call includes --gitignore so .gitignore files are respected natively."""
-        mock_result = Mock()
-        mock_result.returncode = 0
-        mock_result.stdout = "tree output"
+        completed = subprocess.CompletedProcess(args=[], returncode=0, stdout="tree output")
 
-        with patch('subprocess.run', return_value=mock_result) as mock_run:
+        with patch('subprocess.run', return_value=completed) as mock_run:
             get_directory_tree(Path('/some/repo'), max_depth=3)
 
         cmd = mock_run.call_args[0][0]
@@ -86,13 +81,11 @@ class TestGetDirectoryTree(unittest.TestCase):
 
     def test_tree_cli_nonzero_returncode_falls_back_to_python(self):
         """When tree CLI returns non-zero, falls back to generate_simple_tree."""
-        mock_result = Mock()
-        mock_result.returncode = 1
-        mock_result.stdout = ""
+        completed = subprocess.CompletedProcess(args=[], returncode=1, stdout="")
 
         with TemporaryDirectory() as tmpdir:
             (Path(tmpdir) / "src").mkdir()
-            with patch('subprocess.run', return_value=mock_result):
+            with patch('subprocess.run', return_value=completed):
                 result = get_directory_tree(Path(tmpdir), max_depth=2)
 
         self.assertIn("src", result)
@@ -118,11 +111,9 @@ class TestGetDirectoryTree(unittest.TestCase):
     def test_truncates_when_output_exceeds_max_chars(self):
         """Output longer than max_chars is truncated with a suffix message."""
         long_output = "x" * 200
-        mock_result = Mock()
-        mock_result.returncode = 0
-        mock_result.stdout = long_output
+        completed = subprocess.CompletedProcess(args=[], returncode=0, stdout=long_output)
 
-        with patch('subprocess.run', return_value=mock_result):
+        with patch('subprocess.run', return_value=completed):
             result = get_directory_tree(Path('/repo'), max_depth=3, max_chars=100)
 
         self.assertEqual(len(result), 100 + len("\n... [truncated, 100 chars omitted]"))
@@ -132,11 +123,9 @@ class TestGetDirectoryTree(unittest.TestCase):
     def test_no_truncation_when_output_within_max_chars(self):
         """Output shorter than max_chars is returned unchanged."""
         short_output = ".\n└── src\n"
-        mock_result = Mock()
-        mock_result.returncode = 0
-        mock_result.stdout = short_output
+        completed = subprocess.CompletedProcess(args=[], returncode=0, stdout=short_output)
 
-        with patch('subprocess.run', return_value=mock_result):
+        with patch('subprocess.run', return_value=completed):
             result = get_directory_tree(Path('/repo'), max_depth=3, max_chars=8000)
 
         self.assertEqual(result, short_output)
@@ -299,13 +288,13 @@ class TestGenerateSimpleTree(unittest.TestCase):
             (root / "README.md").touch()
 
             # Mock git check-ignore to report secret.log as ignored
-            mock_result = Mock()
-            mock_result.returncode = 0
-            mock_result.stdout = "secret.log\n"
+            check_ignore_result = subprocess.CompletedProcess(
+                args=[], returncode=0, stdout="secret.log\n"
+            )
 
             with patch(
                 'src.smartfix.domains.agents.directory_tree_utils.subprocess.run',
-                return_value=mock_result,
+                return_value=check_ignore_result,
             ):
                 result = generate_simple_tree(root, max_depth=2, repo_root=root)
 
@@ -320,13 +309,13 @@ class TestGenerateSimpleTree(unittest.TestCase):
             (root / "src").mkdir()
             (root / "main.py").touch()
 
-            mock_result = Mock()
-            mock_result.returncode = 1  # nothing ignored
-            mock_result.stdout = ""
+            check_ignore_result = subprocess.CompletedProcess(
+                args=[], returncode=1, stdout=""  # nothing ignored
+            )
 
             with patch(
                 'src.smartfix.domains.agents.directory_tree_utils.subprocess.run',
-                return_value=mock_result,
+                return_value=check_ignore_result,
             ):
                 result = generate_simple_tree(root, max_depth=2, repo_root=root)
 

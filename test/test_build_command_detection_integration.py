@@ -21,6 +21,7 @@ Detection is store-only: it does NOT run actual builds.
 The Fix agent's BuildTool handles build execution and verification.
 """
 
+import subprocess
 import unittest
 import tempfile
 import shutil
@@ -56,7 +57,7 @@ class TestBuildCommandDetectionIntegration(unittest.TestCase):
         self._create_file('src/main/java/App.java', 'public class App {}')
 
         # Mock mvn --version check (tool exists)
-        mock_subprocess.return_value = Mock(returncode=0, stdout='Maven 3.8.1')
+        mock_subprocess.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout='Maven 3.8.1')
 
         result = detect_build_command(repo_root=self.repo_root)
 
@@ -92,7 +93,7 @@ class TestBuildCommandDetectionIntegration(unittest.TestCase):
         self._create_file('build.gradle', 'plugins { id "java" }')
         self._create_file('settings.gradle', 'rootProject.name = "test"')
 
-        mock_subprocess.return_value = Mock(returncode=0, stdout='Gradle 7.4')
+        mock_subprocess.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout='Gradle 7.4')
 
         result = detect_build_command(repo_root=self.repo_root)
 
@@ -107,7 +108,7 @@ class TestBuildCommandDetectionIntegration(unittest.TestCase):
         """npm project: detects npm command from package.json marker."""
         self._create_file('package.json', '{"name": "test", "scripts": {"test": "jest"}}')
 
-        mock_subprocess.return_value = Mock(returncode=0, stdout='8.19.2')
+        mock_subprocess.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout='8.19.2')
 
         result = detect_build_command(repo_root=self.repo_root)
 
@@ -119,7 +120,7 @@ class TestBuildCommandDetectionIntegration(unittest.TestCase):
         """Makefile project: detects make command from Makefile marker."""
         self._create_file('Makefile', 'test:\n\t@python -m pytest\n\n.PHONY: test\n')
 
-        mock_subprocess.return_value = Mock(returncode=0, stdout='GNU Make 4.3')
+        mock_subprocess.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout='GNU Make 4.3')
 
         result = detect_build_command(repo_root=self.repo_root)
 
@@ -144,7 +145,7 @@ class TestBuildCommandDetectionIntegration(unittest.TestCase):
         backend_dir.mkdir(parents=True)
         (backend_dir / 'pom.xml').write_text('<project></project>')
 
-        mock_subprocess.return_value = Mock(returncode=0, stdout='Maven 3.8.1')
+        mock_subprocess.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout='Maven 3.8.1')
 
         result = detect_build_command(
             repo_root=self.repo_root,
@@ -159,7 +160,7 @@ class TestBuildCommandDetectionIntegration(unittest.TestCase):
         """Detection must NOT run actual builds (store-only)."""
         self._create_file('pom.xml', '<project></project>')
 
-        mock_subprocess.return_value = Mock(returncode=0, stdout='Maven 3.8.1')
+        mock_subprocess.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout='Maven 3.8.1')
 
         detect_build_command(repo_root=self.repo_root)
 

@@ -24,6 +24,7 @@ import os
 import json
 
 from src.config import reset_config, get_config  # noqa: E402
+from src.github.github_operations import GitHubOperations  # noqa: E402
 from src import closed_handler  # noqa: E402
 
 
@@ -282,7 +283,7 @@ class TestClosedHandler(unittest.TestCase):
         """Test _extract_remediation_info with Copilot branch"""
         # Mock objects
         mock_extract_remediation_id = Mock(return_value="REM-456")
-        github_ops_mock = Mock()
+        github_ops_mock = Mock(spec=GitHubOperations)
         github_ops_mock.extract_issue_number_from_branch.return_value = 42
         telemetry_mock = Mock()
         # Test data
@@ -307,7 +308,7 @@ class TestClosedHandler(unittest.TestCase):
         """Test _extract_remediation_info with Claude Code branch"""
         # Mock objects
         mock_extract_remediation_id = Mock(return_value="REM-789")
-        github_ops_mock = Mock()
+        github_ops_mock = Mock(spec=GitHubOperations)
         github_ops_mock.extract_issue_number_from_branch.return_value = 75
         telemetry_mock = Mock()
         # Test data
@@ -332,7 +333,7 @@ class TestClosedHandler(unittest.TestCase):
         """Test _extract_remediation_info with Claude Code branch without extractable issue number"""
         # Mock objects
         mock_extract_remediation_id = Mock(return_value="REM-789")
-        github_ops_mock = Mock()
+        github_ops_mock = Mock(spec=GitHubOperations)
         github_ops_mock.extract_issue_number_from_branch.return_value = None
         telemetry_mock = Mock()
         # Test data

@@ -9,6 +9,7 @@ Tests the end-to-end flow:
 - Non-recordable commands don't satisfy PR gate
 """
 
+import subprocess
 import unittest
 from pathlib import Path
 from unittest.mock import patch, Mock
@@ -27,7 +28,7 @@ class TestBuildToolPRGateIntegration(unittest.TestCase):
     @patch('subprocess.run')
     def test_successful_build_records_command_and_pr_gate_passes(self, mock_subprocess):
         """Full flow: BuildTool records success → PR gate passes."""
-        mock_subprocess.return_value = Mock(returncode=0, stdout="BUILD SUCCESS", stderr="")
+        mock_subprocess.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="BUILD SUCCESS", stderr="")
 
         tool, state = create_build_tool(
             repo_root=Path("/tmp/test"),
@@ -88,7 +89,7 @@ class TestBuildToolPRGateIntegration(unittest.TestCase):
     @patch('subprocess.run')
     def test_non_recordable_command_does_not_satisfy_gate(self, mock_subprocess):
         """Non-recordable commands (--version, echo) don't satisfy PR gate."""
-        mock_subprocess.return_value = Mock(returncode=0, stdout="Maven 3.8.1", stderr="")
+        mock_subprocess.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="Maven 3.8.1", stderr="")
 
         tool, state = create_build_tool(
             repo_root=Path("/tmp/test"),
@@ -117,7 +118,7 @@ class TestBuildCommandEnforcement(unittest.TestCase):
     @patch('subprocess.run')
     def test_scoped_command_not_recorded_when_configured_exists(self, mock_subprocess):
         """Agent runs scoped command (e.g. mvn test -Dtest=Foo) but configured is 'mvn test' → not recorded."""
-        mock_subprocess.return_value = Mock(returncode=0, stdout="BUILD SUCCESS", stderr="")
+        mock_subprocess.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="BUILD SUCCESS", stderr="")
 
         tool, state = create_build_tool(
             repo_root=Path("/tmp/test"),
@@ -135,7 +136,7 @@ class TestBuildCommandEnforcement(unittest.TestCase):
     @patch('subprocess.run')
     def test_exact_configured_command_is_recorded(self, mock_subprocess):
         """Agent runs exact configured command → recorded."""
-        mock_subprocess.return_value = Mock(returncode=0, stdout="BUILD SUCCESS", stderr="")
+        mock_subprocess.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="BUILD SUCCESS", stderr="")
 
         tool, state = create_build_tool(
             repo_root=Path("/tmp/test"),
@@ -152,7 +153,7 @@ class TestBuildCommandEnforcement(unittest.TestCase):
     @patch('subprocess.run')
     def test_pr_gate_rejects_mismatched_recorded_command(self, mock_subprocess):
         """PR gate fails if recorded command doesn't match configured command."""
-        mock_subprocess.return_value = Mock(returncode=0, stdout="BUILD SUCCESS", stderr="")
+        mock_subprocess.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="BUILD SUCCESS", stderr="")
 
         # Simulate: no user_build_command so any recordable command gets recorded
         tool, state = create_build_tool(
@@ -179,7 +180,7 @@ class TestBuildToolConfiguredVsDetermined(unittest.TestCase):
     @patch('subprocess.run')
     def test_configured_command_skips_allowlist(self, mock_subprocess):
         """User-configured command skips allowlist validation."""
-        mock_subprocess.return_value = Mock(returncode=0, stdout="OK", stderr="")
+        mock_subprocess.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="OK", stderr="")
 
         tool, state = create_build_tool(
             repo_root=Path("/tmp/test"),
@@ -197,7 +198,7 @@ class TestBuildToolConfiguredVsDetermined(unittest.TestCase):
     @patch('subprocess.run')
     def test_agent_discovered_command_must_pass_allowlist(self, mock_subprocess):
         """Agent-discovered command must pass allowlist validation."""
-        mock_subprocess.return_value = Mock(returncode=0, stdout="OK", stderr="")
+        mock_subprocess.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="OK", stderr="")
 
         tool, state = create_build_tool(
             repo_root=Path("/tmp/test"),
@@ -215,7 +216,7 @@ class TestBuildToolConfiguredVsDetermined(unittest.TestCase):
     @patch('subprocess.run')
     def test_configured_format_command_skips_allowlist(self, mock_subprocess, mock_format):
         """User-configured format command skips allowlist validation."""
-        mock_subprocess.return_value = Mock(returncode=0, stdout="Formatted", stderr="")
+        mock_subprocess.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="Formatted", stderr="")
 
         tool, state = create_build_tool(
             repo_root=Path("/tmp/test"),
@@ -265,7 +266,7 @@ class TestCrossRunPersistence(unittest.TestCase):
     @patch('subprocess.run')
     def test_cross_run_build_config_passes_user_command_to_tool(self, mock_subprocess):
         """BuildConfiguration.user_build_command flows through to BuildTool for exact-match."""
-        mock_subprocess.return_value = Mock(returncode=0, stdout="OK", stderr="")
+        mock_subprocess.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="OK", stderr="")
 
         config = Mock()
         config.BUILD_COMMAND = "custom-tool verify"

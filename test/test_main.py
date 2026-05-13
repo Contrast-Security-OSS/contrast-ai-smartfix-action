@@ -1,3 +1,4 @@
+import subprocess
 import sys
 import unittest
 import os
@@ -52,12 +53,9 @@ class TestMain(unittest.TestCase):
         # Mock subprocess calls
         self.subproc_patcher = patch('subprocess.run')
         self.mock_subprocess = self.subproc_patcher.start()
-        mock_process = Mock()
-        mock_process.returncode = 0
-        mock_process.stdout = "Mock output"
-        mock_process.stderr = ""
-        mock_process.communicate.return_value = (b"Mock stdout", b"Mock stderr")
-        self.mock_subprocess.return_value = mock_process
+        self.mock_subprocess.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="Mock output", stderr=""
+        )
 
         # Mock git configuration
         self.git_patcher = patch('src.smartfix.domains.scm.git_operations.GitOperations.configure_git_user')

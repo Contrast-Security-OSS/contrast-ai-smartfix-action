@@ -3,6 +3,7 @@
 import unittest
 from unittest.mock import patch, Mock
 
+from src.github.github_operations import GitHubOperations
 from src.smartfix.domains.workflow.pr_reconciliation import reconcile_open_remediations
 
 
@@ -18,7 +19,7 @@ class TestReconcileOpenRemediations(unittest.TestCase):
             CONTRAST_AUTHORIZATION_KEY='test-auth-key',
             CONTRAST_API_KEY='test-api-key',
         )
-        self.mock_github_ops = Mock()
+        self.mock_github_ops = Mock(spec=GitHubOperations)
 
     @patch('src.smartfix.domains.workflow.pr_reconciliation.contrast_api')
     def test_empty_list_makes_no_github_calls(self, mock_contrast_api):

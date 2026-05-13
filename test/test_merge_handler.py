@@ -48,7 +48,8 @@ TEST_ENV_VARS = {
 os.environ.update(TEST_ENV_VARS)
 
 # Now import project modules (after path modification)
-from src.config import reset_config, get_config  # noqa: E402
+from src.config import Config, reset_config, get_config  # noqa: E402
+from src.github.github_operations import GitHubOperations  # noqa: E402
 from src import merge_handler  # noqa: E402
 
 
@@ -148,7 +149,7 @@ class TestMergeHandler(unittest.TestCase):
         """Test _extract_remediation_info with Copilot branch"""
         # Mock objects
         mock_extract_remediation_id = Mock(return_value="REM-456")
-        github_ops_mock = Mock()
+        github_ops_mock = Mock(spec=GitHubOperations)
         github_ops_mock.extract_issue_number_from_branch.return_value = 42
         telemetry_mock = Mock()
         # Test data
@@ -173,7 +174,7 @@ class TestMergeHandler(unittest.TestCase):
         """Test _extract_remediation_info with Claude Code branch"""
         # Mock objects
         mock_extract_remediation_id = Mock(return_value="REM-789")
-        github_ops_mock = Mock()
+        github_ops_mock = Mock(spec=GitHubOperations)
         github_ops_mock.extract_issue_number_from_branch.return_value = 75
         telemetry_mock = Mock()
         # Test data
@@ -198,7 +199,7 @@ class TestMergeHandler(unittest.TestCase):
         """Test _extract_remediation_info with Claude Code branch without extractable issue number"""
         # Mock objects
         mock_extract_remediation_id = Mock(return_value="REM-789")
-        github_ops_mock = Mock()
+        github_ops_mock = Mock(spec=GitHubOperations)
         github_ops_mock.extract_issue_number_from_branch.return_value = None
         telemetry_mock = Mock()
         # Test data
@@ -337,7 +338,7 @@ class TestMergeHandler(unittest.TestCase):
     @patch('src.merge_handler.contrast_api.notify_remediation_pr_merged_org')
     def test_notify_remediation_service_success(self, mock_notify, mock_get_config):
         """Test _notify_remediation_service when notification succeeds"""
-        mock_config = Mock()
+        mock_config = Mock(spec=Config)
         mock_config.CONTRAST_HOST = "test.contrastsecurity.com"
         mock_config.CONTRAST_ORG_ID = "test-org"
         mock_config.CONTRAST_AUTHORIZATION_KEY = "test-auth"
@@ -359,7 +360,7 @@ class TestMergeHandler(unittest.TestCase):
     @patch('src.merge_handler.contrast_api.notify_remediation_pr_merged_org')
     def test_notify_remediation_service_failure(self, mock_notify, mock_get_config):
         """Test _notify_remediation_service when notification fails"""
-        mock_config = Mock()
+        mock_config = Mock(spec=Config)
         mock_config.CONTRAST_HOST = "test.contrastsecurity.com"
         mock_config.CONTRAST_ORG_ID = "test-org"
         mock_config.CONTRAST_AUTHORIZATION_KEY = "test-auth"
