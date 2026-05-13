@@ -19,7 +19,7 @@
 #
 
 import unittest
-from unittest.mock import patch, mock_open, MagicMock
+from unittest.mock import patch, mock_open, Mock
 import os
 import json
 
@@ -168,7 +168,7 @@ class TestClosedHandler(unittest.TestCase):
             "head": {"ref": "smartfix/remediation-REM-555"},
             "labels": [{"name": "smartfix-id:REM-555"}]
         }
-        telemetry_mock = MagicMock()
+        telemetry_mock = Mock()
         with patch('src.smartfix.domains.telemetry.telemetry_handler.update_telemetry', telemetry_mock):
             result = closed_handler._extract_remediation_info(pull_request)
         self.assertEqual(result, ("REM-555", [{"name": "smartfix-id:REM-555"}]))
@@ -179,7 +179,7 @@ class TestClosedHandler(unittest.TestCase):
             "head": {"ref": "smartfix/remediation-REM-999"},
             "labels": []
         }
-        telemetry_mock = MagicMock()
+        telemetry_mock = Mock()
         with patch('src.smartfix.domains.telemetry.telemetry_handler.update_telemetry', telemetry_mock):
             result = closed_handler._extract_remediation_info(pull_request)
         self.assertEqual(result[0], "REM-999")
@@ -281,10 +281,10 @@ class TestClosedHandler(unittest.TestCase):
     def test_extract_remediation_info_copilot_branch(self):
         """Test _extract_remediation_info with Copilot branch"""
         # Mock objects
-        mock_extract_remediation_id = MagicMock(return_value="REM-456")
-        github_ops_mock = MagicMock()
+        mock_extract_remediation_id = Mock(return_value="REM-456")
+        github_ops_mock = Mock()
         github_ops_mock.extract_issue_number_from_branch.return_value = 42
-        telemetry_mock = MagicMock()
+        telemetry_mock = Mock()
         # Test data
         pull_request = {
             "head": {"ref": "copilot/fix-42"},
@@ -306,10 +306,10 @@ class TestClosedHandler(unittest.TestCase):
     def test_extract_remediation_info_claude_branch(self):
         """Test _extract_remediation_info with Claude Code branch"""
         # Mock objects
-        mock_extract_remediation_id = MagicMock(return_value="REM-789")
-        github_ops_mock = MagicMock()
+        mock_extract_remediation_id = Mock(return_value="REM-789")
+        github_ops_mock = Mock()
         github_ops_mock.extract_issue_number_from_branch.return_value = 75
-        telemetry_mock = MagicMock()
+        telemetry_mock = Mock()
         # Test data
         pull_request = {
             "head": {"ref": "claude/issue-75-20250908-1723"},
@@ -331,10 +331,10 @@ class TestClosedHandler(unittest.TestCase):
     def test_extract_remediation_info_claude_branch_no_issue_number(self):
         """Test _extract_remediation_info with Claude Code branch without extractable issue number"""
         # Mock objects
-        mock_extract_remediation_id = MagicMock(return_value="REM-789")
-        github_ops_mock = MagicMock()
+        mock_extract_remediation_id = Mock(return_value="REM-789")
+        github_ops_mock = Mock()
         github_ops_mock.extract_issue_number_from_branch.return_value = None
-        telemetry_mock = MagicMock()
+        telemetry_mock = Mock()
         # Test data
         pull_request = {
             "head": {"ref": "claude/issue-75-20250908-1723"},
@@ -423,7 +423,7 @@ class TestCleanupSmartfixLabels(unittest.TestCase):
 
     def _build_mock_ops(self, smartfix_label_names, issue_number=None,
                         remove_pr_ok=True, remove_issue_ok=True):
-        ops = MagicMock()
+        ops = Mock()
         ops.filter_smartfix_labels.return_value = smartfix_label_names
         ops.extract_issue_number_from_branch.return_value = issue_number
         ops.remove_labels_from_pr.return_value = remove_pr_ok

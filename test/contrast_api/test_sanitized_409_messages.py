@@ -1,7 +1,7 @@
 """Tests for sanitized 409 error message handling."""
 
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import Mock
 from datetime import datetime, timezone, timedelta
 
 from src.contrast_api import get_sanitized_409_message
@@ -32,7 +32,7 @@ class TestSanitized409Messages(unittest.TestCase):
         response = '{"message": "Credits have been exhausted. Contact your CSM to request additional credits."}'
 
         # Mock credit info with expired end_date
-        credit_info = MagicMock()
+        credit_info = Mock()
         credit_info.end_date = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
 
         message, is_error = get_sanitized_409_message(response, credit_info)
@@ -47,7 +47,7 @@ class TestSanitized409Messages(unittest.TestCase):
         response = '{"message": "Credits have been exhausted. Contact your CSM to request additional credits."}'
 
         # Mock credit info with future end_date
-        credit_info = MagicMock()
+        credit_info = Mock()
         credit_info.end_date = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
 
         message, is_error = get_sanitized_409_message(response, credit_info)
@@ -101,7 +101,7 @@ class TestSanitized409Messages(unittest.TestCase):
         """If end_date can't be parsed, fall through to credits exhausted message."""
         response = '{"message": "Credits have been exhausted. Contact your CSM to request additional credits."}'
 
-        credit_info = MagicMock()
+        credit_info = Mock()
         credit_info.end_date = "not-a-valid-date"
 
         message, is_error = get_sanitized_409_message(response, credit_info)

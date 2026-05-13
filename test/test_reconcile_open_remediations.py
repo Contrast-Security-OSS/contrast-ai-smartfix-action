@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, Mock
 
 from src.smartfix.domains.workflow.pr_reconciliation import reconcile_open_remediations
 
@@ -11,14 +11,14 @@ class TestReconcileOpenRemediations(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        self.mock_config = MagicMock(
+        self.mock_config = Mock(
             CONTRAST_HOST='test.contrastsecurity.com',
             CONTRAST_ORG_ID='test-org-id',
             CONTRAST_APP_IDS=['test-app-id'],
             CONTRAST_AUTHORIZATION_KEY='test-auth-key',
             CONTRAST_API_KEY='test-api-key',
         )
-        self.mock_github_ops = MagicMock()
+        self.mock_github_ops = Mock()
 
     @patch('src.smartfix.domains.workflow.pr_reconciliation.contrast_api')
     def test_empty_list_makes_no_github_calls(self, mock_contrast_api):

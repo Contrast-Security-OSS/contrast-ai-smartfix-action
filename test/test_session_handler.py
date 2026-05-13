@@ -19,7 +19,7 @@
 #
 
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import Mock, patch
 
 from src.smartfix.domains.workflow.session_handler import (
     SessionOutcome, handle_session_result, generate_qa_section
@@ -37,7 +37,7 @@ class TestSessionHandler(unittest.TestCase):
 
     def create_mock_session(self, success=True, failure_category=None, pr_body="Test PR body"):
         """Helper to create a mock session object."""
-        session = MagicMock()
+        session = Mock()
         session.success = success
         session.failure_category = failure_category
         session.pr_body = pr_body
@@ -89,7 +89,7 @@ class TestSessionHandler(unittest.TestCase):
 
     def test_handle_session_result_failure_with_category(self):
         """Test session result handling for failed session with failure category."""
-        mock_failure_category = MagicMock()
+        mock_failure_category = Mock()
         mock_failure_category.value = "INITIAL_BUILD_FAILURE"
         session = self.create_mock_session(
             success=False,
@@ -122,7 +122,7 @@ class TestSessionHandler(unittest.TestCase):
         # Bug scenario: session failed
         failed_session = self.create_mock_session(
             success=False,
-            failure_category=MagicMock(value="INITIAL_BUILD_FAILURE")
+            failure_category=Mock(value="INITIAL_BUILD_FAILURE")
         )
 
         result = handle_session_result(failed_session)
@@ -146,7 +146,7 @@ class TestSessionHandler(unittest.TestCase):
         """
         Test that session failure returns should_continue=False with a failure category.
         """
-        mock_failure_category = MagicMock()
+        mock_failure_category = Mock()
         mock_failure_category.value = "QA_BUILD_FAILURE"
         failed_session = self.create_mock_session(
             success=False,

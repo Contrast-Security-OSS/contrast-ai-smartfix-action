@@ -3,7 +3,7 @@ import os
 import contextlib
 import unittest
 import tempfile
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, Mock
 
 # Test setup imports (path is set up by conftest.py)
 from src.config import reset_config
@@ -39,7 +39,7 @@ class TestSmartFixAction(unittest.TestCase):
         # Mock subprocess to prevent actual command execution
         self.subprocess_patcher = patch('subprocess.run')
         self.mock_subprocess_run = self.subprocess_patcher.start()
-        mock_process = MagicMock()
+        mock_process = Mock()
         mock_process.returncode = 0
         mock_process.stdout = "Mock process output"
         mock_process.stderr = ""
@@ -58,14 +58,14 @@ class TestSmartFixAction(unittest.TestCase):
         # Mock all HTTP requests
         self.requests_patcher = patch('requests.post')
         self.mock_requests_post = self.requests_patcher.start()
-        mock_post_response = MagicMock()
+        mock_post_response = Mock()
         mock_post_response.status_code = 404  # Not found, to avoid further processing
         self.mock_requests_post.return_value = mock_post_response
 
         # Mock version check requests
         self.version_requests_patcher = patch('src.version_check.requests.get')
         self.mock_requests_get = self.version_requests_patcher.start()
-        mock_response = MagicMock()
+        mock_response = Mock()
         mock_response.json.return_value = [{'name': 'v1.0.0'}]
         mock_response.raise_for_status.return_value = None
         self.mock_requests_get.return_value = mock_response

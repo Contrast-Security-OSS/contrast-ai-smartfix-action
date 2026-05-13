@@ -38,7 +38,7 @@ Span hierarchy:
 
 import asyncio
 import unittest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
@@ -323,16 +323,16 @@ class TestLlmCallSpan(unittest.TestCase):
         import src.smartfix.domains.telemetry.otel_provider as otel_provider
         from src.smartfix.extensions.smartfix_litellm import SmartFixLiteLlm
 
-        mock_instance = MagicMock(spec=SmartFixLiteLlm)
+        mock_instance = Mock(spec=SmartFixLiteLlm)
         mock_instance._max_retries = 1
         mock_instance._initial_retry_delay = 0
         mock_instance._retry_multiplier = 2
         mock_instance._is_retryable_exception = lambda e: False
         mock_instance._log_cost_analysis.return_value = (10, 5, 0, 0)
-        mock_instance.llm_client = MagicMock()
+        mock_instance.llm_client = Mock()
         mock_instance._otel_context = None  # use ambient context (fix-vulnerability is current)
 
-        mock_response = MagicMock()
+        mock_response = Mock()
         mock_response.model = "test-model"
         mock_instance.llm_client.acompletion = AsyncMock(return_value=mock_response)
 
@@ -363,16 +363,16 @@ class TestLlmCallSpan(unittest.TestCase):
         """Token counts from _log_cost_analysis() are set on the LLM span."""
         from src.smartfix.extensions.smartfix_litellm import SmartFixLiteLlm
 
-        mock_instance = MagicMock(spec=SmartFixLiteLlm)
+        mock_instance = Mock(spec=SmartFixLiteLlm)
         mock_instance._max_retries = 1
         mock_instance._initial_retry_delay = 0
         mock_instance._retry_multiplier = 2
         mock_instance._is_retryable_exception = lambda e: False
         mock_instance._log_cost_analysis.return_value = (200, 80, 0, 0)
-        mock_instance.llm_client = MagicMock()
+        mock_instance.llm_client = Mock()
         mock_instance._otel_context = None
 
-        mock_response = MagicMock()
+        mock_response = Mock()
         mock_response.model = "usage-model"
         mock_instance.llm_client.acompletion = AsyncMock(return_value=mock_response)
 

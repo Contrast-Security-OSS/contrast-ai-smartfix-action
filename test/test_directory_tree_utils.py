@@ -31,7 +31,7 @@ import subprocess
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, Mock
 
 from src.smartfix.domains.agents.directory_tree_utils import (
     get_directory_tree,
@@ -45,7 +45,7 @@ class TestGetDirectoryTree(unittest.TestCase):
 
     def test_uses_tree_cli_when_available(self):
         """When tree CLI succeeds (returncode=0), returns its stdout."""
-        mock_result = MagicMock()
+        mock_result = Mock()
         mock_result.returncode = 0
         mock_result.stdout = ".\n├── src\n└── test\n\n2 directories"
 
@@ -59,7 +59,7 @@ class TestGetDirectoryTree(unittest.TestCase):
 
     def test_tree_cli_excludes_dotfiles_and_build_dirs(self):
         """The tree -I pattern uses .* to exclude all dotfiles/dotdirs and common build directories."""
-        mock_result = MagicMock()
+        mock_result = Mock()
         mock_result.returncode = 0
         mock_result.stdout = "tree output"
 
@@ -74,7 +74,7 @@ class TestGetDirectoryTree(unittest.TestCase):
 
     def test_tree_cli_passes_gitignore_flag(self):
         """The tree CLI call includes --gitignore so .gitignore files are respected natively."""
-        mock_result = MagicMock()
+        mock_result = Mock()
         mock_result.returncode = 0
         mock_result.stdout = "tree output"
 
@@ -86,7 +86,7 @@ class TestGetDirectoryTree(unittest.TestCase):
 
     def test_tree_cli_nonzero_returncode_falls_back_to_python(self):
         """When tree CLI returns non-zero, falls back to generate_simple_tree."""
-        mock_result = MagicMock()
+        mock_result = Mock()
         mock_result.returncode = 1
         mock_result.stdout = ""
 
@@ -118,7 +118,7 @@ class TestGetDirectoryTree(unittest.TestCase):
     def test_truncates_when_output_exceeds_max_chars(self):
         """Output longer than max_chars is truncated with a suffix message."""
         long_output = "x" * 200
-        mock_result = MagicMock()
+        mock_result = Mock()
         mock_result.returncode = 0
         mock_result.stdout = long_output
 
@@ -132,7 +132,7 @@ class TestGetDirectoryTree(unittest.TestCase):
     def test_no_truncation_when_output_within_max_chars(self):
         """Output shorter than max_chars is returned unchanged."""
         short_output = ".\n└── src\n"
-        mock_result = MagicMock()
+        mock_result = Mock()
         mock_result.returncode = 0
         mock_result.stdout = short_output
 
@@ -299,7 +299,7 @@ class TestGenerateSimpleTree(unittest.TestCase):
             (root / "README.md").touch()
 
             # Mock git check-ignore to report secret.log as ignored
-            mock_result = MagicMock()
+            mock_result = Mock()
             mock_result.returncode = 0
             mock_result.stdout = "secret.log\n"
 
@@ -320,7 +320,7 @@ class TestGenerateSimpleTree(unittest.TestCase):
             (root / "src").mkdir()
             (root / "main.py").touch()
 
-            mock_result = MagicMock()
+            mock_result = Mock()
             mock_result.returncode = 1  # nothing ignored
             mock_result.stdout = ""
 
@@ -387,7 +387,7 @@ class TestSmartfixAgentDirectoryTreeIntegration(unittest.TestCase):
 
     def _make_context(self, repo_path=None):
         """Build a minimal RemediationContext mock for testing."""
-        context = MagicMock()
+        context = Mock()
         context.repo_config.repo_path = repo_path or Path('/tmp/test-repo')
         context.remediation_id = "rem-123"
         context.session_id = "sess-456"

@@ -21,7 +21,7 @@
 import os
 import unittest
 from types import SimpleNamespace
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, Mock
 
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
@@ -76,7 +76,7 @@ class TestOtelProvider(unittest.TestCase):
     def test_initialize_sets_tracer_provider_when_endpoint_present(self, mock_exporter_cls):
         """initialize_otel() creates a real TracerProvider when endpoint env var is set."""
         os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = "http://localhost:4318"
-        mock_exporter_cls.return_value = MagicMock()
+        mock_exporter_cls.return_value = Mock()
 
         otel_provider.initialize_otel(_config())
 
@@ -86,7 +86,7 @@ class TestOtelProvider(unittest.TestCase):
     def test_initialize_sets_correct_resource_attributes(self, mock_exporter_cls):
         """Resource attributes on the TracerProvider match config values."""
         os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = "http://localhost:4318"
-        mock_exporter_cls.return_value = MagicMock()
+        mock_exporter_cls.return_value = Mock()
         cfg = _config()
 
         otel_provider.initialize_otel(cfg)
@@ -106,7 +106,7 @@ class TestOtelProvider(unittest.TestCase):
     def test_initialize_also_accepts_traces_specific_endpoint_var(self, mock_exporter_cls):
         """OTEL_EXPORTER_OTLP_TRACES_ENDPOINT also enables OTel."""
         os.environ["OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"] = "http://localhost:4318/v1/traces"
-        mock_exporter_cls.return_value = MagicMock()
+        mock_exporter_cls.return_value = Mock()
 
         otel_provider.initialize_otel(_config())
 
@@ -119,8 +119,8 @@ class TestOtelProvider(unittest.TestCase):
     ):
         """When only OTEL_EXPORTER_OTLP_TRACES_ENDPOINT is set, metrics must not export to .../v1/traces/v1/metrics."""
         os.environ["OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"] = "http://localhost:4318/v1/traces"
-        mock_span_cls.return_value = MagicMock()
-        mock_metric_cls.return_value = MagicMock()
+        mock_span_cls.return_value = Mock()
+        mock_metric_cls.return_value = Mock()
 
         otel_provider.initialize_otel(_config())
 
@@ -135,8 +135,8 @@ class TestOtelProvider(unittest.TestCase):
     def test_auth_headers_come_from_config_not_env(self, mock_span_cls, mock_metric_cls):
         """Auth headers are always derived from config credentials, never from env vars."""
         os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = "http://localhost:4318"
-        mock_span_cls.return_value = MagicMock()
-        mock_metric_cls.return_value = MagicMock()
+        mock_span_cls.return_value = Mock()
+        mock_metric_cls.return_value = Mock()
         cfg = _config(CONTRAST_AUTHORIZATION_KEY="my-auth", CONTRAST_API_KEY="my-api")
 
         otel_provider.initialize_otel(cfg)
@@ -222,7 +222,7 @@ class TestOtelProvider(unittest.TestCase):
 
     def test_shutdown_calls_force_flush_then_shutdown(self):
         """shutdown_otel() calls force_flush then shutdown on the provider."""
-        mock_provider = MagicMock()
+        mock_provider = Mock()
         otel_provider._tracer_provider = mock_provider
 
         otel_provider.shutdown_otel()
@@ -232,7 +232,7 @@ class TestOtelProvider(unittest.TestCase):
 
     def test_double_shutdown_is_safe(self):
         """Calling shutdown_otel() twice does not double-flush or raise."""
-        mock_provider = MagicMock()
+        mock_provider = Mock()
         otel_provider._tracer_provider = mock_provider
 
         otel_provider.shutdown_otel()
@@ -248,7 +248,7 @@ class TestOtelProvider(unittest.TestCase):
     def test_start_span_returns_context_manager_when_provider_active(self, mock_exporter_cls):
         """start_span() returns a usable context manager when OTel is initialised."""
         os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = "http://localhost:4318"
-        mock_exporter_cls.return_value = MagicMock()
+        mock_exporter_cls.return_value = Mock()
         otel_provider.initialize_otel(_config())
 
         with otel_provider.start_span("my-span") as span:

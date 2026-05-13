@@ -19,7 +19,7 @@
 #
 
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import Mock
 
 # Import just the function we need to test, avoiding full class initialization
 import sys
@@ -184,7 +184,7 @@ class TestContrastMessageHandling(unittest.TestCase):
     def test_message_object_handling(self):
         """Test handling of message objects (not just dicts)"""
         # Create mock message objects
-        user_message = MagicMock()
+        user_message = Mock()
         user_message.role = 'user'
         messages = [user_message]
 

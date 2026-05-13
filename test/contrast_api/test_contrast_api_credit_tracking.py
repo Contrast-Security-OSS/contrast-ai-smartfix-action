@@ -20,7 +20,7 @@
 
 import unittest
 import json
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, Mock
 import requests
 
 from src import contrast_api
@@ -43,7 +43,7 @@ class TestContrastApiCreditTrackingOrg(unittest.TestCase):
     @patch('src.contrast_api.requests.get')
     def test_get_credit_tracking_org_returns_valid_response(self, mock_get):
         """Test that org-level endpoint returns properly structured CreditTrackingResponse."""
-        mock_response = MagicMock()
+        mock_response = Mock()
         mock_response.status_code = 200
         mock_response.text = json.dumps(self.sample_api_response)
         mock_response.json.return_value = self.sample_api_response
@@ -62,7 +62,7 @@ class TestContrastApiCreditTrackingOrg(unittest.TestCase):
     @patch('src.contrast_api.requests.get')
     def test_get_credit_tracking_org_url_has_no_app_id(self, mock_get):
         """Test that the org-level endpoint URL does not include an application ID."""
-        mock_response = MagicMock()
+        mock_response = Mock()
         mock_response.status_code = 200
         mock_response.text = json.dumps(self.sample_api_response)
         mock_response.json.return_value = self.sample_api_response
@@ -82,7 +82,7 @@ class TestContrastApiCreditTrackingOrg(unittest.TestCase):
     @patch('src.contrast_api.requests.get')
     def test_get_credit_tracking_org_returns_none_on_http_error(self, mock_get):
         """Test that org-level endpoint returns None on HTTP errors."""
-        mock_response = MagicMock()
+        mock_response = Mock()
         mock_response.status_code = 404
         mock_response.text = "Not Found"
         mock_get.return_value = mock_response

@@ -34,7 +34,7 @@ Covers:
 
 import json
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, Mock
 
 import requests
 
@@ -67,7 +67,7 @@ class TestGetOrgOpenRemediations(unittest.TestCase):
 
     @patch('src.contrast_api.requests.post')
     def test_returns_list_on_200(self, mock_post):
-        mock_post.return_value = MagicMock(
+        mock_post.return_value = Mock(
             status_code=200,
             json=lambda: [{'remediationId': REMEDIATION_ID, 'vulnerabilityId': 'v1'}]
         )
@@ -77,7 +77,7 @@ class TestGetOrgOpenRemediations(unittest.TestCase):
 
     @patch('src.contrast_api.requests.post')
     def test_posts_to_org_url_without_app_id(self, mock_post):
-        mock_post.return_value = MagicMock(status_code=200, json=lambda: [])
+        mock_post.return_value = Mock(status_code=200, json=lambda: [])
         self._call()
         url = mock_post.call_args[0][0]
         self.assertIn(f'/organizations/{ORG_ID}/remediations/open', url)
@@ -85,14 +85,14 @@ class TestGetOrgOpenRemediations(unittest.TestCase):
 
     @patch('src.contrast_api.requests.post')
     def test_sends_app_ids_in_body(self, mock_post):
-        mock_post.return_value = MagicMock(status_code=200, json=lambda: [])
+        mock_post.return_value = Mock(status_code=200, json=lambda: [])
         self._call()
         payload = mock_post.call_args[1]['json']
         self.assertEqual(payload['appIds'], APP_IDS)
 
     @patch('src.contrast_api.requests.post')
     def test_returns_empty_list_on_non_200(self, mock_post):
-        mock_post.return_value = MagicMock(status_code=500)
+        mock_post.return_value = Mock(status_code=500)
         self.assertEqual(self._call(), [])
 
     @patch('src.contrast_api.requests.post')
@@ -102,13 +102,13 @@ class TestGetOrgOpenRemediations(unittest.TestCase):
 
     @patch('src.contrast_api.requests.post')
     def test_returns_empty_list_on_json_error(self, mock_post):
-        mock_post.return_value = MagicMock(status_code=200, json=MagicMock(side_effect=json.JSONDecodeError('', '', 0)))
+        mock_post.return_value = Mock(status_code=200, json=Mock(side_effect=json.JSONDecodeError('', '', 0)))
         self.assertEqual(self._call(), [])
 
     @patch('src.contrast_api.requests.post')
     def test_strips_protocol_from_host_in_url(self, mock_post):
         """normalize_host is applied — passing host with https:// prefix still builds a valid URL."""
-        mock_post.return_value = MagicMock(status_code=200, json=lambda: [])
+        mock_post.return_value = Mock(status_code=200, json=lambda: [])
         self._call(contrast_host=f'https://{HOST}')
         url = mock_post.call_args[0][0]
         self.assertNotIn('https://https://', url)
@@ -145,7 +145,7 @@ class TestGetOrgRemediationDetails(unittest.TestCase):
             'applicationId': 'app-id-1',
             'skippedAppIds': ['app-id-2'],
         }
-        mock_post.return_value = MagicMock(status_code=200, json=lambda: payload)
+        mock_post.return_value = Mock(status_code=200, json=lambda: payload)
         result = self._call()
         self.assertEqual(result['remediationId'], REMEDIATION_ID)
         self.assertEqual(result['applicationId'], 'app-id-1')
@@ -154,7 +154,7 @@ class TestGetOrgRemediationDetails(unittest.TestCase):
 
     @patch('src.contrast_api.requests.post')
     def test_posts_to_org_url_without_app_id(self, mock_post):
-        mock_post.return_value = MagicMock(status_code=204)
+        mock_post.return_value = Mock(status_code=204)
         self._call()
         url = mock_post.call_args[0][0]
         self.assertIn(f'/organizations/{ORG_ID}/remediation-details', url)
@@ -162,14 +162,14 @@ class TestGetOrgRemediationDetails(unittest.TestCase):
 
     @patch('src.contrast_api.requests.post')
     def test_sends_app_ids_in_body(self, mock_post):
-        mock_post.return_value = MagicMock(status_code=204)
+        mock_post.return_value = Mock(status_code=204)
         self._call()
         body = mock_post.call_args[1]['json']
         self.assertEqual(body['appIds'], APP_IDS)
 
     @patch('src.contrast_api.requests.post')
     def test_returns_none_on_204(self, mock_post):
-        mock_post.return_value = MagicMock(status_code=204)
+        mock_post.return_value = Mock(status_code=204)
         self.assertIsNone(self._call())
 
     @patch('src.contrast_api.requests.post')
@@ -179,18 +179,18 @@ class TestGetOrgRemediationDetails(unittest.TestCase):
 
     @patch('src.contrast_api.requests.post')
     def test_returns_none_on_unexpected_status(self, mock_post):
-        mock_post.return_value = MagicMock(status_code=500, text='error')
+        mock_post.return_value = Mock(status_code=500, text='error')
         self.assertIsNone(self._call())
 
     @patch('src.contrast_api.requests.post')
     def test_returns_none_on_503(self, mock_post):
-        mock_post.return_value = MagicMock(status_code=503, text='all apps inaccessible')
+        mock_post.return_value = Mock(status_code=503, text='all apps inaccessible')
         self.assertIsNone(self._call())
 
     @patch('src.contrast_api.get_sanitized_409_message')
     @patch('src.contrast_api.requests.post')
     def test_exits_on_409_is_error(self, mock_post, mock_409):
-        mock_post.return_value = MagicMock(status_code=409, text='credits exhausted')
+        mock_post.return_value = Mock(status_code=409, text='credits exhausted')
         mock_409.return_value = ('Credits exhausted', True)
         with self.assertRaises(SystemExit):
             self._call()
@@ -198,7 +198,7 @@ class TestGetOrgRemediationDetails(unittest.TestCase):
     @patch('src.contrast_api.get_sanitized_409_message')
     @patch('src.contrast_api.requests.post')
     def test_returns_none_on_409_not_error(self, mock_post, mock_409):
-        mock_post.return_value = MagicMock(status_code=409, text='pr limit reached')
+        mock_post.return_value = Mock(status_code=409, text='pr limit reached')
         mock_409.return_value = ('PR limit reached', False)
         self.assertIsNone(self._call())
 
@@ -231,7 +231,7 @@ class TestGetOrgPromptDetails(unittest.TestCase):
             'fixSystemPrompt': 'sys', 'fixUserPrompt': 'usr',
             'applicationId': 'app-id-1', 'skippedAppIds': ['app-id-2'],
         }
-        mock_post.return_value = MagicMock(status_code=200, json=lambda: payload)
+        mock_post.return_value = Mock(status_code=200, json=lambda: payload)
         result = self._call()
         self.assertEqual(result['remediationId'], REMEDIATION_ID)
         self.assertEqual(result['applicationId'], 'app-id-1')
@@ -239,7 +239,7 @@ class TestGetOrgPromptDetails(unittest.TestCase):
 
     @patch('src.contrast_api.requests.post')
     def test_posts_to_org_url_without_app_id(self, mock_post):
-        mock_post.return_value = MagicMock(status_code=204)
+        mock_post.return_value = Mock(status_code=204)
         self._call()
         url = mock_post.call_args[0][0]
         self.assertIn(f'/organizations/{ORG_ID}/prompt-details', url)
@@ -247,19 +247,19 @@ class TestGetOrgPromptDetails(unittest.TestCase):
 
     @patch('src.contrast_api.requests.post')
     def test_sends_app_ids_in_body(self, mock_post):
-        mock_post.return_value = MagicMock(status_code=204)
+        mock_post.return_value = Mock(status_code=204)
         self._call()
         body = mock_post.call_args[1]['json']
         self.assertEqual(body['appIds'], APP_IDS)
 
     @patch('src.contrast_api.requests.post')
     def test_returns_none_on_204(self, mock_post):
-        mock_post.return_value = MagicMock(status_code=204)
+        mock_post.return_value = Mock(status_code=204)
         self.assertIsNone(self._call())
 
     @patch('src.contrast_api.requests.post')
     def test_returns_none_on_503(self, mock_post):
-        mock_post.return_value = MagicMock(status_code=503, text='all apps inaccessible')
+        mock_post.return_value = Mock(status_code=503, text='all apps inaccessible')
         self.assertIsNone(self._call())
 
     @patch('src.contrast_api.requests.post')
@@ -271,7 +271,7 @@ class TestGetOrgPromptDetails(unittest.TestCase):
     @patch('src.contrast_api.get_sanitized_409_message')
     @patch('src.contrast_api.requests.post')
     def test_exits_on_409_is_error(self, mock_post, mock_409):
-        mock_post.return_value = MagicMock(status_code=409, text='credits exhausted')
+        mock_post.return_value = Mock(status_code=409, text='credits exhausted')
         mock_409.return_value = ('Credits exhausted', True)
         with self.assertRaises(SystemExit):
             self._call()
@@ -279,7 +279,7 @@ class TestGetOrgPromptDetails(unittest.TestCase):
     @patch('src.contrast_api.get_sanitized_409_message')
     @patch('src.contrast_api.requests.post')
     def test_returns_none_on_409_not_error(self, mock_post, mock_409):
-        mock_post.return_value = MagicMock(status_code=409, text='pr limit reached')
+        mock_post.return_value = Mock(status_code=409, text='pr limit reached')
         mock_409.return_value = ('PR limit reached', False)
         self.assertIsNone(self._call())
 
@@ -289,7 +289,7 @@ class TestGetOrgPromptDetails(unittest.TestCase):
             'remediationId': REMEDIATION_ID,
             # missing vulnerabilityUuid, vulnerabilityTitle, etc.
         }
-        mock_post.return_value = MagicMock(status_code=200, json=lambda: incomplete_payload)
+        mock_post.return_value = Mock(status_code=200, json=lambda: incomplete_payload)
         with self.assertRaises(SystemExit):
             self._call()
 
@@ -312,14 +312,14 @@ class TestNotifyRemediationPrOpenedOrg(unittest.TestCase):
 
     @patch('src.contrast_api.requests.put')
     def test_returns_true_on_204(self, mock_put):
-        mock_put.return_value = MagicMock(status_code=204)
-        mock_put.return_value.raise_for_status = MagicMock()
+        mock_put.return_value = Mock(status_code=204)
+        mock_put.return_value.raise_for_status = Mock()
         self.assertTrue(self._call())
 
     @patch('src.contrast_api.requests.put')
     def test_url_has_no_app_id_segment(self, mock_put):
-        mock_put.return_value = MagicMock(status_code=204)
-        mock_put.return_value.raise_for_status = MagicMock()
+        mock_put.return_value = Mock(status_code=204)
+        mock_put.return_value.raise_for_status = Mock()
         self._call()
         url = mock_put.call_args[0][0]
         self.assertIn(f'/organizations/{ORG_ID}/remediations/{REMEDIATION_ID}/open', url)
@@ -327,7 +327,7 @@ class TestNotifyRemediationPrOpenedOrg(unittest.TestCase):
 
     @patch('src.contrast_api.requests.put')
     def test_returns_false_on_http_error(self, mock_put):
-        mock_response = MagicMock(status_code=500, text='error')
+        mock_response = Mock(status_code=500, text='error')
         mock_put.return_value = mock_response
         mock_put.return_value.raise_for_status.side_effect = requests.exceptions.HTTPError(
             response=mock_response)
@@ -355,14 +355,14 @@ class TestNotifyRemediationPrClosedOrg(unittest.TestCase):
 
     @patch('src.contrast_api.requests.put')
     def test_returns_true_on_204(self, mock_put):
-        mock_put.return_value = MagicMock(status_code=204)
-        mock_put.return_value.raise_for_status = MagicMock()
+        mock_put.return_value = Mock(status_code=204)
+        mock_put.return_value.raise_for_status = Mock()
         self.assertTrue(self._call())
 
     @patch('src.contrast_api.requests.put')
     def test_url_has_no_app_id_segment(self, mock_put):
-        mock_put.return_value = MagicMock(status_code=204)
-        mock_put.return_value.raise_for_status = MagicMock()
+        mock_put.return_value = Mock(status_code=204)
+        mock_put.return_value.raise_for_status = Mock()
         self._call()
         url = mock_put.call_args[0][0]
         self.assertIn(f'/organizations/{ORG_ID}/remediations/{REMEDIATION_ID}/closed', url)
@@ -390,14 +390,14 @@ class TestNotifyRemediationPrMergedOrg(unittest.TestCase):
 
     @patch('src.contrast_api.requests.put')
     def test_returns_true_on_204(self, mock_put):
-        mock_put.return_value = MagicMock(status_code=204)
-        mock_put.return_value.raise_for_status = MagicMock()
+        mock_put.return_value = Mock(status_code=204)
+        mock_put.return_value.raise_for_status = Mock()
         self.assertTrue(self._call())
 
     @patch('src.contrast_api.requests.put')
     def test_url_has_no_app_id_segment(self, mock_put):
-        mock_put.return_value = MagicMock(status_code=204)
-        mock_put.return_value.raise_for_status = MagicMock()
+        mock_put.return_value = Mock(status_code=204)
+        mock_put.return_value.raise_for_status = Mock()
         self._call()
         url = mock_put.call_args[0][0]
         self.assertIn(f'/organizations/{ORG_ID}/remediations/{REMEDIATION_ID}/merged', url)
@@ -426,14 +426,14 @@ class TestNotifyRemediationFailedOrg(unittest.TestCase):
 
     @patch('src.contrast_api.requests.put')
     def test_returns_true_on_204(self, mock_put):
-        mock_put.return_value = MagicMock(status_code=204)
-        mock_put.return_value.raise_for_status = MagicMock()
+        mock_put.return_value = Mock(status_code=204)
+        mock_put.return_value.raise_for_status = Mock()
         self.assertTrue(self._call())
 
     @patch('src.contrast_api.requests.put')
     def test_url_has_no_app_id_segment(self, mock_put):
-        mock_put.return_value = MagicMock(status_code=204)
-        mock_put.return_value.raise_for_status = MagicMock()
+        mock_put.return_value = Mock(status_code=204)
+        mock_put.return_value.raise_for_status = Mock()
         self._call()
         url = mock_put.call_args[0][0]
         self.assertIn(f'/organizations/{ORG_ID}/remediations/{REMEDIATION_ID}/failed', url)
@@ -441,8 +441,8 @@ class TestNotifyRemediationFailedOrg(unittest.TestCase):
 
     @patch('src.contrast_api.requests.put')
     def test_sends_failure_category_in_body(self, mock_put):
-        mock_put.return_value = MagicMock(status_code=204)
-        mock_put.return_value.raise_for_status = MagicMock()
+        mock_put.return_value = Mock(status_code=204)
+        mock_put.return_value.raise_for_status = Mock()
         self._call(failure_category='AGENT_FAILURE')
         body = mock_put.call_args[1]['json']
         self.assertEqual(body['failureCategory'], 'AGENT_FAILURE')
@@ -472,12 +472,12 @@ class TestSendTelemetryDataOrg(unittest.TestCase):
 
     @patch('src.contrast_api.requests.post')
     def test_returns_true_on_201(self, mock_post):
-        mock_post.return_value = MagicMock(status_code=201)
+        mock_post.return_value = Mock(status_code=201)
         self.assertTrue(self._call())
 
     @patch('src.contrast_api.requests.post')
     def test_url_has_no_app_id_segment(self, mock_post):
-        mock_post.return_value = MagicMock(status_code=201)
+        mock_post.return_value = Mock(status_code=201)
         self._call()
         url = mock_post.call_args[0][0]
         self.assertIn(f'/organizations/{ORG_ID}/remediations/{REMEDIATION_ID}/telemetry', url)
@@ -485,7 +485,7 @@ class TestSendTelemetryDataOrg(unittest.TestCase):
 
     @patch('src.contrast_api.requests.post')
     def test_returns_false_on_error_status(self, mock_post):
-        mock_post.return_value = MagicMock(status_code=500, text='error')
+        mock_post.return_value = Mock(status_code=500, text='error')
         self.assertFalse(self._call())
 
     @patch('src.contrast_api.requests.post')

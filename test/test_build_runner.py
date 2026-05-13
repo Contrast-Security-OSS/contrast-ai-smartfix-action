@@ -6,7 +6,7 @@ Tests build execution, output capture, exit code handling, and telemetry integra
 
 import unittest
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, Mock
 
 from src.smartfix.domains.workflow.build_runner import run_build_command
 
@@ -32,7 +32,7 @@ class TestBuildRunner(unittest.TestCase):
     def test_build_succeeds_exit_code_0(self):
         """Test successful build with exit code 0."""
         # Setup mock
-        mock_result = MagicMock()
+        mock_result = Mock()
         mock_result.returncode = 0
         mock_result.stdout = "BUILD SUCCESS\n"
         mock_result.stderr = ""
@@ -54,7 +54,7 @@ class TestBuildRunner(unittest.TestCase):
     def test_build_fails_exit_code_1(self):
         """Test failed build with exit code 1."""
         # Setup mock
-        mock_result = MagicMock()
+        mock_result = Mock()
         mock_result.returncode = 1
         mock_result.stdout = ""
         mock_result.stderr = "COMPILATION FAILED\n"
@@ -83,7 +83,7 @@ class TestBuildRunner(unittest.TestCase):
         for exit_code, error_msg in test_cases:
             with self.subTest(exit_code=exit_code):
                 # Setup mock
-                mock_result = MagicMock()
+                mock_result = Mock()
                 mock_result.returncode = exit_code
                 mock_result.stdout = ""
                 mock_result.stderr = error_msg
@@ -103,7 +103,7 @@ class TestBuildRunner(unittest.TestCase):
     def test_build_output_parsing_stdout_and_stderr(self):
         """Test that both stdout and stderr are captured and combined."""
         # Setup mock
-        mock_result = MagicMock()
+        mock_result = Mock()
         mock_result.returncode = 0
         mock_result.stdout = "Standard output\n"
         mock_result.stderr = "Warning messages\n"
@@ -157,7 +157,7 @@ class TestBuildRunner(unittest.TestCase):
     def test_build_subprocess_call_parameters(self):
         """Test that subprocess.run is called with correct parameters."""
         # Setup mock
-        mock_result = MagicMock()
+        mock_result = Mock()
         mock_result.returncode = 0
         mock_result.stdout = "Success"
         mock_result.stderr = ""
@@ -183,7 +183,7 @@ class TestBuildRunner(unittest.TestCase):
     def test_build_telemetry_always_recorded(self):
         """Test that telemetry is recorded regardless of build outcome."""
         # Test successful build
-        mock_result = MagicMock()
+        mock_result = Mock()
         mock_result.returncode = 0
         mock_result.stdout = "Success"
         mock_result.stderr = ""
@@ -206,7 +206,7 @@ class TestBuildRunner(unittest.TestCase):
     def test_build_encoding_handling(self):
         """Test that encoding errors are handled gracefully."""
         # Setup mock with unicode characters
-        mock_result = MagicMock()
+        mock_result = Mock()
         mock_result.returncode = 0
         mock_result.stdout = "Test output with unicode: \u2713\n"
         mock_result.stderr = "Warning with emoji: \U0001F4A9\n"

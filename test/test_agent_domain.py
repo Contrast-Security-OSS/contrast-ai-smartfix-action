@@ -18,7 +18,7 @@
 #
 
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import Mock, patch
 from src.config import get_config, reset_config
 from src.smartfix.domains.agents import (
     SmartFixAgent,
@@ -83,15 +83,15 @@ class TestSmartFixAgent(unittest.TestCase):
         Tests that the remediate method is present on the SmartFixAgent and no longer raises NotImplementedError.
         """
         agent = SmartFixAgent()
-        mock_context = MagicMock(spec=RemediationContext)
+        mock_context = Mock(spec=RemediationContext)
 
         # Mock the required attributes and methods
-        mock_context.build_config = MagicMock()
+        mock_context.build_config = Mock()
         mock_context.build_config.has_build_command.return_value = False
-        mock_context.vulnerability = MagicMock()
+        mock_context.vulnerability = Mock()
         mock_context.vulnerability.title = "Test Vulnerability"
         mock_context.remediation_id = "test-123"
-        mock_context.repo_config = MagicMock()
+        mock_context.repo_config = Mock()
         mock_context.repo_config.repo_path = "/tmp/test-repo"
 
         # Mock function returns
@@ -111,13 +111,13 @@ class TestSmartFixAgent(unittest.TestCase):
         """
         agent = SmartFixAgent()
         session = AgentSession()
-        mock_context = MagicMock(spec=RemediationContext)
+        mock_context = Mock(spec=RemediationContext)
 
         # Setup mocks with proper attribute structure
-        mock_context.vulnerability = MagicMock()
+        mock_context.vulnerability = Mock()
         mock_context.vulnerability.title = "SQL Injection"
-        mock_context.prompts = MagicMock()  # Required by _run_fix_agent
-        mock_context.repo_config = MagicMock()  # Required by _run_fix_agent
+        mock_context.prompts = Mock()  # Required by _run_fix_agent
+        mock_context.repo_config = Mock()  # Required by _run_fix_agent
 
         mock_run_ai_fix.return_value = "Fix applied successfully"
 
@@ -134,10 +134,10 @@ class TestSmartFixAgent(unittest.TestCase):
         """
         agent = SmartFixAgent()
         session = AgentSession()
-        mock_context = MagicMock(spec=RemediationContext)
+        mock_context = Mock(spec=RemediationContext)
 
         # Setup mocks with proper attribute structure
-        mock_context.vulnerability = MagicMock()
+        mock_context.vulnerability = Mock()
         mock_context.vulnerability.title = "SQL Injection"
 
         mock_run_ai_fix.return_value = "Error during AI fix agent execution: Something went wrong"
@@ -154,9 +154,9 @@ class TestSmartFixAgent(unittest.TestCase):
         Tests the complete remediation workflow with all steps successful.
         """
         agent = SmartFixAgent()
-        mock_context = MagicMock(spec=RemediationContext)
+        mock_context = Mock(spec=RemediationContext)
 
-        mock_context.build_config = MagicMock()
+        mock_context.build_config = Mock()
         mock_context.build_config.has_build_command.return_value = True
         mock_context.build_config.user_build_command = None
 
@@ -178,8 +178,8 @@ class TestSmartFixAgent(unittest.TestCase):
         Tests the complete remediation workflow with BuildTool verification (PR gate).
         """
         agent = SmartFixAgent()
-        mock_context = MagicMock(spec=RemediationContext)
-        mock_context.build_config = MagicMock()
+        mock_context = Mock(spec=RemediationContext)
+        mock_context.build_config = Mock()
         mock_context.build_config.has_build_command.return_value = True
         mock_context.build_config.user_build_command = "mvn test"
 
