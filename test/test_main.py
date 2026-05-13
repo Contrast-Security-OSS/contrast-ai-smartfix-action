@@ -1,3 +1,4 @@
+import requests
 import subprocess
 import sys
 import unittest
@@ -73,7 +74,7 @@ class TestMain(unittest.TestCase):
         # Mock requests for version checking
         self.requests_patcher = patch('src.version_check.requests.get')
         self.mock_requests_get = self.requests_patcher.start()
-        mock_response = Mock()
+        mock_response = Mock(spec=requests.Response)
         mock_response.json.return_value = [{'name': 'v1.0.0'}]
         mock_response.raise_for_status.return_value = None
         self.mock_requests_get.return_value = mock_response

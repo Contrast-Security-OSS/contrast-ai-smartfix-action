@@ -1,5 +1,6 @@
 import unittest
 import os
+import requests
 from unittest.mock import patch, Mock
 from packaging.version import Version
 
@@ -23,7 +24,7 @@ class TestVersionCheck(unittest.TestCase):
         self.mock_requests.exceptions.RequestException = Exception
 
         # Set up a default mock response
-        self.mock_response = Mock()
+        self.mock_response = Mock(spec=requests.Response)
         self.mock_response.json.return_value = [
             {'name': 'v1.0.0'},
             {'name': 'v1.1.0'},

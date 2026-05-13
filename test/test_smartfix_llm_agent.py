@@ -41,7 +41,7 @@ class TestSmartFixLlmAgentFunctionality(unittest.TestCase):
     def test_has_extended_model_true(self):
         """Test has_extended_model returns True when SmartFixLiteLlm reference exists."""
         # Test the method logic directly without full object instantiation
-        agent = Mock()
+        agent = Mock(spec=SmartFixLlmAgent)
         agent.canonical_model = Mock(spec=SmartFixLiteLlm)
 
         # Apply the real method to our mock
@@ -50,15 +50,15 @@ class TestSmartFixLlmAgentFunctionality(unittest.TestCase):
 
     def test_has_extended_model_false(self):
         """Test has_extended_model returns False when no SmartFixLiteLlm reference exists."""
-        agent = Mock()
-        agent.canonical_model = Mock()  # Not a SmartFixLiteLlm
+        agent = Mock(spec=SmartFixLlmAgent)
+        agent.canonical_model = Mock()  # Intentionally no spec: test verifies non-SmartFixLiteLlm is detected
 
         result = SmartFixLlmAgent.has_extended_model(agent)
         self.assertFalse(result)
 
     def test_get_extended_model_with_reference(self):
         """Test get_extended_model returns the canonical model when it's SmartFixLiteLlm."""
-        agent = Mock()
+        agent = Mock(spec=SmartFixLlmAgent)
         mock_extended_model = Mock(spec=SmartFixLiteLlm)
         agent.canonical_model = mock_extended_model
 

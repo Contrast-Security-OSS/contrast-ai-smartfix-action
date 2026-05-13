@@ -19,7 +19,7 @@
 #
 
 import unittest
-from types import SimpleNamespace
+from litellm.types.utils import Message
 
 # Import just the function we need to test, avoiding full class initialization
 import sys
@@ -183,8 +183,8 @@ class TestContrastMessageHandling(unittest.TestCase):
 
     def test_message_object_handling(self):
         """Test handling of message objects (not just dicts)"""
-        # Use a non-dict message object to verify the function handles arbitrary objects
-        user_message = SimpleNamespace(role='user')
+        # Use the real litellm Message type to verify the function handles non-dict objects
+        user_message = Message(role='user')
         messages = [user_message]
 
         result = self.model._ensure_system_message_for_contrast(messages)
