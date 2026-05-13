@@ -64,7 +64,7 @@ class TestSmartFixAction(unittest.TestCase):
         # Mock version check requests
         self.version_requests_patcher = patch('src.version_check.requests.get')
         self.mock_requests_get = self.version_requests_patcher.start()
-        mock_response = Mock()
+        mock_response = Mock(spec=requests.Response)
         mock_response.json.return_value = [{'name': 'v1.0.0'}]
         mock_response.raise_for_status.return_value = None
         self.mock_requests_get.return_value = mock_response

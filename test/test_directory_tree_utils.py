@@ -31,8 +31,9 @@ import subprocess
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import patch, Mock  # Mock kept for RemediationContext in _make_context
+from unittest.mock import patch
 
+from setup_test_env import make_sample_context
 from src.smartfix.domains.agents.directory_tree_utils import (
     get_directory_tree,
     generate_simple_tree,
@@ -375,15 +376,14 @@ class TestSmartfixAgentDirectoryTreeIntegration(unittest.TestCase):
     """
 
     def _make_context(self, repo_path=None):
-        """Build a minimal RemediationContext mock for testing."""
-        context = Mock()
-        context.repo_config.repo_path = repo_path or Path('/tmp/test-repo')
-        context.remediation_id = "rem-123"
-        context.session_id = "sess-456"
-        context.prompts.fix_user_prompt = "Fix this vulnerability."
-        context.prompts.fix_system_prompt = "You are a security expert."
-        context.build_config.has_build_command.return_value = False
-        return context
+        """Build a RemediationContext for testing."""
+        return make_sample_context(
+            remediation_id="rem-123",
+            session_id="sess-456",
+            fix_user_prompt="Fix this vulnerability.",
+            fix_system_prompt="You are a security expert.",
+            repo_path=repo_path or Path('/tmp/test-repo'),
+        )
 
     def test_fix_agent_appends_directory_tree_to_user_prompt(self):
         """

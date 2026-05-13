@@ -19,7 +19,7 @@
 #
 
 import unittest
-from unittest.mock import Mock
+from types import SimpleNamespace
 
 # Import just the function we need to test, avoiding full class initialization
 import sys
@@ -183,9 +183,8 @@ class TestContrastMessageHandling(unittest.TestCase):
 
     def test_message_object_handling(self):
         """Test handling of message objects (not just dicts)"""
-        # Create mock message objects
-        user_message = Mock()
-        user_message.role = 'user'
+        # Use a non-dict message object to verify the function handles arbitrary objects
+        user_message = SimpleNamespace(role='user')
         messages = [user_message]
 
         result = self.model._ensure_system_message_for_contrast(messages)

@@ -424,7 +424,7 @@ class TestCleanupSmartfixLabels(unittest.TestCase):
 
     def _build_mock_ops(self, smartfix_label_names, issue_number=None,
                         remove_pr_ok=True, remove_issue_ok=True):
-        ops = Mock()
+        ops = Mock(spec=GitHubOperations)
         ops.filter_smartfix_labels.return_value = smartfix_label_names
         ops.extract_issue_number_from_branch.return_value = issue_number
         ops.remove_labels_from_pr.return_value = remove_pr_ok

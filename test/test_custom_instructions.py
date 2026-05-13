@@ -22,7 +22,7 @@ import subprocess
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch, Mock
+from unittest.mock import patch
 
 from src.smartfix.domains.agents.custom_instructions import load_custom_instructions, HEADER, SOURCE_B_FRAMING
 
@@ -36,15 +36,17 @@ def _config(use_smartfix=True, use_repo=True, base_branch="main"):
 
 
 def _git_show_result(content=None, returncode=0, stderr=""):
-    """Return a mock subprocess.CompletedProcess for git show."""
-    result = Mock()
-    result.returncode = returncode
+    """Return a subprocess.CompletedProcess for git show."""
     if content is not None:
-        result.stdout = content if isinstance(content, bytes) else content.encode("utf-8")
+        stdout = content if isinstance(content, bytes) else content.encode("utf-8")
     else:
-        result.stdout = b""
-    result.stderr = stderr.encode("utf-8") if isinstance(stderr, str) else stderr
-    return result
+        stdout = b""
+    return subprocess.CompletedProcess(
+        args=[],
+        returncode=returncode,
+        stdout=stdout,
+        stderr=stderr.encode("utf-8") if isinstance(stderr, str) else stderr,
+    )
 
 
 class TestLoadCustomInstructions(unittest.TestCase):
@@ -193,10 +195,9 @@ class TestLoadCustomInstructions(unittest.TestCase):
     def test_non_utf8_content_decoded_with_replacement(self, mock_run):
         """Non-UTF-8 bytes are decoded with replacement chars, not a crash."""
         bad_bytes = b"Good prefix \xff\xfe bad bytes then more text."
-        result_mock = Mock()
-        result_mock.returncode = 0
-        result_mock.stdout = bad_bytes
-        mock_run.return_value = result_mock
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout=bad_bytes, stderr=b""
+        )
         # Should not raise; result should contain something
         result = load_custom_instructions(self.repo_path, self.config)
         self.assertIsNotNone(result)
