@@ -66,6 +66,15 @@ class TestOtelProvider(unittest.TestCase):
         # Reset global provider so the real SDK TracerProvider installed by a test
         # does not bleed into subsequent tests.
         trace.set_tracer_provider(TracerProvider())
+        # Shut down any MeterProvider created by initialize_otel() so the OTLP
+        # exporter doesn't try to flush at process exit (producing connection
+        # refused tracebacks in CI where no collector is running).
+        if otel_provider._meter_provider is not None:
+            try:
+                otel_provider._meter_provider.shutdown()
+            except Exception:
+                pass
+            otel_provider._meter_provider = None
         otel_provider._tracer_provider = None
         otel_provider._shutdown_called = False
         os.environ.pop("OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT", None)

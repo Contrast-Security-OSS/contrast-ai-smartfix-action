@@ -94,6 +94,10 @@ class TestMain(unittest.TestCase):
         self.notify_patcher = patch('src.contrast_api.notify_remediation_failed_org', return_value=False)
         self.mock_notify = self.notify_patcher.start()
 
+        # Mock get_credit_tracking_org to prevent real HTTP calls during main() flow
+        self.credit_patcher = patch('src.contrast_api.get_credit_tracking_org', return_value=None)
+        self.mock_credit = self.credit_patcher.start()
+
     def tearDown(self):
         """Clean up after each test."""
         # Stop all patches
@@ -105,6 +109,7 @@ class TestMain(unittest.TestCase):
         self.exit_patcher.stop()
         self.pr_count_patcher.stop()
         self.notify_patcher.stop()
+        self.credit_patcher.stop()
         reset_config()
 
         # Clean up temp directory
