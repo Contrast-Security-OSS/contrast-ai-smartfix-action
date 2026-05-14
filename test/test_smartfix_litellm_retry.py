@@ -52,7 +52,7 @@ class TestSmartFixLiteLlmRetry(unittest.TestCase):
             message="Rate limit exceeded",
             llm_provider="test",
             model="test-model",
-            response=httpx.Response(429)
+            response=httpx.Response(429, request=httpx.Request("POST", "http://test"))
         )
         result = SmartFixLiteLlm._is_retryable_exception(self.mock_instance, error)
         self.assertTrue(result)
@@ -73,7 +73,7 @@ class TestSmartFixLiteLlmRetry(unittest.TestCase):
             message="Service unavailable",
             llm_provider="test",
             model="test-model",
-            response=httpx.Response(503)
+            response=httpx.Response(503, request=httpx.Request("POST", "http://test"))
         )
         result = SmartFixLiteLlm._is_retryable_exception(self.mock_instance, error)
         self.assertTrue(result)
@@ -199,7 +199,7 @@ class TestSmartFixLiteLlmRetryAsync(unittest.TestCase):
             message="Rate limit",
             llm_provider="test",
             model="test",
-            response=httpx.Response(429)
+            response=httpx.Response(429, request=httpx.Request("POST", "http://test"))
         )
 
         # Fail twice, then succeed
@@ -226,7 +226,7 @@ class TestSmartFixLiteLlmRetryAsync(unittest.TestCase):
             message="Rate limit",
             llm_provider="test",
             model="test",
-            response=httpx.Response(429)
+            response=httpx.Response(429, request=httpx.Request("POST", "http://test"))
         )
 
         # Fail all attempts

@@ -63,8 +63,8 @@ if [[ $SKIP_INSTALL -eq 0 ]]; then
         fi
     fi
 
-    # Sync dependencies in virtual environment (matches CI's uv pip sync)
-    if ! uv pip sync "$REQUIREMENTS_LOCK"; then
+    # Install dependencies in virtual environment
+    if ! uv pip install -r "$REQUIREMENTS_LOCK"; then
         echo "Error installing dependencies" >&2
         exit 1
     fi

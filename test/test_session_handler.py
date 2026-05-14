@@ -37,7 +37,16 @@ class TestSessionHandler(unittest.TestCase):
     """
 
     def create_session(self, success=True, failure_category=None, pr_body="Test PR body"):
-        """Helper to create a real AgentSession for tests."""
+        """Helper to create a real AgentSession for tests.
+
+        AgentSession.success is derived from is_complete and failure_category,
+        so success=False requires a failure_category to be meaningful.
+        """
+        if not success and failure_category is None:
+            raise ValueError(
+                "create_session(success=False) requires a failure_category; "
+                "AgentSession.success is derived from failure_category being None"
+            )
         session = AgentSession()
         if success:
             session.complete_session(pr_body=pr_body)
