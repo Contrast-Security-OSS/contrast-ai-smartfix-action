@@ -460,6 +460,27 @@ class TestSmartFixMergeSpan(unittest.TestCase):
         spans = _spans_named(self.exporter, "smartfix-merge")
         self.assertEqual(spans[0].attributes["contrast.finding.fingerprint"], "vuln-abc123")
 
+    @patch('src.merge_handler.otel_provider.shutdown_otel')
+    @patch('src.merge_handler.atexit.register')
+    @patch('src.merge_handler.otel_provider.initialize_otel')
+    @patch('src.smartfix.domains.telemetry.telemetry_handler.initialize_telemetry')
+    @patch('src.merge_handler._validate_pr_event')
+    @patch('src.merge_handler._load_github_event')
+    @patch('src.merge_handler._extract_remediation_info', side_effect=SystemExit(1))
+    def test_no_merge_span_when_extraction_fails(
+        self, _mock_extract, mock_load, mock_validate,
+        _mock_init_tel, _mock_init_otel, _mock_atexit, _mock_shutdown
+    ):
+        """Extraction failure before start_span must produce zero smartfix-merge spans."""
+        mock_load.return_value = {}
+        mock_validate.return_value = {"merged": True}
+
+        with self.assertRaises(SystemExit):
+            import src.merge_handler as merge_handler
+            merge_handler.handle_merged_pr()
+
+        self.assertEqual(len(_spans_named(self.exporter, "smartfix-merge")), 0)
+
 
 if __name__ == "__main__":
     unittest.main()
