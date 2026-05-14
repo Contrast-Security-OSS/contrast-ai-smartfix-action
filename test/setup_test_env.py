@@ -4,7 +4,10 @@ This module provides helper functions for test setup, including
 temporary directory management and sample object factories.
 """
 
+import json
 from pathlib import Path
+
+import requests
 
 from src.smartfix.domains.vulnerability import RemediationContext
 from src.smartfix.domains.vulnerability.context import (
@@ -16,6 +19,19 @@ from src.smartfix.domains.vulnerability.models import Vulnerability, Vulnerabili
 _SENTINEL = object()
 
 
+def make_sample_response(status_code, body=None, text=None):
+    """Create a real requests.Response with the given status code and content."""
+    resp = requests.Response()
+    resp.status_code = status_code
+    if body is not None:
+        resp._content = json.dumps(body).encode()
+    elif text is not None:
+        resp._content = text.encode()
+    else:
+        resp._content = b''
+    return resp
+
+
 def make_sample_context(
     remediation_id="sample-remediation",
     session_id="sample-session",
@@ -25,7 +41,7 @@ def make_sample_context(
     build_command=None,
     user_build_command=None,
     user_format_command=None,
-    repo_path="/tmp/test",
+    repo_path=Path("/tmp/test"),
     language=None,
     vuln_uuid="sample-vuln-uuid",
     vuln_title="Sample Vulnerability",

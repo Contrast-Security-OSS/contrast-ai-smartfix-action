@@ -1120,8 +1120,8 @@ class TestGitHubOperations(unittest.TestCase):
 
         mock_exists.return_value = True
         mock_getsize.return_value = 1000
-        mock_subprocess_run.return_value = Mock(
-            returncode=0, stdout="gh version 2.0.0"
+        mock_subprocess_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="gh version 2.0.0"
         )
 
         # Simulate the exact error GitHub returns when setting is disabled
@@ -1184,8 +1184,8 @@ class TestGitHubOperations(unittest.TestCase):
 
         mock_exists.return_value = True
         mock_getsize.return_value = 1000
-        mock_subprocess_run.return_value = Mock(
-            returncode=0, stdout="gh version 2.0.0"
+        mock_subprocess_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="gh version 2.0.0"
         )
 
         # Simulate a different command error (not permission-related)
@@ -1265,8 +1265,8 @@ class TestGitHubOperations(unittest.TestCase):
 
         mock_exists.return_value = True
         mock_getsize.return_value = 1000
-        mock_subprocess_run.return_value = Mock(
-            returncode=0, stdout="gh version 2.0.0"
+        mock_subprocess_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="gh version 2.0.0"
         )
 
         # Simulate a command error with no stderr

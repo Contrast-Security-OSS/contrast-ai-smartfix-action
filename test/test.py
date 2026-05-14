@@ -8,6 +8,7 @@ import requests
 from unittest.mock import patch, Mock
 
 # Test setup imports (path is set up by conftest.py)
+from setup_test_env import make_sample_response
 from src.config import reset_config
 from src.main import main
 
@@ -57,9 +58,7 @@ class TestSmartFixAction(unittest.TestCase):
         # Mock all HTTP requests
         self.requests_patcher = patch('requests.post')
         self.mock_requests_post = self.requests_patcher.start()
-        post_response = requests.Response()
-        post_response.status_code = 404  # Not found, to avoid further processing
-        self.mock_requests_post.return_value = post_response
+        self.mock_requests_post.return_value = make_sample_response(404)
 
         # Mock version check requests
         self.version_requests_patcher = patch('src.version_check.requests.get')

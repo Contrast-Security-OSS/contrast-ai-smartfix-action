@@ -32,12 +32,12 @@ Covers:
   - send_telemetry_data_org
 """
 
-import json
 import unittest
 from unittest.mock import patch
 
 import requests
 
+from setup_test_env import make_sample_response
 from src import contrast_api
 
 
@@ -47,19 +47,6 @@ ORG_ID = 'test-org-id'
 AUTH_KEY = 'test-auth-key'
 API_KEY = 'test-api-key'
 REMEDIATION_ID = 'rem-123'
-
-
-def _make_response(status_code, body=None, text=None):
-    """Build a real requests.Response for tests."""
-    resp = requests.Response()
-    resp.status_code = status_code
-    if body is not None:
-        resp._content = json.dumps(body).encode()
-    elif text is not None:
-        resp._content = text.encode()
-    else:
-        resp._content = b''
-    return resp
 
 
 # =============================================================================
@@ -80,7 +67,7 @@ class TestGetOrgOpenRemediations(unittest.TestCase):
 
     @patch('src.contrast_api.requests.post')
     def test_returns_list_on_200(self, mock_post):
-        mock_post.return_value = _make_response(
+        mock_post.return_value = make_sample_response(
             200, body=[{'remediationId': REMEDIATION_ID, 'vulnerabilityId': 'v1'}]
         )
         result = self._call()
@@ -89,7 +76,7 @@ class TestGetOrgOpenRemediations(unittest.TestCase):
 
     @patch('src.contrast_api.requests.post')
     def test_posts_to_org_url_without_app_id(self, mock_post):
-        mock_post.return_value = _make_response(200, body=[])
+        mock_post.return_value = make_sample_response(200, body=[])
         self._call()
         url = mock_post.call_args[0][0]
         self.assertIn(f'/organizations/{ORG_ID}/remediations/open', url)
@@ -97,14 +84,14 @@ class TestGetOrgOpenRemediations(unittest.TestCase):
 
     @patch('src.contrast_api.requests.post')
     def test_sends_app_ids_in_body(self, mock_post):
-        mock_post.return_value = _make_response(200, body=[])
+        mock_post.return_value = make_sample_response(200, body=[])
         self._call()
         payload = mock_post.call_args[1]['json']
         self.assertEqual(payload['appIds'], APP_IDS)
 
     @patch('src.contrast_api.requests.post')
     def test_returns_empty_list_on_non_200(self, mock_post):
-        mock_post.return_value = _make_response(500)
+        mock_post.return_value = make_sample_response(500)
         self.assertEqual(self._call(), [])
 
     @patch('src.contrast_api.requests.post')
@@ -114,16 +101,13 @@ class TestGetOrgOpenRemediations(unittest.TestCase):
 
     @patch('src.contrast_api.requests.post')
     def test_returns_empty_list_on_json_error(self, mock_post):
-        bad_response = requests.Response()
-        bad_response.status_code = 200
-        bad_response._content = b'not valid json'
-        mock_post.return_value = bad_response
+        mock_post.return_value = make_sample_response(200, text='not valid json')
         self.assertEqual(self._call(), [])
 
     @patch('src.contrast_api.requests.post')
     def test_strips_protocol_from_host_in_url(self, mock_post):
         """normalize_host is applied — passing host with https:// prefix still builds a valid URL."""
-        mock_post.return_value = _make_response(200, body=[])
+        mock_post.return_value = make_sample_response(200, body=[])
         self._call(contrast_host=f'https://{HOST}')
         url = mock_post.call_args[0][0]
         self.assertNotIn('https://https://', url)
@@ -160,7 +144,7 @@ class TestGetOrgRemediationDetails(unittest.TestCase):
             'applicationId': 'app-id-1',
             'skippedAppIds': ['app-id-2'],
         }
-        mock_post.return_value = _make_response(200, body=payload)
+        mock_post.return_value = make_sample_response(200, body=payload)
         result = self._call()
         self.assertEqual(result['remediationId'], REMEDIATION_ID)
         self.assertEqual(result['applicationId'], 'app-id-1')
@@ -169,7 +153,7 @@ class TestGetOrgRemediationDetails(unittest.TestCase):
 
     @patch('src.contrast_api.requests.post')
     def test_posts_to_org_url_without_app_id(self, mock_post):
-        mock_post.return_value = _make_response(204)
+        mock_post.return_value = make_sample_response(204)
         self._call()
         url = mock_post.call_args[0][0]
         self.assertIn(f'/organizations/{ORG_ID}/remediation-details', url)
@@ -177,14 +161,14 @@ class TestGetOrgRemediationDetails(unittest.TestCase):
 
     @patch('src.contrast_api.requests.post')
     def test_sends_app_ids_in_body(self, mock_post):
-        mock_post.return_value = _make_response(204)
+        mock_post.return_value = make_sample_response(204)
         self._call()
         body = mock_post.call_args[1]['json']
         self.assertEqual(body['appIds'], APP_IDS)
 
     @patch('src.contrast_api.requests.post')
     def test_returns_none_on_204(self, mock_post):
-        mock_post.return_value = _make_response(204)
+        mock_post.return_value = make_sample_response(204)
         self.assertIsNone(self._call())
 
     @patch('src.contrast_api.requests.post')
@@ -194,18 +178,18 @@ class TestGetOrgRemediationDetails(unittest.TestCase):
 
     @patch('src.contrast_api.requests.post')
     def test_returns_none_on_unexpected_status(self, mock_post):
-        mock_post.return_value = _make_response(500, text='error')
+        mock_post.return_value = make_sample_response(500, text='error')
         self.assertIsNone(self._call())
 
     @patch('src.contrast_api.requests.post')
     def test_returns_none_on_503(self, mock_post):
-        mock_post.return_value = _make_response(503, text='all apps inaccessible')
+        mock_post.return_value = make_sample_response(503, text='all apps inaccessible')
         self.assertIsNone(self._call())
 
     @patch('src.contrast_api.get_sanitized_409_message')
     @patch('src.contrast_api.requests.post')
     def test_exits_on_409_is_error(self, mock_post, mock_409):
-        mock_post.return_value = _make_response(409, text='credits exhausted')
+        mock_post.return_value = make_sample_response(409, text='credits exhausted')
         mock_409.return_value = ('Credits exhausted', True)
         with self.assertRaises(SystemExit):
             self._call()
@@ -213,7 +197,7 @@ class TestGetOrgRemediationDetails(unittest.TestCase):
     @patch('src.contrast_api.get_sanitized_409_message')
     @patch('src.contrast_api.requests.post')
     def test_returns_none_on_409_not_error(self, mock_post, mock_409):
-        mock_post.return_value = _make_response(409, text='pr limit reached')
+        mock_post.return_value = make_sample_response(409, text='pr limit reached')
         mock_409.return_value = ('PR limit reached', False)
         self.assertIsNone(self._call())
 
@@ -246,7 +230,7 @@ class TestGetOrgPromptDetails(unittest.TestCase):
             'fixSystemPrompt': 'sys', 'fixUserPrompt': 'usr',
             'applicationId': 'app-id-1', 'skippedAppIds': ['app-id-2'],
         }
-        mock_post.return_value = _make_response(200, body=payload)
+        mock_post.return_value = make_sample_response(200, body=payload)
         result = self._call()
         self.assertEqual(result['remediationId'], REMEDIATION_ID)
         self.assertEqual(result['applicationId'], 'app-id-1')
@@ -254,7 +238,7 @@ class TestGetOrgPromptDetails(unittest.TestCase):
 
     @patch('src.contrast_api.requests.post')
     def test_posts_to_org_url_without_app_id(self, mock_post):
-        mock_post.return_value = _make_response(204)
+        mock_post.return_value = make_sample_response(204)
         self._call()
         url = mock_post.call_args[0][0]
         self.assertIn(f'/organizations/{ORG_ID}/prompt-details', url)
@@ -262,19 +246,19 @@ class TestGetOrgPromptDetails(unittest.TestCase):
 
     @patch('src.contrast_api.requests.post')
     def test_sends_app_ids_in_body(self, mock_post):
-        mock_post.return_value = _make_response(204)
+        mock_post.return_value = make_sample_response(204)
         self._call()
         body = mock_post.call_args[1]['json']
         self.assertEqual(body['appIds'], APP_IDS)
 
     @patch('src.contrast_api.requests.post')
     def test_returns_none_on_204(self, mock_post):
-        mock_post.return_value = _make_response(204)
+        mock_post.return_value = make_sample_response(204)
         self.assertIsNone(self._call())
 
     @patch('src.contrast_api.requests.post')
     def test_returns_none_on_503(self, mock_post):
-        mock_post.return_value = _make_response(503, text='all apps inaccessible')
+        mock_post.return_value = make_sample_response(503, text='all apps inaccessible')
         self.assertIsNone(self._call())
 
     @patch('src.contrast_api.requests.post')
@@ -286,7 +270,7 @@ class TestGetOrgPromptDetails(unittest.TestCase):
     @patch('src.contrast_api.get_sanitized_409_message')
     @patch('src.contrast_api.requests.post')
     def test_exits_on_409_is_error(self, mock_post, mock_409):
-        mock_post.return_value = _make_response(409, text='credits exhausted')
+        mock_post.return_value = make_sample_response(409, text='credits exhausted')
         mock_409.return_value = ('Credits exhausted', True)
         with self.assertRaises(SystemExit):
             self._call()
@@ -294,7 +278,7 @@ class TestGetOrgPromptDetails(unittest.TestCase):
     @patch('src.contrast_api.get_sanitized_409_message')
     @patch('src.contrast_api.requests.post')
     def test_returns_none_on_409_not_error(self, mock_post, mock_409):
-        mock_post.return_value = _make_response(409, text='pr limit reached')
+        mock_post.return_value = make_sample_response(409, text='pr limit reached')
         mock_409.return_value = ('PR limit reached', False)
         self.assertIsNone(self._call())
 
@@ -304,7 +288,7 @@ class TestGetOrgPromptDetails(unittest.TestCase):
             'remediationId': REMEDIATION_ID,
             # missing vulnerabilityUuid, vulnerabilityTitle, etc.
         }
-        mock_post.return_value = _make_response(200, body=incomplete_payload)
+        mock_post.return_value = make_sample_response(200, body=incomplete_payload)
         with self.assertRaises(SystemExit):
             self._call()
 
@@ -327,13 +311,13 @@ class TestNotifyRemediationPrOpenedOrg(unittest.TestCase):
 
     @patch('src.contrast_api.requests.put')
     def test_returns_true_on_204(self, mock_put):
-        mock_put.return_value = _make_response(204)
+        mock_put.return_value = make_sample_response(204)
 
         self.assertTrue(self._call())
 
     @patch('src.contrast_api.requests.put')
     def test_url_has_no_app_id_segment(self, mock_put):
-        mock_put.return_value = _make_response(204)
+        mock_put.return_value = make_sample_response(204)
 
         self._call()
         url = mock_put.call_args[0][0]
@@ -342,7 +326,7 @@ class TestNotifyRemediationPrOpenedOrg(unittest.TestCase):
 
     @patch('src.contrast_api.requests.put')
     def test_returns_false_on_http_error(self, mock_put):
-        mock_put.return_value = _make_response(500, text='error')
+        mock_put.return_value = make_sample_response(500, text='error')
         self.assertFalse(self._call())
 
     @patch('src.contrast_api.requests.put')
@@ -367,13 +351,13 @@ class TestNotifyRemediationPrClosedOrg(unittest.TestCase):
 
     @patch('src.contrast_api.requests.put')
     def test_returns_true_on_204(self, mock_put):
-        mock_put.return_value = _make_response(204)
+        mock_put.return_value = make_sample_response(204)
 
         self.assertTrue(self._call())
 
     @patch('src.contrast_api.requests.put')
     def test_url_has_no_app_id_segment(self, mock_put):
-        mock_put.return_value = _make_response(204)
+        mock_put.return_value = make_sample_response(204)
 
         self._call()
         url = mock_put.call_args[0][0]
@@ -402,13 +386,13 @@ class TestNotifyRemediationPrMergedOrg(unittest.TestCase):
 
     @patch('src.contrast_api.requests.put')
     def test_returns_true_on_204(self, mock_put):
-        mock_put.return_value = _make_response(204)
+        mock_put.return_value = make_sample_response(204)
 
         self.assertTrue(self._call())
 
     @patch('src.contrast_api.requests.put')
     def test_url_has_no_app_id_segment(self, mock_put):
-        mock_put.return_value = _make_response(204)
+        mock_put.return_value = make_sample_response(204)
 
         self._call()
         url = mock_put.call_args[0][0]
@@ -438,13 +422,13 @@ class TestNotifyRemediationFailedOrg(unittest.TestCase):
 
     @patch('src.contrast_api.requests.put')
     def test_returns_true_on_204(self, mock_put):
-        mock_put.return_value = _make_response(204)
+        mock_put.return_value = make_sample_response(204)
 
         self.assertTrue(self._call())
 
     @patch('src.contrast_api.requests.put')
     def test_url_has_no_app_id_segment(self, mock_put):
-        mock_put.return_value = _make_response(204)
+        mock_put.return_value = make_sample_response(204)
 
         self._call()
         url = mock_put.call_args[0][0]
@@ -453,7 +437,7 @@ class TestNotifyRemediationFailedOrg(unittest.TestCase):
 
     @patch('src.contrast_api.requests.put')
     def test_sends_failure_category_in_body(self, mock_put):
-        mock_put.return_value = _make_response(204)
+        mock_put.return_value = make_sample_response(204)
 
         self._call(failure_category='AGENT_FAILURE')
         body = mock_put.call_args[1]['json']
@@ -484,12 +468,12 @@ class TestSendTelemetryDataOrg(unittest.TestCase):
 
     @patch('src.contrast_api.requests.post')
     def test_returns_true_on_201(self, mock_post):
-        mock_post.return_value = _make_response(201)
+        mock_post.return_value = make_sample_response(201)
         self.assertTrue(self._call())
 
     @patch('src.contrast_api.requests.post')
     def test_url_has_no_app_id_segment(self, mock_post):
-        mock_post.return_value = _make_response(201)
+        mock_post.return_value = make_sample_response(201)
         self._call()
         url = mock_post.call_args[0][0]
         self.assertIn(f'/organizations/{ORG_ID}/remediations/{REMEDIATION_ID}/telemetry', url)
@@ -497,7 +481,7 @@ class TestSendTelemetryDataOrg(unittest.TestCase):
 
     @patch('src.contrast_api.requests.post')
     def test_returns_false_on_error_status(self, mock_post):
-        mock_post.return_value = _make_response(500, text='error')
+        mock_post.return_value = make_sample_response(500, text='error')
         self.assertFalse(self._call())
 
     @patch('src.contrast_api.requests.post')
