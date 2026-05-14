@@ -188,23 +188,20 @@ def handle_merged_pr():
 
     log("--- Handling Merged Contrast AI SmartFix Pull Request ---")
 
-    # Load and validate event before starting the span so non-merge events
-    # don't produce a smartfix-merge span with pr_merged=true.
+    # Validate event and extract all identifiers before opening the span so that
+    # sys.exit() in any helper does not flush a merge span with pr_merged=true
+    # but without remediation_id / fingerprint (which creates uncorrelatable events).
     event_data = _load_github_event()
     pull_request = _validate_pr_event(event_data)
+    remediation_id, labels = _extract_remediation_info(pull_request)
+    vuln_uuid = _extract_vulnerability_info(labels)
 
     try:
         with otel_provider.start_span("smartfix-merge") as merge_span:
             merge_span.set_attribute("contrast.smartfix.pr_merged", True)
-
-            # Extract remediation and vulnerability information
-            remediation_id, labels = _extract_remediation_info(pull_request)
-            vuln_uuid = _extract_vulnerability_info(labels)
-
             merge_span.set_attribute("contrast.smartfix.remediation_id", remediation_id)
             merge_span.set_attribute("contrast.finding.fingerprint", vuln_uuid)
 
-            # Update telemetry with extracted information
             debug_log(f"Extracted Remediation ID: {remediation_id}")
             telemetry_handler.update_telemetry("additionalAttributes.remediationId", remediation_id)
             telemetry_handler.update_telemetry("vulnInfo.vulnId", vuln_uuid)

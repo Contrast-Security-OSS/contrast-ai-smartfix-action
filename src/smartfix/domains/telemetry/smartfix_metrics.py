@@ -183,6 +183,10 @@ def record_vulnerability_duration(
 def record_pr_attempt(outcome: str, rule_name: str, coding_agent: str) -> None:
     """Record a PR creation attempt.
 
+    Note for dashboard consumers: this counter reflects only PRs created by the
+    internal SmartFix agent. External-agent PRs (Copilot, Claude Code) are not
+    counted here, though they may produce merge spans via handle_merged_pr().
+
     Args:
         outcome: "success" or "failure".
         rule_name: Contrast rule name.
