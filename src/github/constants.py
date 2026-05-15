@@ -30,3 +30,7 @@ GITHUB_MAX_ISSUE_BODY_SIZE = 32000
 # GitHub API Query Limits
 GITHUB_PR_LIST_LIMIT = 100
 GITHUB_WORKFLOW_RUN_LIMIT = 50
+
+# SmartFix-managed PR/issue label prefixes — used to identify labels SmartFix
+# attaches (and now removes on PR close/merge).
+SMARTFIX_LABEL_PREFIXES = ("smartfix-id:", "contrast-vuln-id:")

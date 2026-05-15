@@ -29,7 +29,7 @@ import sys
 import unittest
 import os
 from pathlib import Path
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import patch, Mock, AsyncMock
 
 # Add project root to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -114,7 +114,7 @@ class TestEventLoopUtils(unittest.TestCase):
             return "windows_success"
 
         # Mock WindowsProactorEventLoopPolicy - patch at asyncio level
-        mock_policy_class = MagicMock()
+        mock_policy_class = Mock()
         with patch('asyncio.WindowsProactorEventLoopPolicy', mock_policy_class, create=True):
             result = event_loop_utils._run_agent_in_event_loop(simple_async_func)
             self.assertEqual(result, "windows_success")
@@ -169,7 +169,7 @@ class TestEventLoopUtils(unittest.TestCase):
         """Test SubAgentExecutor.run() with session creation error"""
         mock_error_exit.side_effect = SystemExit(1)
 
-        mock_service_instance = MagicMock()
+        mock_service_instance = Mock()
         mock_service_instance.create_session = AsyncMock(side_effect=Exception("Session error"))
         mock_session_service.return_value = mock_service_instance
 
@@ -196,8 +196,8 @@ class TestEventLoopUtils(unittest.TestCase):
         """Test SubAgentExecutor.run() when agent creation fails"""
         mock_error_exit.side_effect = SystemExit(1)
 
-        mock_service_instance = MagicMock()
-        mock_service_instance.create_session = AsyncMock(return_value=MagicMock())
+        mock_service_instance = Mock()
+        mock_service_instance.create_session = AsyncMock(return_value=Mock())
         mock_session_service.return_value = mock_service_instance
 
         executor = SubAgentExecutor()
@@ -222,13 +222,13 @@ class TestEventLoopUtils(unittest.TestCase):
         self, mock_runner_class, mock_artifact_service, mock_session_service
     ):
         """Test SubAgentExecutor.run() with successful execution"""
-        mock_session = MagicMock()
-        mock_service_instance = MagicMock()
+        mock_session = Mock()
+        mock_service_instance = Mock()
         mock_service_instance.create_session = AsyncMock(return_value=mock_session)
         mock_session_service.return_value = mock_service_instance
 
         executor = SubAgentExecutor()
-        mock_agent = MagicMock()
+        mock_agent = Mock()
         with patch.object(executor, 'create_agent', AsyncMock(return_value=mock_agent)) as mock_create, \
              patch.object(executor, 'execute_agent', AsyncMock(return_value="Fix applied successfully")) as mock_execute:
             result = asyncio.run(executor.run(
@@ -251,13 +251,13 @@ class TestEventLoopUtils(unittest.TestCase):
         self, mock_runner_class, mock_artifact_service, mock_session_service
     ):
         """Test SubAgentExecutor.run() passes session_id through to create_agent"""
-        mock_session = MagicMock()
-        mock_service_instance = MagicMock()
+        mock_session = Mock()
+        mock_service_instance = Mock()
         mock_service_instance.create_session = AsyncMock(return_value=mock_session)
         mock_session_service.return_value = mock_service_instance
 
         executor = SubAgentExecutor()
-        mock_agent = MagicMock()
+        mock_agent = Mock()
         with patch.object(executor, 'create_agent', AsyncMock(return_value=mock_agent)) as mock_create, \
              patch.object(executor, 'execute_agent', AsyncMock(return_value="Windows fix success")):
             result = asyncio.run(executor.run(

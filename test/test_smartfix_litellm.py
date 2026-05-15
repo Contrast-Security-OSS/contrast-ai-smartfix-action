@@ -31,10 +31,11 @@ This module tests the extended LiteLLM functionality including:
 import asyncio
 import unittest
 import json
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import patch, Mock, MagicMock, AsyncMock
 
 # Test setup imports (path is set up by conftest.py)
 from src.smartfix.extensions.smartfix_litellm import SmartFixLiteLlm, TokenCostAccumulator, _derive_system
+from src.smartfix.domains.providers import CONTRAST_CLAUDE_SONNET_4_5
 
 
 class TestTokenCostAccumulator(unittest.TestCase):
@@ -389,6 +390,10 @@ class TestDeriveSystem(unittest.TestCase):
         """Production Contrast LLM model string must report provider as 'contrast', not 'anthropic'."""
         self.assertEqual(_derive_system("contrast/claude-sonnet-4-5"), "contrast")
 
+    def test_contrast_claude_sonnet_v2_model_id_returns_contrast(self):
+        """v2 model id (bare Bedrock id, no contrast/ prefix) must still resolve to 'contrast'."""
+        self.assertEqual(_derive_system(CONTRAST_CLAUDE_SONNET_4_5), "contrast")
+
     def test_anthropic_prefix_returns_anthropic(self):
         self.assertEqual(_derive_system("anthropic/claude-3-opus"), "anthropic")
 
@@ -424,7 +429,7 @@ class TestLogCostAnalysisReturnValue(unittest.TestCase):
     @patch('src.smartfix.extensions.smartfix_litellm.debug_log')
     def test_returns_token_tuple_from_dict_usage(self, _mock_log):
         """Returns correct 4-tuple when usage is a dict."""
-        response = MagicMock()
+        response = Mock()
         response.get = lambda key, default=None: {
             "usage": {
                 "prompt_tokens": 100,
@@ -442,7 +447,7 @@ class TestLogCostAnalysisReturnValue(unittest.TestCase):
     @patch('src.smartfix.extensions.smartfix_litellm.debug_log')
     def test_returns_zeros_when_no_usage(self, _mock_log):
         """Returns (0, 0, 0, 0) when no usage data is present."""
-        response = MagicMock()
+        response = Mock()
         response.get = lambda key, default=None: default
 
         result = self.model._log_cost_analysis(response)
@@ -463,7 +468,7 @@ class TestCallLlmWithRetryOtelSpan(unittest.TestCase):
         usage = MagicMock()
         usage.__class__.__name__ = "Usage"
         # Make response.get("usage", {}) return the usage object
-        resp = MagicMock()
+        resp = Mock()
         resp.model = model_name
         resp.get = lambda key, default=None: usage if key == "usage" else default
 
@@ -490,17 +495,17 @@ class TestCallLlmWithRetryOtelSpan(unittest.TestCase):
     def test_chat_span_is_created(self, _mock_log):
         """start_span('chat <model>') is called once for a successful call."""
         mock_response = self._make_mock_response()
-        self.model.llm_client = MagicMock()
+        self.model.llm_client = Mock()
         self.model.llm_client.acompletion = AsyncMock(return_value=mock_response)
 
         span_names = []
 
         def mock_start_span(name, context=None):
             span_names.append(name)
-            mock_span = MagicMock()
+            mock_span = Mock()
             mock_span_cm = MagicMock()
-            mock_span_cm.__enter__ = MagicMock(return_value=mock_span)
-            mock_span_cm.__exit__ = MagicMock(return_value=False)
+            mock_span_cm.__enter__ = Mock(return_value=mock_span)
+            mock_span_cm.__exit__ = Mock(return_value=False)
             return mock_span_cm
 
         with patch('src.smartfix.domains.telemetry.otel_provider.start_span', side_effect=mock_start_span):
@@ -512,18 +517,18 @@ class TestCallLlmWithRetryOtelSpan(unittest.TestCase):
     def test_span_has_request_attributes(self, _mock_log):
         """gen_ai.system, gen_ai.request.model, gen_ai.operation.name, contrast.smartfix.retry_attempt are set."""
         mock_response = self._make_mock_response()
-        self.model.llm_client = MagicMock()
+        self.model.llm_client = Mock()
         self.model.llm_client.acompletion = AsyncMock(return_value=mock_response)
 
         captured_span = None
 
         def mock_start_span(name, context=None):
             nonlocal captured_span
-            mock_span = MagicMock()
+            mock_span = Mock()
             captured_span = mock_span
             mock_span_cm = MagicMock()
-            mock_span_cm.__enter__ = MagicMock(return_value=mock_span)
-            mock_span_cm.__exit__ = MagicMock(return_value=False)
+            mock_span_cm.__enter__ = Mock(return_value=mock_span)
+            mock_span_cm.__exit__ = Mock(return_value=False)
             return mock_span_cm
 
         with patch('src.smartfix.domains.telemetry.otel_provider.start_span', side_effect=mock_start_span):
@@ -539,18 +544,18 @@ class TestCallLlmWithRetryOtelSpan(unittest.TestCase):
     def test_span_has_response_model_attribute(self, _mock_log):
         """gen_ai.response.model is set from the response object."""
         mock_response = self._make_mock_response(model_name="claude-3-opus-20240229")
-        self.model.llm_client = MagicMock()
+        self.model.llm_client = Mock()
         self.model.llm_client.acompletion = AsyncMock(return_value=mock_response)
 
         captured_span = None
 
         def mock_start_span(name, context=None):
             nonlocal captured_span
-            mock_span = MagicMock()
+            mock_span = Mock()
             captured_span = mock_span
             mock_span_cm = MagicMock()
-            mock_span_cm.__enter__ = MagicMock(return_value=mock_span)
-            mock_span_cm.__exit__ = MagicMock(return_value=False)
+            mock_span_cm.__enter__ = Mock(return_value=mock_span)
+            mock_span_cm.__exit__ = Mock(return_value=False)
             return mock_span_cm
 
         with patch('src.smartfix.domains.telemetry.otel_provider.start_span', side_effect=mock_start_span):
@@ -568,18 +573,18 @@ class TestCallLlmWithRetryOtelSpan(unittest.TestCase):
         non_retryable_err = _litellm.AuthenticationError(
             message="bad key", llm_provider="anthropic", model="claude-3-opus"
         )
-        self.model.llm_client = MagicMock()
+        self.model.llm_client = Mock()
         self.model.llm_client.acompletion = AsyncMock(side_effect=non_retryable_err)
 
         captured_span = None
 
         def mock_start_span(name, context=None):
             nonlocal captured_span
-            mock_span = MagicMock()
+            mock_span = Mock()
             captured_span = mock_span
             mock_span_cm = MagicMock()
-            mock_span_cm.__enter__ = MagicMock(return_value=mock_span)
-            mock_span_cm.__exit__ = MagicMock(return_value=False)
+            mock_span_cm.__enter__ = Mock(return_value=mock_span)
+            mock_span_cm.__exit__ = Mock(return_value=False)
             return mock_span_cm
 
         with patch('src.smartfix.domains.telemetry.otel_provider.start_span', side_effect=mock_start_span):
@@ -589,6 +594,58 @@ class TestCallLlmWithRetryOtelSpan(unittest.TestCase):
         captured_span.record_exception.assert_called_once()
         attrs = {call[0][0]: call[0][1] for call in captured_span.set_attribute.call_args_list}
         self.assertIn("error.type", attrs)
+
+
+class TestGenerateContentAsyncDoesNotStream(unittest.TestCase):
+    """Regression: SmartFixLiteLlm must not set stream on the completion call.
+
+    The v2 Contrast LLM proxy returns HTTP 406 for streaming requests, so the
+    Contrast call path must never pass stream=True (or any truthy stream value)
+    into acompletion.  This test locks in the current non-streaming behaviour
+    so a future refactor cannot silently regress it.
+    """
+
+    def setUp(self):
+        with patch('litellm.completion'):
+            self.model = SmartFixLiteLlm(model=CONTRAST_CLAUDE_SONNET_4_5)
+
+    def _consume(self, gen):
+        async def _drain():
+            async for _ in gen:
+                pass
+        asyncio.run(_drain())
+
+    @patch('google.adk.models.lite_llm._model_response_to_generate_content_response')
+    @patch('src.smartfix.extensions.smartfix_litellm._get_completion_inputs')
+    def test_completion_args_omit_stream_for_contrast_model(
+        self, mock_inputs, mock_response_converter
+    ):
+        """generate_content_async must not insert 'stream' into completion_args."""
+        # _get_completion_inputs returns (messages, tools, response_format, generation_params)
+        mock_inputs.return_value = ([], None, None, None)
+        mock_response_converter.return_value = Mock()
+
+        # Capture completion_args via _call_llm_with_retry mock
+        fake_response = Mock()
+        fake_response.get = lambda key, default=None: default
+        fake_response.model = CONTRAST_CLAUDE_SONNET_4_5
+        self.model._call_llm_with_retry = AsyncMock(return_value=fake_response)
+
+        # Skip helpers that touch llm_request internals
+        self.model._maybe_append_user_content = Mock()
+        self.model._ensure_system_message_for_contrast = Mock(return_value=[])
+        self.model._apply_role_conversion_and_caching = Mock()
+        # Provide concrete value for the parent-class attribute the method reads
+        self.model._additional_args = {}
+
+        self._consume(self.model.generate_content_async(Mock(), stream=False))
+
+        self.model._call_llm_with_retry.assert_called_once()
+        completion_args = self.model._call_llm_with_retry.call_args[0][0]
+        self.assertNotIn(
+            "stream", completion_args,
+            "completion_args must not set 'stream'; v2 Contrast LLM proxy returns HTTP 406 on streaming"
+        )
 
 
 if __name__ == '__main__':

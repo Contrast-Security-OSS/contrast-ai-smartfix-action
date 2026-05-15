@@ -20,7 +20,7 @@
 
 import re
 import unittest
-from unittest.mock import patch, MagicMock, ANY
+from unittest.mock import patch, Mock, ANY
 
 # Test setup imports (path is set up by conftest.py)
 from src.config import get_config, reset_config
@@ -170,7 +170,7 @@ class TestExternalCodingAgent(unittest.TestCase):
         agent = ExternalCodingAgent(self.config)
 
         # Mock _poll_for_pr instead of patching it
-        mock_poll_for_pr = MagicMock(return_value=None)
+        mock_poll_for_pr = Mock(return_value=None)
         original_poll_for_pr = agent._process_external_coding_agent_run
         agent._process_external_coding_agent_run = mock_poll_for_pr
 
@@ -235,7 +235,7 @@ class TestExternalCodingAgent(unittest.TestCase):
         agent = ExternalCodingAgent(self.config)
 
         # Mock _poll_for_pr instead of patching it
-        mock_poll_for_pr = MagicMock(return_value=pr_info)
+        mock_poll_for_pr = Mock(return_value=pr_info)
         original_poll_for_pr = agent._process_external_coding_agent_run
         agent._process_external_coding_agent_run = mock_poll_for_pr
 

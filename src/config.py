@@ -56,7 +56,7 @@ class Config:
         self.testing = testing
 
         # --- Preset ---
-        self.VERSION = "v1.0.17"
+        self.VERSION = "v1.0.18"
         self.USER_AGENT = f"contrast-smart-fix {self.VERSION}"
 
         # --- Paths (initialized early for use in command detection) ---
@@ -211,7 +211,7 @@ class Config:
         if (is_smartfix_coding_agent
                 and self.USE_CONTRAST_LLM
                 and self._get_env_var("AGENT_MODEL", required=False) is None):
-            self.AGENT_MODEL = "contrast/claude-sonnet-4-5"
+            self.AGENT_MODEL = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
 
         # Validate AWS Bedrock configuration if applicable
         self._validate_aws_bedrock_config()
@@ -448,7 +448,12 @@ class Config:
 
         if not app_ids:
             raise ConfigurationError(
-                "Error: contrast_app_ids must not be an empty array."
+                "SmartFix could not find a Contrast application ID for this repository. "
+                "Make sure this repository is instrumented by the Contrast Agent so that it "
+                "has IAST findings in Contrast, then set one of the following inputs in your "
+                "SmartFix workflow step:\n"
+                "  contrast_app_id: '<your-app-id>'          # single application\n"
+                "  contrast_app_ids: '[\"id-1\", \"id-2\"]'      # monorepo with multiple applications"
             )
 
         cleaned_ids: List[str] = []

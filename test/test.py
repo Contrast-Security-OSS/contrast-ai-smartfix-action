@@ -1,11 +1,14 @@
 import io
 import os
 import contextlib
+import subprocess
 import unittest
 import tempfile
-from unittest.mock import patch, MagicMock
+import requests
+from unittest.mock import patch, Mock
 
 # Test setup imports (path is set up by conftest.py)
+from setup_test_env import make_sample_response
 from src.config import reset_config
 from src.main import main
 
@@ -39,12 +42,9 @@ class TestSmartFixAction(unittest.TestCase):
         # Mock subprocess to prevent actual command execution
         self.subprocess_patcher = patch('subprocess.run')
         self.mock_subprocess_run = self.subprocess_patcher.start()
-        mock_process = MagicMock()
-        mock_process.returncode = 0
-        mock_process.stdout = "Mock process output"
-        mock_process.stderr = ""
-        mock_process.communicate.return_value = (b"Mock stdout", b"Mock stderr")
-        self.mock_subprocess_run.return_value = mock_process
+        self.mock_subprocess_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="Mock process output", stderr=""
+        )
 
         # Mock GitOperations.configure_git_user to prevent git config errors
         self.git_config_patcher = patch('src.smartfix.domains.scm.git_operations.GitOperations.configure_git_user')
@@ -58,14 +58,12 @@ class TestSmartFixAction(unittest.TestCase):
         # Mock all HTTP requests
         self.requests_patcher = patch('requests.post')
         self.mock_requests_post = self.requests_patcher.start()
-        mock_post_response = MagicMock()
-        mock_post_response.status_code = 404  # Not found, to avoid further processing
-        self.mock_requests_post.return_value = mock_post_response
+        self.mock_requests_post.return_value = make_sample_response(404)
 
         # Mock version check requests
         self.version_requests_patcher = patch('src.version_check.requests.get')
         self.mock_requests_get = self.version_requests_patcher.start()
-        mock_response = MagicMock()
+        mock_response = Mock(spec=requests.Response)
         mock_response.json.return_value = [{'name': 'v1.0.0'}]
         mock_response.raise_for_status.return_value = None
         self.mock_requests_get.return_value = mock_response

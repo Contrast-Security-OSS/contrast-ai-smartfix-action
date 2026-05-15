@@ -19,10 +19,9 @@
 #
 
 import unittest
-import json
-from unittest.mock import patch, MagicMock
-import requests
+from unittest.mock import patch
 
+from setup_test_env import make_sample_response
 from src import contrast_api
 from src.smartfix.domains.workflow.credit_tracking import CreditTrackingResponse
 
@@ -43,11 +42,7 @@ class TestContrastApiCreditTrackingOrg(unittest.TestCase):
     @patch('src.contrast_api.requests.get')
     def test_get_credit_tracking_org_returns_valid_response(self, mock_get):
         """Test that org-level endpoint returns properly structured CreditTrackingResponse."""
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.text = json.dumps(self.sample_api_response)
-        mock_response.json.return_value = self.sample_api_response
-        mock_get.return_value = mock_response
+        mock_get.return_value = make_sample_response(200, body=self.sample_api_response)
 
         result = contrast_api.get_credit_tracking_org(
             contrast_host="test.contrastsecurity.com",
@@ -62,11 +57,7 @@ class TestContrastApiCreditTrackingOrg(unittest.TestCase):
     @patch('src.contrast_api.requests.get')
     def test_get_credit_tracking_org_url_has_no_app_id(self, mock_get):
         """Test that the org-level endpoint URL does not include an application ID."""
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.text = json.dumps(self.sample_api_response)
-        mock_response.json.return_value = self.sample_api_response
-        mock_get.return_value = mock_response
+        mock_get.return_value = make_sample_response(200, body=self.sample_api_response)
 
         contrast_api.get_credit_tracking_org(
             contrast_host="test.contrastsecurity.com",
@@ -82,13 +73,7 @@ class TestContrastApiCreditTrackingOrg(unittest.TestCase):
     @patch('src.contrast_api.requests.get')
     def test_get_credit_tracking_org_returns_none_on_http_error(self, mock_get):
         """Test that org-level endpoint returns None on HTTP errors."""
-        mock_response = MagicMock()
-        mock_response.status_code = 404
-        mock_response.text = "Not Found"
-        mock_get.return_value = mock_response
-        mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError(
-            response=mock_response
-        )
+        mock_get.return_value = make_sample_response(404, text="Not Found")
 
         result = contrast_api.get_credit_tracking_org(
             contrast_host="test.contrastsecurity.com",
