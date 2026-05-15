@@ -19,7 +19,9 @@
 #
 
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
+
+from litellm.types.utils import Message
 
 # Test setup imports (path is set up by conftest.py)
 from src.config import get_config, reset_config
@@ -153,10 +155,8 @@ class TestSmartFixLiteLlmContrast(unittest.TestCase):
 
     def test_message_object_handling(self):
         """Test handling of message objects (not just dicts)"""
-        # Create mock message objects
-        user_message = MagicMock()
-        user_message.role = 'user'
-        user_message.__dict__ = {'role': 'user', 'content': 'Hello'}
+        # Use the real litellm Message type to verify the function handles non-dict objects
+        user_message = Message(role='user', content='Hello')
 
         messages = [user_message]
 

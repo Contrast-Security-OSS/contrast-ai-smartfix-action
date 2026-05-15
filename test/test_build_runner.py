@@ -4,9 +4,10 @@ Tests for build_runner.py module.
 Tests build execution, output capture, exit code handling, and telemetry integration.
 """
 
+import subprocess
 import unittest
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from src.smartfix.domains.workflow.build_runner import run_build_command
 
@@ -31,12 +32,9 @@ class TestBuildRunner(unittest.TestCase):
 
     def test_build_succeeds_exit_code_0(self):
         """Test successful build with exit code 0."""
-        # Setup mock
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        mock_result.stdout = "BUILD SUCCESS\n"
-        mock_result.stderr = ""
-        self.mock_subprocess.return_value = mock_result
+        self.mock_subprocess.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="BUILD SUCCESS\n", stderr=""
+        )
 
         # Execute
         success, output = run_build_command(
@@ -53,12 +51,9 @@ class TestBuildRunner(unittest.TestCase):
 
     def test_build_fails_exit_code_1(self):
         """Test failed build with exit code 1."""
-        # Setup mock
-        mock_result = MagicMock()
-        mock_result.returncode = 1
-        mock_result.stdout = ""
-        mock_result.stderr = "COMPILATION FAILED\n"
-        self.mock_subprocess.return_value = mock_result
+        self.mock_subprocess.return_value = subprocess.CompletedProcess(
+            args=[], returncode=1, stdout="", stderr="COMPILATION FAILED\n"
+        )
 
         # Execute
         success, output = run_build_command(
@@ -82,12 +77,9 @@ class TestBuildRunner(unittest.TestCase):
 
         for exit_code, error_msg in test_cases:
             with self.subTest(exit_code=exit_code):
-                # Setup mock
-                mock_result = MagicMock()
-                mock_result.returncode = exit_code
-                mock_result.stdout = ""
-                mock_result.stderr = error_msg
-                self.mock_subprocess.return_value = mock_result
+                self.mock_subprocess.return_value = subprocess.CompletedProcess(
+                    args=[], returncode=exit_code, stdout="", stderr=error_msg
+                )
 
                 # Execute
                 success, output = run_build_command(
@@ -102,12 +94,9 @@ class TestBuildRunner(unittest.TestCase):
 
     def test_build_output_parsing_stdout_and_stderr(self):
         """Test that both stdout and stderr are captured and combined."""
-        # Setup mock
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        mock_result.stdout = "Standard output\n"
-        mock_result.stderr = "Warning messages\n"
-        self.mock_subprocess.return_value = mock_result
+        self.mock_subprocess.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="Standard output\n", stderr="Warning messages\n"
+        )
 
         # Execute
         success, output = run_build_command(
@@ -156,12 +145,9 @@ class TestBuildRunner(unittest.TestCase):
 
     def test_build_subprocess_call_parameters(self):
         """Test that subprocess.run is called with correct parameters."""
-        # Setup mock
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        mock_result.stdout = "Success"
-        mock_result.stderr = ""
-        self.mock_subprocess.return_value = mock_result
+        self.mock_subprocess.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="Success", stderr=""
+        )
 
         # Execute
         command = "npm run build"
@@ -183,11 +169,9 @@ class TestBuildRunner(unittest.TestCase):
     def test_build_telemetry_always_recorded(self):
         """Test that telemetry is recorded regardless of build outcome."""
         # Test successful build
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        mock_result.stdout = "Success"
-        mock_result.stderr = ""
-        self.mock_subprocess.return_value = mock_result
+        self.mock_subprocess.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="Success", stderr=""
+        )
 
         run_build_command("npm test", Path("/tmp/repo"), "test-remediation-id")
         self.mock_telemetry.assert_called_with("configInfo.buildCommandRunTestsIncluded", True)
@@ -196,21 +180,20 @@ class TestBuildRunner(unittest.TestCase):
         self.mock_telemetry.reset_mock()
 
         # Test failed build
-        mock_result.returncode = 1
-        mock_result.stdout = ""
-        mock_result.stderr = "Failed"
+        self.mock_subprocess.return_value = subprocess.CompletedProcess(
+            args=[], returncode=1, stdout="", stderr="Failed"
+        )
 
         run_build_command("npm test", Path("/tmp/repo"), "test-remediation-id")
         self.mock_telemetry.assert_called_with("configInfo.buildCommandRunTestsIncluded", True)
 
     def test_build_encoding_handling(self):
         """Test that encoding errors are handled gracefully."""
-        # Setup mock with unicode characters
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        mock_result.stdout = "Test output with unicode: \u2713\n"
-        mock_result.stderr = "Warning with emoji: \U0001F4A9\n"
-        self.mock_subprocess.return_value = mock_result
+        self.mock_subprocess.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0,
+            stdout="Test output with unicode: \u2713\n",
+            stderr="Warning with emoji: \U0001F4A9\n"
+        )
 
         # Execute
         success, output = run_build_command(

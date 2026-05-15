@@ -1,10 +1,12 @@
+import requests
+import subprocess
 import sys
 import unittest
 import os
 import io
 import contextlib
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, Mock, MagicMock
 
 # Ensure test directory is on path (conftest.py only runs under pytest)
 sys.path.insert(0, str(Path(__file__).parent))
@@ -52,11 +54,9 @@ class TestMain(unittest.TestCase):
         # Mock subprocess calls
         self.subproc_patcher = patch('subprocess.run')
         self.mock_subprocess = self.subproc_patcher.start()
-        mock_process = MagicMock()
-        mock_process.returncode = 0
-        mock_process.stdout = "Mock output"
-        mock_process.communicate.return_value = (b"Mock stdout", b"Mock stderr")
-        self.mock_subprocess.return_value = mock_process
+        self.mock_subprocess.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="Mock output", stderr=""
+        )
 
         # Mock git configuration
         self.git_patcher = patch('src.smartfix.domains.scm.git_operations.GitOperations.configure_git_user')
@@ -74,7 +74,7 @@ class TestMain(unittest.TestCase):
         # Mock requests for version checking
         self.requests_patcher = patch('src.version_check.requests.get')
         self.mock_requests_get = self.requests_patcher.start()
-        mock_response = MagicMock()
+        mock_response = Mock(spec=requests.Response)
         mock_response.json.return_value = [{'name': 'v1.0.0'}]
         mock_response.raise_for_status.return_value = None
         self.mock_requests_get.return_value = mock_response
@@ -94,6 +94,10 @@ class TestMain(unittest.TestCase):
         self.notify_patcher = patch('src.contrast_api.notify_remediation_failed_org', return_value=False)
         self.mock_notify = self.notify_patcher.start()
 
+        # Mock get_credit_tracking_org to prevent real HTTP calls during main() flow
+        self.credit_patcher = patch('src.contrast_api.get_credit_tracking_org', return_value=None)
+        self.mock_credit = self.credit_patcher.start()
+
     def tearDown(self):
         """Clean up after each test."""
         # Stop all patches
@@ -105,6 +109,7 @@ class TestMain(unittest.TestCase):
         self.exit_patcher.stop()
         self.pr_count_patcher.stop()
         self.notify_patcher.stop()
+        self.credit_patcher.stop()
         reset_config()
 
         # Clean up temp directory
@@ -241,7 +246,7 @@ class TestMain(unittest.TestCase):
              patch('src.main.generate_qa_section', return_value=""), \
              patch('src.contrast_api.notify_remediation_failed_org') as mock_notify_failed:
 
-            mock_agent = MagicMock()
+            mock_agent = Mock()
             mock_agent_class.return_value = mock_agent
 
             with patch.dict('os.environ', test_env, clear=True):
@@ -286,7 +291,7 @@ class TestMain(unittest.TestCase):
         span_registry = {}
 
         def mock_start_span(name):
-            mock_span = MagicMock()
+            mock_span = Mock()
             mock_span_cm = MagicMock()
             mock_span_cm.__enter__ = MagicMock(return_value=mock_span)
             mock_span_cm.__exit__ = MagicMock(return_value=False)
@@ -305,7 +310,7 @@ class TestMain(unittest.TestCase):
              patch('src.smartfix.domains.telemetry.otel_provider.initialize_otel'), \
              patch('src.smartfix.domains.telemetry.otel_provider.shutdown_otel'):
 
-            mock_agent_class.return_value = MagicMock()
+            mock_agent_class.return_value = Mock()
 
             with patch.dict('os.environ', test_env, clear=True):
                 reset_config()
@@ -350,7 +355,7 @@ class TestMain(unittest.TestCase):
         span_registry = {}
 
         def mock_start_span(name):
-            mock_span = MagicMock()
+            mock_span = Mock()
             mock_span_cm = MagicMock()
             mock_span_cm.__enter__ = MagicMock(return_value=mock_span)
             mock_span_cm.__exit__ = MagicMock(return_value=False)
@@ -372,7 +377,7 @@ class TestMain(unittest.TestCase):
              patch('src.smartfix.domains.telemetry.otel_provider.initialize_otel'), \
              patch('src.smartfix.domains.telemetry.otel_provider.shutdown_otel'):
 
-            mock_agent_class.return_value = MagicMock()
+            mock_agent_class.return_value = Mock()
 
             with patch.dict('os.environ', test_env, clear=True):
                 reset_config()
@@ -388,7 +393,7 @@ class TestMain(unittest.TestCase):
 
     def test_main_initializes_and_shuts_down_otel(self):
         """main() calls initialize_otel, starts smartfix-run span, and calls shutdown_otel."""
-        mock_span = MagicMock()
+        mock_span = Mock()
         mock_span_cm = MagicMock()
         mock_span_cm.__enter__ = MagicMock(return_value=mock_span)
         mock_span_cm.__exit__ = MagicMock(return_value=False)

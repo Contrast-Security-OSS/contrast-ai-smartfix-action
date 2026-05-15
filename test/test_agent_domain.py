@@ -18,15 +18,16 @@
 #
 
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 from src.config import get_config, reset_config
 from src.smartfix.domains.agents import (
     SmartFixAgent,
     CodingAgentStrategy,
     AgentSession,
 )
-from src.smartfix.shared.failure_categories import FailureCategory
 from src.smartfix.domains.vulnerability import RemediationContext
+from src.smartfix.shared.failure_categories import FailureCategory
+from setup_test_env import make_sample_context
 
 
 # Global patches to prevent git operations during tests
@@ -83,23 +84,17 @@ class TestSmartFixAgent(unittest.TestCase):
         Tests that the remediate method is present on the SmartFixAgent and no longer raises NotImplementedError.
         """
         agent = SmartFixAgent()
-        mock_context = MagicMock(spec=RemediationContext)
-
-        # Mock the required attributes and methods
-        mock_context.build_config = MagicMock()
-        mock_context.build_config.has_build_command.return_value = False
-        mock_context.vulnerability = MagicMock()
-        mock_context.vulnerability.title = "Test Vulnerability"
-        mock_context.remediation_id = "test-123"
-        mock_context.repo_config = MagicMock()
-        mock_context.repo_config.repo_path = "/tmp/test-repo"
+        context = make_sample_context(
+            remediation_id="test-123",
+            vuln_title="Test Vulnerability",
+        )
 
         # Mock function returns
         mock_run_build.return_value = (True, "Build success")
         mock_run_ai_fix.return_value = "Fix applied successfully"
 
         # Should not raise NotImplementedError anymore
-        result = agent.remediate(mock_context)
+        result = agent.remediate(context)
         self.assertIsInstance(result, AgentSession)
         # Just verify that the method returns a valid session object, don't check specific status
         # since the mock setup might result in different statuses
@@ -111,17 +106,11 @@ class TestSmartFixAgent(unittest.TestCase):
         """
         agent = SmartFixAgent()
         session = AgentSession()
-        mock_context = MagicMock(spec=RemediationContext)
-
-        # Setup mocks with proper attribute structure
-        mock_context.vulnerability = MagicMock()
-        mock_context.vulnerability.title = "SQL Injection"
-        mock_context.prompts = MagicMock()  # Required by _run_fix_agent
-        mock_context.repo_config = MagicMock()  # Required by _run_fix_agent
+        context = make_sample_context(vuln_title="SQL Injection")
 
         mock_run_ai_fix.return_value = "Fix applied successfully"
 
-        result = agent._run_fix_agent(session, mock_context)
+        result = agent._run_fix_agent(session, context)
 
         self.assertIsNotNone(result)
         self.assertEqual(result, "Fix applied successfully")
@@ -134,15 +123,11 @@ class TestSmartFixAgent(unittest.TestCase):
         """
         agent = SmartFixAgent()
         session = AgentSession()
-        mock_context = MagicMock(spec=RemediationContext)
-
-        # Setup mocks with proper attribute structure
-        mock_context.vulnerability = MagicMock()
-        mock_context.vulnerability.title = "SQL Injection"
+        context = make_sample_context(vuln_title="SQL Injection")
 
         mock_run_ai_fix.return_value = "Error during AI fix agent execution: Something went wrong"
 
-        result = agent._run_fix_agent(session, mock_context)
+        result = agent._run_fix_agent(session, context)
 
         self.assertIsNone(result)
         # Verify failure reason is set
@@ -154,18 +139,14 @@ class TestSmartFixAgent(unittest.TestCase):
         Tests the complete remediation workflow with all steps successful.
         """
         agent = SmartFixAgent()
-        mock_context = MagicMock(spec=RemediationContext)
-
-        mock_context.build_config = MagicMock()
-        mock_context.build_config.has_build_command.return_value = True
-        mock_context.build_config.user_build_command = None
+        context = make_sample_context(build_command="mvn test")
 
         def fix_agent_side_effect(session, context):
             agent._build_state = {"build_cmd": "mvn test", "format_cmd": None}
             return "success"
 
         with patch.object(agent, '_run_fix_agent', side_effect=fix_agent_side_effect) as mock_fix:
-            result = agent.remediate(mock_context)
+            result = agent.remediate(context)
 
             self.assertIsInstance(result, AgentSession)
             self.assertTrue(result.success)
@@ -178,10 +159,10 @@ class TestSmartFixAgent(unittest.TestCase):
         Tests the complete remediation workflow with BuildTool verification (PR gate).
         """
         agent = SmartFixAgent()
-        mock_context = MagicMock(spec=RemediationContext)
-        mock_context.build_config = MagicMock()
-        mock_context.build_config.has_build_command.return_value = True
-        mock_context.build_config.user_build_command = "mvn test"
+        context = make_sample_context(
+            build_command="mvn test",
+            user_build_command="mvn test",
+        )
 
         def fake_fix_agent(session, context):
             # Simulate BuildTool recording a successful build
@@ -189,7 +170,7 @@ class TestSmartFixAgent(unittest.TestCase):
             return "success"
 
         with patch.object(agent, '_run_fix_agent', side_effect=fake_fix_agent) as mock_fix:
-            result = agent.remediate(mock_context)
+            result = agent.remediate(context)
 
             self.assertTrue(result.success)
             self.assertIsNone(result.failure_category)

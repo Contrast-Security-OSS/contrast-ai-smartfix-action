@@ -28,59 +28,11 @@ Tests the SmartFixAgent remediation workflow including:
 """
 
 import unittest
-from unittest.mock import patch, Mock
-from pathlib import Path
+from unittest.mock import patch
 
 from src.smartfix.domains.agents.smartfix_agent import SmartFixAgent
-from src.smartfix.domains.vulnerability import RemediationContext
-from src.smartfix.domains.vulnerability.context import (
-    PromptConfiguration, BuildConfiguration, RepositoryConfiguration
-)
-from src.smartfix.domains.vulnerability.models import Vulnerability, VulnerabilitySeverity
 from src.smartfix.shared.failure_categories import FailureCategory
-
-
-def _make_context(
-    remediation_id="test-remediation",
-    session_id="test-session",
-    fix_system_prompt="Fix system prompt",
-    fix_user_prompt="Fix user prompt",
-    build_command=None,
-    user_build_command=None,
-    user_format_command=None,
-    repo_path="/tmp/test",
-    language=None,
-):
-    """Build a real RemediationContext for tests that exercise _run_fix_agent_execution."""
-    vulnerability = Vulnerability(
-        uuid="sample-vuln-uuid",
-        title="Sample Vulnerability",
-        rule_name="sample-rule",
-        severity=VulnerabilitySeverity.HIGH,
-    )
-    prompts = PromptConfiguration(
-        fix_system_prompt=fix_system_prompt,
-        fix_user_prompt=fix_user_prompt,
-    )
-    build_config = BuildConfiguration(
-        build_command=build_command,
-        user_build_command=user_build_command,
-        user_format_command=user_format_command,
-    )
-    repo_config = RepositoryConfiguration(
-        repo_path=repo_path,
-        base_branch="main",
-    )
-    return RemediationContext(
-        remediation_id=remediation_id,
-        vulnerability=vulnerability,
-        prompts=prompts,
-        build_config=build_config,
-        repo_config=repo_config,
-        skip_writing_security_test=False,
-        session_id=session_id,
-        language=language,
-    )
+from setup_test_env import make_sample_context
 
 
 class TestSmartFixAgentSuccessScenarios(unittest.TestCase):
@@ -90,16 +42,12 @@ class TestSmartFixAgentSuccessScenarios(unittest.TestCase):
         """When fix agent succeeds but no build command is configured,
         PR gate fails with BUILD_VERIFICATION_FAILED."""
         agent = SmartFixAgent()
-        context = Mock(spec=RemediationContext)
-        context.build_config = None
-        context.prompts = Mock()
-        context.prompts.fix_system_prompt = "You are a security expert"
-        context.prompts.fix_user_prompt = "Fix this vulnerability"
-        context.repo_config = Mock()
-        context.repo_config.repo_path = Path("/tmp/test")
-        context.remediation_id = "test-fix-123"
-        context.session_id = "session-456"
-        context.skip_writing_security_test = False
+        context = make_sample_context(
+            remediation_id="test-fix-123",
+            session_id="session-456",
+            fix_system_prompt="You are a security expert",
+            fix_user_prompt="Fix this vulnerability",
+        )
 
         with patch.object(agent, '_run_fix_agent_execution', return_value="Agent completed"):
             with patch.object(agent, '_extract_analytics_data'):
@@ -113,20 +61,14 @@ class TestSmartFixAgentSuccessScenarios(unittest.TestCase):
         """When fix agent succeeds and BuildTool recorded a successful build,
         PR gate passes and session succeeds."""
         agent = SmartFixAgent()
-        context = Mock(spec=RemediationContext)
-        context.build_config = Mock()
-        context.build_config.has_build_command.return_value = True
-        context.build_config.build_command = "mvn test"
-        context.build_config.user_build_command = "mvn test"
-        context.build_config.user_format_command = None
-        context.repo_config = Mock()
-        context.repo_config.repo_path = Path("/tmp/test")
-        context.prompts = Mock()
-        context.prompts.fix_system_prompt = "Fix system"
-        context.prompts.fix_user_prompt = "Fix user"
-        context.remediation_id = "test-456"
-        context.session_id = "session-789"
-        context.skip_writing_security_test = False
+        context = make_sample_context(
+            remediation_id="test-456",
+            session_id="session-789",
+            fix_system_prompt="Fix system",
+            fix_user_prompt="Fix user",
+            build_command="mvn test",
+            user_build_command="mvn test",
+        )
 
         def fake_execution(ctx):
             # Simulate BuildTool recording a successful build
@@ -149,10 +91,7 @@ class TestSmartFixAgentFixAgentFailures(unittest.TestCase):
         """When fix agent throws an exception,
         should return session with AGENT_FAILURE."""
         agent = SmartFixAgent()
-        context = Mock(spec=RemediationContext)
-        context.build_config = None
-        context.prompts = Mock()
-        context.repo_config = Mock()
+        context = make_sample_context(build_config=None)
 
         with patch.object(agent, '_run_ai_fix_agent', side_effect=Exception("Agent crashed")):
             session = agent.remediate(context)
@@ -164,10 +103,7 @@ class TestSmartFixAgentFixAgentFailures(unittest.TestCase):
         """When fix agent returns None,
         should return session with AGENT_FAILURE."""
         agent = SmartFixAgent()
-        context = Mock(spec=RemediationContext)
-        context.build_config = None
-        context.prompts = Mock()
-        context.repo_config = Mock()
+        context = make_sample_context(build_config=None)
 
         with patch.object(agent, '_run_ai_fix_agent', return_value=None):
             session = agent.remediate(context)
@@ -179,10 +115,7 @@ class TestSmartFixAgentFixAgentFailures(unittest.TestCase):
         """When fix agent returns error message,
         should return session with AGENT_FAILURE."""
         agent = SmartFixAgent()
-        context = Mock(spec=RemediationContext)
-        context.build_config = None
-        context.prompts = Mock()
-        context.repo_config = Mock()
+        context = make_sample_context(build_config=None)
 
         with patch.object(agent, '_run_ai_fix_agent', return_value="Error: Failed to apply fix"):
             session = agent.remediate(context)
@@ -198,20 +131,14 @@ class TestSmartFixAgentPRGate(unittest.TestCase):
         """When build command is configured but agent never verified a build,
         PR gate fails with BUILD_VERIFICATION_FAILED."""
         agent = SmartFixAgent()
-        context = Mock(spec=RemediationContext)
-        context.build_config = Mock()
-        context.build_config.has_build_command.return_value = True
-        context.build_config.build_command = "mvn test"
-        context.build_config.user_build_command = "mvn test"
-        context.build_config.user_format_command = None
-        context.repo_config = Mock()
-        context.repo_config.repo_path = Path("/tmp/test")
-        context.prompts = Mock()
-        context.prompts.fix_system_prompt = "Fix"
-        context.prompts.fix_user_prompt = "Fix"
-        context.remediation_id = "test-gate-fail"
-        context.session_id = "session-gate"
-        context.skip_writing_security_test = False
+        context = make_sample_context(
+            remediation_id="test-gate-fail",
+            session_id="session-gate",
+            fix_system_prompt="Fix",
+            fix_user_prompt="Fix",
+            build_command="mvn test",
+            user_build_command="mvn test",
+        )
 
         def fake_execution(ctx):
             # Simulate BuildTool created but no successful build recorded
@@ -229,17 +156,12 @@ class TestSmartFixAgentPRGate(unittest.TestCase):
     def test_pr_gate_fails_when_no_build_config(self):
         """When no build command is configured, PR gate fails."""
         agent = SmartFixAgent()
-        context = Mock(spec=RemediationContext)
-        context.build_config = Mock()
-        context.build_config.has_build_command.return_value = False
-        context.prompts = Mock()
-        context.prompts.fix_system_prompt = "Fix"
-        context.prompts.fix_user_prompt = "Fix"
-        context.repo_config = Mock()
-        context.repo_config.repo_path = Path("/tmp/test")
-        context.remediation_id = "test-no-build"
-        context.session_id = "session-no-build"
-        context.skip_writing_security_test = False
+        context = make_sample_context(
+            remediation_id="test-no-build",
+            session_id="session-no-build",
+            fix_system_prompt="Fix",
+            fix_user_prompt="Fix",
+        )
 
         with patch.object(agent, '_run_fix_agent_execution', return_value="Success"):
             with patch.object(agent, '_extract_analytics_data'):
@@ -253,18 +175,12 @@ class TestSmartFixAgentPRGate(unittest.TestCase):
         """Scenario 4: No pre-configured or detected build command, but agent discovers
         one at runtime and records a successful build — PR gate should pass."""
         agent = SmartFixAgent()
-        context = Mock(spec=RemediationContext)
-        context.build_config = Mock()
-        context.build_config.has_build_command.return_value = False
-        context.build_config.user_build_command = None
-        context.prompts = Mock()
-        context.prompts.fix_system_prompt = "Fix"
-        context.prompts.fix_user_prompt = "Fix"
-        context.repo_config = Mock()
-        context.repo_config.repo_path = Path("/tmp/test")
-        context.remediation_id = "test-discovered-build"
-        context.session_id = "session-discovered"
-        context.skip_writing_security_test = False
+        context = make_sample_context(
+            remediation_id="test-discovered-build",
+            session_id="session-discovered",
+            fix_system_prompt="Fix",
+            fix_user_prompt="Fix",
+        )
 
         def fake_execution(ctx):
             # Agent discovered "pytest" at runtime and ran a successful build
@@ -290,7 +206,7 @@ class TestSmartFixAgentBuildToolIntegration(unittest.TestCase):
         mock_event_loop.return_value = "<pr_body>Fix applied</pr_body>"
 
         agent = SmartFixAgent()
-        context = _make_context(
+        context = make_sample_context(
             remediation_id="test-build-tool",
             session_id="session-bt",
             fix_system_prompt="Fix",
@@ -315,10 +231,7 @@ class TestSmartFixAgentBuildToolIntegration(unittest.TestCase):
         agent = SmartFixAgent()
         agent._build_state = {"build_cmd": "leftover", "format_cmd": None}
 
-        context = Mock(spec=RemediationContext)
-        context.build_config = None
-        context.prompts = Mock()
-        context.repo_config = Mock()
+        context = make_sample_context(build_config=None)
 
         with patch.object(agent, '_run_ai_fix_agent', return_value="<pr_body>Fixed</pr_body>"):
             agent.remediate(context)
@@ -399,7 +312,7 @@ class TestSmartFixAgentCustomInstructions(unittest.TestCase):
         mock_event_loop.return_value = "<pr_body>Fixed</pr_body>"
 
         agent = SmartFixAgent()
-        context = _make_context(
+        context = make_sample_context(
             remediation_id="test-ci-123",
             session_id="session-ci",
             fix_system_prompt="Fix system",
@@ -423,7 +336,7 @@ class TestSmartFixAgentCustomInstructions(unittest.TestCase):
         mock_event_loop.return_value = "<pr_body>Fixed</pr_body>"
 
         agent = SmartFixAgent()
-        context = _make_context(
+        context = make_sample_context(
             remediation_id="test-no-ci",
             session_id="session-no-ci",
             fix_system_prompt="Fix system",
