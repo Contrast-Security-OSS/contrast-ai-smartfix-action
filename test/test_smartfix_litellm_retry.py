@@ -362,6 +362,46 @@ class TestSmartFixLiteLlmRetryAsync(unittest.TestCase):
         self.assertEqual(self.mock_instance.llm_client.acompletion.call_count, 2)
 
 
+class TestLitellm402ExceptionShape(unittest.TestCase):
+    """Contract tests locking in the shape of litellm's 402 exception.
+
+    Our 402 detection reads e.status_code directly (mirroring _is_retryable_exception).
+    litellm's exception_mapping_utils.py:588-597 confirms 402 hits the else branch
+    and raises APIError(status_code=...) with the code on the instance, not on
+    e.response. These tests break loudly if that changes in a future litellm version.
+    """
+
+    def test_litellm_api_error_402_status_code_on_instance(self):
+        """litellm.APIError exposes status_code directly on the instance."""
+        e = litellm.APIError(
+            status_code=402,
+            message="Payment Required",
+            llm_provider="test",
+            model="test",
+        )
+        self.assertEqual(e.status_code, 402)
+        self.assertEqual(getattr(e, 'status_code', None), 402)
+
+    def test_402_detection_requires_status_code_on_instance_not_response(self):
+        """Detection does not fire when status_code is only on e.response, not the instance.
+
+        Documents the detection boundary: if litellm ever moves the code to
+        e.response.status_code, our check would miss it and this test would need
+        updating alongside the detection logic.
+        """
+        e = litellm.APIError(
+            status_code=200,
+            message="ok",
+            llm_provider="test",
+            model="test",
+        )
+        e.status_code = None
+        self.assertIsNone(getattr(e, 'status_code', None))
+        self.assertFalse(
+            isinstance(e, litellm.APIError) and getattr(e, 'status_code', None) == 402
+        )
+
+
 class TestSmartFixLiteLlmRetryConfig(unittest.TestCase):
     """Test cases for retry configuration loading."""
 

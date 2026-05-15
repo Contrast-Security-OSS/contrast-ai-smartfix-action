@@ -493,8 +493,8 @@ class TestMain(unittest.TestCase):
         # Clean exit: sys.exit is never called (function returns naturally, process exits 0)
         self.mock_exit.assert_not_called()
 
-    def test_token_balance_exhausted_process_exits_zero(self):
-        """When TokenBalanceExhaustedError is raised, sys.exit is called with 0, not 1."""
+    def test_token_balance_exhausted_returns_naturally_no_sys_exit(self):
+        """When TokenBalanceExhaustedError is raised, the function returns naturally — sys.exit is never called."""
         vuln_data = {
             'vulnerabilityUuid': 'TEST-VULN-UUID-402B',
             'vulnerabilityTitle': 'Test XSS',
