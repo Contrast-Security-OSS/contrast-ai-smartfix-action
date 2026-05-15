@@ -29,7 +29,7 @@ These tests verify that:
 """
 
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, patch, MagicMock
 
 from opentelemetry.metrics import Counter, Histogram, Meter
 
