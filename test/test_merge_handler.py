@@ -20,7 +20,7 @@
 
 import sys
 import unittest
-from unittest.mock import patch, mock_open, MagicMock
+from unittest.mock import patch, mock_open, Mock
 import os
 import json
 
@@ -48,7 +48,8 @@ TEST_ENV_VARS = {
 os.environ.update(TEST_ENV_VARS)
 
 # Now import project modules (after path modification)
-from src.config import reset_config, get_config  # noqa: E402
+from src.config import Config, reset_config, get_config  # noqa: E402
+from src.github.github_operations import GitHubOperations  # noqa: E402
 from src import merge_handler  # noqa: E402
 
 
@@ -147,10 +148,10 @@ class TestMergeHandler(unittest.TestCase):
     def test_extract_remediation_info_copilot_branch(self):
         """Test _extract_remediation_info with Copilot branch"""
         # Mock objects
-        mock_extract_remediation_id = MagicMock(return_value="REM-456")
-        github_ops_mock = MagicMock()
+        mock_extract_remediation_id = Mock(return_value="REM-456")
+        github_ops_mock = Mock(spec=GitHubOperations)
         github_ops_mock.extract_issue_number_from_branch.return_value = 42
-        telemetry_mock = MagicMock()
+        telemetry_mock = Mock()
         # Test data
         pull_request = {
             "head": {"ref": "copilot/fix-42"},
@@ -172,10 +173,10 @@ class TestMergeHandler(unittest.TestCase):
     def test_extract_remediation_info_claude_branch(self):
         """Test _extract_remediation_info with Claude Code branch"""
         # Mock objects
-        mock_extract_remediation_id = MagicMock(return_value="REM-789")
-        github_ops_mock = MagicMock()
+        mock_extract_remediation_id = Mock(return_value="REM-789")
+        github_ops_mock = Mock(spec=GitHubOperations)
         github_ops_mock.extract_issue_number_from_branch.return_value = 75
-        telemetry_mock = MagicMock()
+        telemetry_mock = Mock()
         # Test data
         pull_request = {
             "head": {"ref": "claude/issue-75-20250908-1723"},
@@ -197,10 +198,10 @@ class TestMergeHandler(unittest.TestCase):
     def test_extract_remediation_info_claude_branch_no_issue_number(self):
         """Test _extract_remediation_info with Claude Code branch without extractable issue number"""
         # Mock objects
-        mock_extract_remediation_id = MagicMock(return_value="REM-789")
-        github_ops_mock = MagicMock()
+        mock_extract_remediation_id = Mock(return_value="REM-789")
+        github_ops_mock = Mock(spec=GitHubOperations)
         github_ops_mock.extract_issue_number_from_branch.return_value = None
-        telemetry_mock = MagicMock()
+        telemetry_mock = Mock()
         # Test data
         pull_request = {
             "head": {"ref": "claude/issue-75-20250908-1723"},
@@ -245,8 +246,8 @@ class TestMergeHandler(unittest.TestCase):
 
     def test_extract_remediation_info_smartfix_branch(self):
         """Test _extract_remediation_info with SmartFix branch"""
-        mock_extract_from_branch = MagicMock(return_value="REM-555")
-        telemetry_mock = MagicMock()
+        mock_extract_from_branch = Mock(return_value="REM-555")
+        telemetry_mock = Mock()
         pull_request = {
             "head": {"ref": "smartfix/REM-555-fix-sql-injection"},
             "labels": []
@@ -259,7 +260,7 @@ class TestMergeHandler(unittest.TestCase):
 
     def test_extract_remediation_info_no_remediation_id_external_agent(self):
         """Test _extract_remediation_info when remediation ID cannot be extracted from external agent branch"""
-        mock_extract_from_labels = MagicMock(return_value=None)
+        mock_extract_from_labels = Mock(return_value=None)
         pull_request = {
             "head": {"ref": "copilot/fix-123"},
             "labels": []
@@ -278,7 +279,7 @@ class TestMergeHandler(unittest.TestCase):
             "head": {"ref": "smartfix/remediation-REM-777"},
             "labels": [{"name": "smartfix-id:REM-777"}]
         }
-        telemetry_mock = MagicMock()
+        telemetry_mock = Mock()
         with patch('src.smartfix.domains.telemetry.telemetry_handler.update_telemetry', telemetry_mock):
             result = merge_handler._extract_remediation_info(pull_request)
         self.assertEqual(result, ("REM-777", [{"name": "smartfix-id:REM-777"}]))
@@ -300,7 +301,7 @@ class TestMergeHandler(unittest.TestCase):
 
     def test_extract_remediation_info_no_remediation_id_smartfix(self):
         """Test _extract_remediation_info when remediation ID cannot be extracted from SmartFix branch"""
-        mock_extract_from_branch = MagicMock(return_value=None)
+        mock_extract_from_branch = Mock(return_value=None)
         pull_request = {
             "head": {"ref": "smartfix/invalid-branch-name"},
             "labels": []
@@ -337,7 +338,7 @@ class TestMergeHandler(unittest.TestCase):
     @patch('src.merge_handler.contrast_api.notify_remediation_pr_merged_org')
     def test_notify_remediation_service_success(self, mock_notify, mock_get_config):
         """Test _notify_remediation_service when notification succeeds"""
-        mock_config = MagicMock()
+        mock_config = Mock(spec=Config)
         mock_config.CONTRAST_HOST = "test.contrastsecurity.com"
         mock_config.CONTRAST_ORG_ID = "test-org"
         mock_config.CONTRAST_AUTHORIZATION_KEY = "test-auth"
@@ -359,7 +360,7 @@ class TestMergeHandler(unittest.TestCase):
     @patch('src.merge_handler.contrast_api.notify_remediation_pr_merged_org')
     def test_notify_remediation_service_failure(self, mock_notify, mock_get_config):
         """Test _notify_remediation_service when notification fails"""
-        mock_config = MagicMock()
+        mock_config = Mock(spec=Config)
         mock_config.CONTRAST_HOST = "test.contrastsecurity.com"
         mock_config.CONTRAST_ORG_ID = "test-org"
         mock_config.CONTRAST_AUTHORIZATION_KEY = "test-auth"
@@ -392,7 +393,7 @@ class TestCleanupSmartfixLabels(unittest.TestCase):
 
     def _build_mock_ops(self, smartfix_label_names, issue_number=None,
                         remove_pr_ok=True, remove_issue_ok=True):
-        ops = MagicMock()
+        ops = Mock(spec=GitHubOperations)
         ops.filter_smartfix_labels.return_value = smartfix_label_names
         ops.extract_issue_number_from_branch.return_value = issue_number
         ops.remove_labels_from_pr.return_value = remove_pr_ok

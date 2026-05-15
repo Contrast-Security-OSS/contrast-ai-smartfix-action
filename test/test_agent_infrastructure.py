@@ -7,7 +7,7 @@ This module tests the low-level agent infrastructure including:
 """
 
 import unittest
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import Mock, patch, AsyncMock
 from pathlib import Path
 import asyncio
 import os
@@ -111,8 +111,8 @@ class TestMCPToolsetManager(unittest.TestCase):
     def test_get_tools_success(self, mock_toolset_class):
         """Test successful get_tools call."""
         # Create mock toolset with async get_tools
-        mock_toolset = MagicMock()
-        mock_tool = MagicMock()
+        mock_toolset = Mock()
+        mock_tool = Mock()
         mock_tool.name = 'test_tool'
         mock_toolset.get_tools = AsyncMock(return_value=[mock_tool])
         mock_toolset_class.return_value = mock_toolset
@@ -129,7 +129,7 @@ class TestMCPToolsetManager(unittest.TestCase):
     def test_get_tools_failure(self, mock_toolset_class, mock_error_exit):
         """Test get_tools failure handling."""
         # Make get_tools raise an exception
-        mock_toolset = MagicMock()
+        mock_toolset = Mock()
         mock_toolset.get_tools = AsyncMock(side_effect=Exception('Connection failed'))
         mock_toolset_class.return_value = mock_toolset
 
@@ -170,7 +170,7 @@ class TestSubAgentExecutor(unittest.TestCase):
     def test_initialization_default_max_events(self):
         """Test SubAgentExecutor initialization with default max_events."""
         with patch('src.config.get_config') as mock_config:
-            config_mock = MagicMock()
+            config_mock = Mock()
             config_mock.MAX_EVENTS_PER_AGENT = 100
             mock_config.return_value = config_mock
 
@@ -193,19 +193,19 @@ class TestSubAgentExecutor(unittest.TestCase):
     def test_create_agent_success(self, mock_get_config, mock_litellm, mock_agent):
         """Test successful agent creation."""
         # Mock config
-        config_mock = MagicMock()
+        config_mock = Mock()
         config_mock.AGENT_MODEL = 'test-model'
-        config_mock.USE_CONTRAST_LLM = 'false'
+        config_mock.USE_CONTRAST_LLM = False
         mock_get_config.return_value = config_mock
 
         # Mock MCP manager
-        mock_mcp_tools = MagicMock()
+        mock_mcp_tools = Mock()
 
         executor = SubAgentExecutor()
         executor.mcp_manager.get_tools = AsyncMock(return_value=mock_mcp_tools)
 
         # Mock agent creation
-        mock_agent_instance = MagicMock()
+        mock_agent_instance = Mock()
         mock_agent.return_value = mock_agent_instance
 
         result = asyncio.run(executor.create_agent(
@@ -224,21 +224,21 @@ class TestSubAgentExecutor(unittest.TestCase):
     def test_create_agent_with_contrast_llm(self, mock_get_config, mock_litellm, mock_agent):
         """Test agent creation with Contrast LLM configuration."""
         # Mock config with Contrast LLM enabled
-        config_mock = MagicMock()
+        config_mock = Mock()
         config_mock.AGENT_MODEL = 'test-model'
-        config_mock.USE_CONTRAST_LLM = 'true'
+        config_mock.USE_CONTRAST_LLM = True
         config_mock.CONTRAST_API_KEY = 'test-api-key'
         config_mock.CONTRAST_AUTHORIZATION_KEY = 'test-auth-key'
         mock_get_config.return_value = config_mock
 
         # Mock MCP manager
-        mock_mcp_tools = MagicMock()
+        mock_mcp_tools = Mock()
 
         executor = SubAgentExecutor()
         executor.mcp_manager.get_tools = AsyncMock(return_value=mock_mcp_tools)
 
         # Mock agent creation
-        mock_agent_instance = MagicMock()
+        mock_agent_instance = Mock()
         mock_agent.return_value = mock_agent_instance
 
         result = asyncio.run(executor.create_agent(
@@ -258,14 +258,15 @@ class TestSubAgentExecutor(unittest.TestCase):
         headers = call_kwargs['extra_headers']
         self.assertEqual(headers['Api-Key'], 'test-api-key')
         self.assertEqual(headers['Authorization'], 'test-auth-key')
-        self.assertNotIn('x-contrast-llm-session-id', headers)
+        self.assertEqual(headers['x-contrast-llm-feature'], 'SMARTFIX')
+        self.assertEqual(headers['x-contrast-llm-session-id'], 'test-123')
 
     @patch('src.smartfix.domains.agents.sub_agent_executor.error_exit')
     @patch('src.config.get_config')
     def test_create_agent_no_mcp_tools(self, mock_get_config, mock_error_exit):
         """Test agent creation fails when no MCP tools available."""
         # Mock config
-        config_mock = MagicMock()
+        config_mock = Mock()
         mock_get_config.return_value = config_mock
 
         executor = SubAgentExecutor()
@@ -285,11 +286,11 @@ class TestSubAgentExecutor(unittest.TestCase):
     def test_create_agent_no_system_prompt(self, mock_get_config, mock_error_exit):
         """Test agent creation fails when no system prompt provided."""
         # Mock config
-        config_mock = MagicMock()
+        config_mock = Mock()
         mock_get_config.return_value = config_mock
 
         executor = SubAgentExecutor()
-        executor.mcp_manager.get_tools = AsyncMock(return_value=MagicMock())
+        executor.mcp_manager.get_tools = AsyncMock(return_value=Mock())
 
         asyncio.run(executor.create_agent(
             target_folder=Path('/test'),
@@ -305,7 +306,7 @@ class TestSubAgentExecutor(unittest.TestCase):
         executor = SubAgentExecutor()
 
         # Mock agent with stats
-        mock_agent = MagicMock()
+        mock_agent = Mock()
         mock_agent.gather_accumulated_stats_dict.return_value = {
             'token_usage': {'total_tokens': 1000},
             'cost_analysis': {'total_cost': 0.05}
@@ -321,7 +322,7 @@ class TestSubAgentExecutor(unittest.TestCase):
         executor = SubAgentExecutor()
 
         # Mock agent with stats including $ sign
-        mock_agent = MagicMock()
+        mock_agent = Mock()
         mock_agent.gather_accumulated_stats_dict.return_value = {
             'token_usage': {'total_tokens': 1000},
             'cost_analysis': {'total_cost': '$0.05'}
@@ -337,7 +338,7 @@ class TestSubAgentExecutor(unittest.TestCase):
         executor = SubAgentExecutor()
 
         # Mock agent that raises AttributeError (one of the caught exceptions)
-        mock_agent = MagicMock()
+        mock_agent = Mock()
         mock_agent.gather_accumulated_stats_dict.side_effect = AttributeError('Stats error')
 
         total_tokens, total_cost = executor._collect_statistics(mock_agent)
@@ -351,7 +352,7 @@ class TestSubAgentExecutor(unittest.TestCase):
         executor = SubAgentExecutor()
 
         # Mock event with text content
-        mock_event = MagicMock()
+        mock_event = Mock()
         mock_event.content.text = 'Agent response text'
 
         result = executor._process_content(mock_event)
@@ -363,10 +364,10 @@ class TestSubAgentExecutor(unittest.TestCase):
         executor = SubAgentExecutor()
 
         # Mock event with parts (no text attribute)
-        mock_event = MagicMock()
+        mock_event = Mock()
         # Remove the text attribute so hasattr returns False
         del mock_event.content.text
-        mock_part = MagicMock()
+        mock_part = Mock()
         mock_part.text = 'Part text'
         mock_event.content.parts = [mock_part]
 
@@ -379,7 +380,7 @@ class TestSubAgentExecutor(unittest.TestCase):
         executor = SubAgentExecutor()
 
         # Mock event with no content
-        mock_event = MagicMock()
+        mock_event = Mock()
         mock_event.content = None
 
         result = executor._process_content(mock_event)
@@ -392,8 +393,8 @@ class TestSubAgentExecutor(unittest.TestCase):
         telemetry = []
 
         # Mock event with function calls
-        mock_event = MagicMock()
-        mock_call = MagicMock()
+        mock_event = Mock()
+        mock_call = Mock()
         mock_call.name = 'read_file'
         mock_call.args = {'path': '/test/file.py'}
         mock_event.get_function_calls.return_value = [mock_call]
@@ -410,8 +411,8 @@ class TestSubAgentExecutor(unittest.TestCase):
         telemetry = []
 
         # Mock event with function response
-        mock_event = MagicMock()
-        mock_response = MagicMock()
+        mock_event = Mock()
+        mock_response = Mock()
         mock_response.name = 'read_file'
         mock_response.response = 'isError = False, content = file contents'
         mock_event.get_function_responses.return_value = [mock_response]
@@ -428,8 +429,8 @@ class TestSubAgentExecutor(unittest.TestCase):
         telemetry = []
 
         # Mock event with error response
-        mock_event = MagicMock()
-        mock_response = MagicMock()
+        mock_event = Mock()
+        mock_response = Mock()
         mock_response.name = 'write_file'
         mock_response.response = 'isError = True, error = permission denied'
         mock_event.get_function_responses.return_value = [mock_response]

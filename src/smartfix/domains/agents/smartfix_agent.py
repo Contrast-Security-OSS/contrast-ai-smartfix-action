@@ -232,7 +232,8 @@ class SmartFixAgent(CodingAgentStrategy):
                 "5. Do NOT skip the build step or mark the task complete without a recorded successful build."
             )
 
-        custom_instructions = load_custom_instructions(repo_path, get_config()) or ""
+        config = get_config()
+        custom_instructions = load_custom_instructions(repo_path, config) or ""
         debug_log(
             f"Custom instructions appended ({len(custom_instructions)} chars)"
             if custom_instructions
@@ -251,6 +252,9 @@ class SmartFixAgent(CodingAgentStrategy):
             context.remediation_id,
             context.session_id,
             additional_tools=[build_tool],
+            vuln_uuid=context.vulnerability.uuid,
+            repo_slug=config.GITHUB_REPOSITORY,
+            language=context.language or "",
         )
 
         log("--- AI Agent Fix Attempt Completed ---")

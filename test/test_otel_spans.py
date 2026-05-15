@@ -38,7 +38,7 @@ Span hierarchy:
 
 import asyncio
 import unittest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
@@ -92,11 +92,12 @@ class TestSmartFixRunSpan(unittest.TestCase):
     def tearDown(self):
         self.patch_ctx.__exit__(None, None, None)
 
-    def _emit_run_span(self, session_id="run-99999", vuln_count=2):
+    def _emit_run_span(self, session_id="run-99999", vuln_count=2, prs_created_total=0):
         import src.smartfix.domains.telemetry.otel_provider as otel_provider
         with otel_provider.start_span("smartfix-run") as span:
             span.set_attribute("session.id", session_id)
             span.set_attribute("contrast.smartfix.vulnerabilities_total", vuln_count)
+            span.set_attribute("contrast.smartfix.prs_created_total", prs_created_total)
 
     def test_smartfix_run_span_has_session_id(self):
         self._emit_run_span(session_id="run-12345")
@@ -127,6 +128,16 @@ class TestSmartFixRunSpan(unittest.TestCase):
         spans = _spans_named(self.exporter, "smartfix-run")
         self.assertNotIn("contrast.smartfix.pr_url", spans[0].attributes)
 
+    def test_smartfix_run_span_has_prs_created_total(self):
+        self._emit_run_span(prs_created_total=3)
+        spans = _spans_named(self.exporter, "smartfix-run")
+        self.assertEqual(spans[0].attributes["contrast.smartfix.prs_created_total"], 3)
+
+    def test_smartfix_run_span_prs_created_total_zero_when_no_prs(self):
+        self._emit_run_span(prs_created_total=0)
+        spans = _spans_named(self.exporter, "smartfix-run")
+        self.assertEqual(spans[0].attributes["contrast.smartfix.prs_created_total"], 0)
+
 
 # ---------------------------------------------------------------------------
 # TestFixVulnerabilitySpan — operation span attributes
@@ -150,10 +161,13 @@ class TestFixVulnerabilitySpan(unittest.TestCase):
             rule_id="sql-injection",
             coding_agent="smartfix",
             language="java",
+            severity="HIGH",
             fix_applied=True,
             files_modified=2,
             pr_created=True,
             pr_url="https://github.com/org/repo/pull/42",
+            total_input_tokens=0,
+            total_output_tokens=0,
         )
         attrs.update(overrides)
         with otel_provider.start_span("fix-vulnerability") as span:
@@ -162,9 +176,12 @@ class TestFixVulnerabilitySpan(unittest.TestCase):
             span.set_attribute("contrast.finding.rule_id", attrs["rule_id"])
             span.set_attribute("contrast.smartfix.coding_agent", attrs["coding_agent"])
             span.set_attribute("contrast.finding.language", attrs["language"])
+            span.set_attribute("contrast.finding.severity", attrs["severity"])
             span.set_attribute("contrast.smartfix.fix_applied", attrs["fix_applied"])
             span.set_attribute("contrast.smartfix.files_modified", attrs["files_modified"])
             span.set_attribute("contrast.smartfix.pr_created", attrs["pr_created"])
+            span.set_attribute("contrast.smartfix.total_input_tokens", attrs["total_input_tokens"])
+            span.set_attribute("contrast.smartfix.total_output_tokens", attrs["total_output_tokens"])
             if attrs.get("pr_url"):
                 span.set_attribute("contrast.smartfix.pr_url", attrs["pr_url"])
 
@@ -214,6 +231,18 @@ class TestFixVulnerabilitySpan(unittest.TestCase):
         """pr_url should not be set when no PR was created."""
         self._emit(pr_url=None)
         self.assertNotIn("contrast.smartfix.pr_url", self._span().attributes)
+
+    def test_has_finding_severity(self):
+        self._emit(severity="CRITICAL")
+        self.assertEqual(self._span().attributes["contrast.finding.severity"], "CRITICAL")
+
+    def test_has_total_input_tokens(self):
+        self._emit(total_input_tokens=1500)
+        self.assertEqual(self._span().attributes["contrast.smartfix.total_input_tokens"], 1500)
+
+    def test_has_total_output_tokens(self):
+        self._emit(total_output_tokens=320)
+        self.assertEqual(self._span().attributes["contrast.smartfix.total_output_tokens"], 320)
 
 
 # ---------------------------------------------------------------------------
@@ -323,16 +352,16 @@ class TestLlmCallSpan(unittest.TestCase):
         import src.smartfix.domains.telemetry.otel_provider as otel_provider
         from src.smartfix.extensions.smartfix_litellm import SmartFixLiteLlm
 
-        mock_instance = MagicMock(spec=SmartFixLiteLlm)
+        mock_instance = Mock(spec=SmartFixLiteLlm)
         mock_instance._max_retries = 1
         mock_instance._initial_retry_delay = 0
         mock_instance._retry_multiplier = 2
         mock_instance._is_retryable_exception = lambda e: False
         mock_instance._log_cost_analysis.return_value = (10, 5, 0, 0)
-        mock_instance.llm_client = MagicMock()
+        mock_instance.llm_client = Mock()
         mock_instance._otel_context = None  # use ambient context (fix-vulnerability is current)
 
-        mock_response = MagicMock()
+        mock_response = Mock()
         mock_response.model = "test-model"
         mock_instance.llm_client.acompletion = AsyncMock(return_value=mock_response)
 
@@ -363,16 +392,16 @@ class TestLlmCallSpan(unittest.TestCase):
         """Token counts from _log_cost_analysis() are set on the LLM span."""
         from src.smartfix.extensions.smartfix_litellm import SmartFixLiteLlm
 
-        mock_instance = MagicMock(spec=SmartFixLiteLlm)
+        mock_instance = Mock(spec=SmartFixLiteLlm)
         mock_instance._max_retries = 1
         mock_instance._initial_retry_delay = 0
         mock_instance._retry_multiplier = 2
         mock_instance._is_retryable_exception = lambda e: False
         mock_instance._log_cost_analysis.return_value = (200, 80, 0, 0)
-        mock_instance.llm_client = MagicMock()
+        mock_instance.llm_client = Mock()
         mock_instance._otel_context = None
 
-        mock_response = MagicMock()
+        mock_response = Mock()
         mock_response.model = "usage-model"
         mock_instance.llm_client.acompletion = AsyncMock(return_value=mock_response)
 
@@ -388,6 +417,69 @@ class TestLlmCallSpan(unittest.TestCase):
         self.assertEqual(len(llm_spans), 1)
         self.assertEqual(llm_spans[0].attributes["gen_ai.usage.input_tokens"], 200)
         self.assertEqual(llm_spans[0].attributes["gen_ai.usage.output_tokens"], 80)
+
+
+# ---------------------------------------------------------------------------
+# TestSmartFixMergeSpan — merge event span attributes
+# ---------------------------------------------------------------------------
+
+class TestSmartFixMergeSpan(unittest.TestCase):
+    """Verify the smartfix-merge span emitted by merge_handler."""
+
+    def setUp(self):
+        self.exporter, self.patch_ctx = _make_span_recorder()
+        self.patch_ctx.__enter__()
+
+    def tearDown(self):
+        self.patch_ctx.__exit__(None, None, None)
+
+    def _emit_merge_span(self, remediation_id="rem-abc", vuln_uuid="vuln-xyz"):
+        import src.smartfix.domains.telemetry.otel_provider as otel_provider
+        with otel_provider.start_span("smartfix-merge") as span:
+            span.set_attribute("contrast.smartfix.pr_merged", True)
+            span.set_attribute("contrast.smartfix.remediation_id", remediation_id)
+            span.set_attribute("contrast.finding.fingerprint", vuln_uuid)
+
+    def test_merge_span_emitted(self):
+        self._emit_merge_span()
+        spans = _spans_named(self.exporter, "smartfix-merge")
+        self.assertEqual(len(spans), 1)
+
+    def test_merge_span_has_pr_merged_true(self):
+        self._emit_merge_span()
+        spans = _spans_named(self.exporter, "smartfix-merge")
+        self.assertTrue(spans[0].attributes["contrast.smartfix.pr_merged"])
+
+    def test_merge_span_has_remediation_id(self):
+        self._emit_merge_span(remediation_id="rem-12345")
+        spans = _spans_named(self.exporter, "smartfix-merge")
+        self.assertEqual(spans[0].attributes["contrast.smartfix.remediation_id"], "rem-12345")
+
+    def test_merge_span_has_finding_fingerprint(self):
+        self._emit_merge_span(vuln_uuid="vuln-abc123")
+        spans = _spans_named(self.exporter, "smartfix-merge")
+        self.assertEqual(spans[0].attributes["contrast.finding.fingerprint"], "vuln-abc123")
+
+    @patch('src.merge_handler.otel_provider.shutdown_otel')
+    @patch('src.merge_handler.atexit.register')
+    @patch('src.merge_handler.otel_provider.initialize_otel')
+    @patch('src.smartfix.domains.telemetry.telemetry_handler.initialize_telemetry')
+    @patch('src.merge_handler._validate_pr_event')
+    @patch('src.merge_handler._load_github_event')
+    @patch('src.merge_handler._extract_remediation_info', side_effect=SystemExit(1))
+    def test_no_merge_span_when_extraction_fails(
+        self, _mock_extract, mock_load, mock_validate,
+        _mock_init_tel, _mock_init_otel, _mock_atexit, _mock_shutdown
+    ):
+        """Extraction failure before start_span must produce zero smartfix-merge spans."""
+        mock_load.return_value = {}
+        mock_validate.return_value = {"merged": True}
+
+        with self.assertRaises(SystemExit):
+            import src.merge_handler as merge_handler
+            merge_handler.handle_merged_pr()
+
+        self.assertEqual(len(_spans_named(self.exporter, "smartfix-merge")), 0)
 
 
 if __name__ == "__main__":

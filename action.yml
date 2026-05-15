@@ -400,9 +400,19 @@ runs:
     # Auth headers are always derived from Contrast credentials in code — not configurable here.
     - name: Set OTel defaults
       shell: bash
+      env:
+        INPUT_CONTRAST_HOST: ${{ inputs.contrast_host }}
       run: |
         if [ -z "${OTEL_EXPORTER_OTLP_ENDPOINT}" ]; then
-          echo "OTEL_EXPORTER_OTLP_ENDPOINT=https://${{ inputs.contrast_host }}/aiml/otel" >> $GITHUB_ENV
+          # Mirrors Python normalize_host: remove ALL occurrences of https:// and http://
+          # (handles double-scheme inputs like http://https://host) then strip all trailing slashes.
+          HOST="${INPUT_CONTRAST_HOST}"
+          HOST="${HOST//https:\/\//}"
+          HOST="${HOST//http:\/\//}"
+          while [ "${HOST%/}" != "${HOST}" ]; do
+            HOST="${HOST%/}"
+          done
+          echo "OTEL_EXPORTER_OTLP_ENDPOINT=https://${HOST}/aiml/otel" >> $GITHUB_ENV
         fi
 
 

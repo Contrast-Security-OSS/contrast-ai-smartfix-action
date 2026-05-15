@@ -29,7 +29,9 @@ These tests verify that:
 """
 
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import Mock, patch, MagicMock
+
+from opentelemetry.metrics import Counter, Histogram, Meter
 
 
 class TestLazyInitialisation(unittest.TestCase):
@@ -56,8 +58,8 @@ class TestLazyInitialisation(unittest.TestCase):
 
     def test_vulnerability_duration_histogram_created_on_first_call(self):
         import src.smartfix.domains.telemetry.smartfix_metrics as m
-        mock_histogram = MagicMock()
-        mock_meter = MagicMock()
+        mock_histogram = Mock(spec=Histogram)
+        mock_meter = Mock(spec=Meter)
         mock_meter.create_histogram.return_value = mock_histogram
 
         with patch("src.smartfix.domains.telemetry.smartfix_metrics.otel_provider") as mock_provider:
@@ -71,8 +73,8 @@ class TestLazyInitialisation(unittest.TestCase):
 
     def test_pr_count_counter_created_on_first_call(self):
         import src.smartfix.domains.telemetry.smartfix_metrics as m
-        mock_counter = MagicMock()
-        mock_meter = MagicMock()
+        mock_counter = Mock(spec=Counter)
+        mock_meter = Mock(spec=Meter)
         mock_meter.create_counter.return_value = mock_counter
 
         with patch("src.smartfix.domains.telemetry.smartfix_metrics.otel_provider") as mock_provider:
@@ -86,8 +88,8 @@ class TestLazyInitialisation(unittest.TestCase):
 
     def test_llm_duration_histogram_created_on_first_call(self):
         import src.smartfix.domains.telemetry.smartfix_metrics as m
-        mock_histogram = MagicMock()
-        mock_meter = MagicMock()
+        mock_histogram = Mock(spec=Histogram)
+        mock_meter = Mock(spec=Meter)
         mock_meter.create_histogram.return_value = mock_histogram
 
         with patch("src.smartfix.domains.telemetry.smartfix_metrics.otel_provider") as mock_provider:
@@ -100,8 +102,8 @@ class TestLazyInitialisation(unittest.TestCase):
 
     def test_llm_retries_counter_created_on_first_call(self):
         import src.smartfix.domains.telemetry.smartfix_metrics as m
-        mock_counter = MagicMock()
-        mock_meter = MagicMock()
+        mock_counter = Mock(spec=Counter)
+        mock_meter = Mock(spec=Meter)
         mock_meter.create_counter.return_value = mock_counter
 
         with patch("src.smartfix.domains.telemetry.smartfix_metrics.otel_provider") as mock_provider:
@@ -117,7 +119,7 @@ class TestRecordVulnerabilityDuration(unittest.TestCase):
 
     def setUp(self):
         import src.smartfix.domains.telemetry.smartfix_metrics as m
-        self.mock_histogram = MagicMock()
+        self.mock_histogram = Mock(spec=Histogram)
         m._vulnerability_duration_histogram = self.mock_histogram
 
     def test_records_with_correct_attributes(self):
@@ -149,7 +151,7 @@ class TestRecordPrAttempt(unittest.TestCase):
 
     def setUp(self):
         import src.smartfix.domains.telemetry.smartfix_metrics as m
-        self.mock_counter = MagicMock()
+        self.mock_counter = Mock(spec=Counter)
         m._pr_count_counter = self.mock_counter
 
     def test_records_success(self):
@@ -182,8 +184,8 @@ class TestRecordLlmCallTokens(unittest.TestCase):
 
     def setUp(self):
         import src.smartfix.domains.telemetry.smartfix_metrics as m
-        self.mock_total = MagicMock()
-        self.mock_cache = MagicMock()
+        self.mock_total = Mock(spec=Counter)
+        self.mock_cache = Mock(spec=Counter)
         m._tokens_total_counter = self.mock_total
         m._cache_tokens_counter = self.mock_cache
 
@@ -233,7 +235,7 @@ class TestRecordLlmDuration(unittest.TestCase):
 
     def setUp(self):
         import src.smartfix.domains.telemetry.smartfix_metrics as m
-        self.mock_histogram = MagicMock()
+        self.mock_histogram = Mock(spec=Histogram)
         m._llm_duration_histogram = self.mock_histogram
 
     def test_records_with_provider_and_model(self):
@@ -255,7 +257,7 @@ class TestRecordLlmRetry(unittest.TestCase):
 
     def setUp(self):
         import src.smartfix.domains.telemetry.smartfix_metrics as m
-        self.mock_counter = MagicMock()
+        self.mock_counter = Mock(spec=Counter)
         m._llm_retries_counter = self.mock_counter
 
     def test_records_with_model_and_error_type(self):
@@ -271,6 +273,80 @@ class TestRecordLlmRetry(unittest.TestCase):
         import src.smartfix.domains.telemetry.smartfix_metrics as m
         self.mock_counter.add.side_effect = RuntimeError("otel broken")
         m.record_llm_retry("contrast/claude-sonnet-4-5", "RateLimitError")
+
+
+class TestVulnTokenAccumulator(unittest.TestCase):
+    """Tests for the per-vulnerability token accumulator."""
+
+    def setUp(self):
+        import src.smartfix.domains.telemetry.smartfix_metrics as m
+        self._m = m
+        self._orig_total = m._tokens_total_counter
+        self._orig_cache = m._cache_tokens_counter
+        m.reset_vuln_token_accumulator()
+
+    def tearDown(self):
+        self._m._tokens_total_counter = self._orig_total
+        self._m._cache_tokens_counter = self._orig_cache
+        self._m.reset_vuln_token_accumulator()
+
+    def test_reset_clears_counts(self):
+        import src.smartfix.domains.telemetry.smartfix_metrics as m
+        m._vuln_input_tokens = 500
+        m._vuln_output_tokens = 200
+        m.reset_vuln_token_accumulator()
+        self.assertEqual(m._vuln_input_tokens, 0)
+        self.assertEqual(m._vuln_output_tokens, 0)
+
+    def test_get_totals_returns_zero_after_reset(self):
+        import src.smartfix.domains.telemetry.smartfix_metrics as m
+        input_t, output_t = m.get_vuln_token_totals()
+        self.assertEqual(input_t, 0)
+        self.assertEqual(output_t, 0)
+
+    def test_accumulates_across_multiple_calls(self):
+        import src.smartfix.domains.telemetry.smartfix_metrics as m
+        mock_total = MagicMock()
+        mock_cache = MagicMock()
+        m._tokens_total_counter = mock_total
+        m._cache_tokens_counter = mock_cache
+
+        m.record_llm_call_tokens(100, 50, 0, 0, "model-a")
+        m.record_llm_call_tokens(200, 80, 0, 0, "model-a")
+        m.record_llm_call_tokens(300, 120, 0, 0, "model-a")
+
+        input_t, output_t = m.get_vuln_token_totals()
+        self.assertEqual(input_t, 600)
+        self.assertEqual(output_t, 250)
+
+    def test_accumulator_includes_cache_tokens_in_input(self):
+        import src.smartfix.domains.telemetry.smartfix_metrics as m
+        mock_total = MagicMock()
+        mock_cache = MagicMock()
+        m._tokens_total_counter = mock_total
+        m._cache_tokens_counter = mock_cache
+
+        # 50 new input + 30 cache_read + 20 cache_write = 100 total input
+        m.record_llm_call_tokens(50, 40, 30, 20, "model-b")
+
+        input_t, output_t = m.get_vuln_token_totals()
+        self.assertEqual(input_t, 100)
+        self.assertEqual(output_t, 40)
+
+    def test_reset_between_vulnerabilities(self):
+        import src.smartfix.domains.telemetry.smartfix_metrics as m
+        mock_total = MagicMock()
+        mock_cache = MagicMock()
+        m._tokens_total_counter = mock_total
+        m._cache_tokens_counter = mock_cache
+
+        m.record_llm_call_tokens(100, 50, 0, 0, "model-a")
+        m.reset_vuln_token_accumulator()
+        m.record_llm_call_tokens(200, 80, 0, 0, "model-a")
+
+        input_t, output_t = m.get_vuln_token_totals()
+        self.assertEqual(input_t, 200)
+        self.assertEqual(output_t, 80)
 
 
 if __name__ == "__main__":

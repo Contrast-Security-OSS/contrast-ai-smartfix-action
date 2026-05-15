@@ -26,8 +26,9 @@ This module tests the exponential backoff retry mechanism for LLM calls.
 
 import asyncio
 import unittest
-from unittest.mock import patch, AsyncMock, MagicMock
+from unittest.mock import patch, AsyncMock, Mock
 
+import httpx
 import litellm
 
 from src.smartfix.extensions.smartfix_litellm import SmartFixLiteLlm
@@ -40,11 +41,11 @@ class TestSmartFixLiteLlmRetry(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures."""
         # Create a mock instance with retry config
-        self.mock_instance = MagicMock(spec=SmartFixLiteLlm)
+        self.mock_instance = Mock(spec=SmartFixLiteLlm)
         self.mock_instance._max_retries = 3
         self.mock_instance._initial_retry_delay = 1
         self.mock_instance._retry_multiplier = 2
-        self.mock_instance.llm_client = MagicMock()
+        self.mock_instance.llm_client = Mock()
 
     def test_is_retryable_exception_rate_limit(self):
         """Test that RateLimitError is retryable."""
@@ -52,7 +53,7 @@ class TestSmartFixLiteLlmRetry(unittest.TestCase):
             message="Rate limit exceeded",
             llm_provider="test",
             model="test-model",
-            response=MagicMock()
+            response=httpx.Response(429, request=httpx.Request("POST", "http://test"))
         )
         result = SmartFixLiteLlm._is_retryable_exception(self.mock_instance, error)
         self.assertTrue(result)
@@ -73,7 +74,7 @@ class TestSmartFixLiteLlmRetry(unittest.TestCase):
             message="Service unavailable",
             llm_provider="test",
             model="test-model",
-            response=MagicMock()
+            response=httpx.Response(503, request=httpx.Request("POST", "http://test"))
         )
         result = SmartFixLiteLlm._is_retryable_exception(self.mock_instance, error)
         self.assertTrue(result)
@@ -157,11 +158,11 @@ class TestSmartFixLiteLlmRetryAsync(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        self.mock_instance = MagicMock(spec=SmartFixLiteLlm)
+        self.mock_instance = Mock(spec=SmartFixLiteLlm)
         self.mock_instance._max_retries = 3
         self.mock_instance._initial_retry_delay = 0  # No delay for tests
         self.mock_instance._retry_multiplier = 2
-        self.mock_instance.llm_client = MagicMock()
+        self.mock_instance.llm_client = Mock()
         # Use the real _is_retryable_exception method
         self.mock_instance._is_retryable_exception = lambda e: SmartFixLiteLlm._is_retryable_exception(
             self.mock_instance, e
@@ -199,7 +200,7 @@ class TestSmartFixLiteLlmRetryAsync(unittest.TestCase):
             message="Rate limit",
             llm_provider="test",
             model="test",
-            response=MagicMock()
+            response=httpx.Response(429, request=httpx.Request("POST", "http://test"))
         )
 
         # Fail twice, then succeed
@@ -226,7 +227,7 @@ class TestSmartFixLiteLlmRetryAsync(unittest.TestCase):
             message="Rate limit",
             llm_provider="test",
             model="test",
-            response=MagicMock()
+            response=httpx.Response(429, request=httpx.Request("POST", "http://test"))
         )
 
         # Fail all attempts

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 
+import subprocess
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, Mock, MagicMock
 import json
 from src.github.github_operations import GitHubOperations
 from src.smartfix.shared.failure_categories import FailureCategory
@@ -14,7 +15,7 @@ class TestGitHubOperations(unittest.TestCase):
         """Set up test fixtures."""
         # Mock the config to avoid import issues
         with patch('src.github.github_operations.get_config') as mock_config:
-            mock_config.return_value = MagicMock(
+            mock_config.return_value = Mock(
                 GITHUB_TOKEN="test-token",
                 GITHUB_REPOSITORY="test-owner/test-repo",
                 testing=True,
@@ -94,7 +95,7 @@ class TestGitHubOperations(unittest.TestCase):
         # First call returns empty list (no existing labels)
         mock_run_command.return_value = json.dumps([])
         # subprocess.run for label creation succeeds
-        mock_subprocess_run.return_value = MagicMock(returncode=0)
+        mock_subprocess_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
 
         result = self.github_ops.ensure_label("new-label", "New description", "ff0000")
         self.assertTrue(result)
@@ -408,7 +409,7 @@ class TestGitHubOperations(unittest.TestCase):
             "Created",       # Create label2
             "Success"        # Final add labels command
         ]
-        mock_subprocess_run.return_value = MagicMock(returncode=0)
+        mock_subprocess_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
 
         result = self.github_ops.add_labels_to_pr(123, ["label1", "label2"])
         self.assertTrue(result)
@@ -423,7 +424,7 @@ class TestGitHubOperations(unittest.TestCase):
             "Created",       # Create label1
             Exception("Failed to add labels")  # Final add labels command fails
         ]
-        mock_subprocess_run.return_value = MagicMock(returncode=0)
+        mock_subprocess_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
 
         result = self.github_ops.add_labels_to_pr(123, ["label1"])
         self.assertFalse(result)
@@ -810,8 +811,8 @@ class TestGitHubOperations(unittest.TestCase):
         # Mock temp file
         mock_temp = MagicMock()
         mock_temp.name = "/tmp/test_pr_body.md"
-        mock_temp.__enter__ = MagicMock(return_value=mock_temp)
-        mock_temp.__exit__ = MagicMock(return_value=False)
+        mock_temp.__enter__ = Mock(return_value=mock_temp)
+        mock_temp.__exit__ = Mock(return_value=False)
         mock_tempfile.return_value = mock_temp
 
         # Mock file operations
@@ -842,13 +843,13 @@ class TestGitHubOperations(unittest.TestCase):
         # Mock temp file
         mock_temp = MagicMock()
         mock_temp.name = "/tmp/test_pr_body.md"
-        mock_temp.__enter__ = MagicMock(return_value=mock_temp)
-        mock_temp.__exit__ = MagicMock(return_value=False)
+        mock_temp.__enter__ = Mock(return_value=mock_temp)
+        mock_temp.__exit__ = Mock(return_value=False)
         mock_tempfile.return_value = mock_temp
 
         mock_exists.return_value = True
         mock_getsize.return_value = 1000
-        mock_subprocess_run.return_value = MagicMock(returncode=0, stdout="gh version 2.0.0")
+        mock_subprocess_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="gh version 2.0.0")
         mock_run_command.return_value = "https://github.com/test/repo/pull/456"
 
         # Create body larger than 32000 chars
@@ -885,7 +886,7 @@ class TestGitHubOperations(unittest.TestCase):
 
         # Set up config for CLAUDE_CODE mode
         with patch('src.github.github_operations.get_config') as mock_config:
-            mock_config.return_value = MagicMock(
+            mock_config.return_value = Mock(
                 GITHUB_TOKEN="test-token",
                 GITHUB_REPOSITORY="test-owner/test-repo",
                 testing=True,
@@ -904,7 +905,7 @@ class TestGitHubOperations(unittest.TestCase):
             "Created",       # ensure_label for remediation (create)
             "https://github.com/test/repo/issues/789"  # create issue
         ]
-        mock_subprocess_run.return_value = MagicMock(returncode=0)
+        mock_subprocess_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
 
         result = github_ops.create_issue(
             "Test Issue",
@@ -987,7 +988,7 @@ class TestGitHubOperations(unittest.TestCase):
 
         # Set up config for CLAUDE_CODE mode
         with patch('src.github.github_operations.get_config') as mock_config:
-            mock_config.return_value = MagicMock(
+            mock_config.return_value = Mock(
                 GITHUB_TOKEN="test-token",
                 GITHUB_REPOSITORY="test-owner/test-repo",
                 testing=True,
@@ -1013,7 +1014,7 @@ class TestGitHubOperations(unittest.TestCase):
             "Success",  # add new label
             "Comment added"  # add comment
         ]
-        mock_subprocess_run.return_value = MagicMock(returncode=0)
+        mock_subprocess_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
 
         # Mock find_open_pr_for_issue to return None (no open PR)
         with patch.object(github_ops, 'find_open_pr_for_issue') as mock_find_pr:
@@ -1034,8 +1035,8 @@ class TestGitHubOperations(unittest.TestCase):
         # Mock temp file
         mock_temp = MagicMock()
         mock_temp.name = "/tmp/test_pr_body.md"
-        mock_temp.__enter__ = MagicMock(return_value=mock_temp)
-        mock_temp.__exit__ = MagicMock(return_value=False)
+        mock_temp.__enter__ = Mock(return_value=mock_temp)
+        mock_temp.__exit__ = Mock(return_value=False)
         mock_tempfile.return_value = mock_temp
 
         # Mock file operations
@@ -1043,7 +1044,7 @@ class TestGitHubOperations(unittest.TestCase):
         mock_getsize.return_value = 1000
 
         # Mock version check, PR creation
-        mock_subprocess_run.return_value = MagicMock(returncode=0, stdout="gh version 2.0.0")
+        mock_subprocess_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="gh version 2.0.0")
         mock_run_command.return_value = "https://github.com/test/repo/pull/123"
 
         # Mock git_ops.get_branch_name
@@ -1070,13 +1071,13 @@ class TestGitHubOperations(unittest.TestCase):
         # Mock temp file
         mock_temp = MagicMock()
         mock_temp.name = "/tmp/test_pr_body.md"
-        mock_temp.__enter__ = MagicMock(return_value=mock_temp)
-        mock_temp.__exit__ = MagicMock(return_value=False)
+        mock_temp.__enter__ = Mock(return_value=mock_temp)
+        mock_temp.__exit__ = Mock(return_value=False)
         mock_tempfile.return_value = mock_temp
 
         mock_exists.return_value = True
         mock_getsize.return_value = 1000
-        mock_subprocess_run.return_value = MagicMock(returncode=0, stdout="gh version 2.0.0")
+        mock_subprocess_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="gh version 2.0.0")
         mock_run_command.return_value = "https://github.com/test/repo/pull/456"
 
         # Mock git_ops.get_branch_name
@@ -1113,14 +1114,14 @@ class TestGitHubOperations(unittest.TestCase):
         # Mock temp file
         mock_temp = MagicMock()
         mock_temp.name = "/tmp/test_pr_body.md"
-        mock_temp.__enter__ = MagicMock(return_value=mock_temp)
-        mock_temp.__exit__ = MagicMock(return_value=False)
+        mock_temp.__enter__ = Mock(return_value=mock_temp)
+        mock_temp.__exit__ = Mock(return_value=False)
         mock_tempfile.return_value = mock_temp
 
         mock_exists.return_value = True
         mock_getsize.return_value = 1000
-        mock_subprocess_run.return_value = MagicMock(
-            returncode=0, stdout="gh version 2.0.0"
+        mock_subprocess_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="gh version 2.0.0"
         )
 
         # Simulate the exact error GitHub returns when setting is disabled
@@ -1177,14 +1178,14 @@ class TestGitHubOperations(unittest.TestCase):
         # Mock temp file
         mock_temp = MagicMock()
         mock_temp.name = "/tmp/test_pr_body.md"
-        mock_temp.__enter__ = MagicMock(return_value=mock_temp)
-        mock_temp.__exit__ = MagicMock(return_value=False)
+        mock_temp.__enter__ = Mock(return_value=mock_temp)
+        mock_temp.__exit__ = Mock(return_value=False)
         mock_tempfile.return_value = mock_temp
 
         mock_exists.return_value = True
         mock_getsize.return_value = 1000
-        mock_subprocess_run.return_value = MagicMock(
-            returncode=0, stdout="gh version 2.0.0"
+        mock_subprocess_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="gh version 2.0.0"
         )
 
         # Simulate a different command error (not permission-related)
@@ -1258,14 +1259,14 @@ class TestGitHubOperations(unittest.TestCase):
         # Mock temp file
         mock_temp = MagicMock()
         mock_temp.name = "/tmp/test_pr_body.md"
-        mock_temp.__enter__ = MagicMock(return_value=mock_temp)
-        mock_temp.__exit__ = MagicMock(return_value=False)
+        mock_temp.__enter__ = Mock(return_value=mock_temp)
+        mock_temp.__exit__ = Mock(return_value=False)
         mock_tempfile.return_value = mock_temp
 
         mock_exists.return_value = True
         mock_getsize.return_value = 1000
-        mock_subprocess_run.return_value = MagicMock(
-            returncode=0, stdout="gh version 2.0.0"
+        mock_subprocess_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="gh version 2.0.0"
         )
 
         # Simulate a command error with no stderr
@@ -1554,7 +1555,7 @@ class TestGetPrChangedFiles(unittest.TestCase):
 
     def setUp(self):
         with patch('src.github.github_operations.get_config') as mock_config:
-            mock_config.return_value = MagicMock(
+            mock_config.return_value = Mock(
                 GITHUB_TOKEN="test-token",
                 GITHUB_REPOSITORY="test-owner/test-repo",
                 testing=True,
@@ -1617,7 +1618,7 @@ class TestAddReviewersToPr(unittest.TestCase):
 
     def setUp(self):
         with patch('src.github.github_operations.get_config') as mock_config:
-            mock_config.return_value = MagicMock(
+            mock_config.return_value = Mock(
                 GITHUB_TOKEN="test-token",
                 GITHUB_REPOSITORY="test-owner/test-repo",
                 testing=True,
