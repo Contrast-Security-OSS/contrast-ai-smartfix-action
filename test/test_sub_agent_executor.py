@@ -311,6 +311,8 @@ class TestSubAgentExecutorAgentCreation(unittest.TestCase):
             call_kwargs = mock_llm_class.call_args[1]
             self.assertEqual(call_kwargs["model"], "claude-sonnet-4.5")
             self.assertEqual(call_kwargs["temperature"], 0.2)
+            # Attribution headers should not be present for non-Contrast LLM
+            self.assertNotIn("extra_headers", call_kwargs)
             # Verify agent was created
             mock_agent_class.assert_called_once()
             agent_kwargs = mock_agent_class.call_args[1]
@@ -366,7 +368,12 @@ class TestSubAgentExecutorAgentCreation(unittest.TestCase):
             headers = call_kwargs["extra_headers"]
             self.assertEqual(headers["Api-Key"], "test-api-key")
             self.assertEqual(headers["Authorization"], "test-auth-key")
-            self.assertNotIn("x-contrast-llm-session-id", headers)
+            self.assertEqual(headers["x-contrast-llm-feature"], "SMARTFIX")
+            self.assertEqual(headers["x-contrast-llm-session-id"], "test-123")
+            # Attribution headers with empty defaults should be absent
+            self.assertNotIn("x-contrast-llm-fingerprint", headers)
+            self.assertNotIn("x-contrast-llm-repo", headers)
+            self.assertNotIn("x-contrast-llm-source-language", headers)
             # Verify agent was created with fix agent name
             mock_agent_class.assert_called_once()
             agent_kwargs = mock_agent_class.call_args[1]
@@ -411,6 +418,125 @@ class TestSubAgentExecutorAgentCreation(unittest.TestCase):
             call_args = mock_error_exit.call_args[0]
             self.assertEqual(call_args[0], "test-123")
             self.assertIn("INVALID_LLM_CONFIG", call_args[1])
+
+
+class TestSubAgentExecutorAttributionHeaders(unittest.TestCase):
+    """Test LLM usage attribution headers for Contrast LLM path."""
+
+    def test_contrast_llm_includes_all_attribution_headers(self):
+        """
+        Given all attribution parameters are provided,
+        when creating an agent with Contrast LLM,
+        then all x-contrast-llm-* headers should be present.
+        """
+        with patch('src.config.get_config') as mock_config, \
+             patch('src.smartfix.domains.agents.sub_agent_executor.SmartFixLiteLlm') as mock_llm_class, \
+             patch('src.smartfix.domains.agents.sub_agent_executor.SmartFixLlmAgent') as mock_agent_class, \
+             patch('src.smartfix.domains.agents.sub_agent_executor.setup_contrast_provider'):
+
+            mock_config.return_value = Mock(
+                MAX_EVENTS_PER_AGENT=120,
+                USE_CONTRAST_LLM=True,
+                AGENT_MODEL="contrast/claude-sonnet-4-5",
+                CONTRAST_API_KEY="test-api-key",
+                CONTRAST_AUTHORIZATION_KEY="test-auth-key",
+            )
+            executor = SubAgentExecutor()
+            executor.mcp_manager.get_tools = AsyncMock(return_value=[Mock()])
+            mock_llm_class.return_value = Mock()
+            mock_agent_class.return_value = Mock()
+
+            asyncio.run(executor.create_agent(
+                target_folder=Path("/tmp/test"),
+                remediation_id="rem-001",
+                session_id="sess-001",
+                system_prompt="Fix the vulnerability",
+                vuln_uuid="3MUU-1GC8-U6DE-KDUO",
+                repo_slug="Contrast-Security-Inc/employee-management",
+                language="Java",
+            ))
+
+            headers = mock_llm_class.call_args[1]["extra_headers"]
+            self.assertEqual(headers["x-contrast-llm-feature"], "SMARTFIX")
+            self.assertEqual(headers["x-contrast-llm-fingerprint"], "3MUU-1GC8-U6DE-KDUO")
+            self.assertEqual(headers["x-contrast-llm-session-id"], "rem-001")
+            self.assertEqual(headers["x-contrast-llm-repo"], "Contrast-Security-Inc/employee-management")
+            self.assertEqual(headers["x-contrast-llm-source-language"], "Java")
+
+    def test_contrast_llm_omits_empty_attribution_headers(self):
+        """
+        Given attribution parameters are empty strings,
+        when creating an agent with Contrast LLM,
+        then optional x-contrast-llm-* headers should be absent.
+        """
+        with patch('src.config.get_config') as mock_config, \
+             patch('src.smartfix.domains.agents.sub_agent_executor.SmartFixLiteLlm') as mock_llm_class, \
+             patch('src.smartfix.domains.agents.sub_agent_executor.SmartFixLlmAgent') as mock_agent_class, \
+             patch('src.smartfix.domains.agents.sub_agent_executor.setup_contrast_provider'):
+
+            mock_config.return_value = Mock(
+                MAX_EVENTS_PER_AGENT=120,
+                USE_CONTRAST_LLM=True,
+                AGENT_MODEL="contrast/claude-sonnet-4-5",
+                CONTRAST_API_KEY="test-api-key",
+                CONTRAST_AUTHORIZATION_KEY="test-auth-key",
+            )
+            executor = SubAgentExecutor()
+            executor.mcp_manager.get_tools = AsyncMock(return_value=[Mock()])
+            mock_llm_class.return_value = Mock()
+            mock_agent_class.return_value = Mock()
+
+            asyncio.run(executor.create_agent(
+                target_folder=Path("/tmp/test"),
+                remediation_id="",
+                session_id="sess-001",
+                system_prompt="Fix the vulnerability",
+                vuln_uuid="",
+                repo_slug="",
+                language="",
+            ))
+
+            headers = mock_llm_class.call_args[1]["extra_headers"]
+            # Feature header is always present
+            self.assertEqual(headers["x-contrast-llm-feature"], "SMARTFIX")
+            # All others should be absent when their source values are empty
+            self.assertNotIn("x-contrast-llm-fingerprint", headers)
+            self.assertNotIn("x-contrast-llm-session-id", headers)
+            self.assertNotIn("x-contrast-llm-repo", headers)
+            self.assertNotIn("x-contrast-llm-source-language", headers)
+
+    def test_standard_llm_does_not_receive_attribution_headers(self):
+        """
+        Given attribution parameters are provided,
+        when creating an agent with a standard (non-Contrast) LLM,
+        then no extra_headers should be passed to SmartFixLiteLlm.
+        """
+        with patch('src.config.get_config') as mock_config, \
+             patch('src.smartfix.domains.agents.sub_agent_executor.SmartFixLiteLlm') as mock_llm_class, \
+             patch('src.smartfix.domains.agents.sub_agent_executor.SmartFixLlmAgent') as mock_agent_class:
+
+            mock_config.return_value = Mock(
+                MAX_EVENTS_PER_AGENT=120,
+                USE_CONTRAST_LLM=False,
+                AGENT_MODEL="claude-sonnet-4-5",
+            )
+            executor = SubAgentExecutor()
+            executor.mcp_manager.get_tools = AsyncMock(return_value=[Mock()])
+            mock_llm_class.return_value = Mock()
+            mock_agent_class.return_value = Mock()
+
+            asyncio.run(executor.create_agent(
+                target_folder=Path("/tmp/test"),
+                remediation_id="rem-001",
+                session_id="sess-001",
+                system_prompt="Fix the vulnerability",
+                vuln_uuid="3MUU-1GC8-U6DE-KDUO",
+                repo_slug="Contrast-Security-Inc/employee-management",
+                language="Java",
+            ))
+
+            call_kwargs = mock_llm_class.call_args[1]
+            self.assertNotIn("extra_headers", call_kwargs)
 
 
 class TestSubAgentExecutorFunctionProcessing(unittest.TestCase):

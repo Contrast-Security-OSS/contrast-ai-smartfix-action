@@ -33,7 +33,54 @@ from pathlib import Path
 
 from src.smartfix.domains.agents.smartfix_agent import SmartFixAgent
 from src.smartfix.domains.vulnerability import RemediationContext
+from src.smartfix.domains.vulnerability.context import (
+    PromptConfiguration, BuildConfiguration, RepositoryConfiguration
+)
+from src.smartfix.domains.vulnerability.models import Vulnerability, VulnerabilitySeverity
 from src.smartfix.shared.failure_categories import FailureCategory
+
+
+def _make_context(
+    remediation_id="test-remediation",
+    session_id="test-session",
+    fix_system_prompt="Fix system prompt",
+    fix_user_prompt="Fix user prompt",
+    build_command=None,
+    user_build_command=None,
+    user_format_command=None,
+    repo_path="/tmp/test",
+    language=None,
+):
+    """Build a real RemediationContext for tests that exercise _run_fix_agent_execution."""
+    vulnerability = Vulnerability(
+        uuid="sample-vuln-uuid",
+        title="Sample Vulnerability",
+        rule_name="sample-rule",
+        severity=VulnerabilitySeverity.HIGH,
+    )
+    prompts = PromptConfiguration(
+        fix_system_prompt=fix_system_prompt,
+        fix_user_prompt=fix_user_prompt,
+    )
+    build_config = BuildConfiguration(
+        build_command=build_command,
+        user_build_command=user_build_command,
+        user_format_command=user_format_command,
+    )
+    repo_config = RepositoryConfiguration(
+        repo_path=repo_path,
+        base_branch="main",
+    )
+    return RemediationContext(
+        remediation_id=remediation_id,
+        vulnerability=vulnerability,
+        prompts=prompts,
+        build_config=build_config,
+        repo_config=repo_config,
+        skip_writing_security_test=False,
+        session_id=session_id,
+        language=language,
+    )
 
 
 class TestSmartFixAgentSuccessScenarios(unittest.TestCase):
@@ -243,19 +290,13 @@ class TestSmartFixAgentBuildToolIntegration(unittest.TestCase):
         mock_event_loop.return_value = "<pr_body>Fix applied</pr_body>"
 
         agent = SmartFixAgent()
-        context = Mock(spec=RemediationContext)
-        context.build_config = Mock()
-        context.build_config.has_build_command.return_value = False
-        context.build_config.user_build_command = "mvn test"
-        context.build_config.user_format_command = None
-        context.repo_config = Mock()
-        context.repo_config.repo_path = Path("/tmp/test")
-        context.prompts = Mock()
-        context.prompts.fix_system_prompt = "Fix"
-        context.prompts.fix_user_prompt = "Fix"
-        context.remediation_id = "test-build-tool"
-        context.session_id = "session-bt"
-        context.skip_writing_security_test = False
+        context = _make_context(
+            remediation_id="test-build-tool",
+            session_id="session-bt",
+            fix_system_prompt="Fix",
+            fix_user_prompt="Fix",
+            user_build_command="mvn test",
+        )
 
         with patch.object(agent, '_extract_analytics_data'):
             agent.remediate(context)
@@ -358,19 +399,12 @@ class TestSmartFixAgentCustomInstructions(unittest.TestCase):
         mock_event_loop.return_value = "<pr_body>Fixed</pr_body>"
 
         agent = SmartFixAgent()
-        context = Mock(spec=RemediationContext)
-        context.build_config = Mock()
-        context.build_config.has_build_command.return_value = False
-        context.build_config.user_build_command = None
-        context.build_config.user_format_command = None
-        context.repo_config = Mock()
-        context.repo_config.repo_path = Path("/tmp/test")
-        context.prompts = Mock()
-        context.prompts.fix_system_prompt = "Fix system"
-        context.prompts.fix_user_prompt = "Fix this vulnerability"
-        context.remediation_id = "test-ci-123"
-        context.session_id = "session-ci"
-        context.skip_writing_security_test = False
+        context = _make_context(
+            remediation_id="test-ci-123",
+            session_id="session-ci",
+            fix_system_prompt="Fix system",
+            fix_user_prompt="Fix this vulnerability",
+        )
 
         with patch.object(agent, '_extract_analytics_data'):
             agent.remediate(context)
@@ -389,19 +423,12 @@ class TestSmartFixAgentCustomInstructions(unittest.TestCase):
         mock_event_loop.return_value = "<pr_body>Fixed</pr_body>"
 
         agent = SmartFixAgent()
-        context = Mock(spec=RemediationContext)
-        context.build_config = Mock()
-        context.build_config.has_build_command.return_value = False
-        context.build_config.user_build_command = None
-        context.build_config.user_format_command = None
-        context.repo_config = Mock()
-        context.repo_config.repo_path = Path("/tmp/test")
-        context.prompts = Mock()
-        context.prompts.fix_system_prompt = "Fix system"
-        context.prompts.fix_user_prompt = "Fix this vulnerability"
-        context.remediation_id = "test-no-ci"
-        context.session_id = "session-no-ci"
-        context.skip_writing_security_test = False
+        context = _make_context(
+            remediation_id="test-no-ci",
+            session_id="session-no-ci",
+            fix_system_prompt="Fix system",
+            fix_user_prompt="Fix this vulnerability",
+        )
 
         with patch.object(agent, '_extract_analytics_data'):
             agent.remediate(context)

@@ -195,7 +195,7 @@ class TestSubAgentExecutor(unittest.TestCase):
         # Mock config
         config_mock = MagicMock()
         config_mock.AGENT_MODEL = 'test-model'
-        config_mock.USE_CONTRAST_LLM = 'false'
+        config_mock.USE_CONTRAST_LLM = False
         mock_get_config.return_value = config_mock
 
         # Mock MCP manager
@@ -226,7 +226,7 @@ class TestSubAgentExecutor(unittest.TestCase):
         # Mock config with Contrast LLM enabled
         config_mock = MagicMock()
         config_mock.AGENT_MODEL = 'test-model'
-        config_mock.USE_CONTRAST_LLM = 'true'
+        config_mock.USE_CONTRAST_LLM = True
         config_mock.CONTRAST_API_KEY = 'test-api-key'
         config_mock.CONTRAST_AUTHORIZATION_KEY = 'test-auth-key'
         mock_get_config.return_value = config_mock
@@ -258,7 +258,8 @@ class TestSubAgentExecutor(unittest.TestCase):
         headers = call_kwargs['extra_headers']
         self.assertEqual(headers['Api-Key'], 'test-api-key')
         self.assertEqual(headers['Authorization'], 'test-auth-key')
-        self.assertNotIn('x-contrast-llm-session-id', headers)
+        self.assertEqual(headers['x-contrast-llm-feature'], 'SMARTFIX')
+        self.assertEqual(headers['x-contrast-llm-session-id'], 'test-123')
 
     @patch('src.smartfix.domains.agents.sub_agent_executor.error_exit')
     @patch('src.config.get_config')

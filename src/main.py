@@ -274,6 +274,7 @@ def _main_impl(vuln_count: list[int], prs_created_count: list[int]) -> None:  # 
             vuln_title = vulnerability_data['vulnerabilityTitle']
             remediation_id = vulnerability_data['remediationId']
             session_id = vulnerability_data.get('sessionId')
+            vuln_language = vulnerability_data.get('language')
 
             # Validate and create prompt configuration for SmartFix agent
             try:
@@ -316,6 +317,7 @@ def _main_impl(vuln_count: list[int], prs_created_count: list[int]) -> None:  # 
             vuln_title = vulnerability_data['vulnerabilityTitle']
             remediation_id = vulnerability_data['remediationId']
             session_id = None  # External agents don't use Contrast LLM sessions
+            vuln_language = vulnerability_data.get('language')
 
             # No prompts required for external agents
             prompts = PromptConfiguration()
@@ -379,6 +381,7 @@ def _main_impl(vuln_count: list[int], prs_created_count: list[int]) -> None:  # 
                     repo_config=repo_config,
                     skip_writing_security_test=config.SKIP_WRITING_SECURITY_TEST,
                     session_id=session_id,
+                    language=vuln_language,
                 )
 
                 # Propagate a build command discovered by a previous agent run so the next
