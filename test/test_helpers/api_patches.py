@@ -19,7 +19,6 @@ CONTRAST_API_PATCHES = [
     'src.contrast_api.notify_remediation_pr_opened_org',
     'src.contrast_api.notify_remediation_failed_org',
     'src.contrast_api.notify_remediation_pr_merged_org',
-    'src.contrast_api.get_credit_tracking_org',
 ]
 
 # GitHub operations patches - prevent actual GitHub API calls

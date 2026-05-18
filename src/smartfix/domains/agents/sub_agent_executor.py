@@ -34,6 +34,7 @@ from typing import Optional
 
 from src.utils import debug_log, log, error_exit, tail_string
 from src.smartfix.shared.failure_categories import FailureCategory
+from src.smartfix.shared.exceptions import TokenBalanceExhaustedError
 from src.smartfix.domains.telemetry import telemetry_handler
 from src.smartfix.domains.providers import setup_contrast_provider
 
@@ -339,6 +340,11 @@ class SubAgentExecutor:
                     break  # Exit the event loop
 
             agent_run_result = "SUCCESS"
+        # The broad catch-all below treats every Exception as an agent failure
+        # (error_exit / AGENT_FAILURE). TokenBalanceExhaustedError is a clean
+        # stop on HTTP 402, not a failure. Re-raise so it reaches main.
+        except TokenBalanceExhaustedError:
+            raise
         except Exception as e:
             # Handle the exception and determine if execution should continue
             should_continue = await self._handle_exception(e, events_async, remediation_id)

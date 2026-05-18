@@ -16,6 +16,7 @@ from src.smartfix.domains.agents.custom_instructions import load_custom_instruct
 from src.config import get_config
 from src.utils import debug_log, log, error_exit
 from src.smartfix.shared.failure_categories import FailureCategory
+from src.smartfix.shared.exceptions import TokenBalanceExhaustedError
 from src.smartfix.domains.telemetry import telemetry_handler
 
 from .coding_agent import CodingAgentStrategy
@@ -64,6 +65,11 @@ class SmartFixAgent(CodingAgentStrategy):
             session.complete_session(pr_body=fix_result)
             return session
 
+        # The broad catch-all below treats every Exception as an agent failure
+        # (AGENT_FAILURE session). TokenBalanceExhaustedError is a clean stop
+        # on HTTP 402, not a failure. Re-raise so it reaches main.
+        except TokenBalanceExhaustedError:
+            raise
         except Exception as ex:
             debug_log(f"SmartFix agent failed with error: {str(ex)}")
             session.complete_session(
@@ -133,6 +139,11 @@ class SmartFixAgent(CodingAgentStrategy):
                 fix_result = "Error: RemediationContext missing required attributes (prompts, repo_config)"
             else:
                 fix_result = self._run_ai_fix_agent(context)
+        # The broad catch-all below treats every Exception as an agent failure
+        # (AGENT_FAILURE session). TokenBalanceExhaustedError is a clean stop
+        # on HTTP 402, not a failure. Re-raise so it reaches main.
+        except TokenBalanceExhaustedError:
+            raise
         except Exception as ex:
             debug_log(f"Exception during fix agent execution: {str(ex)}")
             session.complete_session(
@@ -167,6 +178,11 @@ class SmartFixAgent(CodingAgentStrategy):
             self._extract_analytics_data(agent_summary_str)
             return self._extract_pr_body(agent_summary_str)
 
+        # The broad catch-all below treats every Exception as an agent failure
+        # (error_exit / AGENT_FAILURE or INVALID_LLM_CONFIG). TokenBalanceExhaustedError
+        # is a clean stop on HTTP 402, not a failure. Re-raise so it reaches main.
+        except TokenBalanceExhaustedError:
+            raise
         except Exception as ex:
             log(f"Error running AI fix agent: {ex}", is_error=True)
             failure_code = FailureCategory.AGENT_FAILURE.value

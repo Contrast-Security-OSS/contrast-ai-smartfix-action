@@ -1,0 +1,2 @@
+class TokenBalanceExhaustedError(Exception):
+    pass

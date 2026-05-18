@@ -1,22 +1,8 @@
 """Tests for sanitized 409 error message handling."""
 
 import unittest
-from datetime import datetime, timezone, timedelta
 
 from src.contrast_api import get_sanitized_409_message
-from src.smartfix.domains.workflow.credit_tracking import CreditTrackingResponse
-
-
-def _make_credit_info(end_date):
-    """Create a sample CreditTrackingResponse with a specific end_date."""
-    return CreditTrackingResponse(
-        organization_id="test-org",
-        enabled=True,
-        max_credits=100,
-        credits_used=100,
-        start_date="2025-01-01T00:00:00Z",
-        end_date=end_date,
-    )
 
 
 class TestSanitized409Messages(unittest.TestCase):
@@ -27,42 +13,12 @@ class TestSanitized409Messages(unittest.TestCase):
         response = '{"message": "Maximum pull request limit exceeded"}'
         message, is_error = get_sanitized_409_message(response)
         self.assertEqual(message, "Maximum pull request limit exceeded")
-        self.assertFalse(is_error)  # PR limit is expected, not an error
+        self.assertFalse(is_error)
 
-    def test_credits_exhausted_without_credit_info_is_error(self):
-        """Credits exhausted without credit info shows generic credits message and IS an error."""
+    def test_credits_exhausted_is_error(self):
+        """Credits exhausted shows generic credits message and IS an error."""
         response = '{"message": "Credits have been exhausted. Contact your CSM to request additional credits."}'
         message, is_error = get_sanitized_409_message(response)
-        self.assertEqual(
-            message,
-            "Your Contrast-provided LLM credits have been exhausted. Please contact your Contrast representative for additional credits."
-        )
-        self.assertTrue(is_error)
-
-    def test_credits_exhausted_with_expired_trial_is_error(self):
-        """Credits exhausted with expired trial shows trial expired message and IS an error."""
-        response = '{"message": "Credits have been exhausted. Contact your CSM to request additional credits."}'
-
-        credit_info = _make_credit_info(
-            end_date=(datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
-        )
-
-        message, is_error = get_sanitized_409_message(response, credit_info)
-        self.assertEqual(
-            message,
-            "Your Contrast-provided LLM trial has expired. Please contact your Contrast representative to renew."
-        )
-        self.assertTrue(is_error)
-
-    def test_credits_exhausted_with_active_trial_is_error(self):
-        """Credits exhausted with active trial shows credits exhausted message and IS an error."""
-        response = '{"message": "Credits have been exhausted. Contact your CSM to request additional credits."}'
-
-        credit_info = _make_credit_info(
-            end_date=(datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
-        )
-
-        message, is_error = get_sanitized_409_message(response, credit_info)
         self.assertEqual(
             message,
             "Your Contrast-provided LLM credits have been exhausted. Please contact your Contrast representative for additional credits."
@@ -106,19 +62,6 @@ class TestSanitized409Messages(unittest.TestCase):
         self.assertEqual(
             message,
             "Unable to process request. Please try again or contact Contrast support if the issue persists."
-        )
-        self.assertTrue(is_error)
-
-    def test_credits_exhausted_with_unparseable_date_falls_through(self):
-        """If end_date can't be parsed, fall through to credits exhausted message."""
-        response = '{"message": "Credits have been exhausted. Contact your CSM to request additional credits."}'
-
-        credit_info = _make_credit_info(end_date="not-a-valid-date")
-
-        message, is_error = get_sanitized_409_message(response, credit_info)
-        self.assertEqual(
-            message,
-            "Your Contrast-provided LLM credits have been exhausted. Please contact your Contrast representative for additional credits."
         )
         self.assertTrue(is_error)
 
