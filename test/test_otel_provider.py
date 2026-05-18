@@ -93,24 +93,35 @@ class TestOtelProvider(unittest.TestCase):
 
     @patch("src.smartfix.domains.telemetry.otel_provider.OTLPSpanExporter")
     def test_initialize_sets_correct_resource_attributes(self, mock_exporter_cls):
-        """Resource attributes on the TracerProvider match config values."""
+        """Resource attributes on the TracerProvider match config values exactly.
+
+        Compares the full set of attributes within the namespaces we own
+        (service.*, vcs.*, contrast.*) so that adding or removing an attribute
+        forces an explicit test update. SDK-injected attributes
+        (telemetry.sdk.*) are excluded from the comparison.
+        """
         os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = "http://localhost:4318"
         mock_exporter_cls.return_value = Mock()
         cfg = _config()
 
         otel_provider.initialize_otel(cfg)
 
-        attrs = otel_provider._tracer_provider.resource.attributes
-        self.assertEqual(attrs["service.name"], "smartfix")
-        self.assertEqual(attrs["service.version"], cfg.VERSION)
-        self.assertEqual(
-            attrs["vcs.repository.url.full"],
-            f"{cfg.GITHUB_SERVER_URL}/{cfg.GITHUB_REPOSITORY}",
-        )
-        self.assertEqual(attrs["vcs.repository.name"], "contrast-ai-smartfix-action")
-        self.assertEqual(attrs["vcs.owner.name"], "Contrast-Security-OSS")
-        self.assertEqual(attrs["vcs.provider.name"], "github")
-        self.assertEqual(attrs["contrast.org_id"], cfg.CONTRAST_ORG_ID)
+        expected = {
+            "service.name": "smartfix",
+            "service.version": cfg.VERSION,
+            "vcs.repository.url.full": f"{cfg.GITHUB_SERVER_URL}/{cfg.GITHUB_REPOSITORY}",
+            "vcs.repository.name": "contrast-ai-smartfix-action",
+            "vcs.owner.name": "Contrast-Security-OSS",
+            "vcs.provider.name": "github",
+            "contrast.org_id": cfg.CONTRAST_ORG_ID,
+        }
+        owned_namespaces = ("service.", "vcs.", "contrast.")
+        actual = {
+            k: v
+            for k, v in otel_provider._tracer_provider.resource.attributes.items()
+            if k.startswith(owned_namespaces)
+        }
+        self.assertEqual(actual, expected)
 
     @patch("src.smartfix.domains.telemetry.otel_provider.OTLPSpanExporter")
     def test_initialize_also_accepts_traces_specific_endpoint_var(self, mock_exporter_cls):
