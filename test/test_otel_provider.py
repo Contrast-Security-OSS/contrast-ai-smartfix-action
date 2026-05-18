@@ -110,6 +110,7 @@ class TestOtelProvider(unittest.TestCase):
         self.assertEqual(attrs["vcs.repository.name"], "contrast-ai-smartfix-action")
         self.assertEqual(attrs["vcs.owner.name"], "Contrast-Security-OSS")
         self.assertEqual(attrs["vcs.provider.name"], "github")
+        self.assertEqual(attrs["contrast.org_id"], cfg.CONTRAST_ORG_ID)
 
     @patch("src.smartfix.domains.telemetry.otel_provider.OTLPSpanExporter")
     def test_initialize_also_accepts_traces_specific_endpoint_var(self, mock_exporter_cls):
