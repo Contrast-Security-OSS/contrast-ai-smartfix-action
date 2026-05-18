@@ -83,7 +83,7 @@ class TestSubAgentExecutorPropagatesTokenBalanceExhausted(_SubprocessIsolatedTes
 
     Simulates the real 402 path: TokenBalanceExhaustedError surfaces inside the
     async event iteration that execute_agent's try block wraps. The catch-all
-    must NOT convert it to AGENT_FAILURE / error_exit — it must re-raise.
+    must NOT convert it to AGENT_FAILURE / error_exit. It must re-raise.
     """
 
     def test_execute_agent_reraises_token_balance_exhausted(self):

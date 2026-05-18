@@ -342,7 +342,7 @@ class SubAgentExecutor:
             agent_run_result = "SUCCESS"
         # The broad catch-all below treats every Exception as an agent failure
         # (error_exit / AGENT_FAILURE). TokenBalanceExhaustedError is a clean
-        # stop on HTTP 402, not a failure — re-raise so it reaches main.
+        # stop on HTTP 402, not a failure. Re-raise so it reaches main.
         except TokenBalanceExhaustedError:
             raise
         except Exception as e:
