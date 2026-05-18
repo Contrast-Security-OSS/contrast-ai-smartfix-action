@@ -617,7 +617,10 @@ def _main_impl(vuln_count: list[int], prs_created_count: list[int]) -> None:  # 
                 )
 
             except TokenBalanceExhaustedError:
-                log("SmartFix paused for token balance — will resume on next allocation tick.")
+                log(
+                    "SmartFix token balance exhausted (HTTP 402). Stopping this run; "
+                    "subsequent scheduled runs will resume when balance is replenished."
+                )
                 break
             except BaseException:
                 raise
