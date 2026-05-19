@@ -112,6 +112,7 @@ def initialize_otel(config) -> None:
             "vcs.repository.name": config.GITHUB_REPOSITORY.split("/")[-1],
             "vcs.owner.name": config.GITHUB_REPOSITORY.split("/")[0],
             "vcs.provider.name": "github",
+            "contrast.org_id": config.CONTRAST_ORG_ID,
         })
 
         # Auth headers are always derived from Contrast credentials — not from any env var.
