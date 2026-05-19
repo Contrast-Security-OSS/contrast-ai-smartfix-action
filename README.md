@@ -1,4 +1,6 @@
 # Contrast AI SmartFix \- User Documentation
+<!-- labeler smoke test, do not merge -->
+
 
 ## Legal Disclaimer
 
