@@ -330,6 +330,7 @@ def _main_impl(vuln_count: list[int], prs_created_count: list[int]) -> None:  # 
         _op_outcome = "failure"
         _op_fix_start = time.monotonic()
 
+        smartfix_metrics.set_current_rule_name(vulnerability.rule_name)
         with otel_provider.start_span("fix-vulnerability") as op_span:
             op_span.set_attribute("contrast.finding.fingerprint", vulnerability.uuid)
             op_span.set_attribute("contrast.finding.source", "runtime")
