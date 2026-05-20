@@ -55,6 +55,7 @@ _METER_NAME = "smartfix"
 
 # --- Lazy instrument handles ---
 _vulnerability_duration_histogram = None
+_vulnerability_tokens_histogram = None
 _pr_count_counter = None
 _pr_merged_counter = None
 _tokens_total_counter = None
@@ -86,6 +87,17 @@ def _get_vulnerability_duration_histogram():
             description="End-to-end time to process each vulnerability fix attempt.",
         )
     return _vulnerability_duration_histogram
+
+
+def _get_vulnerability_tokens_histogram():
+    global _vulnerability_tokens_histogram
+    if _vulnerability_tokens_histogram is None:
+        _vulnerability_tokens_histogram = otel_provider.get_meter(_METER_NAME).create_histogram(
+            name="smartfix.vulnerability.tokens",
+            unit="{token}",
+            description="Total LLM tokens consumed per vulnerability fix attempt.",
+        )
+    return _vulnerability_tokens_histogram
 
 
 def _get_pr_count_counter():
@@ -191,6 +203,7 @@ def get_vuln_token_totals() -> tuple[int, int]:
 
 def record_vulnerability_duration(
     elapsed_s: float, outcome: str, rule_name: str, language: Optional[str], source: str,
+    severity: Optional[str] = None,
 ) -> None:
     """Record end-to-end vulnerability fix duration.
 
@@ -200,14 +213,49 @@ def record_vulnerability_duration(
         rule_name: Contrast rule name (e.g. "sql-injection").
         language: Programming language detected for this app.
         source: Finding source (e.g. "runtime").
+        severity: Vulnerability severity (e.g. "CRITICAL", "HIGH").
     """
     try:
-        _get_vulnerability_duration_histogram().record(elapsed_s, {
+        attrs = {
             "outcome": outcome,
             "rule_name": rule_name,
             "language": language or "unknown",
             "source": source,
-        })
+        }
+        if severity:
+            attrs["severity"] = severity
+        _get_vulnerability_duration_histogram().record(elapsed_s, attrs)
+    except Exception:
+        pass
+
+
+def record_vulnerability_tokens(
+    input_tokens: int, output_tokens: int, rule_name: str, language: Optional[str],
+    severity: Optional[str] = None,
+) -> None:
+    """Record total LLM token consumption for a single vulnerability fix attempt.
+
+    Emitted once per vulnerability (after all LLM calls complete) so that
+    Munir's datalake can compute average token cost per rule/language/severity
+    without needing per-invocation span data.
+
+    Args:
+        input_tokens: Total input tokens (new + cache) across all LLM calls.
+        output_tokens: Total output tokens across all LLM calls.
+        rule_name: Contrast rule name.
+        language: Programming language detected for this app.
+        severity: Vulnerability severity.
+    """
+    try:
+        attrs = {
+            "rule_name": rule_name,
+            "language": language or "unknown",
+        }
+        if severity:
+            attrs["severity"] = severity
+        hist = _get_vulnerability_tokens_histogram()
+        hist.record(input_tokens, {**attrs, "gen_ai.token.type": "input"})
+        hist.record(output_tokens, {**attrs, "gen_ai.token.type": "output"})
     except Exception:
         pass
 
