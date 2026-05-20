@@ -214,8 +214,8 @@ class TestRecordLlmCallTokens(unittest.TestCase):
 
         cache_calls = self.mock_cache.add.call_args_list
         token_types = {c[0][1]["gen_ai.token.type"] for c in cache_calls}
-        self.assertIn("read", token_types)
-        self.assertIn("write", token_types)
+        self.assertIn("cache_read", token_types)
+        self.assertIn("cache_creation", token_types)
 
     def test_skips_cache_counter_when_no_cache_tokens(self):
         import src.smartfix.domains.telemetry.smartfix_metrics as m
@@ -295,6 +295,55 @@ class TestVulnTokenAccumulator(unittest.TestCase):
         m.reset_vuln_token_accumulator()
         self.assertEqual(m._vuln_input_tokens, 0)
         self.assertEqual(m._vuln_output_tokens, 0)
+
+    def test_reset_clears_rule_name(self):
+        import src.smartfix.domains.telemetry.smartfix_metrics as m
+        m.set_current_rule_name("sql-injection")
+        m.reset_vuln_token_accumulator()
+        self.assertEqual(m._current_rule_name, "")
+
+    def test_set_current_rule_name(self):
+        import src.smartfix.domains.telemetry.smartfix_metrics as m
+        m.set_current_rule_name("xss")
+        self.assertEqual(m._current_rule_name, "xss")
+
+    def test_token_counter_includes_rule_id_when_set(self):
+        import src.smartfix.domains.telemetry.smartfix_metrics as m
+        mock_total = MagicMock()
+        mock_cache = MagicMock()
+        m._tokens_total_counter = mock_total
+        m._cache_tokens_counter = mock_cache
+        m.set_current_rule_name("sql-injection")
+
+        m.record_llm_call_tokens(10, 5, 0, 0, "model-a")
+
+        call_kwargs = mock_total.add.call_args_list[0][0][1]
+        self.assertEqual(call_kwargs["rule_id"], "sql-injection")
+
+    def test_token_counter_omits_rule_id_when_not_set(self):
+        import src.smartfix.domains.telemetry.smartfix_metrics as m
+        mock_total = MagicMock()
+        mock_cache = MagicMock()
+        m._tokens_total_counter = mock_total
+        m._cache_tokens_counter = mock_cache
+
+        m.record_llm_call_tokens(10, 5, 0, 0, "model-a")
+
+        call_kwargs = mock_total.add.call_args_list[0][0][1]
+        self.assertNotIn("rule_id", call_kwargs)
+
+    def test_cache_token_type_labels_match_spec(self):
+        import src.smartfix.domains.telemetry.smartfix_metrics as m
+        mock_total = MagicMock()
+        mock_cache = MagicMock()
+        m._tokens_total_counter = mock_total
+        m._cache_tokens_counter = mock_cache
+
+        m.record_llm_call_tokens(0, 0, 30, 20, "model-a")
+
+        types = {call[0][1]["gen_ai.token.type"] for call in mock_cache.add.call_args_list}
+        self.assertIn("cache_read", types)
+        self.assertIn("cache_creation", types)
 
     def test_get_totals_returns_zero_after_reset(self):
         import src.smartfix.domains.telemetry.smartfix_metrics as m
