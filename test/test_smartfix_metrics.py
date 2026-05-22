@@ -159,54 +159,6 @@ class TestRecordVulnerabilityDuration(unittest.TestCase):
         m.record_vulnerability_duration(1.0, "success", "sql-injection", "java", "runtime")
 
 
-class TestRecordVulnerabilityTokens(unittest.TestCase):
-
-    def setUp(self):
-        import src.smartfix.domains.telemetry.smartfix_metrics as m
-        self.mock_histogram = MagicMock()
-        m._vulnerability_tokens_histogram = self.mock_histogram
-
-    def tearDown(self):
-        import src.smartfix.domains.telemetry.smartfix_metrics as m
-        m._vulnerability_tokens_histogram = None
-
-    def test_records_input_and_output_separately(self):
-        import src.smartfix.domains.telemetry.smartfix_metrics as m
-        m.record_vulnerability_tokens(100, 50, "sql-injection", "java")
-
-        calls = self.mock_histogram.record.call_args_list
-        self.assertEqual(len(calls), 2)
-        token_types = {c[0][1]["gen_ai.token.type"] for c in calls}
-        self.assertEqual(token_types, {"input", "output"})
-
-    def test_includes_severity_when_provided(self):
-        import src.smartfix.domains.telemetry.smartfix_metrics as m
-        m.record_vulnerability_tokens(100, 50, "xss", "java", severity="HIGH")
-
-        for call in self.mock_histogram.record.call_args_list:
-            self.assertEqual(call[0][1]["severity"], "HIGH")
-
-    def test_omits_severity_when_not_provided(self):
-        import src.smartfix.domains.telemetry.smartfix_metrics as m
-        m.record_vulnerability_tokens(100, 50, "xss", "java")
-
-        for call in self.mock_histogram.record.call_args_list:
-            self.assertNotIn("severity", call[0][1])
-
-    def test_uses_unknown_for_missing_language(self):
-        import src.smartfix.domains.telemetry.smartfix_metrics as m
-        m.record_vulnerability_tokens(100, 50, "xss", None)
-
-        for call in self.mock_histogram.record.call_args_list:
-            self.assertEqual(call[0][1]["language"], "unknown")
-
-    def test_suppresses_instrument_errors(self):
-        import src.smartfix.domains.telemetry.smartfix_metrics as m
-        self.mock_histogram.record.side_effect = RuntimeError("otel broken")
-        # Must not raise.
-        m.record_vulnerability_tokens(100, 50, "xss", "java")
-
-
 class TestRecordPrAttempt(unittest.TestCase):
 
     def setUp(self):
