@@ -650,13 +650,6 @@ def _main_impl(vuln_count: list[int], prs_created_count: list[int]) -> None:  # 
                     source="runtime",
                     severity=_severity,
                 )
-                smartfix_metrics.record_vulnerability_tokens(
-                    input_tokens=_total_in,
-                    output_tokens=_total_out,
-                    rule_name=vulnerability.rule_name,
-                    language=lang or "unknown",
-                    severity=_severity,
-                )
 
     # Calculate total runtime
     end_time = datetime.now()
