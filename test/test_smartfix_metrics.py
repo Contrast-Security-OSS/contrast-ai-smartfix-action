@@ -131,6 +131,7 @@ class TestRecordVulnerabilityDuration(unittest.TestCase):
             "rule_name": "sql-injection",
             "language": "java",
             "source": "runtime",
+            "severity": "unknown",
         })
 
     def test_includes_severity_when_provided(self):
@@ -140,12 +141,12 @@ class TestRecordVulnerabilityDuration(unittest.TestCase):
         attrs = self.mock_histogram.record.call_args[0][1]
         self.assertEqual(attrs["severity"], "CRITICAL")
 
-    def test_omits_severity_when_not_provided(self):
+    def test_uses_unknown_severity_when_not_provided(self):
         import src.smartfix.domains.telemetry.smartfix_metrics as m
         m.record_vulnerability_duration(2.5, "success", "sql-injection", "java", "runtime")
 
         attrs = self.mock_histogram.record.call_args[0][1]
-        self.assertNotIn("severity", attrs)
+        self.assertEqual(attrs["severity"], "unknown")
 
     def test_uses_unknown_for_missing_language(self):
         import src.smartfix.domains.telemetry.smartfix_metrics as m
@@ -192,6 +193,33 @@ class TestRecordPrAttempt(unittest.TestCase):
         import src.smartfix.domains.telemetry.smartfix_metrics as m
         self.mock_counter.add.side_effect = RuntimeError("otel broken")
         m.record_pr_attempt("success", "sql-injection", "smartfix")
+
+
+class TestRecordPrMerged(unittest.TestCase):
+
+    def setUp(self):
+        import src.smartfix.domains.telemetry.smartfix_metrics as m
+        self.mock_counter = MagicMock()
+        m._pr_merged_counter = self.mock_counter
+
+    def tearDown(self):
+        import src.smartfix.domains.telemetry.smartfix_metrics as m
+        m._pr_merged_counter = None
+
+    def test_records_coding_agent(self):
+        import src.smartfix.domains.telemetry.smartfix_metrics as m
+        m.record_pr_merged("smartfix")
+        self.mock_counter.add.assert_called_once_with(1, {"coding_agent": "smartfix"})
+
+    def test_records_external_agent(self):
+        import src.smartfix.domains.telemetry.smartfix_metrics as m
+        m.record_pr_merged("external-github_copilot")
+        self.mock_counter.add.assert_called_once_with(1, {"coding_agent": "external-github_copilot"})
+
+    def test_suppresses_instrument_errors(self):
+        import src.smartfix.domains.telemetry.smartfix_metrics as m
+        self.mock_counter.add.side_effect = RuntimeError("otel broken")
+        m.record_pr_merged("smartfix")  # must not raise
 
 
 class TestRecordLlmCallTokens(unittest.TestCase):
@@ -323,7 +351,7 @@ class TestVulnTokenAccumulator(unittest.TestCase):
         m.set_current_rule_name("xss")
         self.assertEqual(m._current_rule_name, "xss")
 
-    def test_token_counter_includes_rule_id_when_set(self):
+    def test_token_counter_includes_rule_name_when_set(self):
         import src.smartfix.domains.telemetry.smartfix_metrics as m
         mock_total = MagicMock()
         mock_cache = MagicMock()
@@ -334,9 +362,9 @@ class TestVulnTokenAccumulator(unittest.TestCase):
         m.record_llm_call_tokens(10, 5, 0, 0, "model-a")
 
         call_kwargs = mock_total.add.call_args_list[0][0][1]
-        self.assertEqual(call_kwargs["rule_id"], "sql-injection")
+        self.assertEqual(call_kwargs["rule_name"], "sql-injection")
 
-    def test_token_counter_omits_rule_id_when_not_set(self):
+    def test_token_counter_omits_rule_name_when_not_set(self):
         import src.smartfix.domains.telemetry.smartfix_metrics as m
         mock_total = MagicMock()
         mock_cache = MagicMock()
@@ -346,7 +374,7 @@ class TestVulnTokenAccumulator(unittest.TestCase):
         m.record_llm_call_tokens(10, 5, 0, 0, "model-a")
 
         call_kwargs = mock_total.add.call_args_list[0][0][1]
-        self.assertNotIn("rule_id", call_kwargs)
+        self.assertNotIn("rule_name", call_kwargs)
 
     def test_cache_token_type_labels_match_spec(self):
         import src.smartfix.domains.telemetry.smartfix_metrics as m
