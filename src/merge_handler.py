@@ -28,6 +28,7 @@ from src.config import get_config  # Using get_config function instead of direct
 from src.utils import debug_log, extract_remediation_id_from_branch, extract_remediation_id_from_labels, log
 from src.github.github_operations import GitHubOperations
 from src.smartfix.domains.telemetry import otel_provider, telemetry_handler
+from src.smartfix.domains.telemetry import smartfix_metrics
 
 
 def _load_github_event() -> dict:
@@ -201,6 +202,8 @@ def handle_merged_pr():
             merge_span.set_attribute("contrast.smartfix.pr_merged", True)
             merge_span.set_attribute("contrast.smartfix.remediation_id", remediation_id)
             merge_span.set_attribute("contrast.finding.fingerprint", vuln_uuid)
+
+            smartfix_metrics.record_pr_merged(coding_agent=config.CODING_AGENT.lower())
 
             debug_log(f"Extracted Remediation ID: {remediation_id}")
             telemetry_handler.update_telemetry("additionalAttributes.remediationId", remediation_id)
