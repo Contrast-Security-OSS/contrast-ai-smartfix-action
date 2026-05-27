@@ -330,6 +330,7 @@ def _main_impl(vuln_count: list[int], prs_created_count: list[int]) -> None:  # 
         _op_outcome = "failure"
         _op_fix_start = time.monotonic()
 
+        smartfix_metrics.set_current_rule_name(vulnerability.rule_name)
         with otel_provider.start_span("fix-vulnerability") as op_span:
             op_span.set_attribute("contrast.finding.fingerprint", vulnerability.uuid)
             op_span.set_attribute("contrast.finding.source", "runtime")
@@ -640,12 +641,14 @@ def _main_impl(vuln_count: list[int], prs_created_count: list[int]) -> None:  # 
                 _total_in, _total_out = smartfix_metrics.get_vuln_token_totals()
                 op_span.set_attribute("contrast.smartfix.total_input_tokens", _total_in)
                 op_span.set_attribute("contrast.smartfix.total_output_tokens", _total_out)
+                _severity = vulnerability.severity.value if vulnerability.severity else None
                 smartfix_metrics.record_vulnerability_duration(
                     elapsed_s=time.monotonic() - _op_fix_start,
                     outcome=_op_outcome,
                     rule_name=vulnerability.rule_name,
                     language=lang or "unknown",
                     source="runtime",
+                    severity=_severity,
                 )
 
     # Calculate total runtime

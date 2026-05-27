@@ -50,12 +50,14 @@ OTel try/except so a failed counter write never silently zeroes the totals.
 from typing import Optional
 
 from src.smartfix.domains.telemetry import otel_provider
+from src.utils import debug_log
 
 _METER_NAME = "smartfix"
 
 # --- Lazy instrument handles ---
 _vulnerability_duration_histogram = None
 _pr_count_counter = None
+_pr_merged_counter = None
 _tokens_total_counter = None
 _cache_tokens_counter = None
 _llm_duration_histogram = None
@@ -65,6 +67,11 @@ _llm_retries_counter = None
 # Reset at the start of each vulnerability; read in the fix-vulnerability span finally block.
 _vuln_input_tokens: int = 0
 _vuln_output_tokens: int = 0
+
+# --- Current vulnerability rule name ---
+# Set once per vulnerability loop iteration so that record_llm_call_tokens() can attach
+# rule_id to token counters without requiring it to be threaded through every LLM callback.
+_current_rule_name: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -91,6 +98,17 @@ def _get_pr_count_counter():
             description="Number of PR creation attempts.",
         )
     return _pr_count_counter
+
+
+def _get_pr_merged_counter():
+    global _pr_merged_counter
+    if _pr_merged_counter is None:
+        _pr_merged_counter = otel_provider.get_meter(_METER_NAME).create_counter(
+            name="smartfix.pr.merged",
+            unit="{pr}",
+            description="Number of SmartFix PRs merged.",
+        )
+    return _pr_merged_counter
 
 
 def _get_tokens_total_counter():
@@ -142,10 +160,25 @@ def _get_llm_retries_counter():
 # ---------------------------------------------------------------------------
 
 def reset_vuln_token_accumulator() -> None:
-    """Reset per-vulnerability token counters. Call at the start of each vulnerability loop."""
-    global _vuln_input_tokens, _vuln_output_tokens
+    """Reset per-vulnerability token counters and rule name. Call at the start of each vulnerability loop."""
+    global _vuln_input_tokens, _vuln_output_tokens, _current_rule_name
     _vuln_input_tokens = 0
     _vuln_output_tokens = 0
+    _current_rule_name = ""
+
+
+def set_current_rule_name(rule_name: str) -> None:
+    """Set the rule name for the vulnerability currently being processed.
+
+    Called once per vulnerability loop iteration so that record_llm_call_tokens()
+    can attach rule_id to smartfix.tokens.total and smartfix.cache.tokens without
+    requiring rule_name to be threaded through every LLM callback.
+
+    Args:
+        rule_name: Contrast rule identifier (e.g. "sql-injection").
+    """
+    global _current_rule_name
+    _current_rule_name = rule_name
 
 
 def get_vuln_token_totals() -> tuple[int, int]:
@@ -159,6 +192,7 @@ def get_vuln_token_totals() -> tuple[int, int]:
 
 def record_vulnerability_duration(
     elapsed_s: float, outcome: str, rule_name: str, language: Optional[str], source: str,
+    severity: Optional[str] = None,
 ) -> None:
     """Record end-to-end vulnerability fix duration.
 
@@ -168,16 +202,19 @@ def record_vulnerability_duration(
         rule_name: Contrast rule name (e.g. "sql-injection").
         language: Programming language detected for this app.
         source: Finding source (e.g. "runtime").
+        severity: Vulnerability severity (e.g. "CRITICAL", "HIGH").
     """
     try:
-        _get_vulnerability_duration_histogram().record(elapsed_s, {
+        attrs = {
             "outcome": outcome,
             "rule_name": rule_name,
             "language": language or "unknown",
             "source": source,
-        })
-    except Exception:
-        pass
+            "severity": severity or "unknown",
+        }
+        _get_vulnerability_duration_histogram().record(elapsed_s, attrs)
+    except Exception as e:
+        debug_log(f"OTel metric error in record_vulnerability_duration: {e}")
 
 
 def record_pr_attempt(outcome: str, rule_name: str, coding_agent: str) -> None:
@@ -225,16 +262,23 @@ def record_llm_call_tokens(
     _vuln_input_tokens += total_input
     _vuln_output_tokens += output_tokens
     try:
+        # rule_id is required by the datalake schema for per-rule cost attribution.
+        # It is set via set_current_rule_name() at the start of each vulnerability loop
+        # iteration and read here, since LiteLLM callbacks don't carry vulnerability context.
+        token_attrs = {"gen_ai.request.model": model}
+        if _current_rule_name:
+            token_attrs["rule_name"] = _current_rule_name
+
         total_counter = _get_tokens_total_counter()
-        total_counter.add(total_input, {"gen_ai.token.type": "input", "gen_ai.request.model": model})
-        total_counter.add(output_tokens, {"gen_ai.token.type": "output", "gen_ai.request.model": model})
+        total_counter.add(total_input, {**token_attrs, "gen_ai.token.type": "input"})
+        total_counter.add(output_tokens, {**token_attrs, "gen_ai.token.type": "output"})
 
         if cache_read_tokens or cache_write_tokens:
             cache_counter = _get_cache_tokens_counter()
             if cache_read_tokens:
-                cache_counter.add(cache_read_tokens, {"gen_ai.token.type": "read", "gen_ai.request.model": model})
+                cache_counter.add(cache_read_tokens, {**token_attrs, "gen_ai.token.type": "cache_read"})
             if cache_write_tokens:
-                cache_counter.add(cache_write_tokens, {"gen_ai.token.type": "write", "gen_ai.request.model": model})
+                cache_counter.add(cache_write_tokens, {**token_attrs, "gen_ai.token.type": "cache_creation"})
     except Exception:
         pass
 
@@ -254,6 +298,21 @@ def record_llm_duration(elapsed_s: float, provider_name: str, model: str) -> Non
         })
     except Exception:
         pass
+
+
+def record_pr_merged(coding_agent: str) -> None:
+    """Record a SmartFix PR merge event as a metric.
+
+    Emits smartfix.pr.merged so the datalake can track merge volume independently
+    from PR creation attempts (smartfix.pr.count).
+
+    Args:
+        coding_agent: Coding agent identifier (e.g. "smartfix", "github_copilot").
+    """
+    try:
+        _get_pr_merged_counter().add(1, {"coding_agent": coding_agent})
+    except Exception as e:
+        debug_log(f"OTel metric error in record_pr_merged: {e}")
 
 
 def record_llm_retry(model: str, error_type: str) -> None:
