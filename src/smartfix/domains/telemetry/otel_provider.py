@@ -48,8 +48,16 @@ import os
 from opentelemetry import metrics, trace
 from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-from opentelemetry.sdk.metrics import MeterProvider
-from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+from opentelemetry.sdk.metrics import (
+    Counter,
+    Histogram,
+    MeterProvider,
+    ObservableCounter,
+    ObservableGauge,
+    ObservableUpDownCounter,
+    UpDownCounter,
+)
+from opentelemetry.sdk.metrics.export import AggregationTemporality, PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import Resource, SERVICE_NAME
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
@@ -65,6 +73,24 @@ from src.utils import log
 _tracer_provider = None
 _meter_provider = None
 _shutdown_called = False
+
+# Export metrics with DELTA aggregation temporality rather than the OTLP exporter's
+# default of CUMULATIVE. The data platform team (datalake) standardised on delta: a
+# cumulative series can be derived from deltas but not the other way around, and deltas
+# are simpler to reason about per-run. This mirrors the SDK's standard "delta preference"
+# (OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=DELTA): counters and histograms are
+# delta, while up/down counters and gauges stay cumulative since deltas are meaningless
+# for them. Set explicitly here rather than via the env var because this module passes
+# exporter config directly, since step-level env vars may not propagate within the
+# GitHub composite action environment (see the auth-header note above).
+_DELTA_TEMPORALITY = {
+    Counter: AggregationTemporality.DELTA,
+    Histogram: AggregationTemporality.DELTA,
+    ObservableCounter: AggregationTemporality.DELTA,
+    UpDownCounter: AggregationTemporality.CUMULATIVE,
+    ObservableUpDownCounter: AggregationTemporality.CUMULATIVE,
+    ObservableGauge: AggregationTemporality.CUMULATIVE,
+}
 
 
 def initialize_otel(config) -> None:
@@ -142,7 +168,9 @@ def initialize_otel(config) -> None:
         _tracer_provider = tracer_provider
 
         # --- Metrics ---
-        metric_exporter = OTLPMetricExporter(endpoint=metrics_url, **exporter_kwargs)
+        metric_exporter = OTLPMetricExporter(
+            endpoint=metrics_url, preferred_temporality=_DELTA_TEMPORALITY, **exporter_kwargs
+        )
         reader = PeriodicExportingMetricReader(metric_exporter, export_interval_millis=60000)
         meter_provider = MeterProvider(resource=resource, metric_readers=[reader])
         metrics.set_meter_provider(meter_provider)

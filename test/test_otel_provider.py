@@ -153,6 +153,42 @@ class TestOtelProvider(unittest.TestCase):
 
     @patch("src.smartfix.domains.telemetry.otel_provider.OTLPMetricExporter")
     @patch("src.smartfix.domains.telemetry.otel_provider.OTLPSpanExporter")
+    def test_metrics_exporter_uses_delta_temporality(self, mock_span_cls, mock_metric_cls):
+        """Metrics export as DELTA temporality, not the SDK default CUMULATIVE.
+
+        The data platform team (datalake) standardised on delta because cumulative
+        can be derived from delta but not the reverse. The exporter must therefore
+        receive an explicit preferred_temporality map selecting DELTA for the sync
+        and observable counters and for histograms, while leaving up/down counters
+        and gauges cumulative (delta is meaningless for those).
+        """
+        from opentelemetry.sdk.metrics import (
+            Counter,
+            Histogram,
+            ObservableCounter,
+            ObservableGauge,
+            ObservableUpDownCounter,
+            UpDownCounter,
+        )
+        from opentelemetry.sdk.metrics.export import AggregationTemporality
+
+        os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = "http://localhost:4318"
+        mock_span_cls.return_value = Mock()
+        mock_metric_cls.return_value = Mock()
+
+        otel_provider.initialize_otel(_config())
+
+        mock_metric_cls.assert_called_once()
+        temporality = mock_metric_cls.call_args.kwargs["preferred_temporality"]
+        self.assertEqual(temporality[Counter], AggregationTemporality.DELTA)
+        self.assertEqual(temporality[Histogram], AggregationTemporality.DELTA)
+        self.assertEqual(temporality[ObservableCounter], AggregationTemporality.DELTA)
+        self.assertEqual(temporality[UpDownCounter], AggregationTemporality.CUMULATIVE)
+        self.assertEqual(temporality[ObservableUpDownCounter], AggregationTemporality.CUMULATIVE)
+        self.assertEqual(temporality[ObservableGauge], AggregationTemporality.CUMULATIVE)
+
+    @patch("src.smartfix.domains.telemetry.otel_provider.OTLPMetricExporter")
+    @patch("src.smartfix.domains.telemetry.otel_provider.OTLPSpanExporter")
     def test_auth_headers_come_from_config_not_env(self, mock_span_cls, mock_metric_cls):
         """Auth headers are always derived from config credentials, never from env vars."""
         os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = "http://localhost:4318"
