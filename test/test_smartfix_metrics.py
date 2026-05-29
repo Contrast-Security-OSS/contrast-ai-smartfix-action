@@ -130,7 +130,7 @@ class TestRecordVulnerabilityDuration(unittest.TestCase):
             "outcome": "success",
             "rule_name": "sql-injection",
             "language": "java",
-            "source": "runtime",
+            "contrast.finding.source": "runtime",
             "severity": "unknown",
         })
 

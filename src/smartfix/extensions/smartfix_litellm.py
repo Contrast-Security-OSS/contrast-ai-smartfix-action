@@ -21,11 +21,12 @@
 # #L%
 #
 
-from typing import List, AsyncGenerator
+from typing import List, AsyncGenerator, Optional
 import asyncio
 import json
 import os
 import random
+from urllib.parse import urlparse
 
 import litellm
 from google.adk.models.lite_llm import LiteLlm, _get_completion_inputs
@@ -97,6 +98,32 @@ def _derive_system(model: str) -> str:
     if "/" in model:
         return model.split("/")[0]
     return "unknown"
+
+
+def _extract_server_address(completion_args: dict) -> Optional[str]:
+    """Return the LLM endpoint host for the gen_ai server.address metric attribute.
+
+    The datalake's ai_token_usage and ai_operation_performance tables source the
+    server_address column from server.address on the gen_ai.* metrics. We report the
+    host of the endpoint SmartFix actually calls:
+
+    - An explicit per-call api_base (set by some BYO-LLM configurations) wins.
+    - Otherwise the ANTHROPIC_API_BASE env var, which providers.setup_contrast_provider()
+      points at the Contrast LLM proxy (https://<contrast-host>/api/llm-proxy/...) and which
+      BYO Anthropic callers also set.
+
+    Per OTel semconv server.address is the host only (no scheme or port). For the Contrast
+    LLM this is the proxy host (the endpoint the client connects to), not the upstream model
+    provider. Returns None when the endpoint is unknown so the attribute is omitted rather
+    than emitted empty (e.g. Bedrock, which uses regional SDK endpoints with no api_base).
+    """
+    try:
+        api_base = completion_args.get("api_base") or os.environ.get("ANTHROPIC_API_BASE")
+        if not api_base:
+            return None
+        return urlparse(api_base).hostname
+    except Exception:
+        return None
 
 
 class TokenCostAccumulator:
@@ -510,6 +537,11 @@ class SmartFixLiteLlm(LiteLlm):
                         "gen_ai.request.model": model,
                         "gen_ai.response.model": response_model,
                     }
+                    # server.address feeds the datalake server_address column on the
+                    # gen_ai.* metrics only. Omit it when the endpoint is unknown.
+                    server_address = _extract_server_address(completion_args)
+                    if server_address:
+                        base_attrs["server.address"] = server_address
                     try:
                         total_input = int(input_tokens or 0) + int(cache_read or 0) + int(cache_write or 0)
                         _get_token_usage_histogram().record(

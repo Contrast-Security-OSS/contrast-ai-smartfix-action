@@ -209,7 +209,10 @@ def record_vulnerability_duration(
             "outcome": outcome,
             "rule_name": rule_name,
             "language": language or "unknown",
-            "source": source,
+            # Datalake schema sources the ai_tool_outcomes / ai_operation_performance
+            # `source` column from contrast.finding.source (matching the span attribute
+            # set in main.py), not a bare `source` key.
+            "contrast.finding.source": source,
             "severity": severity or "unknown",
         }
         _get_vulnerability_duration_histogram().record(elapsed_s, attrs)
