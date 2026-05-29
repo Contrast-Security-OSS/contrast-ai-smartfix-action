@@ -31,12 +31,12 @@ This module tests the extended LiteLLM functionality including:
 import asyncio
 import unittest
 import json
-import os
+from types import SimpleNamespace
 from unittest.mock import patch, Mock, MagicMock, AsyncMock
 
 # Test setup imports (path is set up by conftest.py)
 from src.smartfix.extensions.smartfix_litellm import (
-    SmartFixLiteLlm, TokenCostAccumulator, _derive_system, _extract_server_address,
+    SmartFixLiteLlm, TokenCostAccumulator, _derive_system,
 )
 from src.smartfix.domains.providers import CONTRAST_CLAUDE_SONNET_4_5
 
@@ -422,66 +422,16 @@ class TestDeriveSystem(unittest.TestCase):
         self.assertEqual(_derive_system("some-unknown-model"), "unknown")
 
 
-class TestExtractServerAddress(unittest.TestCase):
-    """Tests for _extract_server_address(), which sources the server.address metric attribute.
+class TestGenAiMetricsServerAddress(unittest.TestCase):
+    """server.address is attached to the gen_ai.* metrics from the httpx request hook.
 
-    The datalake's ai_token_usage / ai_operation_performance tables source server_address
-    from the gen_ai.* metrics. We report the host of the endpoint SmartFix actually calls:
-    an explicit per-call api_base, else ANTHROPIC_API_BASE (the Contrast LLM proxy / BYO
-    Anthropic endpoint).
+    The host is captured by otel_provider's httpx request hook (the same source as the
+    http.client.* metrics) and read back via otel_provider.get_last_request_host().
     """
 
     def setUp(self):
-        self._saved = os.environ.get("ANTHROPIC_API_BASE")
-        os.environ.pop("ANTHROPIC_API_BASE", None)
-
-    def tearDown(self):
-        if self._saved is None:
-            os.environ.pop("ANTHROPIC_API_BASE", None)
-        else:
-            os.environ["ANTHROPIC_API_BASE"] = self._saved
-
-    def test_returns_host_from_explicit_api_base(self):
-        self.assertEqual(
-            _extract_server_address({"api_base": "https://api.anthropic.com/v1/messages"}),
-            "api.anthropic.com",
-        )
-
-    def test_explicit_api_base_wins_over_env(self):
-        os.environ["ANTHROPIC_API_BASE"] = "https://env.example.com"
-        self.assertEqual(
-            _extract_server_address({"api_base": "https://explicit.example.com/v1"}),
-            "explicit.example.com",
-        )
-
-    def test_falls_back_to_anthropic_api_base_env(self):
-        os.environ["ANTHROPIC_API_BASE"] = (
-            "https://app.contrastsecurity.com/api/llm-proxy/v2/organizations/abc/anthropic"
-        )
-        self.assertEqual(_extract_server_address({}), "app.contrastsecurity.com")
-
-    def test_strips_port_and_scheme_to_bare_host(self):
-        os.environ["ANTHROPIC_API_BASE"] = "https://llm.contrastsecurity.com:8443/v1"
-        self.assertEqual(_extract_server_address({}), "llm.contrastsecurity.com")
-
-    def test_returns_none_when_no_endpoint_known(self):
-        self.assertIsNone(_extract_server_address({}))
-
-
-class TestGenAiMetricsServerAddress(unittest.TestCase):
-    """server.address is attached to the gen_ai.* metrics when the endpoint is known."""
-
-    def setUp(self):
-        self._saved = os.environ.get("ANTHROPIC_API_BASE")
-        os.environ.pop("ANTHROPIC_API_BASE", None)
         with patch('litellm.completion'):
             self.model = SmartFixLiteLlm(model="anthropic/claude-3-opus")
-
-    def tearDown(self):
-        if self._saved is None:
-            os.environ.pop("ANTHROPIC_API_BASE", None)
-        else:
-            os.environ["ANTHROPIC_API_BASE"] = self._saved
 
     def _make_mock_response(self):
         usage_cls = type("Usage", (), {
@@ -499,10 +449,24 @@ class TestGenAiMetricsServerAddress(unittest.TestCase):
         resp.get = lambda key, default=None: usage if key == "usage" else default
         return resp
 
-    def _run_and_capture_op_duration_attrs(self, completion_args):
-        """Run a successful call and return the attrs passed to the operation.duration histogram."""
+    def _run_and_capture_op_duration_attrs(self, request_host):
+        """Run a successful call and return the attrs passed to the operation.duration histogram.
+
+        Simulates the httpx request hook firing during the call by invoking the real
+        otel_provider._record_request_host from acompletion's side_effect, then letting
+        _call_llm_with_retry read it back through the real get_last_request_host. This
+        exercises the actual ContextVar propagation rather than stubbing the getter.
+        """
+        from src.smartfix.domains.telemetry import otel_provider
+        otel_provider._last_request_host.set(None)
+
+        async def _fake_acompletion(**kwargs):
+            if request_host is not None:
+                otel_provider._record_request_host(Mock(), SimpleNamespace(url=SimpleNamespace(host=request_host)))
+            return self._make_mock_response()
+
         self.model.llm_client = Mock()
-        self.model.llm_client.acompletion = AsyncMock(return_value=self._make_mock_response())
+        self.model.llm_client.acompletion = _fake_acompletion
         mock_hist = Mock()
         with patch('src.smartfix.extensions.smartfix_litellm.otel_provider.start_span'), \
                 patch('src.smartfix.extensions.smartfix_litellm._get_operation_duration_histogram',
@@ -510,21 +474,18 @@ class TestGenAiMetricsServerAddress(unittest.TestCase):
                 patch('src.smartfix.extensions.smartfix_litellm._get_token_usage_histogram',
                       return_value=Mock()), \
                 patch('src.smartfix.extensions.smartfix_litellm.smartfix_metrics'):
-            asyncio.run(self.model._call_llm_with_retry(completion_args))
+            asyncio.run(self.model._call_llm_with_retry({"model": "anthropic/claude-3-opus"}))
         mock_hist.record.assert_called_once()
         return mock_hist.record.call_args[0][1]
 
     @patch('src.smartfix.extensions.smartfix_litellm.debug_log')
-    def test_server_address_attached_from_contrast_proxy_env(self, _mock_log):
-        os.environ["ANTHROPIC_API_BASE"] = (
-            "https://app.contrastsecurity.com/api/llm-proxy/v2/organizations/abc/anthropic"
-        )
-        attrs = self._run_and_capture_op_duration_attrs({"model": "anthropic/claude-3-opus"})
+    def test_server_address_attached_from_request_hook(self, _mock_log):
+        attrs = self._run_and_capture_op_duration_attrs("app.contrastsecurity.com")
         self.assertEqual(attrs.get("server.address"), "app.contrastsecurity.com")
 
     @patch('src.smartfix.extensions.smartfix_litellm.debug_log')
-    def test_server_address_omitted_when_endpoint_unknown(self, _mock_log):
-        attrs = self._run_and_capture_op_duration_attrs({"model": "anthropic/claude-3-opus"})
+    def test_server_address_omitted_when_host_unknown(self, _mock_log):
+        attrs = self._run_and_capture_op_duration_attrs(None)
         self.assertNotIn("server.address", attrs)
 
 

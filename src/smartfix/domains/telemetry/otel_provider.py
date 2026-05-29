@@ -44,6 +44,8 @@ Design notes:
 """
 
 import os
+from contextvars import ContextVar
+from typing import Optional
 
 from opentelemetry import metrics, trace
 from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
@@ -74,6 +76,15 @@ _tracer_provider = None
 _meter_provider = None
 _shutdown_called = False
 
+# Host of the most recent outbound HTTP request, captured by the httpx instrumentation
+# request hook. Used to source the server.address attribute on the hand-emitted gen_ai.*
+# metrics (the datalake's server_address column reads it from those metrics, and litellm
+# does not expose the resolved endpoint on the response object). A ContextVar rather than a
+# plain global so that reading it immediately after an LLM call yields that call's endpoint
+# host, not a host left over from an unrelated concurrent request (Contrast API, telemetry
+# export). Defaults to None so callers degrade to omitting the attribute when it is unset.
+_last_request_host: ContextVar[Optional[str]] = ContextVar("_last_request_host", default=None)
+
 # Export metrics with DELTA aggregation temporality rather than the OTLP exporter's
 # default of CUMULATIVE. The data platform team (datalake) standardised on delta: a
 # cumulative series can be derived from deltas but not the other way around, and deltas
@@ -91,6 +102,42 @@ _DELTA_TEMPORALITY = {
     ObservableUpDownCounter: AggregationTemporality.CUMULATIVE,
     ObservableGauge: AggregationTemporality.CUMULATIVE,
 }
+
+
+def _record_request_host(span, request) -> None:
+    """httpx instrumentation request hook: record the resolved request host.
+
+    `request` is the instrumentation's RequestInfo namedtuple
+    (method, url, headers, stream, extensions); request.url is an httpx.URL whose
+    .host is the server the client actually connected to. Stored in a ContextVar so
+    record_llm_call_tokens()/record_llm_duration() can read it back as the gen_ai
+    server.address attribute. Never raises into the HTTP path.
+    """
+    try:
+        host = request.url.host
+        if host:
+            _last_request_host.set(host)
+    except Exception:
+        pass
+
+
+async def _record_request_host_async(span, request) -> None:
+    """Async variant of _record_request_host for httpx.AsyncClient.
+
+    The httpx instrumentation only honours an async_request_hook that is a coroutine
+    function, so this thin wrapper is registered for the async path (the one LiteLLM
+    uses for acompletion).
+    """
+    _record_request_host(span, request)
+
+
+def get_last_request_host() -> Optional[str]:
+    """Return the host of the most recent outbound HTTP request in this context, or None.
+
+    Intended to be called immediately after an LLM call so the value reflects that call's
+    endpoint. Returns None when no request has been observed or instrumentation is disabled.
+    """
+    return _last_request_host.get()
 
 
 def initialize_otel(config) -> None:
@@ -179,8 +226,15 @@ def initialize_otel(config) -> None:
         # --- HTTP client auto-instrumentation ---
         # Instruments httpx (used by LiteLLM) to emit http.client.* metrics
         # (duration, request/response size) for every outbound LLM API call.
+        # The request hooks additionally capture the resolved request host so callers
+        # can stamp server.address onto the hand-emitted gen_ai.* metrics (see
+        # _record_request_host). Both sync and async hooks are registered because LiteLLM
+        # may use either httpx client depending on the code path.
         if _HTTPX_INSTRUMENTATION_AVAILABLE:
-            HTTPXClientInstrumentor().instrument()
+            HTTPXClientInstrumentor().instrument(
+                request_hook=_record_request_host,
+                async_request_hook=_record_request_host_async,
+            )
 
         header_keys = list(headers.keys()) if headers else []
         log(f"OTel telemetry enabled: exporting to {endpoint}, auth header keys: {header_keys}")

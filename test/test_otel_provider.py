@@ -317,5 +317,49 @@ class TestOtelProvider(unittest.TestCase):
             self.assertIsNotNone(span)
 
 
+class TestRequestHostHook(unittest.TestCase):
+    """The httpx request hook records the resolved host for the server.address attribute."""
+
+    def setUp(self):
+        # Reset the ContextVar to a clean state for each test.
+        otel_provider._last_request_host.set(None)
+
+    def _request(self, host):
+        """Build a stand-in for the instrumentation's RequestInfo with a url.host."""
+        return SimpleNamespace(url=SimpleNamespace(host=host))
+
+    def test_records_host_and_getter_returns_it(self):
+        otel_provider._record_request_host(Mock(), self._request("bedrock-runtime.us-east-2.amazonaws.com"))
+        self.assertEqual(otel_provider.get_last_request_host(), "bedrock-runtime.us-east-2.amazonaws.com")
+
+    def test_getter_returns_none_when_unset(self):
+        self.assertIsNone(otel_provider.get_last_request_host())
+
+    def test_empty_host_does_not_overwrite(self):
+        otel_provider._record_request_host(Mock(), self._request("api.anthropic.com"))
+        otel_provider._record_request_host(Mock(), self._request(""))
+        self.assertEqual(otel_provider.get_last_request_host(), "api.anthropic.com")
+
+    def test_hook_never_raises_on_malformed_request(self):
+        # A request object with no .url attribute must not raise into the HTTP path.
+        otel_provider._record_request_host(Mock(), object())
+        self.assertIsNone(otel_provider.get_last_request_host())
+
+    def test_async_hook_records_host(self):
+        import asyncio
+
+        async def _set_then_read():
+            # Mirror real usage: the hook is awaited and the value is read within the same
+            # event-loop run / task context, where ContextVar changes propagate. (Reading
+            # after asyncio.run returns would not see it, because asyncio.run uses a fresh
+            # context - which is fine, since the production read also happens inside the run.)
+            await otel_provider._record_request_host_async(
+                Mock(), self._request("app.contrastsecurity.com")
+            )
+            return otel_provider.get_last_request_host()
+
+        self.assertEqual(asyncio.run(_set_then_read()), "app.contrastsecurity.com")
+
+
 if __name__ == "__main__":
     unittest.main()
