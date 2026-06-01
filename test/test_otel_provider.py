@@ -335,6 +335,11 @@ class TestRequestHostHook(unittest.TestCase):
     def test_getter_returns_none_when_unset(self):
         self.assertIsNone(otel_provider.get_last_request_host())
 
+    def test_clear_resets_recorded_host_to_none(self):
+        otel_provider._record_request_host(Mock(), self._request("api.anthropic.com"))
+        otel_provider.clear_last_request_host()
+        self.assertIsNone(otel_provider.get_last_request_host())
+
     def test_empty_host_does_not_overwrite(self):
         otel_provider._record_request_host(Mock(), self._request("api.anthropic.com"))
         otel_provider._record_request_host(Mock(), self._request(""))

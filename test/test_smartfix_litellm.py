@@ -488,6 +488,37 @@ class TestGenAiMetricsServerAddress(unittest.TestCase):
         attrs = self._run_and_capture_op_duration_attrs(None)
         self.assertNotIn("server.address", attrs)
 
+    @patch('src.smartfix.extensions.smartfix_litellm.debug_log')
+    def test_stale_host_from_prior_request_does_not_leak(self, _mock_log):
+        """A host left in the ContextVar by a prior (non-LLM) httpx call must not be read.
+
+        _call_llm_with_retry clears the host before the call, so when this call's hook does
+        not fire (request_host=None), server.address is omitted rather than picking up the
+        stale value. Directly exercises the clear-before-call guard.
+        """
+        from src.smartfix.domains.telemetry import otel_provider
+
+        self.model.llm_client = Mock()
+        self.model.llm_client.acompletion = AsyncMock(return_value=self._make_mock_response())
+        mock_hist = Mock()
+
+        async def _run():
+            # Set the leftover host inside the same task context _call_llm_with_retry runs in,
+            # so the stale value is genuinely present before the clear-before-call guard.
+            otel_provider._last_request_host.set("contrast-api.example.com")
+            await self.model._call_llm_with_retry({"model": "anthropic/claude-3-opus"})
+
+        with patch('src.smartfix.extensions.smartfix_litellm.otel_provider.start_span'), \
+                patch('src.smartfix.extensions.smartfix_litellm._get_operation_duration_histogram',
+                      return_value=mock_hist), \
+                patch('src.smartfix.extensions.smartfix_litellm._get_token_usage_histogram',
+                      return_value=Mock()), \
+                patch('src.smartfix.extensions.smartfix_litellm.smartfix_metrics'):
+            asyncio.run(_run())
+
+        attrs = mock_hist.record.call_args[0][1]
+        self.assertNotIn("server.address", attrs)
+
 
 class TestLogCostAnalysisReturnValue(unittest.TestCase):
     """_log_cost_analysis() must return (input_tokens, output_tokens, cache_read, cache_write)."""

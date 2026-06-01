@@ -489,6 +489,9 @@ class SmartFixLiteLlm(LiteLlm):
 
                 t_start = time.monotonic()
                 try:
+                    # Clear any host left by a prior (possibly non-LLM) httpx call so the
+                    # server.address read below reflects only this call's endpoint, or None.
+                    otel_provider.clear_last_request_host()
                     response = await self.llm_client.acompletion(**completion_args)
                     elapsed = time.monotonic() - t_start
 

@@ -80,9 +80,10 @@ _shutdown_called = False
 # request hook. Used to source the server.address attribute on the hand-emitted gen_ai.*
 # metrics (the datalake's server_address column reads it from those metrics, and litellm
 # does not expose the resolved endpoint on the response object). A ContextVar rather than a
-# plain global so that reading it immediately after an LLM call yields that call's endpoint
-# host, not a host left over from an unrelated concurrent request (Contrast API, telemetry
-# export). Defaults to None so callers degrade to omitting the attribute when it is unset.
+# plain global so concurrent LLM calls in separate asyncio tasks (each with its own context
+# copy) don't read each other's host. Callers clear_last_request_host() immediately before a
+# request and read get_last_request_host() immediately after, so the value reflects only that
+# call; defaults to None so the attribute is omitted when no request was observed.
 _last_request_host: ContextVar[Optional[str]] = ContextVar("_last_request_host", default=None)
 
 # Export metrics with DELTA aggregation temporality rather than the OTLP exporter's
@@ -138,6 +139,18 @@ def get_last_request_host() -> Optional[str]:
     endpoint. Returns None when no request has been observed or instrumentation is disabled.
     """
     return _last_request_host.get()
+
+
+def clear_last_request_host() -> None:
+    """Reset the recorded request host to None.
+
+    Call immediately before an LLM request so the subsequent get_last_request_host()
+    reflects only that call. Without this, a host left over from an unrelated httpx call
+    (Contrast API fetch, periodic telemetry export) could be read as the LLM's
+    server.address if the LLM call short-circuits before issuing an HTTP request. Clearing
+    up front makes that case degrade to None (attribute omitted) rather than a stale host.
+    """
+    _last_request_host.set(None)
 
 
 def initialize_otel(config) -> None:
