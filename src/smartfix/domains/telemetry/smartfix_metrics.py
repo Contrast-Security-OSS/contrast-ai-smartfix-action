@@ -209,6 +209,9 @@ def record_vulnerability_duration(
             "outcome": outcome,
             "rule_name": rule_name,
             "language": language or "unknown",
+            # The datalake converter reads this column from the bare `source` key (confirmed
+            # by Munir on the data platform side), even though the span uses
+            # contrast.finding.source. Keep it as `source`; do not "align" it to the span key.
             "source": source,
             "severity": severity or "unknown",
         }

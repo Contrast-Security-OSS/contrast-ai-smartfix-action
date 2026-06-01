@@ -489,6 +489,9 @@ class SmartFixLiteLlm(LiteLlm):
 
                 t_start = time.monotonic()
                 try:
+                    # Clear any host left by a prior (possibly non-LLM) httpx call so the
+                    # server.address read below reflects only this call's endpoint, or None.
+                    otel_provider.clear_last_request_host()
                     response = await self.llm_client.acompletion(**completion_args)
                     elapsed = time.monotonic() - t_start
 
@@ -510,6 +513,13 @@ class SmartFixLiteLlm(LiteLlm):
                         "gen_ai.request.model": model,
                         "gen_ai.response.model": response_model,
                     }
+                    # server.address feeds the datalake server_address column on the
+                    # gen_ai.* metrics. Sourced from the httpx instrumentation request hook,
+                    # which recorded the actual resolved host of the call we just made (the
+                    # same source as the http.client.* metrics). Omit when unknown.
+                    server_address = otel_provider.get_last_request_host()
+                    if server_address:
+                        base_attrs["server.address"] = server_address
                     try:
                         total_input = int(input_tokens or 0) + int(cache_read or 0) + int(cache_write or 0)
                         _get_token_usage_histogram().record(
