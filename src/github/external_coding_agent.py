@@ -62,6 +62,9 @@ class ExternalCodingAgent(CodingAgentStrategy):
         # Extract key details with safe fallbacks
         vuln_title = vulnerability_details.get('vulnerabilityTitle', 'Unknown Vulnerability')
         vuln_uuid = vulnerability_details.get('vulnerabilityUuid', 'Unknown UUID')
+        mode = vulnerability_details.get('mode', 'CLASSIC')
+        issue_id = vulnerability_details.get('issueId')
+        primary_id = issue_id if mode == 'NORTHSTAR_ONLY' else vuln_uuid
         vuln_rule = vulnerability_details.get('vulnerabilityRuleName', 'Unknown Rule')
         vuln_severity = vulnerability_details.get('vulnerabilitySeverity', 'Unknown Severity')
         vuln_status = vulnerability_details.get('vulnerabilityStatus', 'Unknown Status')
@@ -81,7 +84,11 @@ class ExternalCodingAgent(CodingAgentStrategy):
         # If neither is available (monorepo with no singular app configured), omit the app
         # segment to avoid a broken link.
         application_id = vulnerability_details.get('applicationId') or self.config.CONTRAST_APP_ID
-        if application_id:
+        if mode == 'NORTHSTAR_ONLY' and issue_id:
+            # NorthStar UI deeplink: /Contrast/cs/index.html#{orgId}/issues/{issueId}
+            contrast_url = (f"https://{self.config.CONTRAST_HOST}/Contrast/cs/index.html#"
+                            f"{self.config.CONTRAST_ORG_ID}/issues/{issue_id}")
+        elif application_id:
             contrast_url = (f"https://{self.config.CONTRAST_HOST}/Contrast/static/ng/index.html#/"
                             f"{self.config.CONTRAST_ORG_ID}/applications/{application_id}/vulns/{vuln_uuid}")
         else:
@@ -91,7 +98,7 @@ class ExternalCodingAgent(CodingAgentStrategy):
         issue_body = f"""
 # Contrast AI SmartFix Issue Report
 
-This issue should address a vulnerability identified by the Contrast Security platform (ID: [{vuln_uuid}]({contrast_url})).
+This issue should address a security finding identified by the Contrast Security platform (ID: [{primary_id}]({contrast_url})).
 
 # Security Vulnerability: {vuln_title}
 
