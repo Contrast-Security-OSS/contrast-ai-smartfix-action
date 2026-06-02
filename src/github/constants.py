@@ -33,4 +33,4 @@ GITHUB_WORKFLOW_RUN_LIMIT = 50
 
 # SmartFix-managed PR/issue label prefixes — used to identify labels SmartFix
 # attaches (and now removes on PR close/merge).
-SMARTFIX_LABEL_PREFIXES = ("smartfix-id:", "contrast-vuln-id:")
+SMARTFIX_LABEL_PREFIXES = ("smartfix-id:", "contrast-vuln-id:", "contrast-issue-id:")

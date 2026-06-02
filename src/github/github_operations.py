@@ -272,10 +272,18 @@ class GitHubOperations(ScmOperations):
                 debug_log(f"Error checking if Issues are enabled, assuming they are: {e}")
                 return True
 
-    def generate_label_details(self, vuln_uuid: str) -> tuple[str, str, str]:
-        """Generates the label name, description, and color."""
-        label_name = f"contrast-vuln-id:VULN-{vuln_uuid}"
-        label_description = "Vulnerability identified by Contrast AI SmartFix"
+    def generate_label_details(self, vuln_uuid: str, mode: str = 'CLASSIC', issue_id: str = None) -> tuple[str, str, str]:
+        """Generates the label name, description, and color.
+
+        For NORTHSTAR_ONLY mode uses contrast-issue-id:{issueId}.
+        For CLASSIC mode uses contrast-vuln-id:VULN-{vuln_uuid}.
+        """
+        if mode == 'NORTHSTAR_ONLY' and issue_id:
+            label_name = f"contrast-issue-id:{issue_id}"
+            label_description = "Issue identified by Contrast AI SmartFix"
+        else:
+            label_name = f"contrast-vuln-id:VULN-{vuln_uuid}"
+            label_description = "Vulnerability identified by Contrast AI SmartFix"
         label_color = "ff0000"  # Red
         return label_name, label_description, label_color
 
@@ -432,12 +440,12 @@ class GitHubOperations(ScmOperations):
         debug_log(f"No existing OPEN or MERGED PR found for label {label_name}.")
         return "NONE"
 
-    def count_open_prs_with_prefix(self, label_prefix: str, remediation_id: str) -> int:
+    def count_open_prs_with_prefix(self, label_prefix, remediation_id: str) -> int:
         """
         Counts the number of open GitHub PRs with at least one label starting with the given prefix.
 
         Args:
-            label_prefix: Prefix to match against PR labels
+            label_prefix: Prefix string or tuple of prefix strings to match against PR labels
             remediation_id: Remediation ID for error context
         """
         log(f"Counting open PRs with label prefix: '{label_prefix}' (remediation: {remediation_id})")
@@ -1152,6 +1160,8 @@ class GitHubOperations(ScmOperations):
         for label_name in labels:
             if label_name.startswith("contrast-vuln-id:"):
                 self.ensure_label(label_name, "Vulnerability identified by Contrast", "ff0000")  # Red
+            elif label_name.startswith("contrast-issue-id:"):
+                self.ensure_label(label_name, "Issue identified by Contrast AI SmartFix", "ff0000")  # Red
             elif label_name.startswith("smartfix-id:"):
                 self.ensure_label(label_name, "Remediation ID for Contrast vulnerability", "0075ca")  # Blue
             else:

@@ -112,23 +112,33 @@ def _extract_remediation_info(pull_request: dict) -> tuple:
 
 
 def _extract_vulnerability_info(labels: list) -> str:
-    """Extract vulnerability UUID from PR labels."""
-    vuln_uuid = "unknown"
+    """Extract primary finding identifier from PR labels.
+
+    Recognises both Classic (contrast-vuln-id:VULN-*) and NorthStar
+    (contrast-issue-id:*) label formats.
+    """
+    primary_id = "unknown"
 
     for label in labels:
         label_name = label.get("name", "")
         if label_name.startswith("contrast-vuln-id:VULN-"):
             # Extract UUID from label format "contrast-vuln-id:VULN-{vuln_uuid}"
             label_name_parts = label_name.split("VULN-")
-            vuln_uuid = label_name_parts[1] if len(label_name_parts) > 1 else "unknown"
-            if vuln_uuid and vuln_uuid != "unknown":
-                debug_log(f"Extracted Vulnerability UUID from PR label: {vuln_uuid}")
+            primary_id = label_name_parts[1] if len(label_name_parts) > 1 else "unknown"
+            if primary_id and primary_id != "unknown":
+                debug_log(f"Extracted vulnerability UUID from PR label: {primary_id}")
+                break
+        elif label_name.startswith("contrast-issue-id:"):
+            # Extract issueId from label format "contrast-issue-id:{issueId}"
+            primary_id = label_name[len("contrast-issue-id:"):]
+            if primary_id:
+                debug_log(f"Extracted NorthStar issue ID from PR label: {primary_id}")
                 break
 
-    if vuln_uuid == "unknown":
-        debug_log("Could not extract vulnerability UUID from PR labels. Telemetry may be incomplete.")
+    if primary_id == "unknown":
+        debug_log("Could not extract finding identifier from PR labels. Telemetry may be incomplete.")
 
-    return vuln_uuid
+    return primary_id
 
 
 def _notify_remediation_service(remediation_id: str):

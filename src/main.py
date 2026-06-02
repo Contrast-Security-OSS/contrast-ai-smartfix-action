@@ -150,7 +150,7 @@ def _main_impl(vuln_count: list[int], prs_created_count: list[int]) -> None:  # 
 
     # Check Open PR Limit
     log("\n::group::--- Checking Open PR Limit ---")
-    label_prefix_to_check = "contrast-vuln-id:"
+    label_prefix_to_check = ("contrast-vuln-id:", "contrast-issue-id:")
     current_open_pr_count = github_ops.count_open_prs_with_prefix(label_prefix_to_check, "unknown")
     if current_open_pr_count >= max_open_prs_setting:
         log(f"Found {current_open_pr_count} open PR(s) with label prefix '{label_prefix_to_check}'.")
@@ -300,8 +300,7 @@ def _main_impl(vuln_count: list[int], prs_created_count: list[int]) -> None:  # 
         log(f"\n::group::--- Considering Finding: {vuln_title} (ID: {primary_id}) ---")
 
         # --- Check for Existing PRs ---
-        # label_name will use primary_id once I.2+I.3 updates generate_label_details for NS mode
-        label_name, _, _ = github_ops.generate_label_details(vuln_uuid)
+        label_name, _, _ = github_ops.generate_label_details(vuln_uuid, mode=mode, issue_id=issue_id)
         pr_status = github_ops.check_pr_status_for_label(label_name)
 
         # Changed this logic to check only for OPEN PRs for dev purposes
