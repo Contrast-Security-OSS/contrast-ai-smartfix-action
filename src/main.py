@@ -295,6 +295,7 @@ def _main_impl(vuln_count: list[int], prs_created_count: list[int]) -> None:  # 
         # Populate vulnInfo in telemetry
         telemetry_handler.update_telemetry("vulnInfo.vulnId", primary_id)
         telemetry_handler.update_telemetry("vulnInfo.vulnRule", vulnerability_data['vulnerabilityRuleName'])
+        telemetry_handler.update_telemetry("vulnInfo.northstarMode", mode == 'NORTHSTAR_ONLY')
         telemetry_handler.update_telemetry("additionalAttributes.remediationId", remediation_id)
 
         log(f"\n::group::--- Considering Finding: {vuln_title} (ID: {primary_id}) ---")
@@ -595,6 +596,7 @@ def _main_impl(vuln_count: list[int], prs_created_count: list[int]) -> None:  # 
                         outcome=pr_metric_outcome,
                         rule_name=vulnerability.rule_name,
                         coding_agent=config.CODING_AGENT.lower(),
+                        northstar_mode=(mode == 'NORTHSTAR_ONLY'),
                     )
 
                     if not pr_creation_success:
@@ -655,6 +657,7 @@ def _main_impl(vuln_count: list[int], prs_created_count: list[int]) -> None:  # 
                     language=lang or "unknown",
                     source="runtime",
                     severity=_severity,
+                    northstar_mode=(mode == 'NORTHSTAR_ONLY'),
                 )
 
     # Calculate total runtime

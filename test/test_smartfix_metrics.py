@@ -132,7 +132,22 @@ class TestRecordVulnerabilityDuration(unittest.TestCase):
             "language": "java",
             "source": "runtime",
             "severity": "unknown",
+            "northstar_mode": False,
         })
+
+    def test_records_northstar_mode_true(self):
+        import src.smartfix.domains.telemetry.smartfix_metrics as m
+        m.record_vulnerability_duration(1.0, "success", "sql-injection", "java", "runtime", northstar_mode=True)
+
+        attrs = self.mock_histogram.record.call_args[0][1]
+        self.assertTrue(attrs["northstar_mode"])
+
+    def test_records_northstar_mode_false_by_default(self):
+        import src.smartfix.domains.telemetry.smartfix_metrics as m
+        m.record_vulnerability_duration(1.0, "success", "sql-injection", "java", "runtime")
+
+        attrs = self.mock_histogram.record.call_args[0][1]
+        self.assertFalse(attrs["northstar_mode"])
 
     def test_includes_severity_when_provided(self):
         import src.smartfix.domains.telemetry.smartfix_metrics as m
@@ -177,6 +192,7 @@ class TestRecordPrAttempt(unittest.TestCase):
             "outcome": "success",
             "rule_name": "sql-injection",
             "coding_agent": "smartfix",
+            "northstar_mode": False,
         })
 
     def test_records_failure(self):
@@ -187,7 +203,15 @@ class TestRecordPrAttempt(unittest.TestCase):
             "outcome": "failure",
             "rule_name": "xss",
             "coding_agent": "github_copilot",
+            "northstar_mode": False,
         })
+
+    def test_records_northstar_mode_true(self):
+        import src.smartfix.domains.telemetry.smartfix_metrics as m
+        m.record_pr_attempt("success", "sql-injection", "smartfix", northstar_mode=True)
+
+        attrs = self.mock_counter.add.call_args[0][1]
+        self.assertTrue(attrs["northstar_mode"])
 
     def test_suppresses_instrument_errors(self):
         import src.smartfix.domains.telemetry.smartfix_metrics as m
