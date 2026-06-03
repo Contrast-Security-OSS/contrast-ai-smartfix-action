@@ -39,7 +39,7 @@ def reset_vuln_specific_telemetry() -> None:
 
     _telemetry_data["vulnInfo"]["vulnId"] = None
     _telemetry_data["vulnInfo"]["vulnRule"] = None
-    _telemetry_data["vulnInfo"]["northstarMode"] = False
+    _telemetry_data["vulnInfo"]["northstarMode"] = "CLASSIC"
     _telemetry_data["appInfo"]["programmingLanguage"] = None
     _telemetry_data["appInfo"]["technicalStackInfo"] = None
     _telemetry_data["appInfo"]["frameworksAndLibraries"] = []
@@ -65,7 +65,7 @@ def initialize_telemetry() -> None:
         "vulnInfo": {
             "vulnId": None,
             "vulnRule": None,
-            "northstarMode": False,
+            "northstarMode": "CLASSIC",
         },
         "appInfo": {
             "programmingLanguage": None,

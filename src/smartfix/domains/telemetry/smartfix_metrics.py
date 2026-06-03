@@ -193,7 +193,7 @@ def get_vuln_token_totals() -> tuple[int, int]:
 def record_vulnerability_duration(
     elapsed_s: float, outcome: str, rule_name: str, language: Optional[str], source: str,
     severity: Optional[str] = None,
-    northstar_mode: bool = False,
+    mode: str = "CLASSIC",
 ) -> None:
     """Record end-to-end vulnerability fix duration.
 
@@ -204,7 +204,7 @@ def record_vulnerability_duration(
         language: Programming language detected for this app.
         source: Finding source (e.g. "runtime").
         severity: Vulnerability severity (e.g. "CRITICAL", "HIGH").
-        northstar_mode: True when the finding was served via NORTHSTAR_ONLY mode.
+        mode: Remediation mode string from the API (e.g. "CLASSIC", "NORTHSTAR_ONLY").
     """
     try:
         attrs = {
@@ -216,14 +216,14 @@ def record_vulnerability_duration(
             # contrast.finding.source. Keep it as `source`; do not "align" it to the span key.
             "source": source,
             "severity": severity or "unknown",
-            "northstar_mode": northstar_mode,
+            "mode": mode,
         }
         _get_vulnerability_duration_histogram().record(elapsed_s, attrs)
     except Exception as e:
         debug_log(f"OTel metric error in record_vulnerability_duration: {e}")
 
 
-def record_pr_attempt(outcome: str, rule_name: str, coding_agent: str, northstar_mode: bool = False) -> None:
+def record_pr_attempt(outcome: str, rule_name: str, coding_agent: str, mode: str = "CLASSIC") -> None:
     """Record a PR creation attempt.
 
     Note for dashboard consumers: this counter reflects only PRs created by the
@@ -234,14 +234,14 @@ def record_pr_attempt(outcome: str, rule_name: str, coding_agent: str, northstar
         outcome: "success" or "failure".
         rule_name: Contrast rule name.
         coding_agent: Coding agent identifier (e.g. "smartfix").
-        northstar_mode: True when the finding was served via NORTHSTAR_ONLY mode.
+        mode: Remediation mode string from the API (e.g. "CLASSIC", "NORTHSTAR_ONLY").
     """
     try:
         _get_pr_count_counter().add(1, {
             "outcome": outcome,
             "rule_name": rule_name,
             "coding_agent": coding_agent,
-            "northstar_mode": northstar_mode,
+            "mode": mode,
         })
     except Exception:
         pass
