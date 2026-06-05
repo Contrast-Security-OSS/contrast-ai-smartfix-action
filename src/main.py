@@ -166,12 +166,12 @@ def _main_impl(vuln_count: list[int], prs_created_count: list[int]) -> None:  # 
     label_prefix_to_check = ("contrast-vuln-id:", "contrast-issue-id:")
     current_open_pr_count = github_ops.count_open_prs_with_prefix(label_prefix_to_check, "unknown")
     if current_open_pr_count >= max_open_prs_setting:
-        log(f"Found {current_open_pr_count} open PR(s) with label prefix '{label_prefix_to_check}'.")
+        log(f"Found {current_open_pr_count} open PR(s) with label prefix '{', '.join(label_prefix_to_check)}'.")
         log(f"This meets or exceeds the configured limit of {max_open_prs_setting}.")
         log("Exiting script to avoid creating more PRs.")
         sys.exit(0)
     else:
-        log(f"Found {current_open_pr_count} open PR(s) with label prefix '{label_prefix_to_check}' (Limit: {max_open_prs_setting}). Proceeding...")
+        log(f"Found {current_open_pr_count} open PR(s) with label prefix '{', '.join(label_prefix_to_check)}' (Limit: {max_open_prs_setting}). Proceeding...")
     log("\n::endgroup::")
     # END Check Open PR Limit
 
