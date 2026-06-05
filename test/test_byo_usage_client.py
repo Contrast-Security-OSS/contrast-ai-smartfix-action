@@ -163,28 +163,34 @@ class TestByoUsageClientInit(unittest.TestCase):
 class TestByoUsageClientReportUsage(unittest.TestCase):
     """Tests for ByoUsageClient.report_usage and _post_usage."""
 
-    @_patch_debug_log
-    @patch("src.smartfix.clients.byo_usage_client.httpx.Client")
-    def test_successful_report(self, mock_client_cls, _mock_log):
+    def setUp(self):
+        self._httpx_patcher = patch("src.smartfix.clients.byo_usage_client.httpx.Client")
+        self._log_patcher = patch("src.smartfix.clients.byo_usage_client.debug_log")
+        mock_client_cls = self._httpx_patcher.start()
+        self._log_patcher.start()
+        self.mock_http = mock_client_cls.return_value
+        self.mock_http.post.return_value = httpx.Response(status_code=200)
+        self.client = _make_client()
+
+    def tearDown(self):
+        self._httpx_patcher.stop()
+        self._log_patcher.stop()
+
+    def _submit_and_drain(self):
+        """Submit one report with sample data and wait for delivery."""
+        self.client.report_usage(**_sample_usage_kwargs())
+        self.client.shutdown()
+
+    def test_successful_report(self):
         """
         Given a 200 response from the proxy,
         when report_usage is called and shutdown drains,
         then exactly one POST is made with the correct body and headers.
         """
-        # given
-        sample_response = httpx.Response(status_code=200)
-        mock_http = mock_client_cls.return_value
-        mock_http.post.return_value = sample_response
+        self._submit_and_drain()
 
-        client = _make_client()
-
-        # when
-        client.report_usage(**_sample_usage_kwargs())
-        client.shutdown()
-
-        # then
-        mock_http.post.assert_called_once()
-        _, kwargs = mock_http.post.call_args
+        self.mock_http.post.assert_called_once()
+        _, kwargs = self.mock_http.post.call_args
         body = kwargs["json"]
         headers = kwargs["headers"]
 
@@ -204,163 +210,118 @@ class TestByoUsageClientReportUsage(unittest.TestCase):
         self.assertEqual(headers["x-contrast-llm-repo"], SAMPLE_REPO)
         self.assertEqual(headers["x-contrast-llm-source-language"], SAMPLE_LANGUAGE)
 
-    @_patch_debug_log
-    @patch("src.smartfix.clients.byo_usage_client.httpx.Client")
-    def test_attribution_fields_not_in_body(self, mock_client_cls, _mock_log):
+    def test_attribution_fields_not_in_body(self):
         """
         Given a successful POST,
         when report_usage is called,
         then attribution fields (feature, vuln_id, etc.) appear in headers only,
         not in the POST body.
         """
-        mock_http = mock_client_cls.return_value
-        mock_http.post.return_value = httpx.Response(status_code=200)
+        self._submit_and_drain()
 
-        client = _make_client()
-        client.report_usage(**_sample_usage_kwargs())
-        client.shutdown()
-
-        body = mock_http.post.call_args.kwargs["json"]
+        body = self.mock_http.post.call_args.kwargs["json"]
         for key in ("feature", "vuln_id", "session_id", "repo", "source_language"):
             self.assertNotIn(key, body)
 
-    @_patch_debug_log
-    @patch("src.smartfix.clients.byo_usage_client.httpx.Client")
-    def test_retries_on_500(self, mock_client_cls, _mock_log):
+    def test_retries_on_500(self):
         """
         Given a 500 response followed by a 200,
         when report_usage is called,
         then two POSTs are made (one retry) with the same request_id.
         """
-        mock_http = mock_client_cls.return_value
-        mock_http.post.side_effect = [
+        self.mock_http.post.side_effect = [
             httpx.Response(status_code=500),
             httpx.Response(status_code=200),
         ]
 
-        client = _make_client()
-        client.report_usage(**_sample_usage_kwargs())
-        client.shutdown()
+        self._submit_and_drain()
 
-        self.assertEqual(mock_http.post.call_count, 2)
-
-        # Both attempts should use the same request_id for deduplication
-        first_body = mock_http.post.call_args_list[0].kwargs["json"]
-        second_body = mock_http.post.call_args_list[1].kwargs["json"]
+        self.assertEqual(self.mock_http.post.call_count, 2)
+        first_body = self.mock_http.post.call_args_list[0].kwargs["json"]
+        second_body = self.mock_http.post.call_args_list[1].kwargs["json"]
         self.assertEqual(first_body["request_id"], second_body["request_id"])
 
-    @_patch_debug_log
-    @patch("src.smartfix.clients.byo_usage_client.httpx.Client")
-    def test_no_retry_on_4xx(self, mock_client_cls, _mock_log):
+    def test_no_retry_on_4xx(self):
         """
         Given a 400 response,
         when report_usage is called,
         then only one POST is made (no retry for client errors).
         """
-        mock_http = mock_client_cls.return_value
-        mock_http.post.return_value = httpx.Response(status_code=400)
+        self.mock_http.post.return_value = httpx.Response(status_code=400)
 
-        client = _make_client()
-        client.report_usage(**_sample_usage_kwargs())
-        client.shutdown()
+        self._submit_and_drain()
 
-        self.assertEqual(mock_http.post.call_count, 1)
+        self.assertEqual(self.mock_http.post.call_count, 1)
 
-    @_patch_debug_log
-    @patch("src.smartfix.clients.byo_usage_client.httpx.Client")
-    def test_retries_on_timeout(self, mock_client_cls, _mock_log):
+    def test_retries_on_timeout(self):
         """
         Given a timeout on the first attempt and success on the second,
         when report_usage is called,
         then two POSTs are made.
         """
-        mock_http = mock_client_cls.return_value
-        mock_http.post.side_effect = [
+        self.mock_http.post.side_effect = [
             httpx.TimeoutException("read timed out"),
             httpx.Response(status_code=200),
         ]
 
-        client = _make_client()
-        client.report_usage(**_sample_usage_kwargs())
-        client.shutdown()
+        self._submit_and_drain()
 
-        self.assertEqual(mock_http.post.call_count, 2)
+        self.assertEqual(self.mock_http.post.call_count, 2)
 
-    @_patch_debug_log
-    @patch("src.smartfix.clients.byo_usage_client.httpx.Client")
-    def test_retries_on_connect_error(self, mock_client_cls, _mock_log):
+    def test_retries_on_connect_error(self):
         """
         Given a connection error on the first attempt and success on the second,
         when report_usage is called,
         then two POSTs are made.
         """
-        mock_http = mock_client_cls.return_value
-        mock_http.post.side_effect = [
+        self.mock_http.post.side_effect = [
             httpx.ConnectError("connection refused"),
             httpx.Response(status_code=200),
         ]
 
-        client = _make_client()
-        client.report_usage(**_sample_usage_kwargs())
-        client.shutdown()
+        self._submit_and_drain()
 
-        self.assertEqual(mock_http.post.call_count, 2)
+        self.assertEqual(self.mock_http.post.call_count, 2)
 
-    @_patch_debug_log
-    @patch("src.smartfix.clients.byo_usage_client.httpx.Client")
-    def test_failed_count_after_exhausted_retries(self, mock_client_cls, _mock_log):
+    def test_failed_count_after_exhausted_retries(self):
         """
         Given network errors on all attempts,
         when report_usage is called and shutdown drains,
         then the failure is counted.
         """
-        mock_http = mock_client_cls.return_value
-        mock_http.post.side_effect = httpx.ConnectError("connection refused")
+        self.mock_http.post.side_effect = httpx.ConnectError("connection refused")
 
-        client = _make_client()
-        client.report_usage(**_sample_usage_kwargs())
-        client.shutdown()
+        self._submit_and_drain()
 
-        self.assertEqual(client._failed, 1)
+        self.assertEqual(self.client._failed, 1)
 
-    @_patch_debug_log
-    @patch("src.smartfix.clients.byo_usage_client.httpx.Client")
-    def test_failed_count_on_4xx_rejection(self, mock_client_cls, _mock_log):
+    def test_failed_count_on_4xx_rejection(self):
         """
         Given a 400 rejection,
         when report_usage is called,
         then the failure is counted.
         """
-        mock_http = mock_client_cls.return_value
-        mock_http.post.return_value = httpx.Response(status_code=400)
+        self.mock_http.post.return_value = httpx.Response(status_code=400)
 
-        client = _make_client()
-        client.report_usage(**_sample_usage_kwargs())
-        client.shutdown()
+        self._submit_and_drain()
 
-        self.assertEqual(client._failed, 1)
+        self.assertEqual(self.client._failed, 1)
 
-    @_patch_debug_log
-    @patch("src.smartfix.clients.byo_usage_client.httpx.Client")
-    def test_multiple_reports_submitted_sequentially(self, mock_client_cls, _mock_log):
+    def test_multiple_reports_submitted_sequentially(self):
         """
         Given three report_usage calls,
         when shutdown drains,
         then three POSTs are made, each with a unique request_id.
         """
-        mock_http = mock_client_cls.return_value
-        mock_http.post.return_value = httpx.Response(status_code=200)
-
-        client = _make_client()
         for _ in range(3):
-            client.report_usage(**_sample_usage_kwargs())
-        client.shutdown()
+            self.client.report_usage(**_sample_usage_kwargs())
+        self.client.shutdown()
 
-        self.assertEqual(mock_http.post.call_count, 3)
-        self.assertEqual(client._submitted, 3)
+        self.assertEqual(self.mock_http.post.call_count, 3)
+        self.assertEqual(self.client._submitted, 3)
 
         request_ids = [
-            c.kwargs["json"]["request_id"] for c in mock_http.post.call_args_list
+            c.kwargs["json"]["request_id"] for c in self.mock_http.post.call_args_list
         ]
         self.assertEqual(len(set(request_ids)), 3)
 

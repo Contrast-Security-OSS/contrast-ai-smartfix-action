@@ -97,8 +97,12 @@ class ByoUsageClient:
     def __init__(self, contrast_host: str, api_key: str, authorization: str, org_id: str):
         host = normalize_host(contrast_host)
         self._url = f"https://{host}/api/llm-proxy/v2/organizations/{org_id}/usage"
-        self._api_key = api_key
-        self._authorization = authorization
+        self._base_headers: dict[str, str] = {
+            "API-Key": api_key,
+            "Authorization": authorization,
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
         self._http = httpx.Client()
         self._executor = ThreadPoolExecutor(max_workers=1)
         self._futures: list[Future] = []
@@ -175,10 +179,7 @@ class ByoUsageClient:
         # Generated once and reused across retries so the proxy can deduplicate.
         request_id = str(uuid.uuid4())
         headers: dict[str, str] = {
-            "API-Key": self._api_key,
-            "Authorization": self._authorization,
-            "Content-Type": "application/json",
-            "Accept": "application/json",
+            **self._base_headers,
             **_build_attribution_headers(
                 feature=payload["feature"],
                 vuln_id=payload["vuln_id"],
