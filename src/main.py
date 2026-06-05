@@ -63,6 +63,18 @@ github_ops = GitHubOperations()
 apply_asyncio_workarounds()
 
 
+def _extract_finding_ids(vulnerability_data: dict, fallback_remediation_id: str) -> tuple:
+    """Extract and validate vuln_uuid, mode, issue_id, and primary_id from API response data."""
+    vuln_uuid = vulnerability_data['vulnerabilityUuid']
+    mode = vulnerability_data.get('mode', CLASSIC)
+    issue_id = vulnerability_data.get('issueId')
+    if mode == NORTHSTAR_ONLY and not issue_id:
+        debug_log(f"NORTHSTAR_ONLY finding missing issueId; vuln_uuid={vuln_uuid}, remediationId={vulnerability_data.get('remediationId', 'unknown')}")
+        error_exit(vulnerability_data.get('remediationId', fallback_remediation_id), FailureCategory.GENERAL_FAILURE.value)
+    primary_id = issue_id if mode == NORTHSTAR_ONLY else vuln_uuid
+    return vuln_uuid, mode, issue_id, primary_id
+
+
 def main():
     """Entry point: initialise OTel, start root span, then run the implementation."""
     otel_provider.initialize_otel(config)
@@ -227,13 +239,7 @@ def _main_impl(vuln_count: list[int], prs_created_count: list[int]) -> None:  # 
                 log(f"Warning: {len(skipped_app_ids)} app(s) were inaccessible and skipped: {skipped_app_ids}", is_warning=True)
 
             # Extract vulnerability details and prompts from the response
-            vuln_uuid = vulnerability_data['vulnerabilityUuid']
-            mode = vulnerability_data.get('mode', CLASSIC)
-            issue_id = vulnerability_data.get('issueId')
-            if mode == NORTHSTAR_ONLY and not issue_id:
-                debug_log(f"NORTHSTAR_ONLY finding missing issueId; vuln_uuid={vuln_uuid}, remediationId={vulnerability_data.get('remediationId', 'unknown')}")
-                error_exit(vulnerability_data.get('remediationId', remediation_id), FailureCategory.GENERAL_FAILURE.value)
-            primary_id = issue_id if mode == NORTHSTAR_ONLY else vuln_uuid
+            vuln_uuid, mode, issue_id, primary_id = _extract_finding_ids(vulnerability_data, remediation_id)
 
             # Check if this is the same primary identifier as the previous iteration
             if primary_id == previous_primary_id:
@@ -278,13 +284,7 @@ def _main_impl(vuln_count: list[int], prs_created_count: list[int]) -> None:  # 
                 log(f"Warning: {len(skipped_app_ids)} app(s) were inaccessible and skipped: {skipped_app_ids}", is_warning=True)
 
             # Extract vulnerability details from the response (no prompts for external agents)
-            vuln_uuid = vulnerability_data['vulnerabilityUuid']
-            mode = vulnerability_data.get('mode', CLASSIC)
-            issue_id = vulnerability_data.get('issueId')
-            if mode == NORTHSTAR_ONLY and not issue_id:
-                debug_log(f"NORTHSTAR_ONLY finding missing issueId; vuln_uuid={vuln_uuid}, remediationId={vulnerability_data.get('remediationId', 'unknown')}")
-                error_exit(vulnerability_data.get('remediationId', remediation_id), FailureCategory.GENERAL_FAILURE.value)
-            primary_id = issue_id if mode == NORTHSTAR_ONLY else vuln_uuid
+            vuln_uuid, mode, issue_id, primary_id = _extract_finding_ids(vulnerability_data, remediation_id)
 
             # Check if this is the same primary identifier as the previous iteration
             if primary_id == previous_primary_id:
