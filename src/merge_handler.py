@@ -130,10 +130,13 @@ def _extract_vulnerability_info(labels: list) -> str:
                 break
         elif label_name.startswith("contrast-issue-id:"):
             # Extract issueId from label format "contrast-issue-id:{issueId}"
-            primary_id = label_name[len("contrast-issue-id:"):]
-            if primary_id:
+            extracted = label_name[len("contrast-issue-id:"):]
+            if extracted:
+                primary_id = extracted
                 debug_log(f"Extracted NorthStar issue ID from PR label: {primary_id}")
                 break
+            else:
+                debug_log(f"Found contrast-issue-id label with empty value on PR label '{label_name}'; skipping.")
 
     if primary_id == "unknown":
         debug_log("Could not extract finding identifier from PR labels. Telemetry may be incomplete.")
