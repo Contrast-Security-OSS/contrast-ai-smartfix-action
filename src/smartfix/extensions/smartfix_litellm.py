@@ -708,7 +708,7 @@ class SmartFixLiteLlm(LiteLlm):
                 new_input_cost, cache_read_cost, cache_write_cost, output_cost
             )
 
-            # Fire per-call usage callback (e.g., BYO usage reporting)
+            # Fire per-call usage callback
             if self._on_usage_event is not None:
                 try:
                     self._on_usage_event(

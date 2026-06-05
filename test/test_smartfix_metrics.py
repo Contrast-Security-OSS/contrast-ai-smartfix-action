@@ -29,7 +29,7 @@ These tests verify that:
 """
 
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, patch, MagicMock
 
 from opentelemetry.metrics import Counter, Histogram, Meter
 
@@ -199,7 +199,7 @@ class TestRecordPrMerged(unittest.TestCase):
 
     def setUp(self):
         import src.smartfix.domains.telemetry.smartfix_metrics as m
-        self.mock_counter = Mock(spec=Counter)
+        self.mock_counter = MagicMock()
         m._pr_merged_counter = self.mock_counter
 
     def tearDown(self):
@@ -353,8 +353,8 @@ class TestVulnTokenAccumulator(unittest.TestCase):
 
     def test_token_counter_includes_rule_name_when_set(self):
         import src.smartfix.domains.telemetry.smartfix_metrics as m
-        mock_total = Mock(spec=Counter)
-        mock_cache = Mock(spec=Counter)
+        mock_total = MagicMock()
+        mock_cache = MagicMock()
         m._tokens_total_counter = mock_total
         m._cache_tokens_counter = mock_cache
         m.set_current_rule_name("sql-injection")
@@ -366,8 +366,8 @@ class TestVulnTokenAccumulator(unittest.TestCase):
 
     def test_token_counter_omits_rule_name_when_not_set(self):
         import src.smartfix.domains.telemetry.smartfix_metrics as m
-        mock_total = Mock(spec=Counter)
-        mock_cache = Mock(spec=Counter)
+        mock_total = MagicMock()
+        mock_cache = MagicMock()
         m._tokens_total_counter = mock_total
         m._cache_tokens_counter = mock_cache
 
@@ -378,8 +378,8 @@ class TestVulnTokenAccumulator(unittest.TestCase):
 
     def test_cache_token_type_labels_match_spec(self):
         import src.smartfix.domains.telemetry.smartfix_metrics as m
-        mock_total = Mock(spec=Counter)
-        mock_cache = Mock(spec=Counter)
+        mock_total = MagicMock()
+        mock_cache = MagicMock()
         m._tokens_total_counter = mock_total
         m._cache_tokens_counter = mock_cache
 
@@ -397,8 +397,8 @@ class TestVulnTokenAccumulator(unittest.TestCase):
 
     def test_accumulates_across_multiple_calls(self):
         import src.smartfix.domains.telemetry.smartfix_metrics as m
-        mock_total = Mock(spec=Counter)
-        mock_cache = Mock(spec=Counter)
+        mock_total = MagicMock()
+        mock_cache = MagicMock()
         m._tokens_total_counter = mock_total
         m._cache_tokens_counter = mock_cache
 
@@ -412,8 +412,8 @@ class TestVulnTokenAccumulator(unittest.TestCase):
 
     def test_accumulator_includes_cache_tokens_in_input(self):
         import src.smartfix.domains.telemetry.smartfix_metrics as m
-        mock_total = Mock(spec=Counter)
-        mock_cache = Mock(spec=Counter)
+        mock_total = MagicMock()
+        mock_cache = MagicMock()
         m._tokens_total_counter = mock_total
         m._cache_tokens_counter = mock_cache
 
@@ -426,8 +426,8 @@ class TestVulnTokenAccumulator(unittest.TestCase):
 
     def test_reset_between_vulnerabilities(self):
         import src.smartfix.domains.telemetry.smartfix_metrics as m
-        mock_total = Mock(spec=Counter)
-        mock_cache = Mock(spec=Counter)
+        mock_total = MagicMock()
+        mock_cache = MagicMock()
         m._tokens_total_counter = mock_total
         m._cache_tokens_counter = mock_cache
 
