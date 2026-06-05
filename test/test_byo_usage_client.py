@@ -8,7 +8,7 @@ Tests the ByoUsageClient class including:
 """
 
 import unittest
-from unittest.mock import patch, call
+from unittest.mock import patch
 
 import httpx
 
