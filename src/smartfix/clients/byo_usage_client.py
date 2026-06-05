@@ -11,8 +11,6 @@ import time
 import uuid
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor, wait
-from typing import TypedDict
-
 import httpx
 
 from src.utils import debug_log, normalize_host
@@ -57,33 +55,6 @@ def _build_attribution_headers(
     if source_language:
         headers["x-contrast-llm-source-language"] = _sanitize_header(source_language)
     return headers
-
-
-class _UsagePayload(TypedDict):
-    model: str
-    input_tokens: int
-    output_tokens: int
-    cache_read_input_tokens: int
-    cache_write_input_tokens: int
-    cost_usd: float
-    feature: str
-    vuln_id: str
-    session_id: str
-    repo: str
-    source_language: str
-
-
-# Keys from _UsagePayload that belong in the POST body (as opposed to headers).
-# The remaining keys (feature, vuln_id, session_id, repo, source_language)
-# are sent as x-contrast-llm-* attribution headers instead.
-_BODY_KEYS = (
-    "model",
-    "input_tokens",
-    "output_tokens",
-    "cache_read_input_tokens",
-    "cache_write_input_tokens",
-    "cost_usd",
-)
 
 
 class ByoUsageClient:
@@ -136,20 +107,22 @@ class ByoUsageClient:
         /v2/usage endpoint with bounded retry. Never raises.
         """
         self._submitted += 1
-        payload: _UsagePayload = {
+        body = {
             "model": model,
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
             "cache_read_input_tokens": cache_read_input_tokens,
             "cache_write_input_tokens": cache_write_input_tokens,
             "cost_usd": cost_usd,
-            "feature": feature,
-            "vuln_id": vuln_id,
-            "session_id": session_id,
-            "repo": repo,
-            "source_language": source_language,
         }
-        future = self._executor.submit(self._post_usage, payload)
+        attribution_headers = _build_attribution_headers(
+            feature=feature,
+            vuln_id=vuln_id,
+            session_id=session_id,
+            repo=repo,
+            source_language=source_language,
+        )
+        future = self._executor.submit(self._post_usage, body, attribution_headers)
         self._futures.append(future)
 
     def shutdown(self, timeout: float = 10.0) -> None:
@@ -170,29 +143,17 @@ class ByoUsageClient:
         self._executor.shutdown(wait=False, cancel_futures=True)
         self._http.close()
 
-    def _post_usage(self, payload: _UsagePayload) -> None:
+    def _post_usage(
+        self, body: dict[str, object], attribution_headers: dict[str, str]
+    ) -> None:
         """POST a single usage report with bounded retry.
 
         request_id is generated once per report and reused across retries so the
         proxy can deduplicate if the first attempt was received but the response lost.
         """
-        # Generated once and reused across retries so the proxy can deduplicate.
         request_id = str(uuid.uuid4())
-        headers: dict[str, str] = {
-            **self._base_headers,
-            **_build_attribution_headers(
-                feature=payload["feature"],
-                vuln_id=payload["vuln_id"],
-                session_id=payload["session_id"],
-                repo=payload["repo"],
-                source_language=payload["source_language"],
-            ),
-        }
-
-        body = {
-            "request_id": request_id,
-            **{k: payload[k] for k in _BODY_KEYS},
-        }
+        body = {"request_id": request_id, **body}
+        headers = {**self._base_headers, **attribution_headers}
 
         max_attempts = MAX_RETRIES + 1
         last_error: str | None = None
@@ -208,9 +169,9 @@ class ByoUsageClient:
                 if response.status_code < 500:
                     if response.is_success:
                         debug_log(
-                            f"Reported BYO usage: request_id={request_id} model={payload['model']} "
-                            f"input={payload['input_tokens']} output={payload['output_tokens']} "
-                            f"cost_usd={payload['cost_usd']:.6f}"
+                            f"Reported BYO usage: request_id={request_id} model={body['model']} "
+                            f"input={body['input_tokens']} output={body['output_tokens']} "
+                            f"cost_usd={body['cost_usd']:.6f}"
                         )
                     else:
                         self._failed += 1

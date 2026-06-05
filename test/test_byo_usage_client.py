@@ -13,6 +13,7 @@ from unittest.mock import patch
 import httpx
 
 from src.smartfix.clients.byo_usage_client import (
+    MAX_RETRIES,
     ByoUsageClient,
     SMARTFIX_FEATURE,
     _build_attribution_headers,
@@ -61,11 +62,6 @@ def _make_client():
         authorization=SAMPLE_AUTHORIZATION,
         org_id=SAMPLE_ORG_ID,
     )
-
-
-def _patch_debug_log(fn):
-    """Decorator that patches debug_log to a no-op so tests don't need env vars."""
-    return patch("src.smartfix.clients.byo_usage_client.debug_log")(fn)
 
 
 class TestSanitizeHeader(unittest.TestCase):
@@ -118,11 +114,15 @@ class TestByoUsageClientInit(unittest.TestCase):
     """Tests for ByoUsageClient construction."""
 
     def setUp(self):
+        self._httpx_patcher = patch("src.smartfix.clients.byo_usage_client.httpx.Client")
+        self._log_patcher = patch("src.smartfix.clients.byo_usage_client.debug_log")
+        self._httpx_patcher.start()
+        self._log_patcher.start()
         self.client = _make_client()
 
     def tearDown(self):
-        self.client._http.close()
-        self.client._executor.shutdown(wait=False)
+        self._httpx_patcher.stop()
+        self._log_patcher.stop()
 
     def test_url_built_from_host_and_org(self):
         expected_url = f"https://{SAMPLE_HOST}/api/llm-proxy/v2/organizations/{SAMPLE_ORG_ID}/usage"
@@ -146,9 +146,7 @@ class TestByoUsageClientInit(unittest.TestCase):
 
     def test_host_with_protocol_prefix_is_normalized(self):
         # given - host has https:// prefix that normalize_host should strip
-        self.client._http.close()
-        self.client._executor.shutdown(wait=False)
-        self.client = ByoUsageClient(
+        client = ByoUsageClient(
             contrast_host=f"https://{SAMPLE_HOST}",
             api_key=SAMPLE_API_KEY,
             authorization=SAMPLE_AUTHORIZATION,
@@ -156,8 +154,8 @@ class TestByoUsageClientInit(unittest.TestCase):
         )
 
         # then - URL should not double the protocol
-        self.assertIn(f"https://{SAMPLE_HOST}/", self.client._url)
-        self.assertNotIn("https://https://", self.client._url)
+        self.assertIn(f"https://{SAMPLE_HOST}/", client._url)
+        self.assertNotIn("https://https://", client._url)
 
 
 class TestByoUsageClientReportUsage(unittest.TestCase):
@@ -166,8 +164,10 @@ class TestByoUsageClientReportUsage(unittest.TestCase):
     def setUp(self):
         self._httpx_patcher = patch("src.smartfix.clients.byo_usage_client.httpx.Client")
         self._log_patcher = patch("src.smartfix.clients.byo_usage_client.debug_log")
+        self._sleep_patcher = patch("src.smartfix.clients.byo_usage_client.time.sleep")
         mock_client_cls = self._httpx_patcher.start()
         self._log_patcher.start()
+        self._sleep_patcher.start()
         self.mock_http = mock_client_cls.return_value
         self.mock_http.post.return_value = httpx.Response(status_code=200)
         self.client = _make_client()
@@ -175,6 +175,7 @@ class TestByoUsageClientReportUsage(unittest.TestCase):
     def tearDown(self):
         self._httpx_patcher.stop()
         self._log_patcher.stop()
+        self._sleep_patcher.stop()
 
     def _submit_and_drain(self):
         """Submit one report with sample data and wait for delivery."""
@@ -295,6 +296,19 @@ class TestByoUsageClientReportUsage(unittest.TestCase):
 
         self.assertEqual(self.client._failed, 1)
 
+    def test_exhausted_retries_match_max_retries(self):
+        """
+        Given server errors on every attempt,
+        when report_usage is called and shutdown drains,
+        then the total POST count equals MAX_RETRIES + 1.
+        """
+        self.mock_http.post.return_value = httpx.Response(status_code=500)
+
+        self._submit_and_drain()
+
+        expected_attempts = MAX_RETRIES + 1
+        self.assertEqual(self.mock_http.post.call_count, expected_attempts)
+
     def test_failed_count_on_4xx_rejection(self):
         """
         Given a 400 rejection,
@@ -329,33 +343,37 @@ class TestByoUsageClientReportUsage(unittest.TestCase):
 class TestByoUsageClientShutdown(unittest.TestCase):
     """Tests for ByoUsageClient.shutdown."""
 
-    @_patch_debug_log
-    @patch("src.smartfix.clients.byo_usage_client.httpx.Client")
-    def test_shutdown_closes_http_client(self, mock_client_cls, _mock_log):
+    def setUp(self):
+        self._httpx_patcher = patch("src.smartfix.clients.byo_usage_client.httpx.Client")
+        self._log_patcher = patch("src.smartfix.clients.byo_usage_client.debug_log")
+        mock_client_cls = self._httpx_patcher.start()
+        self._log_patcher.start()
+        self.mock_http = mock_client_cls.return_value
+        self.client = _make_client()
+
+    def tearDown(self):
+        self._httpx_patcher.stop()
+        self._log_patcher.stop()
+
+    def test_shutdown_closes_http_client(self):
         """
         When shutdown is called,
         then the underlying httpx client is closed.
         """
-        mock_http = mock_client_cls.return_value
+        self.client.shutdown()
 
-        client = _make_client()
-        client.shutdown()
+        self.mock_http.close.assert_called_once()
 
-        mock_http.close.assert_called_once()
-
-    @_patch_debug_log
-    @patch("src.smartfix.clients.byo_usage_client.httpx.Client")
-    def test_shutdown_with_no_reports(self, mock_client_cls, _mock_log):
+    def test_shutdown_with_no_reports(self):
         """
         Given no reports were submitted,
         when shutdown is called,
         then it completes without error and no failures are logged.
         """
-        client = _make_client()
-        client.shutdown()
+        self.client.shutdown()
 
-        self.assertEqual(client._submitted, 0)
-        self.assertEqual(client._failed, 0)
+        self.assertEqual(self.client._submitted, 0)
+        self.assertEqual(self.client._failed, 0)
 
 
 if __name__ == "__main__":
