@@ -9,6 +9,7 @@ timed-out POST would delay the next LLM call.
 
 import time
 import uuid
+from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor, wait
 from typing import TypedDict
 
@@ -21,6 +22,13 @@ MAX_RETRIES = 1
 RETRY_DELAY = 1.0
 
 SMARTFIX_FEATURE = "SMARTFIX"
+
+# Callback type for per-LLM-call usage events.
+# All parameters are keyword-only.
+UsageEventCallback = Callable[
+    ...,  # keyword-only args: model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_usd
+    None,
+]
 
 
 def _sanitize_header(value: str) -> str:
@@ -66,6 +74,8 @@ class _UsagePayload(TypedDict):
 
 
 # Keys from _UsagePayload that belong in the POST body (as opposed to headers).
+# The remaining keys (feature, fingerprint, session_id, repo, source_language)
+# are sent as x-contrast-llm-* attribution headers instead.
 _BODY_KEYS = (
     "model",
     "input_tokens",
@@ -94,6 +104,12 @@ class ByoUsageClient:
         self._futures: list[Future] = []
         self._submitted = 0
         self._failed = 0
+
+    def __repr__(self) -> str:
+        return (
+            f"ByoUsageClient(url={self._url!r}, "
+            f"submitted={self._submitted}, failed={self._failed})"
+        )
 
     def report_usage(
         self,
@@ -132,20 +148,13 @@ class ByoUsageClient:
         future = self._executor.submit(self._post_usage, payload)
         self._futures.append(future)
 
-    def shutdown(self, timeout: float = 15.0) -> None:
+    def shutdown(self, timeout: float = 10.0) -> None:
         """Wait for pending reports and shut down the executor.
 
         Blocks up to *timeout* seconds for in-flight POSTs to complete.
         Logs a warning if any reports failed or were dropped.
         """
         done, not_done = wait(self._futures, timeout=timeout)
-
-        for f in done:
-            exc = f.exception()
-            if exc is not None:
-                self._failed += 1
-                debug_log(f"BYO usage report raised: {exc}")
-
         dropped = len(not_done)
         total_lost = self._failed + dropped
         if total_lost > 0:
@@ -163,6 +172,7 @@ class ByoUsageClient:
         request_id is generated once per report and reused across retries so the
         proxy can deduplicate if the first attempt was received but the response lost.
         """
+        # Generated once and reused across retries so the proxy can deduplicate.
         request_id = str(uuid.uuid4())
         headers: dict[str, str] = {
             "API-Key": self._api_key,

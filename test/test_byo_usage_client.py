@@ -117,16 +117,38 @@ class TestBuildAttributionHeaders(unittest.TestCase):
 class TestByoUsageClientInit(unittest.TestCase):
     """Tests for ByoUsageClient construction."""
 
+    def setUp(self):
+        self.client = _make_client()
+
+    def tearDown(self):
+        self.client._http.close()
+        self.client._executor.shutdown(wait=False)
+
     def test_url_built_from_host_and_org(self):
-        client = _make_client()
         expected_url = f"https://{SAMPLE_HOST}/api/llm-proxy/v2/organizations/{SAMPLE_ORG_ID}/usage"
-        self.assertEqual(client._url, expected_url)
-        client._http.close()
-        client._executor.shutdown(wait=False)
+        self.assertEqual(self.client._url, expected_url)
+
+    def test_executor_uses_single_worker(self):
+        # single worker ensures usage reports are serialized, which
+        # preserves chronological ordering and avoids connection-pool contention
+        self.assertEqual(self.client._executor._max_workers, 1)
+
+    def test_repr_redacts_credentials(self):
+        # when
+        result = repr(self.client)
+
+        # then - credentials must not appear in the repr
+        self.assertNotIn(SAMPLE_API_KEY, result)
+        self.assertNotIn(SAMPLE_AUTHORIZATION, result)
+        # but operational state should be visible
+        self.assertIn("ByoUsageClient", result)
+        self.assertIn(SAMPLE_HOST, result)
 
     def test_host_with_protocol_prefix_is_normalized(self):
         # given - host has https:// prefix that normalize_host should strip
-        client = ByoUsageClient(
+        self.client._http.close()
+        self.client._executor.shutdown(wait=False)
+        self.client = ByoUsageClient(
             contrast_host=f"https://{SAMPLE_HOST}",
             api_key=SAMPLE_API_KEY,
             authorization=SAMPLE_AUTHORIZATION,
@@ -134,10 +156,8 @@ class TestByoUsageClientInit(unittest.TestCase):
         )
 
         # then - URL should not double the protocol
-        self.assertIn(f"https://{SAMPLE_HOST}/", client._url)
-        self.assertNotIn("https://https://", client._url)
-        client._http.close()
-        client._executor.shutdown(wait=False)
+        self.assertIn(f"https://{SAMPLE_HOST}/", self.client._url)
+        self.assertNotIn("https://https://", self.client._url)
 
 
 class TestByoUsageClientReportUsage(unittest.TestCase):

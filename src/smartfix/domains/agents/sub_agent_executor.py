@@ -36,7 +36,7 @@ from src.utils import debug_log, log, error_exit, tail_string
 from src.smartfix.shared.failure_categories import FailureCategory
 from src.smartfix.domains.telemetry import telemetry_handler
 from src.smartfix.domains.providers import setup_contrast_provider
-from src.smartfix.clients.byo_usage_client import ByoUsageClient, SMARTFIX_FEATURE
+from src.smartfix.clients.byo_usage_client import ByoUsageClient, SMARTFIX_FEATURE, UsageEventCallback
 
 from .mcp_manager import MCPToolsetManager
 
@@ -87,10 +87,10 @@ class SubAgentExecutor:
         if getattr(self.config, "USE_CONTRAST_LLM", True):
             return None
 
-        host = getattr(self.config, "CONTRAST_HOST", "") or ""
-        api_key = getattr(self.config, "CONTRAST_API_KEY", "") or ""
-        authorization = getattr(self.config, "CONTRAST_AUTHORIZATION_KEY", "") or ""
-        org_id = getattr(self.config, "CONTRAST_ORG_ID", "") or ""
+        host = self.config.CONTRAST_HOST or ""
+        api_key = self.config.CONTRAST_API_KEY or ""
+        authorization = self.config.CONTRAST_AUTHORIZATION_KEY or ""
+        org_id = self.config.CONTRAST_ORG_ID or ""
 
         if not all([host, api_key, authorization, org_id]):
             debug_log("BYO usage reporting disabled: missing Contrast credentials")
@@ -112,7 +112,7 @@ class SubAgentExecutor:
         remediation_id: str,
         repo_slug: str,
         language: str,
-    ):
+    ) -> "UsageEventCallback":
         """Return a closure that bridges SmartFixLiteLlm's on_usage_event to ByoUsageClient."""
 
         def _on_usage_event(
@@ -236,7 +236,7 @@ class SubAgentExecutor:
         vuln_uuid: str = "",
         repo_slug: str = "",
         language: str = "",
-        on_usage_event=None,
+        on_usage_event: Optional[UsageEventCallback] = None,
     ) -> Optional[Agent]:
         """
         Create an ADK Agent.
