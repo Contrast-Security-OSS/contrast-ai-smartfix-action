@@ -31,10 +31,13 @@ This module tests the extended LiteLLM functionality including:
 import asyncio
 import unittest
 import json
+from types import SimpleNamespace
 from unittest.mock import patch, Mock, MagicMock, AsyncMock
 
 # Test setup imports (path is set up by conftest.py)
-from src.smartfix.extensions.smartfix_litellm import SmartFixLiteLlm, TokenCostAccumulator, _derive_system
+from src.smartfix.extensions.smartfix_litellm import (
+    SmartFixLiteLlm, TokenCostAccumulator, _derive_system,
+)
 from src.smartfix.domains.providers import CONTRAST_CLAUDE_SONNET_4_5
 
 
@@ -417,6 +420,104 @@ class TestDeriveSystem(unittest.TestCase):
 
     def test_unknown_without_slash_returns_unknown(self):
         self.assertEqual(_derive_system("some-unknown-model"), "unknown")
+
+
+class TestGenAiMetricsServerAddress(unittest.TestCase):
+    """server.address is attached to the gen_ai.* metrics from the httpx request hook.
+
+    The host is captured by otel_provider's httpx request hook (the same source as the
+    http.client.* metrics) and read back via otel_provider.get_last_request_host().
+    """
+
+    def setUp(self):
+        with patch('litellm.completion'):
+            self.model = SmartFixLiteLlm(model="anthropic/claude-3-opus")
+
+    def _make_mock_response(self):
+        usage_cls = type("Usage", (), {
+            "__bool__": lambda s: True,
+            "prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150,
+            "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0,
+            "__dict__": {
+                "prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150,
+                "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0,
+            },
+        })
+        usage = usage_cls()
+        resp = Mock()
+        resp.model = "claude-3-opus"
+        resp.get = lambda key, default=None: usage if key == "usage" else default
+        return resp
+
+    def _run_and_capture_op_duration_attrs(self, request_host):
+        """Run a successful call and return the attrs passed to the operation.duration histogram.
+
+        Simulates the httpx request hook firing during the call by invoking the real
+        otel_provider._record_request_host from acompletion's side_effect, then letting
+        _call_llm_with_retry read it back through the real get_last_request_host. This
+        exercises the actual ContextVar propagation rather than stubbing the getter.
+        """
+        from src.smartfix.domains.telemetry import otel_provider
+        otel_provider._last_request_host.set(None)
+
+        async def _fake_acompletion(**kwargs):
+            if request_host is not None:
+                otel_provider._record_request_host(Mock(), SimpleNamespace(url=SimpleNamespace(host=request_host)))
+            return self._make_mock_response()
+
+        self.model.llm_client = Mock()
+        self.model.llm_client.acompletion = _fake_acompletion
+        mock_hist = Mock()
+        with patch('src.smartfix.extensions.smartfix_litellm.otel_provider.start_span'), \
+                patch('src.smartfix.extensions.smartfix_litellm._get_operation_duration_histogram',
+                      return_value=mock_hist), \
+                patch('src.smartfix.extensions.smartfix_litellm._get_token_usage_histogram',
+                      return_value=Mock()), \
+                patch('src.smartfix.extensions.smartfix_litellm.smartfix_metrics'):
+            asyncio.run(self.model._call_llm_with_retry({"model": "anthropic/claude-3-opus"}))
+        mock_hist.record.assert_called_once()
+        return mock_hist.record.call_args[0][1]
+
+    @patch('src.smartfix.extensions.smartfix_litellm.debug_log')
+    def test_server_address_attached_from_request_hook(self, _mock_log):
+        attrs = self._run_and_capture_op_duration_attrs("app.contrastsecurity.com")
+        self.assertEqual(attrs.get("server.address"), "app.contrastsecurity.com")
+
+    @patch('src.smartfix.extensions.smartfix_litellm.debug_log')
+    def test_server_address_omitted_when_host_unknown(self, _mock_log):
+        attrs = self._run_and_capture_op_duration_attrs(None)
+        self.assertNotIn("server.address", attrs)
+
+    @patch('src.smartfix.extensions.smartfix_litellm.debug_log')
+    def test_stale_host_from_prior_request_does_not_leak(self, _mock_log):
+        """A host left in the ContextVar by a prior (non-LLM) httpx call must not be read.
+
+        _call_llm_with_retry clears the host before the call, so when this call's hook does
+        not fire (request_host=None), server.address is omitted rather than picking up the
+        stale value. Directly exercises the clear-before-call guard.
+        """
+        from src.smartfix.domains.telemetry import otel_provider
+
+        self.model.llm_client = Mock()
+        self.model.llm_client.acompletion = AsyncMock(return_value=self._make_mock_response())
+        mock_hist = Mock()
+
+        async def _run():
+            # Set the leftover host inside the same task context _call_llm_with_retry runs in,
+            # so the stale value is genuinely present before the clear-before-call guard.
+            otel_provider._last_request_host.set("contrast-api.example.com")
+            await self.model._call_llm_with_retry({"model": "anthropic/claude-3-opus"})
+
+        with patch('src.smartfix.extensions.smartfix_litellm.otel_provider.start_span'), \
+                patch('src.smartfix.extensions.smartfix_litellm._get_operation_duration_histogram',
+                      return_value=mock_hist), \
+                patch('src.smartfix.extensions.smartfix_litellm._get_token_usage_histogram',
+                      return_value=Mock()), \
+                patch('src.smartfix.extensions.smartfix_litellm.smartfix_metrics'):
+            asyncio.run(_run())
+
+        attrs = mock_hist.record.call_args[0][1]
+        self.assertNotIn("server.address", attrs)
 
 
 class TestLogCostAnalysisReturnValue(unittest.TestCase):

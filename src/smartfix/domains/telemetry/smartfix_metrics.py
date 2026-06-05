@@ -50,6 +50,7 @@ OTel try/except so a failed counter write never silently zeroes the totals.
 from typing import Optional
 
 from src.smartfix.domains.telemetry import otel_provider
+from src.utils import debug_log
 
 _METER_NAME = "smartfix"
 
@@ -208,13 +209,15 @@ def record_vulnerability_duration(
             "outcome": outcome,
             "rule_name": rule_name,
             "language": language or "unknown",
+            # The datalake converter reads this column from the bare `source` key (confirmed
+            # by Munir on the data platform side), even though the span uses
+            # contrast.finding.source. Keep it as `source`; do not "align" it to the span key.
             "source": source,
+            "severity": severity or "unknown",
         }
-        if severity:
-            attrs["severity"] = severity
         _get_vulnerability_duration_histogram().record(elapsed_s, attrs)
-    except Exception:
-        pass
+    except Exception as e:
+        debug_log(f"OTel metric error in record_vulnerability_duration: {e}")
 
 
 def record_pr_attempt(outcome: str, rule_name: str, coding_agent: str) -> None:
@@ -267,7 +270,7 @@ def record_llm_call_tokens(
         # iteration and read here, since LiteLLM callbacks don't carry vulnerability context.
         token_attrs = {"gen_ai.request.model": model}
         if _current_rule_name:
-            token_attrs["rule_id"] = _current_rule_name
+            token_attrs["rule_name"] = _current_rule_name
 
         total_counter = _get_tokens_total_counter()
         total_counter.add(total_input, {**token_attrs, "gen_ai.token.type": "input"})
@@ -311,8 +314,8 @@ def record_pr_merged(coding_agent: str) -> None:
     """
     try:
         _get_pr_merged_counter().add(1, {"coding_agent": coding_agent})
-    except Exception:
-        pass
+    except Exception as e:
+        debug_log(f"OTel metric error in record_pr_merged: {e}")
 
 
 def record_llm_retry(model: str, error_type: str) -> None:
