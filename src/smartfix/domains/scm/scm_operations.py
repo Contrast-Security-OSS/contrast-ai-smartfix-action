@@ -6,7 +6,8 @@ for implementing SCM platform-specific operations (GitHub, GitLab, BitBucket, et
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple, Union
+from src.smartfix.shared.constants import CLASSIC
 
 
 class ScmOperations(ABC):
@@ -79,12 +80,14 @@ class ScmOperations(ABC):
         pass
 
     @abstractmethod
-    def generate_label_details(self, vuln_uuid: str) -> Tuple[str, str, str]:
+    def generate_label_details(self, vuln_uuid: str, mode: str = CLASSIC, issue_id: Optional[str] = None) -> Tuple[str, str, str]:
         """
         Generates label name, description, and color for a vulnerability.
 
         Args:
             vuln_uuid (str): Vulnerability UUID
+            mode (str): Finding mode ('CLASSIC' or 'NORTHSTAR_ONLY')
+            issue_id (str): NorthStar issue ID (required when mode is NORTHSTAR_ONLY)
 
         Returns:
             Tuple[str, str, str]: Label name, description, and color
@@ -120,12 +123,12 @@ class ScmOperations(ABC):
         pass
 
     @abstractmethod
-    def count_open_prs_with_prefix(self, label_prefix: str, remediation_id: str) -> int:
+    def count_open_prs_with_prefix(self, label_prefix: Union[str, tuple], remediation_id: str) -> int:
         """
         Counts open PRs with labels matching a prefix.
 
         Args:
-            label_prefix (str): Label prefix to match
+            label_prefix: Label prefix to match; accepts a tuple for str.startswith multi-prefix matching
             remediation_id (str): Remediation ID for error context
 
         Returns:

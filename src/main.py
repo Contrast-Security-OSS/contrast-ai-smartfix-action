@@ -29,6 +29,7 @@ from src.config import get_config
 from src.smartfix.domains.telemetry import otel_provider
 from src.smartfix.domains.telemetry import smartfix_metrics
 from src.smartfix.shared.coding_agents import CodingAgents
+from src.smartfix.shared.constants import CLASSIC, NORTHSTAR_ONLY
 from src.smartfix.shared.exceptions import TokenBalanceExhaustedError
 from src.utils import debug_log, log, error_exit
 from src.smartfix.domains.telemetry import telemetry_handler
@@ -227,9 +228,12 @@ def _main_impl(vuln_count: list[int], prs_created_count: list[int]) -> None:  # 
 
             # Extract vulnerability details and prompts from the response
             vuln_uuid = vulnerability_data['vulnerabilityUuid']
-            mode = vulnerability_data.get('mode', 'CLASSIC')
+            mode = vulnerability_data.get('mode', CLASSIC)
             issue_id = vulnerability_data.get('issueId')
-            primary_id = issue_id if mode == 'NORTHSTAR_ONLY' else vuln_uuid
+            if mode == NORTHSTAR_ONLY and not issue_id:
+                debug_log(f"NORTHSTAR_ONLY finding missing issueId; vuln_uuid={vuln_uuid}, remediationId={vulnerability_data.get('remediationId', 'unknown')}")
+                error_exit(vulnerability_data.get('remediationId', remediation_id), FailureCategory.GENERAL_FAILURE.value)
+            primary_id = issue_id if mode == NORTHSTAR_ONLY else vuln_uuid
 
             # Check if this is the same primary identifier as the previous iteration
             if primary_id == previous_primary_id:
@@ -275,9 +279,12 @@ def _main_impl(vuln_count: list[int], prs_created_count: list[int]) -> None:  # 
 
             # Extract vulnerability details from the response (no prompts for external agents)
             vuln_uuid = vulnerability_data['vulnerabilityUuid']
-            mode = vulnerability_data.get('mode', 'CLASSIC')
+            mode = vulnerability_data.get('mode', CLASSIC)
             issue_id = vulnerability_data.get('issueId')
-            primary_id = issue_id if mode == 'NORTHSTAR_ONLY' else vuln_uuid
+            if mode == NORTHSTAR_ONLY and not issue_id:
+                debug_log(f"NORTHSTAR_ONLY finding missing issueId; vuln_uuid={vuln_uuid}, remediationId={vulnerability_data.get('remediationId', 'unknown')}")
+                error_exit(vulnerability_data.get('remediationId', remediation_id), FailureCategory.GENERAL_FAILURE.value)
+            primary_id = issue_id if mode == NORTHSTAR_ONLY else vuln_uuid
 
             # Check if this is the same primary identifier as the previous iteration
             if primary_id == previous_primary_id:
@@ -354,6 +361,8 @@ def _main_impl(vuln_count: list[int], prs_created_count: list[int]) -> None:  # 
                     skip_writing_security_test=config.SKIP_WRITING_SECURITY_TEST,
                     session_id=session_id,
                     language=vuln_language,
+                    mode=mode,
+                    issue_id=issue_id,
                 )
 
                 # Propagate a build command discovered by a previous agent run so the next
@@ -499,7 +508,7 @@ def _main_impl(vuln_count: list[int], prs_created_count: list[int]) -> None:  # 
                 # --- Push and Create PR ---
                 git_ops.push_branch(new_branch_name)  # Push the final commit (original or amended)
 
-                label_name, label_desc, label_color = github_ops.generate_label_details(vuln_uuid)
+                label_name, label_desc, label_color = github_ops.generate_label_details(vuln_uuid, mode=mode, issue_id=issue_id)
                 label_created = github_ops.ensure_label(label_name, label_desc, label_color)
                 if not label_created:
                     log(f"Could not create GitHub label '{label_name}'. PR will be created without a label.", is_warning=True)

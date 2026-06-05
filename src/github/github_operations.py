@@ -23,6 +23,7 @@ import re
 from typing import List, Optional, Set, TypedDict
 from src.utils import run_command, debug_log, log, error_exit, CommandExecutionError
 from src.smartfix.shared.failure_categories import FailureCategory
+from src.smartfix.shared.constants import CLASSIC, NORTHSTAR_ONLY
 from src.config import get_config
 from src.smartfix.shared.coding_agents import CodingAgents
 from src.smartfix.domains.scm.git_operations import GitOperations
@@ -272,13 +273,13 @@ class GitHubOperations(ScmOperations):
                 debug_log(f"Error checking if Issues are enabled, assuming they are: {e}")
                 return True
 
-    def generate_label_details(self, vuln_uuid: str, mode: str = 'CLASSIC', issue_id: str = None) -> tuple[str, str, str]:
+    def generate_label_details(self, vuln_uuid: str, mode: str = CLASSIC, issue_id: str = None) -> tuple[str, str, str]:
         """Generates the label name, description, and color.
 
         For NORTHSTAR_ONLY mode uses contrast-issue-id:{issueId}.
         For CLASSIC mode uses contrast-vuln-id:VULN-{vuln_uuid}.
         """
-        if mode == 'NORTHSTAR_ONLY' and issue_id:
+        if mode == NORTHSTAR_ONLY and issue_id:
             label_name = f"contrast-issue-id:{issue_id}"
             label_description = "Issue identified by Contrast AI SmartFix"
         else:
