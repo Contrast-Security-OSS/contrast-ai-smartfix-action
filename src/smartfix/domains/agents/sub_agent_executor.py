@@ -133,7 +133,7 @@ class SubAgentExecutor:
                 cache_write_input_tokens=cache_write_tokens,
                 cost_usd=cost_usd,
                 feature=SMARTFIX_FEATURE,
-                fingerprint=vuln_uuid,
+                vuln_id=vuln_uuid,
                 session_id=remediation_id,
                 repo=repo_slug,
                 source_language=language,

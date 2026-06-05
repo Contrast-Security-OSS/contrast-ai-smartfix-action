@@ -39,7 +39,7 @@ def _sanitize_header(value: str) -> str:
 def _build_attribution_headers(
     *,
     feature: str,
-    fingerprint: str = "",
+    vuln_id: str = "",
     session_id: str = "",
     repo: str = "",
     source_language: str = "",
@@ -48,8 +48,8 @@ def _build_attribution_headers(
     headers: dict[str, str] = {
         "x-contrast-llm-feature": _sanitize_header(feature),
     }
-    if fingerprint:
-        headers["x-contrast-llm-fingerprint"] = _sanitize_header(fingerprint)
+    if vuln_id:
+        headers["x-contrast-llm-fingerprint"] = _sanitize_header(vuln_id)
     if session_id:
         headers["x-contrast-llm-session-id"] = _sanitize_header(session_id)
     if repo:
@@ -67,14 +67,14 @@ class _UsagePayload(TypedDict):
     cache_write_input_tokens: int
     cost_usd: float
     feature: str
-    fingerprint: str
+    vuln_id: str
     session_id: str
     repo: str
     source_language: str
 
 
 # Keys from _UsagePayload that belong in the POST body (as opposed to headers).
-# The remaining keys (feature, fingerprint, session_id, repo, source_language)
+# The remaining keys (feature, vuln_id, session_id, repo, source_language)
 # are sent as x-contrast-llm-* attribution headers instead.
 _BODY_KEYS = (
     "model",
@@ -121,7 +121,7 @@ class ByoUsageClient:
         cache_write_input_tokens: int,
         cost_usd: float = 0.0,
         feature: str,
-        fingerprint: str,
+        vuln_id: str,
         session_id: str,
         repo: str = "",
         source_language: str = "",
@@ -140,7 +140,7 @@ class ByoUsageClient:
             "cache_write_input_tokens": cache_write_input_tokens,
             "cost_usd": cost_usd,
             "feature": feature,
-            "fingerprint": fingerprint,
+            "vuln_id": vuln_id,
             "session_id": session_id,
             "repo": repo,
             "source_language": source_language,
@@ -181,7 +181,7 @@ class ByoUsageClient:
             "Accept": "application/json",
             **_build_attribution_headers(
                 feature=payload["feature"],
-                fingerprint=payload["fingerprint"],
+                vuln_id=payload["vuln_id"],
                 session_id=payload["session_id"],
                 repo=payload["repo"],
                 source_language=payload["source_language"],

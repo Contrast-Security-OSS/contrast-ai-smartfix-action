@@ -31,7 +31,7 @@ SAMPLE_OUTPUT_TOKENS = 300
 SAMPLE_CACHE_READ = 800
 SAMPLE_CACHE_WRITE = 200
 SAMPLE_COST_USD = 0.004275
-SAMPLE_FINGERPRINT = "vuln-uuid-5678"
+SAMPLE_VULN_ID = "vuln-uuid-5678"
 SAMPLE_SESSION_ID = "remediation-uuid-9012"
 SAMPLE_REPO = "acme/webapp"
 SAMPLE_LANGUAGE = "java"
@@ -47,7 +47,7 @@ def _sample_usage_kwargs():
         "cache_write_input_tokens": SAMPLE_CACHE_WRITE,
         "cost_usd": SAMPLE_COST_USD,
         "feature": SMARTFIX_FEATURE,
-        "fingerprint": SAMPLE_FINGERPRINT,
+        "vuln_id": SAMPLE_VULN_ID,
         "session_id": SAMPLE_SESSION_ID,
         "repo": SAMPLE_REPO,
         "source_language": SAMPLE_LANGUAGE,
@@ -100,7 +100,7 @@ class TestBuildAttributionHeaders(unittest.TestCase):
         # given/when
         headers = _build_attribution_headers(
             feature=SMARTFIX_FEATURE,
-            fingerprint=SAMPLE_FINGERPRINT,
+            vuln_id=SAMPLE_VULN_ID,
             session_id=SAMPLE_SESSION_ID,
             repo=SAMPLE_REPO,
             source_language=SAMPLE_LANGUAGE,
@@ -108,7 +108,7 @@ class TestBuildAttributionHeaders(unittest.TestCase):
 
         # then
         self.assertEqual(headers["x-contrast-llm-feature"], SMARTFIX_FEATURE)
-        self.assertEqual(headers["x-contrast-llm-fingerprint"], SAMPLE_FINGERPRINT)
+        self.assertEqual(headers["x-contrast-llm-fingerprint"], SAMPLE_VULN_ID)
         self.assertEqual(headers["x-contrast-llm-session-id"], SAMPLE_SESSION_ID)
         self.assertEqual(headers["x-contrast-llm-repo"], SAMPLE_REPO)
         self.assertEqual(headers["x-contrast-llm-source-language"], SAMPLE_LANGUAGE)
@@ -199,7 +199,7 @@ class TestByoUsageClientReportUsage(unittest.TestCase):
         self.assertEqual(headers["API-Key"], SAMPLE_API_KEY)
         self.assertEqual(headers["Authorization"], SAMPLE_AUTHORIZATION)
         self.assertEqual(headers["x-contrast-llm-feature"], SMARTFIX_FEATURE)
-        self.assertEqual(headers["x-contrast-llm-fingerprint"], SAMPLE_FINGERPRINT)
+        self.assertEqual(headers["x-contrast-llm-fingerprint"], SAMPLE_VULN_ID)
         self.assertEqual(headers["x-contrast-llm-session-id"], SAMPLE_SESSION_ID)
         self.assertEqual(headers["x-contrast-llm-repo"], SAMPLE_REPO)
         self.assertEqual(headers["x-contrast-llm-source-language"], SAMPLE_LANGUAGE)
@@ -210,7 +210,7 @@ class TestByoUsageClientReportUsage(unittest.TestCase):
         """
         Given a successful POST,
         when report_usage is called,
-        then attribution fields (feature, fingerprint, etc.) appear in headers only,
+        then attribution fields (feature, vuln_id, etc.) appear in headers only,
         not in the POST body.
         """
         mock_http = mock_client_cls.return_value
@@ -221,7 +221,7 @@ class TestByoUsageClientReportUsage(unittest.TestCase):
         client.shutdown()
 
         body = mock_http.post.call_args.kwargs["json"]
-        for key in ("feature", "fingerprint", "session_id", "repo", "source_language"):
+        for key in ("feature", "vuln_id", "session_id", "repo", "source_language"):
             self.assertNotIn(key, body)
 
     @_patch_debug_log
