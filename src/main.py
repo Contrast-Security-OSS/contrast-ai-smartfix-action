@@ -346,7 +346,7 @@ def _main_impl(vuln_count: list[int], prs_created_count: list[int]) -> None:  # 
 
         smartfix_metrics.set_current_rule_name(vulnerability.rule_name)
         with otel_provider.start_span("fix-vulnerability") as op_span:
-            op_span.set_attribute("contrast.finding.fingerprint", vulnerability.uuid)
+            op_span.set_attribute("contrast.finding.fingerprint", primary_id)
             op_span.set_attribute("contrast.finding.source", "runtime")
             op_span.set_attribute("contrast.finding.rule_id", vulnerability.rule_name)
             op_span.set_attribute("contrast.smartfix.coding_agent", config.CODING_AGENT.lower())
