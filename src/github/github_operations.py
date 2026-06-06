@@ -273,7 +273,7 @@ class GitHubOperations(ScmOperations):
                 debug_log(f"Error checking if Issues are enabled, assuming they are: {e}")
                 return True
 
-    def generate_label_details(self, vuln_uuid: str, mode: str = CLASSIC, issue_id: str = None) -> tuple[str, str, str]:
+    def generate_label_details(self, vuln_uuid: str, mode: str = CLASSIC, issue_id: Optional[str] = None) -> tuple[str, str, str]:
         """Generates the label name, description, and color.
 
         For NORTHSTAR_ONLY mode uses contrast-issue-id:{issueId}.
