@@ -107,6 +107,7 @@ class ByoUsageClient:
         /v2/usage endpoint with bounded retry. Never raises.
         """
         self._submitted += 1
+        self._futures = [f for f in self._futures if not f.done()]
         body = {
             "model": model,
             "input_tokens": input_tokens,
@@ -125,7 +126,7 @@ class ByoUsageClient:
         future = self._executor.submit(self._post_usage, body, attribution_headers)
         self._futures.append(future)
 
-    def shutdown(self, timeout: float = 10.0) -> None:
+    def shutdown(self, timeout: float = 15.0) -> None:
         """Wait for pending reports and shut down the executor.
 
         Blocks up to *timeout* seconds for in-flight POSTs to complete.
