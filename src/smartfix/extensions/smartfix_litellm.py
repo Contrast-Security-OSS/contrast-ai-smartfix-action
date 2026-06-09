@@ -39,6 +39,7 @@ from opentelemetry.trace import StatusCode
 from src.smartfix.domains.providers import CONTRAST_CLAUDE_SONNET_4_5
 from src.smartfix.domains.telemetry import otel_provider
 from src.smartfix.domains.telemetry import smartfix_metrics
+from src.smartfix.clients.byo_usage_client import UsageEventCallback
 from src.smartfix.shared.exceptions import TokenBalanceExhaustedError
 from src.config import get_config
 from src.utils import debug_log, log
@@ -215,11 +216,17 @@ class SmartFixLiteLlm(LiteLlm):
     cost_accumulator: TokenCostAccumulator = Field(default_factory=TokenCostAccumulator)
     """Accumulator for tracking token usage and costs across multiple LLM calls."""
 
-    def __init__(self, model: str, **kwargs):
+    def __init__(
+        self,
+        model: str,
+        on_usage_event: "UsageEventCallback | None" = None,
+        **kwargs,
+    ):
         super().__init__(model=model, **kwargs)
         debug_log(f"SmartFixLiteLlm initialized with model: {model}")
         # Store system prompt for use with Contrast models
         self._system_prompt = kwargs.get('system')
+        self._on_usage_event = on_usage_event
 
         # Snapshot the current OTel context so chat spans created during LLM calls are
         # always children of the fix-vulnerability span, regardless of whatever ADK-internal
@@ -700,6 +707,20 @@ class SmartFixLiteLlm(LiteLlm):
                 input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
                 new_input_cost, cache_read_cost, cache_write_cost, output_cost
             )
+
+            # Fire per-call usage callback
+            if self._on_usage_event is not None:
+                try:
+                    self._on_usage_event(
+                        model=self.model,
+                        input_tokens=input_tokens,
+                        output_tokens=output_tokens,
+                        cache_read_tokens=cache_read_tokens,
+                        cache_write_tokens=cache_write_tokens,
+                        cost_usd=total_cost,
+                    )
+                except Exception as cb_err:
+                    debug_log(f"Usage event callback error: {cb_err}")
 
             # Show savings only if we have cache read tokens
             if cache_read_tokens > 0:
