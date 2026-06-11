@@ -334,6 +334,24 @@ class TestMergeHandler(unittest.TestCase):
         result = merge_handler._extract_vulnerability_info(labels)
         self.assertEqual(result, "unknown")
 
+    def test_extract_vulnerability_info_with_northstar_issue_id(self):
+        """Test _extract_vulnerability_info returns issueId from contrast-issue-id: label."""
+        labels = [
+            {"name": "contrast-issue-id:ISS-2026-42"},
+            {"name": "other-label"}
+        ]
+        result = merge_handler._extract_vulnerability_info(labels)
+        self.assertEqual(result, "ISS-2026-42")
+
+    def test_extract_vulnerability_info_prefers_first_matching_label(self):
+        """Test _extract_vulnerability_info returns the first SmartFix label found."""
+        labels = [
+            {"name": "other-label"},
+            {"name": "contrast-vuln-id:VULN-classic-uuid"},
+        ]
+        result = merge_handler._extract_vulnerability_info(labels)
+        self.assertEqual(result, "classic-uuid")
+
     @patch('src.merge_handler.get_config')
     @patch('src.merge_handler.contrast_api.notify_remediation_pr_merged_org')
     def test_notify_remediation_service_success(self, mock_notify, mock_get_config):

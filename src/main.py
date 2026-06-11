@@ -29,6 +29,7 @@ from src.config import get_config
 from src.smartfix.domains.telemetry import otel_provider
 from src.smartfix.domains.telemetry import smartfix_metrics
 from src.smartfix.shared.coding_agents import CodingAgents
+from src.smartfix.shared.constants import CLASSIC, NORTHSTAR_ONLY
 from src.smartfix.shared.exceptions import TokenBalanceExhaustedError
 from src.utils import debug_log, log, error_exit
 from src.smartfix.domains.telemetry import telemetry_handler
@@ -60,6 +61,18 @@ git_ops = GitOperations()
 github_ops = GitHubOperations()
 
 apply_asyncio_workarounds()
+
+
+def _extract_finding_ids(vulnerability_data: dict, fallback_remediation_id: str) -> tuple:
+    """Extract and validate vuln_uuid, mode, issue_id, and primary_id from API response data."""
+    vuln_uuid = vulnerability_data['vulnerabilityUuid']
+    mode = vulnerability_data.get('mode', CLASSIC)
+    issue_id = vulnerability_data.get('issueId')
+    if mode == NORTHSTAR_ONLY and not issue_id:
+        debug_log(f"NORTHSTAR_ONLY finding missing issueId; vuln_uuid={vuln_uuid}, remediationId={vulnerability_data.get('remediationId', 'unknown')}")
+        error_exit(vulnerability_data.get('remediationId', fallback_remediation_id), FailureCategory.GENERAL_FAILURE.value)
+    primary_id = issue_id if mode == NORTHSTAR_ONLY else vuln_uuid
+    return vuln_uuid, mode, issue_id, primary_id
 
 
 def main():
@@ -150,15 +163,15 @@ def _main_impl(vuln_count: list[int], prs_created_count: list[int]) -> None:  # 
 
     # Check Open PR Limit
     log("\n::group::--- Checking Open PR Limit ---")
-    label_prefix_to_check = "contrast-vuln-id:"
+    label_prefix_to_check = ("contrast-vuln-id:", "contrast-issue-id:")
     current_open_pr_count = github_ops.count_open_prs_with_prefix(label_prefix_to_check, "unknown")
     if current_open_pr_count >= max_open_prs_setting:
-        log(f"Found {current_open_pr_count} open PR(s) with label prefix '{label_prefix_to_check}'.")
+        log(f"Found {current_open_pr_count} open PR(s) with label prefix '{', '.join(label_prefix_to_check)}'.")
         log(f"This meets or exceeds the configured limit of {max_open_prs_setting}.")
         log("Exiting script to avoid creating more PRs.")
         sys.exit(0)
     else:
-        log(f"Found {current_open_pr_count} open PR(s) with label prefix '{label_prefix_to_check}' (Limit: {max_open_prs_setting}). Proceeding...")
+        log(f"Found {current_open_pr_count} open PR(s) with label prefix '{', '.join(label_prefix_to_check)}' (Limit: {max_open_prs_setting}). Proceeding...")
     log("\n::endgroup::")
     # END Check Open PR Limit
 
@@ -173,7 +186,7 @@ def _main_impl(vuln_count: list[int], prs_created_count: list[int]) -> None:  # 
     debug_log(f"GitHub repository URL: {github_repo_url}")
     skipped_vulns = set()  # TS-39904
     remediation_id = "unknown"
-    previous_vuln_uuid = None  # Track previous vulnerability UUID to detect duplicates
+    previous_primary_id = None  # Track previous primary identifier to detect duplicates
     discovered_build_cmd = None   # Build command found by agent at runtime; carried forward across iterations
     discovered_format_cmd = None  # Format command found by agent at runtime; carried forward across iterations
 
@@ -226,14 +239,14 @@ def _main_impl(vuln_count: list[int], prs_created_count: list[int]) -> None:  # 
                 log(f"Warning: {len(skipped_app_ids)} app(s) were inaccessible and skipped: {skipped_app_ids}", is_warning=True)
 
             # Extract vulnerability details and prompts from the response
-            vuln_uuid = vulnerability_data['vulnerabilityUuid']
+            vuln_uuid, mode, issue_id, primary_id = _extract_finding_ids(vulnerability_data, remediation_id)
 
-            # Check if this is the same vulnerability UUID as the previous iteration
-            if vuln_uuid == previous_vuln_uuid:
-                if vuln_uuid in skipped_vulns:
-                    log(f"Vulnerability {vuln_uuid} was re-served after being handled. Breaking loop to avoid infinite processing.")
+            # Check if this is the same primary identifier as the previous iteration
+            if primary_id == previous_primary_id:
+                if primary_id in skipped_vulns:
+                    log(f"Finding {primary_id} was re-served after being handled. Breaking loop to avoid infinite processing.")
                     break
-                log(f"Error: Backend provided the same vulnerability UUID ({vuln_uuid}) as the previous iteration. This indicates a backend error.", is_warning=True)
+                log(f"Error: Backend provided the same primary identifier ({primary_id}) as the previous iteration. This indicates a backend error.", is_warning=True)
                 error_exit(remediation_id, FailureCategory.GENERAL_FAILURE.value)
 
             vuln_title = vulnerability_data['vulnerabilityTitle']
@@ -271,11 +284,11 @@ def _main_impl(vuln_count: list[int], prs_created_count: list[int]) -> None:  # 
                 log(f"Warning: {len(skipped_app_ids)} app(s) were inaccessible and skipped: {skipped_app_ids}", is_warning=True)
 
             # Extract vulnerability details from the response (no prompts for external agents)
-            vuln_uuid = vulnerability_data['vulnerabilityUuid']
+            vuln_uuid, mode, issue_id, primary_id = _extract_finding_ids(vulnerability_data, remediation_id)
 
-            # Check if this is the same vulnerability UUID as the previous iteration
-            if vuln_uuid == previous_vuln_uuid:
-                log(f"Error: Backend provided the same vulnerability UUID ({vuln_uuid}) as the previous iteration. This indicates a backend error.", is_warning=True)
+            # Check if this is the same primary identifier as the previous iteration
+            if primary_id == previous_primary_id:
+                log(f"Error: Backend provided the same primary identifier ({primary_id}) as the previous iteration. This indicates a backend error.", is_warning=True)
                 error_exit(remediation_id, FailureCategory.GENERAL_FAILURE.value)
 
             vuln_title = vulnerability_data['vulnerabilityTitle']
@@ -287,34 +300,35 @@ def _main_impl(vuln_count: list[int], prs_created_count: list[int]) -> None:  # 
             prompts = PromptConfiguration()
 
         # Populate vulnInfo in telemetry
-        telemetry_handler.update_telemetry("vulnInfo.vulnId", vuln_uuid)
+        telemetry_handler.update_telemetry("vulnInfo.vulnId", primary_id)
         telemetry_handler.update_telemetry("vulnInfo.vulnRule", vulnerability_data['vulnerabilityRuleName'])
+        telemetry_handler.update_telemetry("vulnInfo.northstarMode", mode)
         telemetry_handler.update_telemetry("additionalAttributes.remediationId", remediation_id)
 
-        log(f"\n::group::--- Considering Vulnerability: {vuln_title} (UUID: {vuln_uuid}) ---")
+        log(f"\n::group::--- Considering Finding: {vuln_title} (ID: {primary_id}) ---")
 
         # --- Check for Existing PRs ---
-        label_name, _, _ = github_ops.generate_label_details(vuln_uuid)
+        label_name, _, _ = github_ops.generate_label_details(vuln_uuid, mode=mode, issue_id=issue_id)
         pr_status = github_ops.check_pr_status_for_label(label_name)
 
         # Changed this logic to check only for OPEN PRs for dev purposes
         if pr_status == "OPEN":
-            log(f"Skipping vulnerability {vuln_uuid} as an OPEN PR with label '{label_name}' already exists.")
+            log(f"Skipping finding {primary_id} as an OPEN PR with label '{label_name}' already exists.")
             log("\n::endgroup::")
-            if vuln_uuid in skipped_vulns:
-                log(f"Vulnerability {vuln_uuid} was re-suggested after being skipped. "
+            if primary_id in skipped_vulns:
+                log(f"Finding {primary_id} was re-suggested after being skipped. "
                     f"This may indicate GitHub returned incorrect PR data. "
                     f"See https://www.githubstatus.com/ for possible incidents. "
                     f"Breaking loop to avoid infinite processing.")
                 break
-            skipped_vulns.add(vuln_uuid)
+            skipped_vulns.add(primary_id)
             continue
         else:
-            log(f"No existing OPEN or MERGED PR found for vulnerability {vuln_uuid}. Proceeding with fix attempt.")
+            log(f"No existing OPEN or MERGED PR found for finding {primary_id}. Proceeding with fix attempt.")
         log("\n::endgroup::")
 
-        # Update tracking variable now that we know we're actually processing this vuln
-        previous_vuln_uuid = vuln_uuid
+        # Update tracking variable now that we know we're actually processing this finding
+        previous_primary_id = primary_id
         vuln_count[0] += 1
 
         log(f"\n\033[0;33m Selected vuln to fix: {vuln_title} \033[0m")
@@ -332,7 +346,7 @@ def _main_impl(vuln_count: list[int], prs_created_count: list[int]) -> None:  # 
 
         smartfix_metrics.set_current_rule_name(vulnerability.rule_name)
         with otel_provider.start_span("fix-vulnerability") as op_span:
-            op_span.set_attribute("contrast.finding.fingerprint", vulnerability.uuid)
+            op_span.set_attribute("contrast.finding.fingerprint", primary_id)
             op_span.set_attribute("contrast.finding.source", "runtime")
             op_span.set_attribute("contrast.finding.rule_id", vulnerability.rule_name)
             op_span.set_attribute("contrast.smartfix.coding_agent", config.CODING_AGENT.lower())
@@ -347,6 +361,8 @@ def _main_impl(vuln_count: list[int], prs_created_count: list[int]) -> None:  # 
                     skip_writing_security_test=config.SKIP_WRITING_SECURITY_TEST,
                     session_id=session_id,
                     language=vuln_language,
+                    mode=mode,
+                    issue_id=issue_id,
                 )
 
                 # Propagate a build command discovered by a previous agent run so the next
@@ -492,7 +508,7 @@ def _main_impl(vuln_count: list[int], prs_created_count: list[int]) -> None:  # 
                 # --- Push and Create PR ---
                 git_ops.push_branch(new_branch_name)  # Push the final commit (original or amended)
 
-                label_name, label_desc, label_color = github_ops.generate_label_details(vuln_uuid)
+                label_name, label_desc, label_color = github_ops.generate_label_details(vuln_uuid, mode=mode, issue_id=issue_id)
                 label_created = github_ops.ensure_label(label_name, label_desc, label_color)
                 if not label_created:
                     log(f"Could not create GitHub label '{label_name}'. PR will be created without a label.", is_warning=True)
@@ -589,6 +605,7 @@ def _main_impl(vuln_count: list[int], prs_created_count: list[int]) -> None:  # 
                         outcome=pr_metric_outcome,
                         rule_name=vulnerability.rule_name,
                         coding_agent=config.CODING_AGENT.lower(),
+                        mode=mode,
                     )
 
                     if not pr_creation_success:
@@ -649,6 +666,7 @@ def _main_impl(vuln_count: list[int], prs_created_count: list[int]) -> None:  # 
                     language=lang or "unknown",
                     source="runtime",
                     severity=_severity,
+                    mode=mode,
                 )
 
     # Calculate total runtime
