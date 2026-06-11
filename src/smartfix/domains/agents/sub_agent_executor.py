@@ -34,8 +34,10 @@ from typing import Optional
 
 from src.utils import debug_log, log, error_exit, tail_string
 from src.smartfix.shared.failure_categories import FailureCategory
+from src.smartfix.shared.exceptions import TokenBalanceExhaustedError
 from src.smartfix.domains.telemetry import telemetry_handler
 from src.smartfix.domains.providers import setup_contrast_provider
+from src.smartfix.clients.byo_usage_client import ByoUsageClient, SMARTFIX_FEATURE, UsageEventCallback
 
 from .mcp_manager import MCPToolsetManager
 
@@ -77,6 +79,68 @@ class SubAgentExecutor:
         self.max_events = max_events or self.config.MAX_EVENTS_PER_AGENT
         self.mcp_manager = MCPToolsetManager()
 
+    def _create_byo_usage_client(self) -> ByoUsageClient | None:
+        """Create a BYO usage client if the customer is using their own LLM provider.
+
+        Returns None when Contrast LLM is in use (usage is tracked server-side)
+        or when required credentials are missing.
+        """
+        if getattr(self.config, "USE_CONTRAST_LLM", True):
+            return None
+
+        host = self.config.CONTRAST_HOST or ""
+        api_key = self.config.CONTRAST_API_KEY or ""
+        authorization = self.config.CONTRAST_AUTHORIZATION_KEY or ""
+        org_id = self.config.CONTRAST_ORG_ID or ""
+
+        if not all([host, api_key, authorization, org_id]):
+            debug_log("BYO usage reporting disabled: missing Contrast credentials")
+            return None
+
+        debug_log("BYO usage reporting enabled")
+        return ByoUsageClient(
+            contrast_host=host,
+            api_key=api_key,
+            authorization=authorization,
+            org_id=org_id,
+        )
+
+    @staticmethod
+    def _make_byo_usage_callback(
+        client: ByoUsageClient,
+        *,
+        vuln_uuid: str,
+        remediation_id: str,
+        repo_slug: str,
+        language: str,
+    ) -> "UsageEventCallback":
+        """Return a closure that bridges SmartFixLiteLlm's on_usage_event to ByoUsageClient."""
+
+        def _on_usage_event(
+            *,
+            model: str,
+            input_tokens: int,
+            output_tokens: int,
+            cache_read_tokens: int,
+            cache_write_tokens: int,
+            cost_usd: float,
+        ) -> None:
+            client.report_usage(
+                model=model,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                cache_read_input_tokens=cache_read_tokens,
+                cache_write_input_tokens=cache_write_tokens,
+                cost_usd=cost_usd,
+                feature=SMARTFIX_FEATURE,
+                vuln_id=vuln_uuid,
+                session_id=remediation_id,
+                repo=repo_slug,
+                source_language=language,
+            )
+
+        return _on_usage_event
+
     async def run(
         self,
         repo_root: Path,
@@ -112,6 +176,17 @@ class SubAgentExecutor:
             log("FATAL: Agent execution skipped: ADK libraries not available (import failed).")
             error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
 
+        byo_client = self._create_byo_usage_client()
+        on_usage_event = None
+        if byo_client is not None:
+            on_usage_event = self._make_byo_usage_callback(
+                byo_client,
+                vuln_uuid=vuln_uuid,
+                remediation_id=remediation_id,
+                repo_slug=repo_slug,
+                language=language,
+            )
+
         try:
             session_service = InMemorySessionService()
             artifacts_service = InMemoryArtifactService()
@@ -125,27 +200,32 @@ class SubAgentExecutor:
             log(f"FATAL: Failed to create fix agent session: {e}", is_error=True)
             error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
 
-        agent = await self.create_agent(
-            repo_root, remediation_id, session_id, system_prompt=system_prompt,
-            additional_tools=additional_tools,
-            vuln_uuid=vuln_uuid, repo_slug=repo_slug, language=language,
-        )
-        if not agent:
-            log(
-                "AI Agent creation failed (fix agent). "
-                "Possible reasons: MCP server connection issue, missing prompts, "
-                "model configuration error, or internal ADK problem."
+        try:
+            agent = await self.create_agent(
+                repo_root, remediation_id, session_id, system_prompt=system_prompt,
+                additional_tools=additional_tools,
+                vuln_uuid=vuln_uuid, repo_slug=repo_slug, language=language,
+                on_usage_event=on_usage_event,
             )
-            error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
+            if not agent:
+                log(
+                    "AI Agent creation failed (fix agent). "
+                    "Possible reasons: MCP server connection issue, missing prompts, "
+                    "model configuration error, or internal ADK problem."
+                )
+                error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
 
-        runner = Runner(
-            app_name=app_name,
-            agent=agent,
-            artifact_service=artifacts_service,
-            session_service=session_service,
-        )
+            runner = Runner(
+                app_name=app_name,
+                agent=agent,
+                artifact_service=artifacts_service,
+                session_service=session_service,
+            )
 
-        return await self.execute_agent(runner, agent, session, query, remediation_id)
+            return await self.execute_agent(runner, agent, session, query, remediation_id)
+        finally:
+            if byo_client is not None:
+                byo_client.shutdown()
 
     async def create_agent(
         self,
@@ -157,6 +237,7 @@ class SubAgentExecutor:
         vuln_uuid: str = "",
         repo_slug: str = "",
         language: str = "",
+        on_usage_event: Optional[UsageEventCallback] = None,
     ) -> Optional[Agent]:
         """
         Create an ADK Agent.
@@ -214,6 +295,7 @@ class SubAgentExecutor:
                     headers["x-contrast-llm-source-language"] = language
                 model_instance = SmartFixLiteLlm(
                     model=self.config.AGENT_MODEL,
+                    on_usage_event=on_usage_event,
                     temperature=0.2,
                     stream_options={"include_usage": True},
                     system=system_prompt,
@@ -223,6 +305,7 @@ class SubAgentExecutor:
             else:
                 model_instance = SmartFixLiteLlm(
                     model=self.config.AGENT_MODEL,
+                    on_usage_event=on_usage_event,
                     temperature=0.2,  # Set low temperature for more deterministic output
                     # seed=42, # The random seed for reproducibility
                     # (not supported by bedrock/anthropic atm - call throws error)
@@ -339,6 +422,11 @@ class SubAgentExecutor:
                     break  # Exit the event loop
 
             agent_run_result = "SUCCESS"
+        # The broad catch-all below treats every Exception as an agent failure
+        # (error_exit / AGENT_FAILURE). TokenBalanceExhaustedError is a clean
+        # stop on HTTP 402, not a failure. Re-raise so it reaches main.
+        except TokenBalanceExhaustedError:
+            raise
         except Exception as e:
             # Handle the exception and determine if execution should continue
             should_continue = await self._handle_exception(e, events_async, remediation_id)

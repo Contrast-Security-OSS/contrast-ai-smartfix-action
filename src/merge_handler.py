@@ -197,13 +197,23 @@ def handle_merged_pr():
     remediation_id, labels = _extract_remediation_info(pull_request)
     vuln_uuid = _extract_vulnerability_info(labels)
 
+    # Derive agent from branch prefix so external-agent merges (Copilot, Claude Code)
+    # are not misattributed as "smartfix" in the datalake.
+    branch_name = pull_request.get("head", {}).get("ref") or ""
+    if branch_name.startswith("claude/issue-"):
+        _merge_agent = "external-claude_code"
+    elif branch_name.startswith("copilot/fix"):
+        _merge_agent = "external-github_copilot"
+    else:
+        _merge_agent = config.CODING_AGENT.lower()
+
     try:
         with otel_provider.start_span("smartfix-merge") as merge_span:
             merge_span.set_attribute("contrast.smartfix.pr_merged", True)
             merge_span.set_attribute("contrast.smartfix.remediation_id", remediation_id)
             merge_span.set_attribute("contrast.finding.fingerprint", vuln_uuid)
 
-            smartfix_metrics.record_pr_merged(coding_agent=config.CODING_AGENT.lower())
+            smartfix_metrics.record_pr_merged(coding_agent=_merge_agent)
 
             debug_log(f"Extracted Remediation ID: {remediation_id}")
             telemetry_handler.update_telemetry("additionalAttributes.remediationId", remediation_id)
