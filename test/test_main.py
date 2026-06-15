@@ -446,5 +446,60 @@ class TestMain(unittest.TestCase):
         self.assertIn("app-id-3", output)
 
 
+    def test_finding_type_and_severity_logged_for_sast_finding(self):
+        """debug_log emits findingType and severity after _extract_finding_ids for a SAST finding."""
+        vuln_data = {
+            'vulnerabilityUuid': 'SAST-UUID-001',
+            'vulnerabilityTitle': 'Test SQL Injection',
+            'vulnerabilityRuleName': 'sql-injection',
+            'remediationId': 'REM-SAST-001',
+            'sessionId': 'session-sast-001',
+            'fixSystemPrompt': 'Fix the vulnerability',
+            'fixUserPrompt': 'Please fix',
+            'findingType': 'SAST',
+            'severity': 'HIGH',
+        }
+
+        self.mock_api.side_effect = [vuln_data, None]
+
+        with patch('src.github.github_operations.GitHubOperations.check_pr_status_for_label') as mock_pr_check, \
+             patch('src.github.github_operations.GitHubOperations.generate_label_details') as mock_label:
+            mock_pr_check.return_value = "OPEN"
+            mock_label.return_value = ('contrast-vuln-id:SAST-UUID-001', 'color', 'desc')
+
+            with patch.dict('os.environ', self.env_vars, clear=True):
+                with io.StringIO() as buf, contextlib.redirect_stdout(buf):
+                    main()
+                    output = buf.getvalue()
+
+        self.assertIn("Processing SAST finding | id=SAST-UUID-001 | severity=HIGH", output)
+
+    def test_finding_type_and_severity_default_to_unknown_when_absent(self):
+        """debug_log uses UNKNOWN for findingType and severity when fields are absent from response."""
+        vuln_data = {
+            'vulnerabilityUuid': 'IAST-UUID-001',
+            'vulnerabilityTitle': 'Test Injection',
+            'vulnerabilityRuleName': 'sql-injection',
+            'remediationId': 'REM-IAST-001',
+            'sessionId': 'session-iast-001',
+            'fixSystemPrompt': 'Fix the vulnerability',
+            'fixUserPrompt': 'Please fix',
+        }
+
+        self.mock_api.side_effect = [vuln_data, None]
+
+        with patch('src.github.github_operations.GitHubOperations.check_pr_status_for_label') as mock_pr_check, \
+             patch('src.github.github_operations.GitHubOperations.generate_label_details') as mock_label:
+            mock_pr_check.return_value = "OPEN"
+            mock_label.return_value = ('contrast-vuln-id:IAST-UUID-001', 'color', 'desc')
+
+            with patch.dict('os.environ', self.env_vars, clear=True):
+                with io.StringIO() as buf, contextlib.redirect_stdout(buf):
+                    main()
+                    output = buf.getvalue()
+
+        self.assertIn("Processing UNKNOWN finding | id=IAST-UUID-001 | severity=UNKNOWN", output)
+
+
 if __name__ == '__main__':
     unittest.main()
