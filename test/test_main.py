@@ -474,6 +474,41 @@ class TestMain(unittest.TestCase):
 
         self.assertIn("Processing SAST finding | id=SAST-UUID-001 | severity=HIGH", output)
 
+    def test_sast_northstar_finding_logs_type_and_severity(self):
+        """Synthetic SAST NORTHSTAR_ONLY payload reaches the finding-type log line without error.
+
+        Regression guard: a NORTHSTAR_ONLY finding with findingType=SAST and severity=CRITICAL
+        must not hit any blocking code path before the debug_log fires.
+        """
+        vuln_data = {
+            'vulnerabilityUuid': 'SAST-VULN-UUID-001',
+            'vulnerabilityTitle': 'SQL Injection (SAST)',
+            'vulnerabilityRuleName': 'sql-injection',
+            'remediationId': 'REM-SAST-TRACE-001',
+            'sessionId': 'session-sast-trace',
+            'fixSystemPrompt': 'Fix the vulnerability',
+            'fixUserPrompt': 'Please fix',
+            'mode': 'NORTHSTAR_ONLY',
+            'issueId': 'NS-SAST-ISSUE-001',
+            'findingType': 'SAST',
+            'severity': 'CRITICAL',
+        }
+
+        self.mock_api.side_effect = [vuln_data, None]
+
+        with patch('src.github.github_operations.GitHubOperations.check_pr_status_for_label') as mock_pr_check, \
+             patch('src.github.github_operations.GitHubOperations.generate_label_details') as mock_label:
+            mock_pr_check.return_value = "OPEN"
+            mock_label.return_value = ('contrast-issue-id:NS-SAST-ISSUE-001', 'color', 'desc')
+
+            with patch.dict('os.environ', self.env_vars, clear=True):
+                with io.StringIO() as buf, contextlib.redirect_stdout(buf):
+                    main()
+                    output = buf.getvalue()
+
+        self.assertIn("Processing SAST finding | id=NS-SAST-ISSUE-001 | severity=CRITICAL", output)
+        self.mock_exit.assert_not_called()
+
     def test_finding_type_and_severity_default_to_unknown_when_absent(self):
         """debug_log uses UNKNOWN for findingType and severity when fields are absent from response."""
         vuln_data = {
