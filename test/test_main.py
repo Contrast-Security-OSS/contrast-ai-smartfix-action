@@ -445,7 +445,6 @@ class TestMain(unittest.TestCase):
         self.assertIn("app-id-2", output)
         self.assertIn("app-id-3", output)
 
-
     def test_finding_type_and_severity_logged_for_sast_finding(self):
         """debug_log emits findingType and severity after _extract_finding_ids for a SAST finding."""
         vuln_data = {
