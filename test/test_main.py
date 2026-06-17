@@ -456,7 +456,7 @@ class TestMain(unittest.TestCase):
             'fixSystemPrompt': 'Fix the vulnerability',
             'fixUserPrompt': 'Please fix',
             'findingType': 'SAST',
-            'severity': 'HIGH',
+            'vulnerabilitySeverity': 'HIGH',
         }
 
         self.mock_api.side_effect = [vuln_data, None]
@@ -490,7 +490,7 @@ class TestMain(unittest.TestCase):
             'mode': 'NORTHSTAR_ONLY',
             'issueId': 'NS-SAST-ISSUE-001',
             'findingType': 'SAST',
-            'severity': 'CRITICAL',
+            'vulnerabilitySeverity': 'CRITICAL',
         }
 
         self.mock_api.side_effect = [vuln_data, None]
