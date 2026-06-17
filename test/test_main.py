@@ -534,6 +534,34 @@ class TestMain(unittest.TestCase):
 
         self.assertIn("Processing UNKNOWN finding | id=IAST-UUID-001 | severity=UNKNOWN", output)
 
+    def test_external_agent_path_logs_severity_from_vulnerabilitySeverity(self):
+        """On the external-agent path, severity falls back to vulnerabilitySeverity (no severity/findingType field)."""
+        vuln_data = {
+            'vulnerabilityUuid': 'EXT-UUID-001',
+            'vulnerabilityTitle': 'Test SQL Injection',
+            'vulnerabilityRuleName': 'sql-injection',
+            'vulnerabilitySeverity': 'HIGH',
+            'remediationId': 'REM-EXT-001',
+        }
+
+        test_env = {**self.env_vars, 'CODING_AGENT': 'GITHUB_COPILOT'}
+
+        with patch('src.contrast_api.get_org_remediation_details') as mock_ext_api, \
+             patch('src.github.github_operations.GitHubOperations.check_pr_status_for_label') as mock_pr_check, \
+             patch('src.github.github_operations.GitHubOperations.generate_label_details') as mock_label:
+            mock_ext_api.side_effect = [vuln_data, None]
+            mock_pr_check.return_value = "OPEN"
+            mock_label.return_value = ('contrast-vuln-id:EXT-UUID-001', 'color', 'desc')
+
+            with patch.dict('os.environ', test_env, clear=True):
+                reset_config()
+                with patch('src.main.config', get_config()):
+                    with io.StringIO() as buf, contextlib.redirect_stdout(buf):
+                        main()
+                        output = buf.getvalue()
+
+        self.assertIn("Processing UNKNOWN finding | id=EXT-UUID-001 | severity=HIGH", output)
+
 
 if __name__ == '__main__':
     unittest.main()
