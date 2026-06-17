@@ -305,6 +305,10 @@ def _main_impl(vuln_count: list[int], prs_created_count: list[int]) -> None:  # 
         telemetry_handler.update_telemetry("vulnInfo.northstarMode", mode)
         telemetry_handler.update_telemetry("additionalAttributes.remediationId", remediation_id)
 
+        finding_type = vulnerability_data.get('findingType', 'UNKNOWN')
+        severity = vulnerability_data.get('vulnerabilitySeverity') or 'UNKNOWN'
+        debug_log(f"Processing {finding_type} finding | id={primary_id} | severity={severity}")
+
         log(f"\n::group::--- Considering Finding: {vuln_title} (ID: {primary_id}) ---")
 
         # --- Check for Existing PRs ---
