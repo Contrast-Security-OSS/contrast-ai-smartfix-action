@@ -97,7 +97,7 @@ def _main_impl(vuln_count: list[int], prs_created_count: list[int]) -> None:  # 
         log("Error: SmartFix could not find a Contrast application ID for this repository. "
             "SmartFix will attempt to fix any static SAST findings for NorthStar-only organizations.  "
             "If you expect SmartFix to addresss IAST findings for this repository, "
-            "Make sure this repository is instrumented by the Contrast Agent so that it "
+            "make sure this repository is instrumented by the Contrast Agent so that it "
             "has IAST findings in Contrast, then set one of the following inputs in your "
             "SmartFix workflow step:\n"
             "  contrast_app_id: '<your-app-id>'          # single application\n"
