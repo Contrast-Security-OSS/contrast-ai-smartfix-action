@@ -414,6 +414,35 @@ class TestMain(unittest.TestCase):
         self.assertEqual(total_calls[-1][0][1], 0)
         mock_shutdown.assert_called()
 
+    def test_sast_only_mode_no_app_id_does_not_exit(self):
+        """When CONTRAST_APP_ID and CONTRAST_APP_IDS are both absent, SAST-only mode is
+        entered without calling sys.exit — the run completes normally (with no vulns)."""
+        sast_env = {k: v for k, v in self.env_vars.items() if k != 'CONTRAST_APP_ID'}
+
+        with patch.dict('os.environ', sast_env, clear=True):
+            reset_config()
+            self.mock_api.return_value = None
+            main()
+
+        self.mock_exit.assert_not_called()
+
+    def test_sast_only_mode_logs_informational_message(self):
+        """When no app ID is configured, an informational message about SAST-only mode is logged."""
+        sast_env = {k: v for k, v in self.env_vars.items() if k != 'CONTRAST_APP_ID'}
+
+        with patch.dict('os.environ', sast_env, clear=True):
+            reset_config()
+            sast_config = get_config(testing=True)
+            sast_config.CONTRAST_APP_ID = None
+            sast_config.CONTRAST_APP_IDS = []
+            self.mock_api.return_value = None
+            with patch('src.main.config', sast_config):
+                with io.StringIO() as buf, contextlib.redirect_stdout(buf):
+                    main()
+                    output = buf.getvalue()
+
+        self.assertIn('SAST-only mode', output)
+
     def test_skipped_app_ids_warning_is_logged(self):
         """When skippedAppIds is non-empty, a warning including the count and IDs is logged."""
         vuln_data = {

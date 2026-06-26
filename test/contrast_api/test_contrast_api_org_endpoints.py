@@ -201,6 +201,14 @@ class TestGetOrgRemediationDetails(unittest.TestCase):
         mock_409.return_value = ('PR limit reached', False)
         self.assertIsNone(self._call())
 
+    @patch('src.contrast_api.requests.post')
+    def test_sast_only_sends_null_app_ids_when_empty(self, mock_post):
+        """SAST-only mode: empty app_ids list is sent as null so backend routes to SAST path."""
+        mock_post.return_value = make_sample_response(204)
+        self._call(app_ids=[])
+        body = mock_post.call_args[1]['json']
+        self.assertIsNone(body['appIds'])
+
 
 # =============================================================================
 # get_org_prompt_details
@@ -291,6 +299,14 @@ class TestGetOrgPromptDetails(unittest.TestCase):
         mock_post.return_value = make_sample_response(200, body=incomplete_payload)
         with self.assertRaises(SystemExit):
             self._call()
+
+    @patch('src.contrast_api.requests.post')
+    def test_sast_only_sends_null_app_ids_when_empty(self, mock_post):
+        """SAST-only mode: empty app_ids list is sent as null so backend routes to SAST path."""
+        mock_post.return_value = make_sample_response(204)
+        self._call(app_ids=[])
+        body = mock_post.call_args[1]['json']
+        self.assertIsNone(body['appIds'])
 
 
 # =============================================================================
