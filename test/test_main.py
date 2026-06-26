@@ -421,8 +421,12 @@ class TestMain(unittest.TestCase):
 
         with patch.dict('os.environ', sast_env, clear=True):
             reset_config()
+            sast_config = get_config(testing=True)
+            sast_config.CONTRAST_APP_ID = None
+            sast_config.CONTRAST_APP_IDS = []
             self.mock_api.return_value = None
-            main()
+            with patch('src.main.config', sast_config):
+                main()
 
         self.mock_exit.assert_not_called()
 
