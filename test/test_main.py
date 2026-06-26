@@ -441,7 +441,7 @@ class TestMain(unittest.TestCase):
                     main()
                     output = buf.getvalue()
 
-        self.assertIn('SAST-only mode', output)
+        self.assertIn('NorthStar-only organizations', output)
 
     def test_skipped_app_ids_warning_is_logged(self):
         """When skippedAppIds is non-empty, a warning including the count and IDs is logged."""
