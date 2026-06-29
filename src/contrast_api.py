@@ -86,7 +86,7 @@ def get_org_open_remediations(contrast_host: str, contrast_org_id: str, app_ids:
         "User-Agent": config.USER_AGENT
     }
 
-    payload = {"appIds": app_ids}
+    payload = {"appIds": app_ids or None}
 
     try:
         debug_log(f"Fetching org-level open remediations from: {api_url}")

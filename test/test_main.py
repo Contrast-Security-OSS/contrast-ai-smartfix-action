@@ -424,11 +424,11 @@ class TestMain(unittest.TestCase):
             sast_config = get_config(testing=True)
             sast_config.CONTRAST_APP_ID = None
             sast_config.CONTRAST_APP_IDS = []
-            self.mock_api.return_value = None
             with patch('src.main.config', sast_config):
                 main()
 
         self.mock_exit.assert_not_called()
+        self.mock_api.assert_called()
 
     def test_sast_only_mode_logs_informational_message(self):
         """When no app ID is configured, an informational message about SAST-only mode is logged."""
@@ -439,7 +439,6 @@ class TestMain(unittest.TestCase):
             sast_config = get_config(testing=True)
             sast_config.CONTRAST_APP_ID = None
             sast_config.CONTRAST_APP_IDS = []
-            self.mock_api.return_value = None
             with patch('src.main.config', sast_config):
                 with io.StringIO() as buf, contextlib.redirect_stdout(buf):
                     main()
