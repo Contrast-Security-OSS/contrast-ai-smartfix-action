@@ -113,7 +113,7 @@ jobs:
 
 * Store all sensitive values (API keys, tokens) as GitHub Secrets in your repository or Github organization settings.
 * Replace `v1` with the specific version of the SmartFix GitHub Action you intend to use.
-* The `contrast_app_id` must correspond to the Contrast Application ID for the code in the repository where this action runs.  To find the app ID, visit the application page in the Contrast web UI, then use the last UUID in the URL (immediately after `/applications/`) as the app ID value.
+* The `contrast_app_id` must correspond to the Contrast Application ID for the code in the repository where this action runs.  To find the app ID, visit the application page in the Contrast web UI, then use the last UUID in the URL (immediately after `/applications/`) as the app ID value.  Omit `contrast_app_id` (and `contrast_app_ids`) for NorthStar-only organizations — SmartFix will run in SAST-only mode and address static findings without an app ID.
 * Set the `coding_agent` value to `CLAUDE_CODE` to force the SmartFix GitHub Action to use the Claude Code coding agent.
 
 ### Supported Languages
@@ -167,7 +167,7 @@ The following are key inputs for the SmartFix GitHub Action using the GitHub Cla
 | `base_branch` | Base branch for PRs. | No | `${{ github.event.repository.default_branch }}` |
 | `contrast_host` | Contrast Security API host. | Yes |  |
 | `contrast_org_id` | Contrast Organization ID. | Yes |  |
-| `contrast_app_id` | Contrast Application ID for the repository. | Yes |  |
+| `contrast_app_id` | Contrast Application ID for the repository. Omit for NorthStar-only (SAST-only) organizations. | No |  |
 | `contrast_authorization_key` | Contrast Authorization Key. | Yes |  |
 | `contrast_api_key` | Contrast API Key. | Yes |  |
 | `coding_agent` | Specify that SmartFix should use Claude Code as the coding agent. | Yes | `CLAUDE_CODE` |

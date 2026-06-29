@@ -105,17 +105,16 @@ def _main_impl(vuln_count: list[int], prs_created_count: list[int]) -> None:  # 
     start_time = datetime.now()
     log("--- Starting Contrast AI SmartFix Script ---")
 
-    # --- Validate app IDs ---
+    # --- Determine operating mode ---
     if not config.CONTRAST_APP_ID and not config.CONTRAST_APP_IDS:
-        log("Error: SmartFix could not find a Contrast application ID for this repository. "
-            "Make sure this repository is instrumented by the Contrast Agent so that it "
+        log("SmartFix could not find a Contrast application ID for this repository. "
+            "SmartFix will attempt to fix any static SAST findings for NorthStar-only organizations. "
+            "If you expect SmartFix to address IAST findings for this repository, "
+            "make sure this repository is instrumented by the Contrast Agent so that it "
             "has IAST findings in Contrast, then set one of the following inputs in your "
             "SmartFix workflow step:\n"
             "  contrast_app_id: '<your-app-id>'          # single application\n"
-            "  contrast_app_ids: '[\"id-1\", \"id-2\"]'      # monorepo with multiple applications",
-            is_error=True)
-        sys.exit(1)
-
+            "  contrast_app_ids: '[\"id-1\", \"id-2\"]'      # monorepo with multiple applications")
     debug_log(f"Start time: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
     # --- Version Check ---

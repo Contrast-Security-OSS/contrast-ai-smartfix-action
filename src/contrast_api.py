@@ -86,7 +86,7 @@ def get_org_open_remediations(contrast_host: str, contrast_org_id: str, app_ids:
         "User-Agent": config.USER_AGENT
     }
 
-    payload = {"appIds": app_ids}
+    payload = {"appIds": app_ids or None}
 
     try:
         debug_log(f"Fetching org-level open remediations from: {api_url}")
@@ -148,7 +148,7 @@ def get_org_remediation_details(contrast_host: str, contrast_org_id: str, app_id
     }
 
     payload = {
-        "appIds": app_ids,
+        "appIds": app_ids or None,
         "teamserverHost": f"https://{normalize_host(contrast_host)}",
         "repoRootDir": str(config.REPO_ROOT),
         "repoUrl": github_repo_url,
@@ -236,7 +236,7 @@ def get_org_prompt_details(contrast_host: str, contrast_org_id: str, app_ids: li
     }
 
     payload = {
-        "appIds": app_ids,
+        "appIds": app_ids or None,
         "teamserverHost": f"https://{normalize_host(contrast_host)}",
         "repoRootDir": str(config.REPO_ROOT),
         "repoUrl": github_repo_url,
