@@ -6,13 +6,13 @@ When you use Contrast AI SmartFix, you agree that your code and other data will 
 
 ## Introduction
 
-Welcome to Contrast AI SmartFix\! SmartFix is an AI-powered agent that automatically generates code fixes for vulnerabilities identified by Contrast Assess. It integrates into your developer workflow via GitHub Actions, creating Pull Requests (PRs) with proposed remediations.
+Welcome to Contrast AI SmartFix\! SmartFix is an AI-powered agent that automatically generates code fixes for security vulnerabilities identified by Contrast Security. It integrates into your developer workflow via GitHub Actions, creating Pull Requests (PRs) with proposed remediations.
 
 **Key Benefits:**
 
 * **Automated Remediation:** Reduces the manual effort and time required to fix vulnerabilities.
 * **Developer-Focused:** Delivers fixes as PRs directly in your GitHub repository, fitting naturally into existing workflows.
-* **Runtime Context:** Leverages Contrast Assess's runtime analysis (IAST) to provide more accurate and relevant fixes.
+* **Vulnerability Context:** Leverages Contrast's vulnerability data — including IAST runtime findings from Contrast Assess and static findings from NorthStar — to provide accurate and relevant fixes.
 
 ## Getting Started
 
@@ -41,7 +41,7 @@ Please follow the specific setup instructions link for the coding agent of your 
 ## FAQ
 
 * **Q: Can I use SmartFix if I don't use Contrast Assess?**
-  * A: No, SmartFix relies on vulnerability data from Contrast Assess. In the future we plan to expand to include more.
+  * A: Yes, if your organization uses static analysis (NorthStar/SAST), SmartFix can operate in SAST-only mode. Simply omit `contrast_app_id` and `contrast_app_ids` from your workflow configuration. SmartFix still requires a Contrast account and organization.
 * **Q: How often does SmartFix run?**
   * A: This is determined by the `schedule` trigger in your GitHub Actions workflow file. You can customize it.
 * **Q: What happens if the AI cannot generate a fix?**

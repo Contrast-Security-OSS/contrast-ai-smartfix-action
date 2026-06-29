@@ -14,13 +14,13 @@ When assigned to a SmartFix-created GitHub Issue describing a Contrast-discovere
 
 * **Automated Remediation:** Reduces the manual effort and time required to fix vulnerabilities.
 * **Developer-Focused:** Delivers fixes as PRs directly in your GitHub repository, fitting naturally into existing workflows.
-* **Runtime Context:** Leverages Contrast Assess's runtime analysis (IAST) to provide more accurate and relevant fixes.
+* **Vulnerability Context:** Leverages Contrast's vulnerability data — including IAST runtime findings from Contrast Assess and static findings from NorthStar — to provide accurate and relevant fixes.
 
 ## Getting Started
 
 ### Prerequisites
 
-* **Contrast Assess:** You need an active Contrast Assess deployment identifying vulnerabilities in your application.
+* **Contrast Security:** You need an active Contrast deployment identifying vulnerabilities in your application — either Contrast Assess (IAST) for runtime findings, or NorthStar (SAST) for static-only organizations.
 * **GitHub:** Your project must be hosted on GitHub and use GitHub Actions.  In the GitHub repository's Settings, enable the Actions > General > Workflow Permissions checkbox for "Allow GitHub Actions to create and approve pull requests".
 * **GitHub Copilot Requirements:**
   * GitHub repository with **Issues** and **GitHub Copilot** enabled
@@ -32,7 +32,7 @@ When assigned to a SmartFix-created GitHub Issue describing a Contrast-discovere
     * **Pull requests**: Read and write (required to create PRs and add labels)
     * **Workflows**: Read and write (required to trigger and monitor GitHub Copilot's workflow execution)
   * **Suggestion:** Set up a GitHub service account and use that to make the PAT for more explicit tracking of SmartFix's work in GitHub.
-* **Contrast API Credentials:** You will need your Contrast Host, Organization ID, Application ID, Authorization Key, and API Key.
+* **Contrast API Credentials:** You will need your Contrast Host, Organization ID, Authorization Key, and API Key. Also provide your Application ID if your organization uses Contrast Assess (IAST); omit it for NorthStar-only (SAST-only) organizations.
 
 Set the gathered values as secrets and variables for the GitHub repository at Settings tab > Secrets and Variables in the sidebar > Actions.
 
@@ -44,7 +44,7 @@ Secrets:
 Variables:
 * CONTRAST_HOST (The host name of your Contrast SaaS instance, e.g. 'app.contrastsecurity.com')
 * CONTRAST_ORG_ID (The UUID of your Contrast organization)
-* CONTRAST_APP_ID (The UUID that is specific to the application in this repository.)
+* CONTRAST_APP_ID (The UUID that is specific to the application in this repository. Omit for NorthStar-only/SAST-only organizations.)
 * Any other non-secret values, such as the AWS region for a Bedrock-provided LLM
 
 ### Installation and Configuration for GitHub Copilot Coding Agent
@@ -91,7 +91,7 @@ jobs:
           # Contrast Configuration
           contrast_host: ${{ vars.CONTRAST_HOST }} # The host name of your Contrast SaaS instance, e.g. 'app.contrastsecurity.com'
           contrast_org_id: ${{ vars.CONTRAST_ORG_ID }} # The UUID of your Contrast organization
-          contrast_app_id: ${{ vars.CONTRAST_APP_ID }} # The UUID that is specific to the application in this repository.
+          contrast_app_id: ${{ vars.CONTRAST_APP_ID }} # Optional: omit for NorthStar-only (SAST-only) organizations
           contrast_authorization_key: ${{ secrets.CONTRAST_AUTHORIZATION_KEY }}
           contrast_api_key: ${{ secrets.CONTRAST_API_KEY }}
 
@@ -109,7 +109,7 @@ jobs:
 
 * Store all sensitive values (API keys, tokens) as GitHub Secrets in your repository or Github organization settings.
 * Replace `v1` with the specific version of the SmartFix GitHub Action you intend to use.
-* The `contrast_app_id` must correspond to the Contrast Application ID for the code in the repository where this action runs.  To find the app ID, visit the application page in the Contrast web UI, then use the last UUID in the URL (immediately after `/applications/`) as the app ID value.
+* The `contrast_app_id` must correspond to the Contrast Application ID for the code in the repository where this action runs.  To find the app ID, visit the application page in the Contrast web UI, then use the last UUID in the URL (immediately after `/applications/`) as the app ID value.  Omit `contrast_app_id` (and `contrast_app_ids`) for NorthStar-only organizations — SmartFix will run in SAST-only mode and address static findings without an app ID.
 * Set the `coding_agent` value to `GITHUB_COPILOT` to force the SmartFix GitHub Action to use the GitHub Copilot coding agent.
 
 ### Supported Languages
@@ -127,7 +127,7 @@ Note: the SmartFix action's setup steps rely on the bash shell.  Please ensure t
 
 SmartFix focuses on remediating:
 
-* **CRITICAL** and **HIGH** severity vulnerabilities identified by Contrast Assess.
+* **CRITICAL** and **HIGH** severity vulnerabilities identified by Contrast, including IAST findings from Contrast Assess and static SAST findings from NorthStar.
 * **Exclusions:**
   * Cross-Site Request Forgery (CSRF) is currently excluded due to the complexity of fixes often requiring API changes.
   * Other specific vulnerability types may be excluded based on ongoing testing by Contrast Labs.
@@ -163,7 +163,7 @@ The following are key inputs for the SmartFix GitHub Action using the GitHub Cop
 | `base_branch` | Base branch for PRs. | No | `${{ github.event.repository.default_branch }}` |
 | `contrast_host` | Contrast Security API host. | Yes |  |
 | `contrast_org_id` | Contrast Organization ID. | Yes |  |
-| `contrast_app_id` | Contrast Application ID for the repository. | Yes |  |
+| `contrast_app_id` | Contrast Application ID for the repository. Omit for NorthStar-only (SAST-only) organizations. | No |  |
 | `contrast_authorization_key` | Contrast Authorization Key. | Yes |  |
 | `contrast_api_key` | Contrast API Key. | Yes |  |
 | `coding_agent` | Specify that SmartFix should use Github Copilot as the coding agent. | Yes | `GITHUB_COPILOT` |
@@ -201,7 +201,7 @@ SmartFix collects telemetry data to help improve the service and diagnose issues
   * Ensure the `PAT_token` has the necessary permissions (Actions: read, Contents: read-write, Issues: read-write, Metadata: read, Pull requests: read-write, Workflows: read-write).
   * Check for branch protection rules that might prevent PR creation.
 * **No Fixes Generated:**
-  * Confirm there are eligible CRITICAL or HIGH severity vulnerabilities in Contrast Assess for the configured `contrast_app_id`. SmartFix only attempts to fix vulnerabilities that are in the REPORTED state.
+  * Confirm there are eligible CRITICAL or HIGH severity vulnerabilities in Contrast. For Contrast Assess (IAST) deployments, check under the configured `contrast_app_id`. For NorthStar-only (SAST-only) deployments — where `contrast_app_id` is intentionally omitted — confirm there are eligible SAST findings in your Contrast organization. SmartFix only attempts to fix vulnerabilities that are in the REPORTED state.
   * Check the `max_open_prs` limit; if the number of PRs SmartFix has created that are still open matches this limit, no new PRs will be created.
   * Review the GitHub Action logs for messages indicating why vulnerabilities might have been skipped.
 * **Incorrect Fixes:** The AI-generated fixes should **always** be reviewed carefully. If a fix is incorrect or incomplete:
@@ -215,7 +215,7 @@ SmartFix collects telemetry data to help improve the service and diagnose issues
 ## FAQ
 
 * **Q: Can I use SmartFix if I don't use Contrast Assess?**
-  * A: No, SmartFix relies on vulnerability data from Contrast Assess. In the future we plan to expand to include more.
+  * A: Yes, if your organization uses static analysis (NorthStar/SAST), SmartFix can operate in SAST-only mode. Simply omit `contrast_app_id` and `contrast_app_ids` from your workflow configuration. SmartFix still requires a Contrast account and organization.
 * **Q: How often does SmartFix run?**
   * A: This is determined by the `schedule` trigger in your GitHub Actions workflow file. You can customize it.
 * **Q: What happens if the AI cannot generate a fix?**

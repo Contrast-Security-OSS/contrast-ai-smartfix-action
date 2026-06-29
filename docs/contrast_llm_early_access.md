@@ -55,7 +55,7 @@ To use Contrast LLM with the SmartFix Coding Agent, simply set one configuration
     # Standard Contrast configuration (unchanged)
     contrast_host: ${{ vars.CONTRAST_HOST }}
     contrast_org_id: ${{ vars.CONTRAST_ORG_ID }}
-    contrast_app_id: ${{ vars.CONTRAST_APP_ID }}
+    contrast_app_id: ${{ vars.CONTRAST_APP_ID }}  # Optional: omit for NorthStar-only (SAST-only) organizations
     contrast_authorization_key: ${{ secrets.CONTRAST_AUTHORIZATION_KEY }}
     contrast_api_key: ${{ secrets.CONTRAST_API_KEY }}
 
@@ -102,7 +102,7 @@ This flexibility allows customers to gradually migrate or use different configur
 All existing Contrast API parameters remain the same:
 - `contrast_host`
 - `contrast_org_id`
-- `contrast_app_id`
+- `contrast_app_id` _(optional — omit for NorthStar-only/SAST-only organizations)_
 - `contrast_authorization_key`
 - `contrast_api_key`
 
@@ -164,7 +164,7 @@ jobs:
           # --- Contrast API Credentials ---
           contrast_host: ${{ vars.CONTRAST_HOST }}
           contrast_org_id: ${{ vars.CONTRAST_ORG_ID }}
-          contrast_app_id: ${{ vars.CONTRAST_APP_ID }}
+          contrast_app_id: ${{ vars.CONTRAST_APP_ID }}  # Optional: omit for NorthStar-only (SAST-only) organizations
           contrast_authorization_key: ${{ secrets.CONTRAST_AUTHORIZATION_KEY }}
           contrast_api_key: ${{ secrets.CONTRAST_API_KEY }}
 

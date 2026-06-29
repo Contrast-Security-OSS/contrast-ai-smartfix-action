@@ -14,9 +14,9 @@ The SmartFix Coding Agent uses Contrast vulnerability data with a team of agenti
 
 ### Prerequisites
 
-* **Contrast Assess:** You need an active Contrast Assess deployment identifying vulnerabilities in your application.
+* **Contrast Security:** You need an active Contrast deployment identifying vulnerabilities in your application — either Contrast Assess (IAST) for runtime findings, or NorthStar (SAST) for static-only organizations.
 * **GitHub:** Your project must be hosted on GitHub and use GitHub Actions.  In the GitHub repository's Settings, enable the Actions > General > Workflow Permissions checkbox for "Allow GitHub Actions to create and approve pull requests".
-* **Contrast API Credentials:** You will need your Contrast Host, Organization ID, Application ID, Authorization Key, and API Key values.  To find the app ID, visit the application page in the Contrast web UI, then use the last UUID in the URL (immediately after `/applications/`) as the app ID value.  **Suggestion:** Setup an API-only service user named “Contrast AI SmartFix” in your Organization Settings in your Contrast SaaS instance.  At a minimum, it should have the “View Organization” permission and “Edit Application” permission for this application.  This service user’s `contrast_authorization_key` value and the Organization’s `contrast_api_key` value should be used in the workflow.
+* **Contrast API Credentials:** You will need your Contrast Host, Organization ID, Authorization Key, and API Key values.  For repositories with IAST findings, also provide your Application ID — visit the application page in the Contrast web UI and use the last UUID in the URL (immediately after `/applications/`).  Omit the Application ID for NorthStar-only (SAST-only) organizations; SmartFix will run in SAST-only mode.  **Suggestion:** Setup an API-only service user named “Contrast AI SmartFix” in your Organization Settings in your Contrast SaaS instance.  At a minimum, it should have the “View Organization” permission and “Edit Application” permission for this application.  This service user’s `contrast_authorization_key` value and the Organization’s `contrast_api_key` value should be used in the workflow.
 * **GitHub Token Permissions:** The GitHub token must have `contents: write` and `pull-requests: write` permissions. These permissions must be explicitly set in your workflow file, as they are in the example config file, below.  Note, the SmartFix Coding Agent uses the internal GitHub token for Actions; you do not need to create a Personal Access Token (PAT).
 * **LLM Access (Optional):** SmartFix uses Contrast's LLM service for seamless setup. If you prefer to use your own LLM provider (BYOLLM), ensure that you have API access to one of our recommended LLMs. If using an AWS Bedrock model, please see Amazon's User Guide on [model access](https://docs.aws.amazon.com/bedrock/latest/userguide/model-access-modify.html).
 
@@ -30,7 +30,7 @@ Secrets:
 Variables:
 * CONTRAST_HOST (The host name of your Contrast SaaS instance, e.g. 'app.contrastsecurity.com')
 * CONTRAST_ORG_ID (The UUID of your Contrast organization)
-* CONTRAST_APP_ID (The UUID that is specific to the application in this repository.)
+* CONTRAST_APP_ID (The UUID that is specific to the application in this repository. Omit for NorthStar-only/SAST-only organizations.)
 * Any other non-secret values, such as the AWS region for a Bedrock-provided LLM - only needed if using BYOLLM
 
 ### Installation and Configuration
@@ -97,7 +97,7 @@ jobs:
           # Contrast Configuration
           contrast_host: ${{ vars.CONTRAST_HOST }} # The host name of your Contrast SaaS instance, e.g. 'app.contrastsecurity.com'
           contrast_org_id: ${{ vars.CONTRAST_ORG_ID }} # The UUID of your Contrast organization
-          contrast_app_id: ${{ vars.CONTRAST_APP_ID }} # The UUID that is specific to the application in this repository.
+          contrast_app_id: ${{ vars.CONTRAST_APP_ID }} # Optional: omit for NorthStar-only (SAST-only) organizations
           contrast_authorization_key: ${{ secrets.CONTRAST_AUTHORIZATION_KEY }}
           contrast_api_key: ${{ secrets.CONTRAST_API_KEY }}
 
@@ -215,7 +215,7 @@ Note: the SmartFix action's setup steps rely on the bash shell.  Please ensure t
 
 SmartFix focuses on remediating:
 
-* **CRITICAL** and **HIGH** severity vulnerabilities identified by Contrast Assess.
+* **CRITICAL** and **HIGH** severity vulnerabilities identified by Contrast, including IAST findings from Contrast Assess and static SAST findings from NorthStar.
 * **Exclusions:**
   * Cross-Site Request Forgery (CSRF) is currently excluded due to the complexity of fixes often requiring API changes.
   * Other specific vulnerability types may be excluded based on ongoing testing by Contrast Labs.
@@ -258,7 +258,7 @@ The following are key inputs for the SmartFix GitHub Action using SmartFix Codin
 | `base_branch` | Base branch for PRs. | No | `${{ github.event.repository.default_branch }}` |
 | `contrast_host` | Contrast Security API host. | Yes |  |
 | `contrast_org_id` | Contrast Organization ID. | Yes |  |
-| `contrast_app_id` | Contrast Application ID for the repository. | Yes |  |
+| `contrast_app_id` | Contrast Application ID for the repository. Omit for NorthStar-only (SAST-only) organizations. | No |  |
 | `contrast_authorization_key` | Contrast Authorization Key. | Yes |  |
 | `contrast_api_key` | Contrast API Key. | Yes |  |
 | `use_contrast_llm` | Use Contrast LLM service. Set to 'false' to use your own LLM provider. | No | `true` |
@@ -365,7 +365,7 @@ SmartFix collects telemetry data to help improve the service and diagnose issues
   * Ensure the `github_token` has the necessary permissions to create PRs in the repository.
   * Check for branch protection rules that might prevent PR creation.
 * **No Fixes Generated:**
-  * Confirm there are eligible CRITICAL or HIGH severity vulnerabilities in Contrast Assess for the configured `contrast_app_id`. SmartFix only attempts to fix vulnerabilities that are in the REPORTED state.
+  * Confirm there are eligible CRITICAL or HIGH severity vulnerabilities in Contrast. For Contrast Assess (IAST) deployments, check under the configured `contrast_app_id`. For NorthStar-only (SAST-only) deployments — where `contrast_app_id` is intentionally omitted — confirm there are eligible SAST findings in your Contrast organization. SmartFix only attempts to fix vulnerabilities that are in the REPORTED state.
   * Check the `max_open_prs` limit; if the number of PRs SmartFix has created that are still open matches this limit, no new PRs will be created.
   * Review the GitHub Action logs for messages indicating why vulnerabilities might have been skipped.
 * **Incorrect Fixes:** The AI-generated fixes should **always** be reviewed carefully. If a fix is incorrect or incomplete:
@@ -382,7 +382,7 @@ SmartFix collects telemetry data to help improve the service and diagnose issues
 ## FAQ
 
 * **Q: Can I use SmartFix if I don't use Contrast Assess?**
-  * A: No, SmartFix relies on vulnerability data from Contrast Assess. In the future we plan to expand to include more.
+  * A: Yes, if your organization uses static analysis (NorthStar/SAST), SmartFix can operate in SAST-only mode. Simply omit `contrast_app_id` and `contrast_app_ids` from your workflow configuration. SmartFix still requires a Contrast account and organization.
 * **Q: Do I need to specify `build_command`?**
   * A: Usually no! SmartFix automatically detects build commands for common build systems (Maven, Gradle, npm, pytest, .NET, PHP, etc.). If auto-detection doesn't work for your project, you can manually specify `build_command`.
 * **Q: How often does SmartFix run?**
