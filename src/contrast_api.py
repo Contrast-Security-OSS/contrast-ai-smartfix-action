@@ -60,7 +60,8 @@ def get_sanitized_409_message(response_text: str) -> tuple[str, bool]:
 
 
 def get_org_open_remediations(contrast_host: str, contrast_org_id: str, app_ids: list,
-                              contrast_auth_key: str, contrast_api_key: str) -> list:
+                              contrast_auth_key: str, contrast_api_key: str,
+                              github_repo_url: str) -> list:
     """Returns open remediations across multiple apps from the org-level endpoint.
 
     Best-effort: returns [] on any error. Must not block main flow.
@@ -71,6 +72,9 @@ def get_org_open_remediations(contrast_host: str, contrast_org_id: str, app_ids:
         app_ids: List of application IDs to query
         contrast_auth_key: The Contrast authorization key
         contrast_api_key: The Contrast API key
+        github_repo_url: The GitHub repository URL. Scopes reconciliation to this
+            repository for SAST-only (no app IDs) runs so the caller only receives
+            its own repo's open remediations, avoiding cross-repo PR-number collisions.
 
     Returns:
         list: List of open remediation dicts, or empty list on error
@@ -86,7 +90,7 @@ def get_org_open_remediations(contrast_host: str, contrast_org_id: str, app_ids:
         "User-Agent": config.USER_AGENT
     }
 
-    payload = {"appIds": app_ids or None}
+    payload = {"appIds": app_ids or None, "repoUrl": github_repo_url}
 
     try:
         debug_log(f"Fetching org-level open remediations from: {api_url}")
