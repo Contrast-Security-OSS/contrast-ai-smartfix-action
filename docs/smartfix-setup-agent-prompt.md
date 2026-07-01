@@ -338,7 +338,7 @@ If you haven't added a Contrast Agent to your application, you're likely SAST-on
 2. SAST-only / NorthStar
 ```
 
-Store: `DEPLOYMENT_TYPE = "iast"` or `"sast_only"`
+Store: `DEPLOYMENT_TYPE = "iast"` or `DEPLOYMENT_TYPE = "sast_only"`
 
 ---
 

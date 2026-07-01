@@ -132,9 +132,9 @@ jobs:
 
 **Important:**
 
-* Store all sensitive values (API keys, tokens) as GitHub Secrets in your repository or Github organization settings.
+* Store all sensitive values (API keys, tokens) as GitHub Secrets in your repository or GitHub organization settings.
 * Replace `v1` with the specific version of the SmartFix GitHub Action you intend to use.
-* The `build_command` configured for the `generate_fixes` job must be an appropriate build command for your project and is required for the proper functioning of SmartFix.  A `build_command` that runs your project's unit tests would be doubly useful as it would enable SmartFix to attempt to correct any changes that break your project's tests.  Please remember to do any additional setup for your `build_command` (such as library installation) in the `generate_fixes` job as a new step preceeding the `Run Contrast AI SmartFix - Generate Fixes Action` step.  For details about the libraries that come pre-installed with Github's Ubuntu runner, please visit https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2404-Readme.md.  For details about GitHub's Windows runner, please visit https://github.com/actions/runner-images/blob/main/images/windows/Windows2025-Readme.md.
+* The `build_command` configured for the `generate_fixes` job must be an appropriate build command for your project and is required for the proper functioning of SmartFix.  A `build_command` that runs your project's unit tests would be doubly useful as it would enable SmartFix to attempt to correct any changes that break your project's tests.  Please remember to do any additional setup for your `build_command` (such as library installation) in the `generate_fixes` job as a new step preceeding the `Run Contrast AI SmartFix - Generate Fixes Action` step.  For details about the libraries that come pre-installed with GitHub's Ubuntu runner, please visit https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2404-Readme.md.  For details about GitHub's Windows runner, please visit https://github.com/actions/runner-images/blob/main/images/windows/Windows2025-Readme.md.
 * The optional `formatting_command` will be run after SmartFix makes code changes to resolve the vulnerability and prior to any subsequent `build_command` invocations.  We recommend supplying a `formatting_command` to fix code style issues in your project as it is an easy way to correct a common class of build-breaking problems.
 
 ### LLM Configuration for the SmartFix Coding Agent
@@ -241,7 +241,7 @@ SmartFix focuses on remediating:
    * If SmartFix sees that it has reached the configured `max_open_prs` number of concurrently open SmartFix PRs, it will end its workflow run.
    * If SmartFix has reached its internal time limit of 3 hours of processing time for some reason, it will stop the workflow run instead of requesting a new vulnerability to resolve.
    * If SmartFix encounters an exception of some kind, it will stop the workflow run.
-11. **Exceptions:** Sometimes things go wrong.  When SmartFix cannot generate a fix for the vulnerability, it will log the reason why, try to clean up the Github feature branches that have been made for that vulnerability, and exit the workflow early.
+11. **Exceptions:** Sometimes things go wrong.  When SmartFix cannot generate a fix for the vulnerability, it will log the reason why, try to clean up the GitHub feature branches that have been made for that vulnerability, and exit the workflow early.
 12. **Guardrails:** SmartFix has several configurable and internal guardrails:
    * *Time limit* - SmartFix has an internal time limit of 3 hours.  If it goes over 3 hours of processing time, it will not request another vulnerability to resolve.
    * `max_open_prs` - SmartFix offers this configurable value to control the maximum number concurrently open SmartFix PRs
