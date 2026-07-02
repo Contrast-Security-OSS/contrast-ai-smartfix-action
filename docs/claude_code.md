@@ -161,19 +161,19 @@ SmartFix focuses on remediating:
 
 The following are key inputs for the SmartFix GitHub Action using the GitHub Claude code coding agent. Refer to the `action.yml` in the SmartFix GitHub Action repository for a complete list and default values.
 
-| Input                        | Description                                                                                                                                                                                            | Required | Default                                         |
-| :--------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :------- | :---------------------------------------------- |
-| `github_token`               | GitHub PAT token for Issue and PR operations.                                                                                                                                                          | Yes      |                                                 |
-| `base_branch`                | Base branch for PRs.                                                                                                                                                                                   | No       | `${{ github.event.repository.default_branch }}` |
-| `contrast_host`              | Contrast Security API host.                                                                                                                                                                            | Yes      |                                                 |
-| `contrast_org_id`            | Contrast Organization ID.                                                                                                                                                                              | Yes      |                                                 |
-| `contrast_app_id`            | Contrast Application ID for the repository. Omit for NorthStar-only organizations with only static findings from Contrast Code.                                                                        | No       |                                                 |
-| `contrast_authorization_key` | Contrast Authorization Key.                                                                                                                                                                            | Yes      |                                                 |
-| `contrast_api_key`           | Contrast API Key.                                                                                                                                                                                      | Yes      |                                                 |
-| `coding_agent`               | Specify that SmartFix should use Claude Code as the coding agent.                                                                                                                                      | Yes      | `CLAUDE_CODE`                                   |
-| `max_open_prs`               | Maximum number of open PRs SmartFix can create.                                                                                                                                                        | No       | `5`                                             |
-| `debug_mode`                 | Enable verbose logging.                                                                                                                                                                                | No       | `false`                                         |
-| `enable_full_telemetry`      | Control how much telemetry data is sent back to Contrast. When set to 'true' (default), sends complete log files and build commands. When 'false', sensitive build commands and full logs are omitted. | No       | `true`                                          |
+| Input | Description | Required | Default |
+| :---- | :---- | :---- | :---- |
+| `github_token` | GitHub PAT token for Issue and PR operations. | Yes |  |
+| `base_branch` | Base branch for PRs. | No | `${{ github.event.repository.default_branch }}` |
+| `contrast_host` | Contrast Security API host. | Yes |  |
+| `contrast_org_id` | Contrast Organization ID. | Yes |  |
+| `contrast_app_id` | Contrast Application ID for the repository. Omit for NorthStar-only (SAST-only) organizations. | No |  |
+| `contrast_authorization_key` | Contrast Authorization Key. | Yes |  |
+| `contrast_api_key` | Contrast API Key. | Yes |  |
+| `coding_agent` | Specify that SmartFix should use Claude Code as the coding agent. | Yes | `CLAUDE_CODE` |
+| `max_open_prs` | Maximum number of open PRs SmartFix can create. | No | `5` |
+| `debug_mode` | Enable verbose logging. | No | `false` |
+| `enable_full_telemetry` | Control how much telemetry data is sent back to Contrast. When set to 'true' (default), sends complete log files and build commands. When 'false', sensitive build commands and full logs are omitted. | No | `true` |
 
 ## Telemetry
 
