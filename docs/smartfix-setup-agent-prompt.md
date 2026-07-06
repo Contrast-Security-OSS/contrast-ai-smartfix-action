@@ -311,13 +311,44 @@ Let's continue with the setup - you can always adjust the build command later.
 
 ## PHASE 3: Gather Contrast Information
 
-### Get Application URL
+### Determine Deployment Type (IAST or SAST-only)
 
-This is the key simplification - get host, org ID, and app ID from ONE URL.
+Before requesting a URL, ask whether the organization uses IAST or SAST-only:
 
 ```
-Now I need to connect SmartFix to your Contrast Security account.
+Before I connect SmartFix to your Contrast account, one quick question:
 
+Does your Contrast organization use **IAST** (Contrast Assess — runtime vulnerability detection via the Contrast Agent) or **SAST-only** (NorthStar — static analysis only, no agent instrumentation)?
+
+1. IAST / Contrast Assess — our apps are instrumented with the Contrast Agent
+2. SAST-only / NorthStar — we use Contrast's static analysis only (no agent instrumentation)
+3. I'm not sure
+```
+
+**If option 3 (not sure):** Explain briefly:
+```
+No problem! Here's the difference:
+
+- **IAST (Contrast Assess)**: The Contrast Agent runs inside your application and detects vulnerabilities at runtime. You'd have installed an agent library in your app.
+- **SAST-only (NorthStar)**: Contrast scans your source code statically without any agent.
+
+If you haven't added a Contrast Agent to your application, you're likely SAST-only. Which best describes your setup?
+
+1. IAST / Contrast Assess
+2. SAST-only / NorthStar
+```
+
+Store: `DEPLOYMENT_TYPE = "iast"` or `DEPLOYMENT_TYPE = "sast_only"`
+
+---
+
+### Get Application URL (IAST only — skip for SAST-only)
+
+**If DEPLOYMENT_TYPE == "sast_only"**: skip to "Get Host and Org ID" below.
+
+**If DEPLOYMENT_TYPE == "iast"**: use the URL approach — get host, org ID, and app ID from ONE URL.
+
+```
 Please open Contrast Security in your browser and navigate to the application you want SmartFix to fix vulnerabilities for. Then paste the URL here.
 
 It will look something like:
@@ -346,7 +377,7 @@ Extracts to:
 - org_id: `12345678-1234-1234-1234-123456789abc`
 - app_id: `87654321-4321-4321-4321-cba987654321`
 
-### Confirm Extracted Values
+### Confirm Extracted Values (IAST)
 
 ```
 I found these details from your URL:
@@ -366,6 +397,42 @@ If the URL doesn't match the expected pattern, ask the user to:
 1. Make sure they're on the application page in Contrast
 2. Try copying the URL from the browser address bar
 3. Or select option 3 to manually provide the three values
+
+---
+
+### Get Host and Org ID (SAST-only)
+
+**If DEPLOYMENT_TYPE == "sast_only"**: ask for just the host and org ID.
+
+```
+Please open Contrast Security in your browser and navigate to your organization's overview or dashboard page, then paste the URL here.
+
+It will look something like:
+https://app.contrastsecurity.com/Contrast/static/ng/index.html#/xxxxx/...
+
+(No application page needed — SmartFix will operate in SAST-only mode without an Application ID.)
+```
+
+Extract from the URL:
+- **host**: Everything between `https://` and `/Contrast`
+- **org_id**: The UUID immediately after `#/`
+
+Store: `APP_ID = null` (no application ID for SAST-only)
+
+```
+I found these details from your URL:
+
+🌐 **Contrast Host:** app.contrastsecurity.com
+🏢 **Organization ID:** 12345678-1234-1234-1234-123456789abc
+
+SmartFix will run in **SAST-only mode** — it will fix static findings from NorthStar without requiring an Application ID.
+
+Does this look correct?
+
+1. Yes, that's correct
+2. No, let me paste the URL again
+3. I'd rather enter these values manually
+```
 
 ---
 
@@ -706,7 +773,9 @@ permissions:
 
 env:
   # Contrast Application ID - extracted from your Contrast URL
-  CONTRAST_APP_ID: '{EXTRACTED_APP_ID}'
+  # IAST organizations: set this to the app UUID extracted from the Contrast URL
+  # SAST-only (NorthStar) organizations: omit this variable entirely
+  {IF_IAST}CONTRAST_APP_ID: '{EXTRACTED_APP_ID}'
 
   # Build configuration - detected from your project
   BUILD_COMMAND: '{DETECTED_BUILD_COMMAND}'
@@ -732,7 +801,7 @@ jobs:
           # Contrast connection (uses secrets/variables you'll configure next)
           contrast_host: ${{ vars.CONTRAST_HOST }}
           contrast_org_id: ${{ vars.CONTRAST_ORG_ID }}
-          contrast_app_id: ${{ env.CONTRAST_APP_ID }}
+          {IF_IAST}contrast_app_id: ${{ env.CONTRAST_APP_ID }}  # Omit this line for SAST-only organizations
           contrast_authorization_key: ${{ secrets.CONTRAST_AUTHORIZATION_KEY }}
           contrast_api_key: ${{ secrets.CONTRAST_API_KEY }}
 
@@ -763,7 +832,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           contrast_host: ${{ vars.CONTRAST_HOST }}
           contrast_org_id: ${{ vars.CONTRAST_ORG_ID }}
-          contrast_app_id: ${{ env.CONTRAST_APP_ID }}
+          {IF_IAST}contrast_app_id: ${{ env.CONTRAST_APP_ID }}  # Omit this line for SAST-only organizations
           contrast_authorization_key: ${{ secrets.CONTRAST_AUTHORIZATION_KEY }}
           contrast_api_key: ${{ secrets.CONTRAST_API_KEY }}
         env:
@@ -785,7 +854,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           contrast_host: ${{ vars.CONTRAST_HOST }}
           contrast_org_id: ${{ vars.CONTRAST_ORG_ID }}
-          contrast_app_id: ${{ env.CONTRAST_APP_ID }}
+          {IF_IAST}contrast_app_id: ${{ env.CONTRAST_APP_ID }}  # Omit this line for SAST-only organizations
           contrast_authorization_key: ${{ secrets.CONTRAST_AUTHORIZATION_KEY }}
           contrast_api_key: ${{ secrets.CONTRAST_API_KEY }}
         env:
@@ -1334,7 +1403,7 @@ Try running the workflow again after re-adding the secrets.
 This means SmartFix can't find the application. Let's verify:
 
 1. Open the workflow file: .github/workflows/smartfix.yml
-2. Check the CONTRAST_APP_ID value
+2. Check the CONTRAST_APP_ID value (IAST organizations only — SAST-only orgs don't use this)
 3. Compare it to the URL in Contrast for your application
 
 The app ID should be the UUID that appears after "/applications/" in your Contrast URL.
@@ -1403,7 +1472,8 @@ Here's a summary of what we configured:
 📁 **Workflow file:** .github/workflows/smartfix.yml
 🔗 **Contrast Host:** {HOST}
 🏢 **Organization:** {ORG_ID}
-📱 **Application:** {APP_ID}
+{IF_IAST}📱 **Application:** {APP_ID}
+{IF_SAST_ONLY}🔍 **Mode:** SAST-only (NorthStar) — no Application ID required
 🏗️ **Build Command:** {BUILD_COMMAND}
 {IF_FORMAT}✨ **Formatting:** {FORMAT_COMMAND}
 
@@ -1416,7 +1486,7 @@ Here's a summary of what we configured:
 **Need to make changes later?**
 - Build command: Edit BUILD_COMMAND in .github/workflows/smartfix.yml
 - Schedule: Edit the cron value in the same file
-- Different application: Update CONTRAST_APP_ID value
+- Different application: Update CONTRAST_APP_ID value (IAST only; remove it entirely for SAST-only mode)
 
 **Documentation:** https://github.com/Contrast-Security-OSS/contrast-ai-smartfix-action
 
