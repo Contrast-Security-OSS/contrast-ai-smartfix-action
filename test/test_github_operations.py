@@ -42,6 +42,22 @@ class TestGitHubOperations(unittest.TestCase):
         self.assertEqual(description, expected_desc)
         self.assertEqual(color, expected_color)
 
+    def test_generate_label_details_northstar_mode(self):
+        """Test label details generation for NORTHSTAR_ONLY mode uses contrast-issue-id prefix."""
+        label_name, description, color = self.github_ops.generate_label_details(
+            "test-uuid-123", mode="NORTHSTAR_ONLY", issue_id="ISS-2026-42"
+        )
+        self.assertEqual(label_name, "contrast-issue-id:ISS-2026-42")
+        self.assertEqual(description, "Issue identified by Contrast AI SmartFix")
+        self.assertEqual(color, "ff0000")
+
+    def test_generate_label_details_classic_mode_unchanged(self):
+        """Test label details for CLASSIC mode unchanged when mode is explicit."""
+        label_name, description, color = self.github_ops.generate_label_details(
+            "test-uuid-123", mode="CLASSIC"
+        )
+        self.assertEqual(label_name, "contrast-vuln-id:VULN-test-uuid-123")
+
     def test_generate_pr_title(self):
         """Test PR title generation."""
         result = self.github_ops.generate_pr_title("SQL Injection vulnerability")
@@ -151,6 +167,20 @@ class TestGitHubOperations(unittest.TestCase):
 
         result = self.github_ops.count_open_prs_with_prefix("smartfix-id:", "test-remediation-id")
         self.assertEqual(result, 3)  # Three PRs have smartfix-id: labels
+
+    @patch('src.github.github_operations.run_command')
+    def test_count_open_prs_with_prefix_tuple(self, mock_run_command):
+        """Test counting open PRs accepts a tuple of prefixes (classic + northstar)."""
+        mock_run_command.return_value = json.dumps([
+            {"labels": [{"name": "contrast-vuln-id:VULN-aaa"}]},
+            {"labels": [{"name": "contrast-issue-id:ISS-2026-1"}]},
+            {"labels": [{"name": "unrelated-label"}]},
+        ])
+
+        result = self.github_ops.count_open_prs_with_prefix(
+            ("contrast-vuln-id:", "contrast-issue-id:"), "test-remediation-id"
+        )
+        self.assertEqual(result, 2)
 
     @patch('src.github.github_operations.error_exit')
     @patch('src.github.github_operations.log')

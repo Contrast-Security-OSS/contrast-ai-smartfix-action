@@ -62,6 +62,7 @@ class TestGetOrgOpenRemediations(unittest.TestCase):
             app_ids=APP_IDS,
             contrast_auth_key=AUTH_KEY,
             contrast_api_key=API_KEY,
+            github_repo_url='https://github.com/org/repo',
         )
         return contrast_api.get_org_open_remediations(**{**defaults, **overrides})
 
@@ -88,6 +89,22 @@ class TestGetOrgOpenRemediations(unittest.TestCase):
         self._call()
         payload = mock_post.call_args[1]['json']
         self.assertEqual(payload['appIds'], APP_IDS)
+
+    @patch('src.contrast_api.requests.post')
+    def test_sends_repo_url_in_body(self, mock_post):
+        mock_post.return_value = make_sample_response(200, body=[])
+        self._call(github_repo_url='github.com/org/repo')
+        payload = mock_post.call_args[1]['json']
+        self.assertEqual(payload['repoUrl'], 'github.com/org/repo')
+
+    @patch('src.contrast_api.requests.post')
+    def test_sast_only_sends_null_app_ids_with_repo_url(self, mock_post):
+        """SAST-only runs send no app IDs but still scope by repo URL."""
+        mock_post.return_value = make_sample_response(200, body=[])
+        self._call(app_ids=[], github_repo_url='github.com/org/repo')
+        payload = mock_post.call_args[1]['json']
+        self.assertIsNone(payload['appIds'])
+        self.assertEqual(payload['repoUrl'], 'github.com/org/repo')
 
     @patch('src.contrast_api.requests.post')
     def test_returns_empty_list_on_non_200(self, mock_post):
@@ -201,6 +218,14 @@ class TestGetOrgRemediationDetails(unittest.TestCase):
         mock_409.return_value = ('PR limit reached', False)
         self.assertIsNone(self._call())
 
+    @patch('src.contrast_api.requests.post')
+    def test_sast_only_sends_null_app_ids_when_empty(self, mock_post):
+        """SAST-only mode: empty app_ids list is sent as null so backend routes to SAST path."""
+        mock_post.return_value = make_sample_response(204)
+        self._call(app_ids=[])
+        body = mock_post.call_args[1]['json']
+        self.assertIsNone(body['appIds'])
+
 
 # =============================================================================
 # get_org_prompt_details
@@ -291,6 +316,14 @@ class TestGetOrgPromptDetails(unittest.TestCase):
         mock_post.return_value = make_sample_response(200, body=incomplete_payload)
         with self.assertRaises(SystemExit):
             self._call()
+
+    @patch('src.contrast_api.requests.post')
+    def test_sast_only_sends_null_app_ids_when_empty(self, mock_post):
+        """SAST-only mode: empty app_ids list is sent as null so backend routes to SAST path."""
+        mock_post.return_value = make_sample_response(204)
+        self._call(app_ids=[])
+        body = mock_post.call_args[1]['json']
+        self.assertIsNone(body['appIds'])
 
 
 # =============================================================================

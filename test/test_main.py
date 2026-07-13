@@ -189,7 +189,7 @@ class TestMain(unittest.TestCase):
                         output = buf.getvalue()
 
                     # Verify the vulnerability was skipped both times
-                    self.assertIn("Skipping vulnerability TEST-VULN-UUID-123", output)
+                    self.assertIn("Skipping finding TEST-VULN-UUID-123", output)
                     self.assertIn("TEST-VULN-UUID-123 was re-suggested after being skipped", output)
 
                     # Verify the loop broke cleanly
@@ -414,6 +414,38 @@ class TestMain(unittest.TestCase):
         self.assertEqual(total_calls[-1][0][1], 0)
         mock_shutdown.assert_called()
 
+    def test_sast_only_mode_no_app_id_does_not_exit(self):
+        """When CONTRAST_APP_ID and CONTRAST_APP_IDS are both absent, SAST-only mode is
+        entered without calling sys.exit — the run completes normally (with no vulns)."""
+        sast_env = {k: v for k, v in self.env_vars.items() if k != 'CONTRAST_APP_ID'}
+
+        with patch.dict('os.environ', sast_env, clear=True):
+            reset_config()
+            sast_config = get_config(testing=True)
+            sast_config.CONTRAST_APP_ID = None
+            sast_config.CONTRAST_APP_IDS = []
+            with patch('src.main.config', sast_config):
+                main()
+
+        self.mock_exit.assert_not_called()
+        self.mock_api.assert_called()
+
+    def test_sast_only_mode_logs_informational_message(self):
+        """When no app ID is configured, an informational message about SAST-only mode is logged."""
+        sast_env = {k: v for k, v in self.env_vars.items() if k != 'CONTRAST_APP_ID'}
+
+        with patch.dict('os.environ', sast_env, clear=True):
+            reset_config()
+            sast_config = get_config(testing=True)
+            sast_config.CONTRAST_APP_ID = None
+            sast_config.CONTRAST_APP_IDS = []
+            with patch('src.main.config', sast_config):
+                with io.StringIO() as buf, contextlib.redirect_stdout(buf):
+                    main()
+                    output = buf.getvalue()
+
+        self.assertIn('NorthStar-only organizations', output)
+
     def test_skipped_app_ids_warning_is_logged(self):
         """When skippedAppIds is non-empty, a warning including the count and IDs is logged."""
         vuln_data = {
@@ -444,6 +476,123 @@ class TestMain(unittest.TestCase):
         self.assertIn("2 app(s) were inaccessible and skipped", output)
         self.assertIn("app-id-2", output)
         self.assertIn("app-id-3", output)
+
+    def test_finding_type_and_severity_logged_for_sast_finding(self):
+        """debug_log emits findingType and severity after _extract_finding_ids for a SAST finding."""
+        vuln_data = {
+            'vulnerabilityUuid': 'SAST-UUID-001',
+            'vulnerabilityTitle': 'Test SQL Injection',
+            'vulnerabilityRuleName': 'sql-injection',
+            'remediationId': 'REM-SAST-001',
+            'sessionId': 'session-sast-001',
+            'fixSystemPrompt': 'Fix the vulnerability',
+            'fixUserPrompt': 'Please fix',
+            'findingType': 'SAST',
+            'vulnerabilitySeverity': 'HIGH',
+        }
+
+        self.mock_api.side_effect = [vuln_data, None]
+
+        with patch('src.github.github_operations.GitHubOperations.check_pr_status_for_label') as mock_pr_check, \
+             patch('src.github.github_operations.GitHubOperations.generate_label_details') as mock_label:
+            mock_pr_check.return_value = "OPEN"
+            mock_label.return_value = ('contrast-vuln-id:SAST-UUID-001', 'color', 'desc')
+
+            with patch.dict('os.environ', self.env_vars, clear=True):
+                with io.StringIO() as buf, contextlib.redirect_stdout(buf):
+                    main()
+                    output = buf.getvalue()
+
+        self.assertIn("Processing SAST finding | id=SAST-UUID-001 | severity=HIGH", output)
+
+    def test_sast_northstar_finding_logs_type_and_severity(self):
+        """Synthetic SAST NORTHSTAR_ONLY payload reaches the finding-type log line without error.
+
+        Regression guard: a NORTHSTAR_ONLY finding with findingType=SAST and severity=CRITICAL
+        must not hit any blocking code path before the debug_log fires.
+        """
+        vuln_data = {
+            'vulnerabilityUuid': 'SAST-VULN-UUID-001',
+            'vulnerabilityTitle': 'SQL Injection (SAST)',
+            'vulnerabilityRuleName': 'sql-injection',
+            'remediationId': 'REM-SAST-TRACE-001',
+            'sessionId': 'session-sast-trace',
+            'fixSystemPrompt': 'Fix the vulnerability',
+            'fixUserPrompt': 'Please fix',
+            'mode': 'NORTHSTAR_ONLY',
+            'issueId': 'NS-SAST-ISSUE-001',
+            'findingType': 'SAST',
+            'vulnerabilitySeverity': 'CRITICAL',
+        }
+
+        self.mock_api.side_effect = [vuln_data, None]
+
+        with patch('src.github.github_operations.GitHubOperations.check_pr_status_for_label') as mock_pr_check, \
+             patch('src.github.github_operations.GitHubOperations.generate_label_details') as mock_label:
+            mock_pr_check.return_value = "OPEN"
+            mock_label.return_value = ('contrast-issue-id:NS-SAST-ISSUE-001', 'color', 'desc')
+
+            with patch.dict('os.environ', self.env_vars, clear=True):
+                with io.StringIO() as buf, contextlib.redirect_stdout(buf):
+                    main()
+                    output = buf.getvalue()
+
+        self.assertIn("Processing SAST finding | id=NS-SAST-ISSUE-001 | severity=CRITICAL", output)
+        self.mock_exit.assert_not_called()
+
+    def test_finding_type_and_severity_default_to_unknown_when_absent(self):
+        """debug_log uses UNKNOWN for findingType and severity when fields are absent from response."""
+        vuln_data = {
+            'vulnerabilityUuid': 'IAST-UUID-001',
+            'vulnerabilityTitle': 'Test Injection',
+            'vulnerabilityRuleName': 'sql-injection',
+            'remediationId': 'REM-IAST-001',
+            'sessionId': 'session-iast-001',
+            'fixSystemPrompt': 'Fix the vulnerability',
+            'fixUserPrompt': 'Please fix',
+        }
+
+        self.mock_api.side_effect = [vuln_data, None]
+
+        with patch('src.github.github_operations.GitHubOperations.check_pr_status_for_label') as mock_pr_check, \
+             patch('src.github.github_operations.GitHubOperations.generate_label_details') as mock_label:
+            mock_pr_check.return_value = "OPEN"
+            mock_label.return_value = ('contrast-vuln-id:IAST-UUID-001', 'color', 'desc')
+
+            with patch.dict('os.environ', self.env_vars, clear=True):
+                with io.StringIO() as buf, contextlib.redirect_stdout(buf):
+                    main()
+                    output = buf.getvalue()
+
+        self.assertIn("Processing UNKNOWN finding | id=IAST-UUID-001 | severity=UNKNOWN", output)
+
+    def test_external_agent_path_logs_severity_from_vulnerabilitySeverity(self):
+        """On the external-agent path, severity falls back to vulnerabilitySeverity (no severity/findingType field)."""
+        vuln_data = {
+            'vulnerabilityUuid': 'EXT-UUID-001',
+            'vulnerabilityTitle': 'Test SQL Injection',
+            'vulnerabilityRuleName': 'sql-injection',
+            'vulnerabilitySeverity': 'HIGH',
+            'remediationId': 'REM-EXT-001',
+        }
+
+        test_env = {**self.env_vars, 'CODING_AGENT': 'GITHUB_COPILOT'}
+
+        with patch('src.contrast_api.get_org_remediation_details') as mock_ext_api, \
+             patch('src.github.github_operations.GitHubOperations.check_pr_status_for_label') as mock_pr_check, \
+             patch('src.github.github_operations.GitHubOperations.generate_label_details') as mock_label:
+            mock_ext_api.side_effect = [vuln_data, None]
+            mock_pr_check.return_value = "OPEN"
+            mock_label.return_value = ('contrast-vuln-id:EXT-UUID-001', 'color', 'desc')
+
+            with patch.dict('os.environ', test_env, clear=True):
+                reset_config()
+                with patch('src.main.config', get_config()):
+                    with io.StringIO() as buf, contextlib.redirect_stdout(buf):
+                        main()
+                        output = buf.getvalue()
+
+        self.assertIn("Processing UNKNOWN finding | id=EXT-UUID-001 | severity=HIGH", output)
 
 
 if __name__ == '__main__':
