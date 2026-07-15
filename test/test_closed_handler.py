@@ -185,17 +185,8 @@ class TestClosedHandler(unittest.TestCase):
             result = closed_handler._extract_remediation_info(pull_request)
         self.assertEqual(result[0], "REM-999")
 
-    def test_extract_vulnerability_info_northstar_issue_id(self):
-        """Test _extract_vulnerability_info returns issueId from contrast-issue-id: label."""
-        labels = [{"name": "contrast-issue-id:ISS-2026-42"}]
-        result = closed_handler._extract_vulnerability_info(labels)
-        self.assertEqual(result, "ISS-2026-42")
-
-    def test_extract_vulnerability_info_classic_label(self):
-        """Test _extract_vulnerability_info still handles classic contrast-vuln-id: label."""
-        labels = [{"name": "contrast-vuln-id:VULN-classic-uuid"}]
-        result = closed_handler._extract_vulnerability_info(labels)
-        self.assertEqual(result, "classic-uuid")
+    # Pure-function coverage for extract_vulnerability_info moved to
+    # test_github_operations.py (AIML-858) — it's no longer defined here.
 
     def test_load_github_event_missing_path(self):
         """Test _load_github_event when GITHUB_EVENT_PATH is not set"""
@@ -260,7 +251,7 @@ class TestClosedHandler(unittest.TestCase):
 
     @patch('src.closed_handler.contrast_api.send_telemetry_data_org')
     @patch('src.closed_handler._notify_remediation_service')
-    @patch('src.closed_handler._extract_vulnerability_info')
+    @patch('src.closed_handler.extract_vulnerability_info')
     @patch('src.closed_handler._extract_remediation_info')
     @patch('src.closed_handler._validate_pr_event')
     @patch('src.closed_handler._load_github_event')

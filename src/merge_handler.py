@@ -26,7 +26,7 @@ import sys
 from src import contrast_api
 from src.config import get_config  # Using get_config function instead of direct import
 from src.utils import debug_log, extract_remediation_id_from_branch, extract_remediation_id_from_labels, log
-from src.github.github_operations import GitHubOperations
+from src.github.github_operations import GitHubOperations, extract_vulnerability_info
 from src.smartfix.domains.telemetry import otel_provider, telemetry_handler
 from src.smartfix.domains.telemetry import smartfix_metrics
 
@@ -111,39 +111,6 @@ def _extract_remediation_info(pull_request: dict) -> tuple:
     return remediation_id, labels
 
 
-def _extract_vulnerability_info(labels: list) -> str:
-    """Extract primary finding identifier from PR labels.
-
-    Recognises both Classic (contrast-vuln-id:VULN-*) and NorthStar
-    (contrast-issue-id:*) label formats.
-    """
-    primary_id = "unknown"
-
-    for label in labels:
-        label_name = label.get("name", "")
-        if label_name.startswith("contrast-vuln-id:VULN-"):
-            # Extract UUID from label format "contrast-vuln-id:VULN-{vuln_uuid}"
-            label_name_parts = label_name.split("VULN-")
-            primary_id = label_name_parts[1] if len(label_name_parts) > 1 else "unknown"
-            if primary_id and primary_id != "unknown":
-                debug_log(f"Extracted vulnerability UUID from PR label: {primary_id}")
-                break
-        elif label_name.startswith("contrast-issue-id:"):
-            # Extract issueId from label format "contrast-issue-id:{issueId}"
-            extracted = label_name[len("contrast-issue-id:"):]
-            if extracted:
-                primary_id = extracted
-                debug_log(f"Extracted NorthStar issue ID from PR label: {primary_id}")
-                break
-            else:
-                debug_log(f"Found contrast-issue-id label with empty value on PR label '{label_name}'; skipping.")
-
-    if primary_id == "unknown":
-        debug_log("Could not extract finding identifier from PR labels. Telemetry may be incomplete.")
-
-    return primary_id
-
-
 def _notify_remediation_service(remediation_id: str):
     """Notify the Remediation backend service about the merged PR."""
     log(f"Notifying Remediation service about merged PR for remediation {remediation_id}...")
@@ -208,7 +175,7 @@ def handle_merged_pr():
     event_data = _load_github_event()
     pull_request = _validate_pr_event(event_data)
     remediation_id, labels = _extract_remediation_info(pull_request)
-    vuln_uuid = _extract_vulnerability_info(labels)
+    vuln_uuid = extract_vulnerability_info(labels)
 
     # Derive agent from branch prefix so external-agent merges (Copilot, Claude Code)
     # are not misattributed as "smartfix" in the datalake.
