@@ -37,6 +37,15 @@ from src.github.constants import (
 )
 
 
+def _label_name(label) -> str:
+    """Extract a label's name string.
+
+    Handles both GitHub's label dicts (each with a "name" key) and plain
+    label name strings (e.g. GitLab's REST API shape).
+    """
+    return label.get("name", "") if isinstance(label, dict) else str(label)
+
+
 def extract_vulnerability_info(labels: list) -> str:
     """Extract primary finding identifier from PR labels.
 
@@ -44,17 +53,13 @@ def extract_vulnerability_info(labels: list) -> str:
     (contrast-issue-id:*) label formats.
 
     Args:
-        labels: List of label dicts (each with a "name" key, as GitHub's API
-            returns them) or plain label name strings (e.g. GitLab's REST API
-            shape) — same dual-shape handling as filter_smartfix_labels().
-
-    Moved here (AIML-858) from closed_handler.py and merge_handler.py, which
-    each defined an identical private copy.
+        labels: List of label dicts or plain label name strings — see
+            _label_name().
     """
     primary_id = "unknown"
 
     for label in labels:
-        label_name = label.get("name", "") if isinstance(label, dict) else str(label)
+        label_name = _label_name(label)
         if label_name.startswith("contrast-vuln-id:VULN-"):
             # Extract UUID from label format "contrast-vuln-id:VULN-{vuln_uuid}"
             label_name_parts = label_name.split("VULN-")
@@ -1263,17 +1268,15 @@ class GitHubOperations(ScmOperations):
         with smartfix-id: or contrast-vuln-id:.
 
         Args:
-            labels: List of label dicts (each with a "name" key) or label name strings
+            labels: List of label dicts or plain label name strings — see
+                _label_name().
 
         Returns:
             List[str]: Names of SmartFix-managed labels, in input order
         """
         names: List[str] = []
         for label in labels:
-            if isinstance(label, dict):
-                name = label.get("name", "")
-            else:
-                name = str(label)
+            name = _label_name(label)
             if name.startswith(SMARTFIX_LABEL_PREFIXES):
                 names.append(name)
         return names
