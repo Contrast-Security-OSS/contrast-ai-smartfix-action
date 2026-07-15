@@ -43,13 +43,18 @@ def extract_vulnerability_info(labels: list) -> str:
     Recognises both Classic (contrast-vuln-id:VULN-*) and NorthStar
     (contrast-issue-id:*) label formats.
 
+    Args:
+        labels: List of label dicts (each with a "name" key, as GitHub's API
+            returns them) or plain label name strings (e.g. GitLab's REST API
+            shape) — same dual-shape handling as filter_smartfix_labels().
+
     Moved here (AIML-858) from closed_handler.py and merge_handler.py, which
     each defined an identical private copy.
     """
     primary_id = "unknown"
 
     for label in labels:
-        label_name = label.get("name", "")
+        label_name = label.get("name", "") if isinstance(label, dict) else str(label)
         if label_name.startswith("contrast-vuln-id:VULN-"):
             # Extract UUID from label format "contrast-vuln-id:VULN-{vuln_uuid}"
             label_name_parts = label_name.split("VULN-")

@@ -1761,6 +1761,12 @@ class TestExtractVulnerabilityInfo(unittest.TestCase):
         result = extract_vulnerability_info(labels)
         self.assertEqual(result, "fallback-uuid")
 
+    def test_extract_vulnerability_info_string_input(self):
+        """Also accepts plain label name strings (e.g. GitLab's label shape)."""
+        labels = ["other-label", "contrast-vuln-id:VULN-classic-uuid"]
+        result = extract_vulnerability_info(labels)
+        self.assertEqual(result, "classic-uuid")
+
 
 if __name__ == '__main__':
     unittest.main()
