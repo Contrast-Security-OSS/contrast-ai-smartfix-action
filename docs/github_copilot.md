@@ -164,6 +164,7 @@ The following are key inputs for the SmartFix GitHub Action using the GitHub Cop
 | `contrast_host` | Contrast Security API host. | Yes |  |
 | `contrast_org_id` | Contrast Organization ID. | Yes |  |
 | `contrast_app_id` | Contrast Application ID for the repository. Optional for NorthStar-only organizations — set it to also address IAST issues for that application, or omit for SAST-only. | No |  |
+| `contrast_app_ids` | Contrast Application IDs for monorepos (JSON array string, e.g. `["id-1", "id-2"]`). Optional alternative to `contrast_app_id`. | No |  |
 | `contrast_authorization_key` | Contrast Authorization Key. | Yes |  |
 | `contrast_api_key` | Contrast API Key. | Yes |  |
 | `coding_agent` | Specify that SmartFix should use GitHub Copilot as the coding agent. | Yes | `GITHUB_COPILOT` |

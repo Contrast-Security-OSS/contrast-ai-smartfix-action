@@ -462,7 +462,7 @@ https://app.contrastsecurity.com/Contrast/static/ng/index.html#/xxxxx/applicatio
 If your repository maps to more than one application (a monorepo), repeat this for each application.
 ```
 
-Extract the **app_id** the same way as in "Parse the URL" above. If more than one application ID was collected, store them as `APP_IDS = ["id-1", "id-2", ...]` (for the `contrast_app_ids` input); otherwise store the single value as `APP_ID`.
+Extract the **app_id** the same way as in "Parse the URL" above. If more than one application ID was collected, store them as `APP_IDS = ["id-1", "id-2", ...]` — the workflow template must set the `contrast_app_ids` input (JSON array string) instead of `contrast_app_id` in this case. Otherwise store the single value as `APP_ID` and use the `contrast_app_id` input as usual.
 
 ```
 Got it! SmartFix will run in **SAST-only mode** for the rest of the repository, and will also address IAST issues for:
@@ -819,6 +819,8 @@ env:
   # SAST-only (NorthStar) organizations: optional — set this if you also want SmartFix
   # to address IAST issues for a specific application, otherwise omit this variable entirely
   {IF_APP_ID}CONTRAST_APP_ID: '{EXTRACTED_APP_ID}'
+  # Monorepo (multiple applications): set this instead of CONTRAST_APP_ID, as a JSON array string
+  {IF_APP_IDS}CONTRAST_APP_IDS: '{EXTRACTED_APP_IDS_JSON}'
 
   # Build configuration - detected from your project
   BUILD_COMMAND: '{DETECTED_BUILD_COMMAND}'
@@ -845,6 +847,7 @@ jobs:
           contrast_host: ${{ vars.CONTRAST_HOST }}
           contrast_org_id: ${{ vars.CONTRAST_ORG_ID }}
           {IF_APP_ID}contrast_app_id: ${{ env.CONTRAST_APP_ID }}  # Optional for SAST-only organizations: omit this line entirely, or set it to also address IAST issues for that application
+          {IF_APP_IDS}contrast_app_ids: ${{ env.CONTRAST_APP_IDS }}  # Monorepo: JSON array string of application IDs, e.g. '["id-1", "id-2"]' — use instead of contrast_app_id above
           contrast_authorization_key: ${{ secrets.CONTRAST_AUTHORIZATION_KEY }}
           contrast_api_key: ${{ secrets.CONTRAST_API_KEY }}
 
@@ -876,6 +879,7 @@ jobs:
           contrast_host: ${{ vars.CONTRAST_HOST }}
           contrast_org_id: ${{ vars.CONTRAST_ORG_ID }}
           {IF_APP_ID}contrast_app_id: ${{ env.CONTRAST_APP_ID }}  # Optional for SAST-only organizations: omit this line entirely, or set it to also address IAST issues for that application
+          {IF_APP_IDS}contrast_app_ids: ${{ env.CONTRAST_APP_IDS }}  # Monorepo: JSON array string of application IDs, e.g. '["id-1", "id-2"]' — use instead of contrast_app_id above
           contrast_authorization_key: ${{ secrets.CONTRAST_AUTHORIZATION_KEY }}
           contrast_api_key: ${{ secrets.CONTRAST_API_KEY }}
         env:
@@ -898,6 +902,7 @@ jobs:
           contrast_host: ${{ vars.CONTRAST_HOST }}
           contrast_org_id: ${{ vars.CONTRAST_ORG_ID }}
           {IF_APP_ID}contrast_app_id: ${{ env.CONTRAST_APP_ID }}  # Optional for SAST-only organizations: omit this line entirely, or set it to also address IAST issues for that application
+          {IF_APP_IDS}contrast_app_ids: ${{ env.CONTRAST_APP_IDS }}  # Monorepo: JSON array string of application IDs, e.g. '["id-1", "id-2"]' — use instead of contrast_app_id above
           contrast_authorization_key: ${{ secrets.CONTRAST_AUTHORIZATION_KEY }}
           contrast_api_key: ${{ secrets.CONTRAST_API_KEY }}
         env:
@@ -1516,7 +1521,8 @@ Here's a summary of what we configured:
 🔗 **Contrast Host:** {HOST}
 🏢 **Organization:** {ORG_ID}
 {IF_APP_ID}📱 **Application ID(s):** {APP_ID_OR_APP_IDS}
-{IF_SAST_ONLY}🔍 **Mode:** SAST-only (NorthStar) — fixing static findings repo-wide{IF_APP_ID}, plus IAST issues for the application(s) above{IF_NOT_APP_ID} (no Application ID configured)
+{IF_SAST_ONLY}{IF_APP_ID}🔍 **Mode:** SAST-only (NorthStar) — fixing static findings repo-wide, plus IAST issues for the application(s) above
+{IF_SAST_ONLY}{IF_NOT_APP_ID}🔍 **Mode:** SAST-only (NorthStar) — fixing static findings repo-wide (no Application ID configured)
 🏗️ **Build Command:** {BUILD_COMMAND}
 {IF_FORMAT}✨ **Formatting:** {FORMAT_COMMAND}
 
