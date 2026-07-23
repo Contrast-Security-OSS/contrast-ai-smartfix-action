@@ -37,6 +37,52 @@ from src.github.constants import (
 )
 
 
+def _label_name(label) -> str:
+    """Extract a label's name string.
+
+    Handles both GitHub's label dicts (each with a "name" key) and plain
+    label name strings (e.g. GitLab's REST API shape).
+    """
+    return label.get("name", "") if isinstance(label, dict) else str(label)
+
+
+def extract_vulnerability_info(labels: list) -> str:
+    """Extract primary finding identifier from PR labels.
+
+    Recognises both Classic (contrast-vuln-id:VULN-*) and NorthStar
+    (contrast-issue-id:*) label formats.
+
+    Args:
+        labels: List of label dicts or plain label name strings — see
+            _label_name().
+    """
+    primary_id = "unknown"
+
+    for label in labels:
+        label_name = _label_name(label)
+        if label_name.startswith("contrast-vuln-id:VULN-"):
+            # Extract UUID from label format "contrast-vuln-id:VULN-{vuln_uuid}"
+            label_name_parts = label_name.split("VULN-")
+            primary_id = label_name_parts[1] if len(label_name_parts) > 1 else "unknown"
+            if primary_id and primary_id != "unknown":
+                debug_log(f"Extracted vulnerability UUID from PR label: {primary_id}")
+                break
+        elif label_name.startswith("contrast-issue-id:"):
+            # Extract issueId from label format "contrast-issue-id:{issueId}"
+            extracted = label_name[len("contrast-issue-id:"):]
+            if extracted:
+                primary_id = extracted
+                debug_log(f"Extracted NorthStar issue ID from PR label: {primary_id}")
+                break
+            else:
+                debug_log(f"Found contrast-issue-id label with empty value on PR label '{label_name}'; skipping.")
+
+    if primary_id == "unknown":
+        debug_log("Could not extract finding identifier from PR labels. Telemetry may be incomplete.")
+
+    return primary_id
+
+
 class PRInfo(TypedDict):
     """Type definition for GitHub Pull Request information."""
     number: int
@@ -1222,17 +1268,15 @@ class GitHubOperations(ScmOperations):
         with smartfix-id: or contrast-vuln-id:.
 
         Args:
-            labels: List of label dicts (each with a "name" key) or label name strings
+            labels: List of label dicts or plain label name strings — see
+                _label_name().
 
         Returns:
             List[str]: Names of SmartFix-managed labels, in input order
         """
         names: List[str] = []
         for label in labels:
-            if isinstance(label, dict):
-                name = label.get("name", "")
-            else:
-                name = str(label)
+            name = _label_name(label)
             if name.startswith(SMARTFIX_LABEL_PREFIXES):
                 names.append(name)
         return names

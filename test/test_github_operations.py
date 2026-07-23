@@ -4,7 +4,7 @@ import subprocess
 import unittest
 from unittest.mock import patch, Mock, MagicMock
 import json
-from src.github.github_operations import GitHubOperations
+from src.github.github_operations import GitHubOperations, extract_vulnerability_info
 from src.smartfix.shared.failure_categories import FailureCategory
 
 
@@ -1704,6 +1704,68 @@ class TestAddReviewersToPr(unittest.TestCase):
         command = mock_run.call_args[0][0]
         reviewer_arg_index = command.index("--add-reviewer") + 1
         self.assertEqual(command[reviewer_arg_index], "alice,bob,charlie")
+
+
+class TestExtractVulnerabilityInfo(unittest.TestCase):
+    """Test cases for extract_vulnerability_info (AIML-858).
+
+    Consolidated from test_closed_handler.py and test_merge_handler.py, which each
+    tested their own identical private copy of this function before it was moved here.
+    """
+
+    def test_extract_vulnerability_info_with_vuln_uuid(self):
+        """Extracts the UUID from a Classic contrast-vuln-id:VULN-* label."""
+        labels = [
+            {"name": "contrast-vuln-id:VULN-abc-123-def"},
+            {"name": "other-label"}
+        ]
+        result = extract_vulnerability_info(labels)
+        self.assertEqual(result, "abc-123-def")
+
+    def test_extract_vulnerability_info_without_vuln_uuid(self):
+        """Returns 'unknown' when no SmartFix label is present."""
+        labels = [{"name": "other-label"}]
+        result = extract_vulnerability_info(labels)
+        self.assertEqual(result, "unknown")
+
+    def test_extract_vulnerability_info_empty_labels(self):
+        """Returns 'unknown' for an empty labels list."""
+        labels = []
+        result = extract_vulnerability_info(labels)
+        self.assertEqual(result, "unknown")
+
+    def test_extract_vulnerability_info_with_northstar_issue_id(self):
+        """Extracts the issueId from a NorthStar contrast-issue-id:* label."""
+        labels = [
+            {"name": "contrast-issue-id:ISS-2026-42"},
+            {"name": "other-label"}
+        ]
+        result = extract_vulnerability_info(labels)
+        self.assertEqual(result, "ISS-2026-42")
+
+    def test_extract_vulnerability_info_prefers_first_matching_label(self):
+        """Returns the first SmartFix label found, regardless of position."""
+        labels = [
+            {"name": "other-label"},
+            {"name": "contrast-vuln-id:VULN-classic-uuid"},
+        ]
+        result = extract_vulnerability_info(labels)
+        self.assertEqual(result, "classic-uuid")
+
+    def test_extract_vulnerability_info_empty_northstar_issue_id_skipped(self):
+        """Skips a contrast-issue-id: label with an empty value instead of matching it."""
+        labels = [
+            {"name": "contrast-issue-id:"},
+            {"name": "contrast-vuln-id:VULN-fallback-uuid"},
+        ]
+        result = extract_vulnerability_info(labels)
+        self.assertEqual(result, "fallback-uuid")
+
+    def test_extract_vulnerability_info_string_input(self):
+        """Also accepts plain label name strings (e.g. GitLab's label shape)."""
+        labels = ["other-label", "contrast-vuln-id:VULN-classic-uuid"]
+        result = extract_vulnerability_info(labels)
+        self.assertEqual(result, "classic-uuid")
 
 
 if __name__ == '__main__':
