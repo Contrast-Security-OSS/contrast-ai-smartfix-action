@@ -115,7 +115,7 @@ class TestMergeHandler(unittest.TestCase):
 
     @patch('src.merge_handler.contrast_api.send_telemetry_data_org')
     @patch('src.merge_handler._notify_remediation_service')
-    @patch('src.merge_handler._extract_vulnerability_info')
+    @patch('src.merge_handler.extract_vulnerability_info')
     @patch('src.merge_handler._extract_remediation_info')
     @patch('src.merge_handler._validate_pr_event')
     @patch('src.merge_handler._load_github_event')
@@ -313,44 +313,8 @@ class TestMergeHandler(unittest.TestCase):
                         merge_handler._extract_remediation_info(pull_request)
                     mock_exit.assert_called_once_with(1)
 
-    def test_extract_vulnerability_info_with_vuln_uuid(self):
-        """Test _extract_vulnerability_info when vulnerability UUID is in labels"""
-        labels = [
-            {"name": "contrast-vuln-id:VULN-abc-123-def"},
-            {"name": "other-label"}
-        ]
-        result = merge_handler._extract_vulnerability_info(labels)
-        self.assertEqual(result, "abc-123-def")
-
-    def test_extract_vulnerability_info_without_vuln_uuid(self):
-        """Test _extract_vulnerability_info when vulnerability UUID is not in labels"""
-        labels = [{"name": "other-label"}]
-        result = merge_handler._extract_vulnerability_info(labels)
-        self.assertEqual(result, "unknown")
-
-    def test_extract_vulnerability_info_empty_labels(self):
-        """Test _extract_vulnerability_info with empty labels list"""
-        labels = []
-        result = merge_handler._extract_vulnerability_info(labels)
-        self.assertEqual(result, "unknown")
-
-    def test_extract_vulnerability_info_with_northstar_issue_id(self):
-        """Test _extract_vulnerability_info returns issueId from contrast-issue-id: label."""
-        labels = [
-            {"name": "contrast-issue-id:ISS-2026-42"},
-            {"name": "other-label"}
-        ]
-        result = merge_handler._extract_vulnerability_info(labels)
-        self.assertEqual(result, "ISS-2026-42")
-
-    def test_extract_vulnerability_info_prefers_first_matching_label(self):
-        """Test _extract_vulnerability_info returns the first SmartFix label found."""
-        labels = [
-            {"name": "other-label"},
-            {"name": "contrast-vuln-id:VULN-classic-uuid"},
-        ]
-        result = merge_handler._extract_vulnerability_info(labels)
-        self.assertEqual(result, "classic-uuid")
+    # Pure-function coverage for extract_vulnerability_info moved to
+    # test_github_operations.py (AIML-858) — it's no longer defined here.
 
     @patch('src.merge_handler.get_config')
     @patch('src.merge_handler.contrast_api.notify_remediation_pr_merged_org')

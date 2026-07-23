@@ -41,7 +41,7 @@ Please follow the specific setup instructions link for the coding agent of your 
 ## FAQ
 
 * **Q: Can I use SmartFix if I don't use Contrast Assess?**
-  * A: Yes, if your organization uses static analysis (NorthStar/SAST), SmartFix can operate in SAST-only mode. Simply omit `contrast_app_id` and `contrast_app_ids` from your workflow configuration. SmartFix still requires a Contrast account and organization.
+  * A: Yes, if your organization uses static analysis (NorthStar/SAST), SmartFix can operate in SAST-only mode — simply omit `contrast_app_id` and `contrast_app_ids` from your workflow configuration. If applications in your NorthStar-only organization are also instrumented with the Contrast Agent, set `contrast_app_id`/`contrast_app_ids` and SmartFix will additionally address IAST issues for those applications. SmartFix still requires a Contrast account and organization.
 * **Q: How often does SmartFix run?**
   * A: This is determined by the `schedule` trigger in your GitHub Actions workflow file. You can customize it.
 * **Q: What happens if the AI cannot generate a fix?**
