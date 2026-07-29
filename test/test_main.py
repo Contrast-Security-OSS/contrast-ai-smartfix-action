@@ -1,10 +1,12 @@
+import requests
+import subprocess
 import sys
 import unittest
 import os
 import io
 import contextlib
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, Mock, MagicMock
 
 # Ensure test directory is on path (conftest.py only runs under pytest)
 sys.path.insert(0, str(Path(__file__).parent))
@@ -52,18 +54,16 @@ class TestMain(unittest.TestCase):
         # Mock subprocess calls
         self.subproc_patcher = patch('subprocess.run')
         self.mock_subprocess = self.subproc_patcher.start()
-        mock_process = MagicMock()
-        mock_process.returncode = 0
-        mock_process.stdout = "Mock output"
-        mock_process.communicate.return_value = (b"Mock stdout", b"Mock stderr")
-        self.mock_subprocess.return_value = mock_process
+        self.mock_subprocess.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="Mock output", stderr=""
+        )
 
         # Mock git configuration
         self.git_patcher = patch('src.smartfix.domains.scm.git_operations.GitOperations.configure_git_user')
         self.mock_git = self.git_patcher.start()
 
         # Mock API calls
-        self.api_patcher = patch('src.contrast_api.get_vulnerability_with_prompts')
+        self.api_patcher = patch('src.contrast_api.get_org_prompt_details')
         self.mock_api = self.api_patcher.start()
         self.mock_api.return_value = None
 
@@ -74,7 +74,7 @@ class TestMain(unittest.TestCase):
         # Mock requests for version checking
         self.requests_patcher = patch('src.version_check.requests.get')
         self.mock_requests_get = self.requests_patcher.start()
-        mock_response = MagicMock()
+        mock_response = Mock(spec=requests.Response)
         mock_response.json.return_value = [{'name': 'v1.0.0'}]
         mock_response.raise_for_status.return_value = None
         self.mock_requests_get.return_value = mock_response
@@ -90,8 +90,8 @@ class TestMain(unittest.TestCase):
         )
         self.mock_pr_count = self.pr_count_patcher.start()
 
-        # Mock notify_remediation_failed to prevent real HTTP calls in error paths
-        self.notify_patcher = patch('src.contrast_api.notify_remediation_failed', return_value=False)
+        # Mock notify_remediation_failed_org to prevent real HTTP calls in error paths
+        self.notify_patcher = patch('src.contrast_api.notify_remediation_failed_org', return_value=False)
         self.mock_notify = self.notify_patcher.start()
 
     def tearDown(self):
@@ -189,7 +189,7 @@ class TestMain(unittest.TestCase):
                         output = buf.getvalue()
 
                     # Verify the vulnerability was skipped both times
-                    self.assertIn("Skipping vulnerability TEST-VULN-UUID-123", output)
+                    self.assertIn("Skipping finding TEST-VULN-UUID-123", output)
                     self.assertIn("TEST-VULN-UUID-123 was re-suggested after being skipped", output)
 
                     # Verify the loop broke cleanly
@@ -239,9 +239,9 @@ class TestMain(unittest.TestCase):
              patch('src.main.SmartFixAgent') as mock_agent_class, \
              patch('src.main.handle_session_result', return_value=mock_session_result), \
              patch('src.main.generate_qa_section', return_value=""), \
-             patch('src.contrast_api.notify_remediation_failed') as mock_notify_failed:
+             patch('src.contrast_api.notify_remediation_failed_org') as mock_notify_failed:
 
-            mock_agent = MagicMock()
+            mock_agent = Mock()
             mock_agent_class.return_value = mock_agent
 
             with patch.dict('os.environ', test_env, clear=True):
@@ -286,7 +286,7 @@ class TestMain(unittest.TestCase):
         span_registry = {}
 
         def mock_start_span(name):
-            mock_span = MagicMock()
+            mock_span = Mock()
             mock_span_cm = MagicMock()
             mock_span_cm.__enter__ = MagicMock(return_value=mock_span)
             mock_span_cm.__exit__ = MagicMock(return_value=False)
@@ -305,7 +305,7 @@ class TestMain(unittest.TestCase):
              patch('src.smartfix.domains.telemetry.otel_provider.initialize_otel'), \
              patch('src.smartfix.domains.telemetry.otel_provider.shutdown_otel'):
 
-            mock_agent_class.return_value = MagicMock()
+            mock_agent_class.return_value = Mock()
 
             with patch.dict('os.environ', test_env, clear=True):
                 reset_config()
@@ -350,7 +350,7 @@ class TestMain(unittest.TestCase):
         span_registry = {}
 
         def mock_start_span(name):
-            mock_span = MagicMock()
+            mock_span = Mock()
             mock_span_cm = MagicMock()
             mock_span_cm.__enter__ = MagicMock(return_value=mock_span)
             mock_span_cm.__exit__ = MagicMock(return_value=False)
@@ -372,7 +372,7 @@ class TestMain(unittest.TestCase):
              patch('src.smartfix.domains.telemetry.otel_provider.initialize_otel'), \
              patch('src.smartfix.domains.telemetry.otel_provider.shutdown_otel'):
 
-            mock_agent_class.return_value = MagicMock()
+            mock_agent_class.return_value = Mock()
 
             with patch.dict('os.environ', test_env, clear=True):
                 reset_config()
@@ -388,7 +388,7 @@ class TestMain(unittest.TestCase):
 
     def test_main_initializes_and_shuts_down_otel(self):
         """main() calls initialize_otel, starts smartfix-run span, and calls shutdown_otel."""
-        mock_span = MagicMock()
+        mock_span = Mock()
         mock_span_cm = MagicMock()
         mock_span_cm.__enter__ = MagicMock(return_value=mock_span)
         mock_span_cm.__exit__ = MagicMock(return_value=False)
@@ -413,6 +413,186 @@ class TestMain(unittest.TestCase):
         self.assertTrue(len(total_calls) >= 1, "Expected contrast.smartfix.vulnerabilities_total to be set")
         self.assertEqual(total_calls[-1][0][1], 0)
         mock_shutdown.assert_called()
+
+    def test_sast_only_mode_no_app_id_does_not_exit(self):
+        """When CONTRAST_APP_ID and CONTRAST_APP_IDS are both absent, SAST-only mode is
+        entered without calling sys.exit — the run completes normally (with no vulns)."""
+        sast_env = {k: v for k, v in self.env_vars.items() if k != 'CONTRAST_APP_ID'}
+
+        with patch.dict('os.environ', sast_env, clear=True):
+            reset_config()
+            sast_config = get_config(testing=True)
+            sast_config.CONTRAST_APP_ID = None
+            sast_config.CONTRAST_APP_IDS = []
+            with patch('src.main.config', sast_config):
+                main()
+
+        self.mock_exit.assert_not_called()
+        self.mock_api.assert_called()
+
+    def test_sast_only_mode_logs_informational_message(self):
+        """When no app ID is configured, an informational message about SAST-only mode is logged."""
+        sast_env = {k: v for k, v in self.env_vars.items() if k != 'CONTRAST_APP_ID'}
+
+        with patch.dict('os.environ', sast_env, clear=True):
+            reset_config()
+            sast_config = get_config(testing=True)
+            sast_config.CONTRAST_APP_ID = None
+            sast_config.CONTRAST_APP_IDS = []
+            with patch('src.main.config', sast_config):
+                with io.StringIO() as buf, contextlib.redirect_stdout(buf):
+                    main()
+                    output = buf.getvalue()
+
+        self.assertIn('NorthStar-only organizations', output)
+
+    def test_skipped_app_ids_warning_is_logged(self):
+        """When skippedAppIds is non-empty, a warning including the count and IDs is logged."""
+        vuln_data = {
+            'vulnerabilityUuid': 'TEST-VULN-UUID-SKIP',
+            'vulnerabilityTitle': 'Test Injection',
+            'vulnerabilityRuleName': 'sql-injection',
+            'vulnerabilitySeverity': 'HIGH',
+            'remediationId': 'REM-SKIP-001',
+            'sessionId': 'session-skip',
+            'fixSystemPrompt': 'Fix it',
+            'fixUserPrompt': 'Please fix',
+            'skippedAppIds': ['app-id-2', 'app-id-3'],
+        }
+
+        # Return vuln_data once then None to stop the loop
+        self.mock_api.side_effect = [vuln_data, None]
+
+        with patch('src.github.github_operations.GitHubOperations.check_pr_status_for_label') as mock_pr_check, \
+             patch('src.github.github_operations.GitHubOperations.generate_label_details') as mock_label:
+            mock_pr_check.return_value = "OPEN"
+            mock_label.return_value = ('contrast-vuln-id:TEST-VULN-UUID-SKIP', 'color', 'desc')
+
+            with patch.dict('os.environ', self.env_vars, clear=True):
+                with io.StringIO() as buf, contextlib.redirect_stdout(buf):
+                    main()
+                    output = buf.getvalue()
+
+        self.assertIn("2 app(s) were inaccessible and skipped", output)
+        self.assertIn("app-id-2", output)
+        self.assertIn("app-id-3", output)
+
+    def test_finding_type_and_severity_logged_for_sast_finding(self):
+        """debug_log emits findingType and severity after _extract_finding_ids for a SAST finding."""
+        vuln_data = {
+            'vulnerabilityUuid': 'SAST-UUID-001',
+            'vulnerabilityTitle': 'Test SQL Injection',
+            'vulnerabilityRuleName': 'sql-injection',
+            'remediationId': 'REM-SAST-001',
+            'sessionId': 'session-sast-001',
+            'fixSystemPrompt': 'Fix the vulnerability',
+            'fixUserPrompt': 'Please fix',
+            'findingType': 'SAST',
+            'vulnerabilitySeverity': 'HIGH',
+        }
+
+        self.mock_api.side_effect = [vuln_data, None]
+
+        with patch('src.github.github_operations.GitHubOperations.check_pr_status_for_label') as mock_pr_check, \
+             patch('src.github.github_operations.GitHubOperations.generate_label_details') as mock_label:
+            mock_pr_check.return_value = "OPEN"
+            mock_label.return_value = ('contrast-vuln-id:SAST-UUID-001', 'color', 'desc')
+
+            with patch.dict('os.environ', self.env_vars, clear=True):
+                with io.StringIO() as buf, contextlib.redirect_stdout(buf):
+                    main()
+                    output = buf.getvalue()
+
+        self.assertIn("Processing SAST finding | id=SAST-UUID-001 | severity=HIGH", output)
+
+    def test_sast_northstar_finding_logs_type_and_severity(self):
+        """Synthetic SAST NORTHSTAR_ONLY payload reaches the finding-type log line without error.
+
+        Regression guard: a NORTHSTAR_ONLY finding with findingType=SAST and severity=CRITICAL
+        must not hit any blocking code path before the debug_log fires.
+        """
+        vuln_data = {
+            'vulnerabilityUuid': 'SAST-VULN-UUID-001',
+            'vulnerabilityTitle': 'SQL Injection (SAST)',
+            'vulnerabilityRuleName': 'sql-injection',
+            'remediationId': 'REM-SAST-TRACE-001',
+            'sessionId': 'session-sast-trace',
+            'fixSystemPrompt': 'Fix the vulnerability',
+            'fixUserPrompt': 'Please fix',
+            'mode': 'NORTHSTAR_ONLY',
+            'issueId': 'NS-SAST-ISSUE-001',
+            'findingType': 'SAST',
+            'vulnerabilitySeverity': 'CRITICAL',
+        }
+
+        self.mock_api.side_effect = [vuln_data, None]
+
+        with patch('src.github.github_operations.GitHubOperations.check_pr_status_for_label') as mock_pr_check, \
+             patch('src.github.github_operations.GitHubOperations.generate_label_details') as mock_label:
+            mock_pr_check.return_value = "OPEN"
+            mock_label.return_value = ('contrast-issue-id:NS-SAST-ISSUE-001', 'color', 'desc')
+
+            with patch.dict('os.environ', self.env_vars, clear=True):
+                with io.StringIO() as buf, contextlib.redirect_stdout(buf):
+                    main()
+                    output = buf.getvalue()
+
+        self.assertIn("Processing SAST finding | id=NS-SAST-ISSUE-001 | severity=CRITICAL", output)
+        self.mock_exit.assert_not_called()
+
+    def test_finding_type_and_severity_default_to_unknown_when_absent(self):
+        """debug_log uses UNKNOWN for findingType and severity when fields are absent from response."""
+        vuln_data = {
+            'vulnerabilityUuid': 'IAST-UUID-001',
+            'vulnerabilityTitle': 'Test Injection',
+            'vulnerabilityRuleName': 'sql-injection',
+            'remediationId': 'REM-IAST-001',
+            'sessionId': 'session-iast-001',
+            'fixSystemPrompt': 'Fix the vulnerability',
+            'fixUserPrompt': 'Please fix',
+        }
+
+        self.mock_api.side_effect = [vuln_data, None]
+
+        with patch('src.github.github_operations.GitHubOperations.check_pr_status_for_label') as mock_pr_check, \
+             patch('src.github.github_operations.GitHubOperations.generate_label_details') as mock_label:
+            mock_pr_check.return_value = "OPEN"
+            mock_label.return_value = ('contrast-vuln-id:IAST-UUID-001', 'color', 'desc')
+
+            with patch.dict('os.environ', self.env_vars, clear=True):
+                with io.StringIO() as buf, contextlib.redirect_stdout(buf):
+                    main()
+                    output = buf.getvalue()
+
+        self.assertIn("Processing UNKNOWN finding | id=IAST-UUID-001 | severity=UNKNOWN", output)
+
+    def test_external_agent_path_logs_severity_from_vulnerabilitySeverity(self):
+        """On the external-agent path, severity falls back to vulnerabilitySeverity (no severity/findingType field)."""
+        vuln_data = {
+            'vulnerabilityUuid': 'EXT-UUID-001',
+            'vulnerabilityTitle': 'Test SQL Injection',
+            'vulnerabilityRuleName': 'sql-injection',
+            'vulnerabilitySeverity': 'HIGH',
+            'remediationId': 'REM-EXT-001',
+        }
+
+        test_env = {**self.env_vars, 'CODING_AGENT': 'GITHUB_COPILOT'}
+
+        with patch('src.contrast_api.get_org_remediation_details') as mock_ext_api, \
+             patch('src.github.github_operations.GitHubOperations.check_pr_status_for_label') as mock_pr_check, \
+             patch('src.github.github_operations.GitHubOperations.generate_label_details') as mock_label:
+            mock_ext_api.side_effect = [vuln_data, None]
+            mock_pr_check.return_value = "OPEN"
+            mock_label.return_value = ('contrast-vuln-id:EXT-UUID-001', 'color', 'desc')
+
+            with patch.dict('os.environ', test_env, clear=True):
+                reset_config()
+                with patch('src.main.config', get_config()):
+                    with io.StringIO() as buf, contextlib.redirect_stdout(buf):
+                        main()
+                        output = buf.getvalue()
+
+        self.assertIn("Processing UNKNOWN finding | id=EXT-UUID-001 | severity=HIGH", output)
 
 
 if __name__ == '__main__':

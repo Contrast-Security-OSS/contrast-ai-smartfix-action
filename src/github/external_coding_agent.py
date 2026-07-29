@@ -25,9 +25,10 @@ from src.utils import log, debug_log, error_exit, tail_string
 from src.config import Config
 from src.github.github_operations import GitHubOperations
 from src.smartfix.domains.telemetry import telemetry_handler
-from src.contrast_api import notify_remediation_pr_opened
+from src.contrast_api import notify_remediation_pr_opened_org
 from src.smartfix.shared.failure_categories import FailureCategory
 from src.smartfix.shared.coding_agents import CodingAgents
+from src.smartfix.shared.constants import CLASSIC, NORTHSTAR_ONLY
 from src.smartfix.domains.agents.coding_agent import CodingAgentStrategy
 from src.smartfix.domains.agents.agent_session import AgentSession
 from src.smartfix.domains.vulnerability.context import RemediationContext
@@ -62,6 +63,9 @@ class ExternalCodingAgent(CodingAgentStrategy):
         # Extract key details with safe fallbacks
         vuln_title = vulnerability_details.get('vulnerabilityTitle', 'Unknown Vulnerability')
         vuln_uuid = vulnerability_details.get('vulnerabilityUuid', 'Unknown UUID')
+        mode = vulnerability_details.get('mode', CLASSIC)
+        issue_id = vulnerability_details.get('issueId')
+        primary_id = issue_id if mode == NORTHSTAR_ONLY else vuln_uuid
         vuln_rule = vulnerability_details.get('vulnerabilityRuleName', 'Unknown Rule')
         vuln_severity = vulnerability_details.get('vulnerabilitySeverity', 'Unknown Severity')
         vuln_status = vulnerability_details.get('vulnerabilityStatus', 'Unknown Status')
@@ -77,13 +81,25 @@ class ExternalCodingAgent(CodingAgentStrategy):
         vuln_http_details = tail_string(raw_http_details, 4000) if raw_http_details.strip() else None
 
         # Start building the issue body
-        contrast_url = (f"https://{self.config.CONTRAST_HOST}/Contrast/static/ng/index.html#/"
-                        f"{self.config.CONTRAST_ORG_ID}/applications/{self.config.CONTRAST_APP_ID}/vulns/{vuln_uuid}")
+        # Prefer applicationId from the response (correct for monorepo); fall back to config.
+        # If neither is available (monorepo with no singular app configured), omit the app
+        # segment to avoid a broken link.
+        application_id = vulnerability_details.get('applicationId') or self.config.CONTRAST_APP_ID
+        if mode == NORTHSTAR_ONLY and issue_id:
+            # NorthStar UI deeplink: /Contrast/cs/index.html#{orgId}/issues/{issueId}
+            contrast_url = (f"https://{self.config.CONTRAST_HOST}/Contrast/cs/index.html#"
+                            f"{self.config.CONTRAST_ORG_ID}/issues/{issue_id}")
+        elif application_id:
+            contrast_url = (f"https://{self.config.CONTRAST_HOST}/Contrast/static/ng/index.html#/"
+                            f"{self.config.CONTRAST_ORG_ID}/applications/{application_id}/vulns/{vuln_uuid}")
+        else:
+            contrast_url = (f"https://{self.config.CONTRAST_HOST}/Contrast/static/ng/index.html#/"
+                            f"{self.config.CONTRAST_ORG_ID}/vulns/{vuln_uuid}")
 
         issue_body = f"""
 # Contrast AI SmartFix Issue Report
 
-This issue should address a vulnerability identified by the Contrast Security platform (ID: [{vuln_uuid}]({contrast_url})).
+This issue should address a security finding identified by the Contrast Security platform (ID: [{primary_id}]({contrast_url})).
 
 # Security Vulnerability: {vuln_title}
 
@@ -178,7 +194,10 @@ Please review this security vulnerability and implement appropriate fixes to add
             )
 
             # Generate labels and issue details
-            vulnerability_label = f"contrast-vuln-id:VULN-{vuln_uuid}"
+            github_ops = GitHubOperations()
+            vulnerability_label, _, _ = github_ops.generate_label_details(
+                vuln_uuid, mode=context.mode, issue_id=context.issue_id
+            )
             remediation_label = f"smartfix-id:{remediation_id}"
             issue_title = vuln_title
 
@@ -192,7 +211,6 @@ Please review this security vulnerability and implement appropriate fixes to add
                 error_exit(remediation_id, FailureCategory.AGENT_FAILURE.value)
 
             # Use GitHubOperations to find if there's an existing issue with this label
-            github_ops = GitHubOperations()
             issue_number = github_ops.find_issue_with_label(vulnerability_label)
 
             is_existing_issue = False
@@ -322,14 +340,13 @@ Please review this security vulnerability and implement appropriate fixes to add
                 debug_log(f"Found PR #{pr_number} for issue #{issue_number} after {attempt} attempts")
 
                 # Notify the Remediation backend about the PR
-                success = notify_remediation_pr_opened(
+                success = notify_remediation_pr_opened_org(
                     remediation_id=remediation_id,
                     pr_number=pr_number,
                     pr_url=pr_url,
                     contrast_provided_llm=self.config.USE_CONTRAST_LLM,
                     contrast_host=self.config.CONTRAST_HOST,
                     contrast_org_id=self.config.CONTRAST_ORG_ID,
-                    contrast_app_id=self.config.CONTRAST_APP_ID,
                     contrast_auth_key=self.config.CONTRAST_AUTHORIZATION_KEY,
                     contrast_api_key=self.config.CONTRAST_API_KEY
                 )

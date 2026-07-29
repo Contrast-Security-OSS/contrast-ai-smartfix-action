@@ -29,8 +29,15 @@ jobs:
           repo-token: "${{ secrets.GITHUB_TOKEN }}"
           sync-labels: true
       - name: Team labeler
-        uses: JulienKode/team-labeler-action@edc2a1d3b252624ac7611293835edad9f1392ed4 # v2.0.2
-        with:
-          repo-token: ${{ secrets.PR_EDITOR_PAT }}
-          teams-repo: "common-github-actions"
-          teams-branch: "master"
+        env:
+          GH_TOKEN: ${{ secrets.PR_EDITOR_PAT }}
+          GH_REPO: ${{ github.repository }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          if gh api "orgs/Contrast-Security-OSS/teams/aiml-developers/memberships/$PR_AUTHOR" --silent 2>/dev/null; then
+            gh pr edit "$PR_NUMBER" --add-label "AIML"
+          else
+            echo "$PR_AUTHOR is not a member of AIML Developers; no label applied"
+          fi

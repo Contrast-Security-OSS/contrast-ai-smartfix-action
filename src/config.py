@@ -56,7 +56,7 @@ class Config:
         self.testing = testing
 
         # --- Preset ---
-        self.VERSION = "v1.0.16"
+        self.VERSION = "v1.0.18"
         self.USER_AGENT = f"contrast-smart-fix {self.VERSION}"
 
         # --- Paths (initialized early for use in command detection) ---
@@ -211,7 +211,7 @@ class Config:
         if (is_smartfix_coding_agent
                 and self.USE_CONTRAST_LLM
                 and self._get_env_var("AGENT_MODEL", required=False) is None):
-            self.AGENT_MODEL = "contrast/claude-sonnet-4-5"
+            self.AGENT_MODEL = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
 
         # Validate AWS Bedrock configuration if applicable
         self._validate_aws_bedrock_config()
@@ -249,8 +249,8 @@ class Config:
             return default
 
     def _check_contrast_config_values_exist(self) -> None:
-        if not all([self.CONTRAST_HOST, self.CONTRAST_ORG_ID, self.CONTRAST_APP_ID, self.CONTRAST_AUTHORIZATION_KEY, self.CONTRAST_API_KEY]):
-            raise ConfigurationError("Error: Missing one or more Contrast API configuration variables (HOST, ORG_ID, APP_ID, AUTH_KEY, API_KEY).")
+        if not all([self.CONTRAST_HOST, self.CONTRAST_ORG_ID, self.CONTRAST_AUTHORIZATION_KEY, self.CONTRAST_API_KEY]):
+            raise ConfigurationError("Error: Missing one or more Contrast API configuration variables (HOST, ORG_ID, AUTH_KEY, API_KEY).")
 
     def _validate_command(self, var_name: str, command: Optional[str], source: str = "config") -> None:
         """
@@ -388,27 +388,33 @@ class Config:
         Resolve the active application ID from contrast_app_id or contrast_app_ids inputs.
 
         Precedence:
-          1. CONTRAST_APP_ID (singular) — takes precedence if set (backward compat)
+          1. CONTRAST_APP_ID (singular) — takes precedence if set (backward compat); if
+             CONTRAST_APP_IDS is also set, a warning is logged and the singular value is used.
           2. CONTRAST_APP_IDS (plural JSON array) — first element used if singular is absent
-          3. Neither set — raises ConfigurationError
+          3. Neither set — returns (None, []); callers that require app IDs must validate
 
         Returns:
-            Tuple[str, List[str]]: (resolved_app_id, parsed_app_ids_list)
+            Tuple[Optional[str], List[str]]: (resolved_app_id, parsed_app_ids_list)
         """
         singular = self._get_env_var("CONTRAST_APP_ID", required=False)
-        if singular:
-            return singular, []
-
         plural_raw = self._get_env_var("CONTRAST_APP_IDS", required=False)
+
+        if singular and plural_raw:
+            _log_config_message(
+                "Warning: Both contrast_app_id and contrast_app_ids are set. "
+                "Using contrast_app_id and ignoring contrast_app_ids.",
+                is_warning=True
+            )
+            return singular, [singular]
+
+        if singular:
+            return singular, [singular]
+
         if plural_raw:
             app_ids = self._parse_app_ids(plural_raw)
             return app_ids[0], app_ids
 
-        raise ConfigurationError(
-            "Error: Must set either contrast_app_id or contrast_app_ids. "
-            "Use contrast_app_id for a single application or "
-            "contrast_app_ids for a JSON array of application IDs."
-        )
+        return None, []
 
     def _parse_app_ids(self, json_str: Optional[str]) -> List[str]:
         """
@@ -442,7 +448,12 @@ class Config:
 
         if not app_ids:
             raise ConfigurationError(
-                "Error: contrast_app_ids must not be an empty array."
+                "SmartFix could not find a Contrast application ID for this repository. "
+                "Make sure this repository is instrumented by the Contrast Agent so that it "
+                "has IAST findings in Contrast, then set one of the following inputs in your "
+                "SmartFix workflow step:\n"
+                "  contrast_app_id: '<your-app-id>'          # single application\n"
+                "  contrast_app_ids: '[\"id-1\", \"id-2\"]'      # monorepo with multiple applications"
             )
 
         cleaned_ids: List[str] = []

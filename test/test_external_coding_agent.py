@@ -20,7 +20,7 @@
 
 import re
 import unittest
-from unittest.mock import patch, MagicMock, ANY
+from unittest.mock import patch, Mock, ANY
 
 # Test setup imports (path is set up by conftest.py)
 from src.config import get_config, reset_config
@@ -100,7 +100,7 @@ class TestExternalCodingAgent(unittest.TestCase):
     @patch('src.github.github_operations.GitHubOperations.create_issue')
     @patch('src.github.github_operations.GitHubOperations.add_labels_to_pr')
     @patch('src.github.external_coding_agent.ExternalCodingAgent._process_copilot_workflow_run')
-    @patch('src.contrast_api.notify_remediation_pr_opened')
+    @patch('src.contrast_api.notify_remediation_pr_opened_org')
     @patch('src.github.external_coding_agent.time.sleep')  # Mock sleep to speed up tests
     @patch('src.smartfix.domains.telemetry.telemetry_handler.update_telemetry')
     @patch('src.github.external_coding_agent.debug_log')
@@ -170,7 +170,7 @@ class TestExternalCodingAgent(unittest.TestCase):
         agent = ExternalCodingAgent(self.config)
 
         # Mock _poll_for_pr instead of patching it
-        mock_poll_for_pr = MagicMock(return_value=None)
+        mock_poll_for_pr = Mock(return_value=None)
         original_poll_for_pr = agent._process_external_coding_agent_run
         agent._process_external_coding_agent_run = mock_poll_for_pr
 
@@ -208,7 +208,7 @@ class TestExternalCodingAgent(unittest.TestCase):
 
     @patch('src.github.github_operations.GitHubOperations.find_issue_with_label')
     @patch('src.github.github_operations.GitHubOperations.reset_issue')
-    @patch('src.contrast_api.notify_remediation_pr_opened')
+    @patch('src.contrast_api.notify_remediation_pr_opened_org')
     @patch('src.github.external_coding_agent.time.sleep')
     @patch('src.smartfix.domains.telemetry.telemetry_handler.update_telemetry')
     @patch('src.github.external_coding_agent.debug_log')
@@ -235,7 +235,7 @@ class TestExternalCodingAgent(unittest.TestCase):
         agent = ExternalCodingAgent(self.config)
 
         # Mock _poll_for_pr instead of patching it
-        mock_poll_for_pr = MagicMock(return_value=pr_info)
+        mock_poll_for_pr = Mock(return_value=pr_info)
         original_poll_for_pr = agent._process_external_coding_agent_run
         agent._process_external_coding_agent_run = mock_poll_for_pr
 
@@ -318,7 +318,7 @@ class TestExternalCodingAgent(unittest.TestCase):
 
     @patch('src.github.github_operations.GitHubOperations.add_labels_to_pr')
     @patch('src.github.external_coding_agent.ExternalCodingAgent._process_copilot_workflow_run')
-    @patch('src.github.external_coding_agent.notify_remediation_pr_opened')
+    @patch('src.github.external_coding_agent.notify_remediation_pr_opened_org')
     @patch('src.github.external_coding_agent.time.sleep')  # Mock sleep to speed up tests
     @patch('src.github.external_coding_agent.log')
     @patch('src.github.external_coding_agent.debug_log')
@@ -357,7 +357,6 @@ class TestExternalCodingAgent(unittest.TestCase):
             contrast_provided_llm=True,
             contrast_host=self.config.CONTRAST_HOST,
             contrast_org_id=self.config.CONTRAST_ORG_ID,
-            contrast_app_id=self.config.CONTRAST_APP_ID,
             contrast_auth_key=self.config.CONTRAST_AUTHORIZATION_KEY,
             contrast_api_key=self.config.CONTRAST_API_KEY
         )
@@ -366,7 +365,7 @@ class TestExternalCodingAgent(unittest.TestCase):
 
     @patch('src.github.github_operations.GitHubOperations.add_labels_to_pr')
     @patch('src.github.external_coding_agent.ExternalCodingAgent._process_copilot_workflow_run')
-    @patch('src.github.external_coding_agent.notify_remediation_pr_opened')
+    @patch('src.github.external_coding_agent.notify_remediation_pr_opened_org')
     @patch('src.github.external_coding_agent.time.sleep')
     @patch('src.github.external_coding_agent.log')
     @patch('src.github.external_coding_agent.debug_log')
@@ -410,7 +409,7 @@ class TestExternalCodingAgent(unittest.TestCase):
             self.assertLessEqual(sleep_value, 0.012)  # 0.01 * 1.2
 
     @patch('src.github.external_coding_agent.ExternalCodingAgent._process_copilot_workflow_run')
-    @patch('src.contrast_api.notify_remediation_pr_opened')
+    @patch('src.contrast_api.notify_remediation_pr_opened_org')
     @patch('src.github.external_coding_agent.time.sleep')
     @patch('src.github.external_coding_agent.log')
     @patch('src.github.external_coding_agent.debug_log')
@@ -446,7 +445,7 @@ class TestExternalCodingAgent(unittest.TestCase):
 
     @patch('src.github.github_operations.GitHubOperations.add_labels_to_pr')
     @patch('src.github.external_coding_agent.ExternalCodingAgent._process_copilot_workflow_run')
-    @patch('src.github.external_coding_agent.notify_remediation_pr_opened')
+    @patch('src.github.external_coding_agent.notify_remediation_pr_opened_org')
     @patch('src.github.external_coding_agent.time.sleep')
     @patch('src.github.external_coding_agent.log')
     @patch('src.github.external_coding_agent.debug_log')
@@ -696,6 +695,49 @@ class TestExternalCodingAgent(unittest.TestCase):
             # Verify debug_log was called with character count
             expected_length = len(result)
             mock_debug_log.assert_called_with(f"Assembled issue body with {expected_length} characters")
+
+    def test_assemble_issue_body_uses_application_id_from_response(self):
+        """applicationId from the response is used in the Contrast UI link."""
+        agent = ExternalCodingAgent(self.config)
+        vulnerability_details = {
+            'vulnerabilityTitle': 'SQL Injection',
+            'vulnerabilityUuid': 'vuln-uuid-123',
+            'applicationId': 'app-from-response-id',
+        }
+
+        result = agent.assemble_issue_body(vulnerability_details)
+
+        self.assertIn('app-from-response-id', result)
+        self.assertIn('vuln-uuid-123', result)
+
+    def test_assemble_issue_body_falls_back_to_config_app_id_when_response_has_none(self):
+        """Falls back to config.CONTRAST_APP_ID when applicationId is absent from response."""
+        self.config.CONTRAST_APP_ID = 'config-app-id'
+        agent = ExternalCodingAgent(self.config)
+        vulnerability_details = {
+            'vulnerabilityTitle': 'SQL Injection',
+            'vulnerabilityUuid': 'vuln-uuid-456',
+        }
+
+        result = agent.assemble_issue_body(vulnerability_details)
+
+        self.assertIn('config-app-id', result)
+
+    def test_assemble_issue_body_omits_app_segment_when_no_app_id_available(self):
+        """When both response applicationId and config.CONTRAST_APP_ID are None, link omits app segment."""
+        self.config.CONTRAST_APP_ID = None
+        agent = ExternalCodingAgent(self.config)
+        vulnerability_details = {
+            'vulnerabilityTitle': 'SQL Injection',
+            'vulnerabilityUuid': 'vuln-uuid-789',
+        }
+
+        result = agent.assemble_issue_body(vulnerability_details)
+
+        self.assertIn('vuln-uuid-789', result)
+        self.assertNotIn('/applications/None/', result)
+        self.assertIn('/vulns/vuln-uuid-789', result)
+        self.assertNotIn('/applications/', result)
 
     @patch('src.github.github_operations.GitHubOperations.get_claude_workflow_run_id')
     @patch('src.github.github_operations.GitHubOperations.watch_github_action_run')

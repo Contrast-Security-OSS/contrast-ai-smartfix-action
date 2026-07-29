@@ -29,6 +29,8 @@ from src.config import get_config
 from src.smartfix.domains.telemetry import otel_provider
 from src.smartfix.domains.telemetry import smartfix_metrics
 from src.smartfix.shared.coding_agents import CodingAgents
+from src.smartfix.shared.constants import CLASSIC, NORTHSTAR_ONLY
+from src.smartfix.shared.exceptions import TokenBalanceExhaustedError
 from src.utils import debug_log, log, error_exit
 from src.smartfix.domains.telemetry import telemetry_handler
 from src.version_check import do_version_check
@@ -40,6 +42,7 @@ from src.smartfix.shared.failure_categories import FailureCategory
 from src import contrast_api
 from src.smartfix.domains.scm.git_operations import GitOperations
 from src.github.github_operations import GitHubOperations
+from src.smartfix.domains.scm.codeowners import get_reviewers_for_files
 
 # Import domain models
 from src.smartfix.domains.vulnerability.context import RemediationContext, PromptConfiguration, BuildConfiguration, RepositoryConfiguration
@@ -60,30 +63,58 @@ github_ops = GitHubOperations()
 apply_asyncio_workarounds()
 
 
+def _extract_finding_ids(vulnerability_data: dict, fallback_remediation_id: str) -> tuple:
+    """Extract and validate vuln_uuid, mode, issue_id, and primary_id from API response data."""
+    vuln_uuid = vulnerability_data['vulnerabilityUuid']
+    mode = vulnerability_data.get('mode', CLASSIC)
+    issue_id = vulnerability_data.get('issueId')
+    if mode == NORTHSTAR_ONLY and not issue_id:
+        debug_log(f"NORTHSTAR_ONLY finding missing issueId; vuln_uuid={vuln_uuid}, remediationId={vulnerability_data.get('remediationId', 'unknown')}")
+        error_exit(vulnerability_data.get('remediationId', fallback_remediation_id), FailureCategory.GENERAL_FAILURE.value)
+    primary_id = issue_id if mode == NORTHSTAR_ONLY else vuln_uuid
+    return vuln_uuid, mode, issue_id, primary_id
+
+
 def main():
     """Entry point: initialise OTel, start root span, then run the implementation."""
     otel_provider.initialize_otel(config)
     atexit.register(otel_provider.shutdown_otel)
 
-    # Use a list so _main_impl can increment it and the finally block sees the
+    # Use lists so _main_impl can mutate them and the finally block sees the
     # correct value even when _main_impl exits via error_exit()/sys.exit().
     vuln_count = [0]
+    # Only counts PRs created by the SmartFix-internal agent.  External-agent
+    # runs (Copilot, Claude Code) create their PR asynchronously after the
+    # GitHub Issue is filed, so they are not reflected here.
+    prs_created_count = [0]
     try:
         with otel_provider.start_span("smartfix-run") as run_span:
             run_span.set_attribute("session.id", config.GITHUB_RUN_ID)
             try:
-                _main_impl(vuln_count)
+                _main_impl(vuln_count, prs_created_count)
             finally:
                 run_span.set_attribute("contrast.smartfix.vulnerabilities_total", vuln_count[0])
+                run_span.set_attribute("contrast.smartfix.prs_created_total", prs_created_count[0])
     finally:
         otel_provider.shutdown_otel()
 
 
-def _main_impl(vuln_count):  # noqa: C901
+def _main_impl(vuln_count: list[int], prs_created_count: list[int]) -> None:  # noqa: C901
     """Main orchestration logic."""
 
     start_time = datetime.now()
     log("--- Starting Contrast AI SmartFix Script ---")
+
+    # --- Determine operating mode ---
+    if not config.CONTRAST_APP_ID and not config.CONTRAST_APP_IDS:
+        log("SmartFix could not find a Contrast application ID for this repository. "
+            "SmartFix will attempt to fix any static SAST findings for NorthStar-only organizations. "
+            "If you expect SmartFix to address IAST findings for this repository, "
+            "make sure this repository is instrumented by the Contrast Agent so that it "
+            "has IAST findings in Contrast, then set one of the following inputs in your "
+            "SmartFix workflow step:\n"
+            "  contrast_app_id: '<your-app-id>'          # single application\n"
+            "  contrast_app_ids: '[\"id-1\", \"id-2\"]'      # monorepo with multiple applications")
     debug_log(f"Start time: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
     # --- Version Check ---
@@ -131,15 +162,15 @@ def _main_impl(vuln_count):  # noqa: C901
 
     # Check Open PR Limit
     log("\n::group::--- Checking Open PR Limit ---")
-    label_prefix_to_check = "contrast-vuln-id:"
+    label_prefix_to_check = ("contrast-vuln-id:", "contrast-issue-id:")
     current_open_pr_count = github_ops.count_open_prs_with_prefix(label_prefix_to_check, "unknown")
     if current_open_pr_count >= max_open_prs_setting:
-        log(f"Found {current_open_pr_count} open PR(s) with label prefix '{label_prefix_to_check}'.")
+        log(f"Found {current_open_pr_count} open PR(s) with label prefix '{', '.join(label_prefix_to_check)}'.")
         log(f"This meets or exceeds the configured limit of {max_open_prs_setting}.")
         log("Exiting script to avoid creating more PRs.")
         sys.exit(0)
     else:
-        log(f"Found {current_open_pr_count} open PR(s) with label prefix '{label_prefix_to_check}' (Limit: {max_open_prs_setting}). Proceeding...")
+        log(f"Found {current_open_pr_count} open PR(s) with label prefix '{', '.join(label_prefix_to_check)}' (Limit: {max_open_prs_setting}). Proceeding...")
     log("\n::endgroup::")
     # END Check Open PR Limit
 
@@ -154,46 +185,23 @@ def _main_impl(vuln_count):  # noqa: C901
     debug_log(f"GitHub repository URL: {github_repo_url}")
     skipped_vulns = set()  # TS-39904
     remediation_id = "unknown"
-    previous_vuln_uuid = None  # Track previous vulnerability UUID to detect duplicates
+    previous_primary_id = None  # Track previous primary identifier to detect duplicates
     discovered_build_cmd = None   # Build command found by agent at runtime; carried forward across iterations
     discovered_format_cmd = None  # Format command found by agent at runtime; carried forward across iterations
 
-    # Log initial credit tracking status if using Contrast LLM (only for SMARTFIX agent)
-    if config.CODING_AGENT == CodingAgents.SMARTFIX.name and config.USE_CONTRAST_LLM:
-        initial_credit_info = contrast_api.get_credit_tracking(
-            contrast_host=config.CONTRAST_HOST,
-            contrast_org_id=config.CONTRAST_ORG_ID,
-            contrast_app_id=config.CONTRAST_APP_ID,
-            contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
-            contrast_api_key=config.CONTRAST_API_KEY
-        )
-        if initial_credit_info:
-            log(initial_credit_info.to_log_message())
-            # Log any initial warnings
-            if initial_credit_info.should_log_warning():
-                warning_msg = initial_credit_info.get_credit_warning_message()
-                if initial_credit_info.is_exhausted:
-                    log(warning_msg, is_error=True)
-                    error_exit(remediation_id, FailureCategory.GENERAL_FAILURE.value)
-                else:
-                    log(warning_msg, is_warning=True)
-        else:
-            log("Could not retrieve initial credit tracking information", is_error=True)
-            error_exit(remediation_id, FailureCategory.GENERAL_FAILURE.value)
-
     while True:
         telemetry_handler.reset_vuln_specific_telemetry()
+        smartfix_metrics.reset_vuln_token_accumulator()
         # Check if we've exceeded the maximum runtime
         current_time = datetime.now()
         elapsed_time = current_time - start_time
         if elapsed_time > max_runtime:
             log(f"\n--- Maximum runtime of 3 hours exceeded (actual: {elapsed_time}). Stopping processing. ---")
-            remediation_notified = contrast_api.notify_remediation_failed(
+            remediation_notified = contrast_api.notify_remediation_failed_org(
                 remediation_id=remediation_id,
                 failure_category=FailureCategory.EXCEEDED_TIMEOUT.value,
                 contrast_host=config.CONTRAST_HOST,
                 contrast_org_id=config.CONTRAST_ORG_ID,
-                contrast_app_id=config.CONTRAST_APP_ID,
                 contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
                 contrast_api_key=config.CONTRAST_API_KEY
             )
@@ -210,29 +218,14 @@ def _main_impl(vuln_count):  # noqa: C901
             log(f"\n--- Reached max PR limit ({max_open_prs_setting}). Current open PRs: {current_open_pr_count}. Stopping processing. ---")
             break
 
-        # Check credit exhaustion for Contrast LLM usage
-        if config.USE_CONTRAST_LLM:
-            current_credit_info = contrast_api.get_credit_tracking(
-                contrast_host=config.CONTRAST_HOST,
-                contrast_org_id=config.CONTRAST_ORG_ID,
-                contrast_app_id=config.CONTRAST_APP_ID,
-                contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
-                contrast_api_key=config.CONTRAST_API_KEY
-            )
-            if current_credit_info and current_credit_info.is_exhausted:
-                log("\n--- Credits exhausted. Stopping processing. ---")
-                log("Credits have been exhausted. Contact your CSM to request additional credits.", is_error=True)
-                break
-
         # --- Fetch Next Vulnerability Data from API ---
         if config.CODING_AGENT == CodingAgents.SMARTFIX.name:
             # For SMARTFIX, get vulnerability with prompts
             log("\n::group::--- Fetching next vulnerability and prompts from Contrast API ---")
-            vulnerability_data = contrast_api.get_vulnerability_with_prompts(
-                config.CONTRAST_HOST, config.CONTRAST_ORG_ID, config.CONTRAST_APP_ID,
+            vulnerability_data = contrast_api.get_org_prompt_details(
+                config.CONTRAST_HOST, config.CONTRAST_ORG_ID, config.CONTRAST_APP_IDS,
                 config.CONTRAST_AUTHORIZATION_KEY, config.CONTRAST_API_KEY,
                 max_open_prs_setting, github_repo_url, config.VULNERABILITY_SEVERITIES,
-                credit_info=current_credit_info if config.USE_CONTRAST_LLM else None
             )
             log("\n::endgroup::")
 
@@ -240,20 +233,25 @@ def _main_impl(vuln_count):  # noqa: C901
                 log("No more vulnerabilities found to process. Stopping processing.")
                 break
 
-            # Extract vulnerability details and prompts from the response
-            vuln_uuid = vulnerability_data['vulnerabilityUuid']
+            skipped_app_ids = vulnerability_data.get('skippedAppIds', [])
+            if skipped_app_ids:
+                log(f"Warning: {len(skipped_app_ids)} app(s) were inaccessible and skipped: {skipped_app_ids}", is_warning=True)
 
-            # Check if this is the same vulnerability UUID as the previous iteration
-            if vuln_uuid == previous_vuln_uuid:
-                if vuln_uuid in skipped_vulns:
-                    log(f"Vulnerability {vuln_uuid} was re-served after being handled. Breaking loop to avoid infinite processing.")
+            # Extract vulnerability details and prompts from the response
+            vuln_uuid, mode, issue_id, primary_id = _extract_finding_ids(vulnerability_data, remediation_id)
+
+            # Check if this is the same primary identifier as the previous iteration
+            if primary_id == previous_primary_id:
+                if primary_id in skipped_vulns:
+                    log(f"Finding {primary_id} was re-served after being handled. Breaking loop to avoid infinite processing.")
                     break
-                log(f"Error: Backend provided the same vulnerability UUID ({vuln_uuid}) as the previous iteration. This indicates a backend error.", is_warning=True)
+                log(f"Error: Backend provided the same primary identifier ({primary_id}) as the previous iteration. This indicates a backend error.", is_warning=True)
                 error_exit(remediation_id, FailureCategory.GENERAL_FAILURE.value)
 
             vuln_title = vulnerability_data['vulnerabilityTitle']
             remediation_id = vulnerability_data['remediationId']
             session_id = vulnerability_data.get('sessionId')
+            vuln_language = vulnerability_data.get('language')
 
             # Validate and create prompt configuration for SmartFix agent
             try:
@@ -269,11 +267,10 @@ def _main_impl(vuln_count):  # noqa: C901
         else:
             # For external coding agents (GITHUB_COPILOT/CLAUDE_CODE), get vulnerability details
             log("\n::group::--- Fetching next vulnerability details from Contrast API ---")
-            vulnerability_data = contrast_api.get_vulnerability_details(
-                config.CONTRAST_HOST, config.CONTRAST_ORG_ID, config.CONTRAST_APP_ID,
+            vulnerability_data = contrast_api.get_org_remediation_details(
+                config.CONTRAST_HOST, config.CONTRAST_ORG_ID, config.CONTRAST_APP_IDS,
                 config.CONTRAST_AUTHORIZATION_KEY, config.CONTRAST_API_KEY,
                 github_repo_url, max_open_prs_setting, config.VULNERABILITY_SEVERITIES,
-                credit_info=current_credit_info if config.USE_CONTRAST_LLM else None
             )
             log("\n::endgroup::")
 
@@ -281,50 +278,60 @@ def _main_impl(vuln_count):  # noqa: C901
                 log("No more vulnerabilities found to process. Stopping processing.")
                 break
 
-            # Extract vulnerability details from the response (no prompts for external agents)
-            vuln_uuid = vulnerability_data['vulnerabilityUuid']
+            skipped_app_ids = vulnerability_data.get('skippedAppIds', [])
+            if skipped_app_ids:
+                log(f"Warning: {len(skipped_app_ids)} app(s) were inaccessible and skipped: {skipped_app_ids}", is_warning=True)
 
-            # Check if this is the same vulnerability UUID as the previous iteration
-            if vuln_uuid == previous_vuln_uuid:
-                log(f"Error: Backend provided the same vulnerability UUID ({vuln_uuid}) as the previous iteration. This indicates a backend error.", is_warning=True)
+            # Extract vulnerability details from the response (no prompts for external agents)
+            vuln_uuid, mode, issue_id, primary_id = _extract_finding_ids(vulnerability_data, remediation_id)
+
+            # Check if this is the same primary identifier as the previous iteration
+            if primary_id == previous_primary_id:
+                log(f"Error: Backend provided the same primary identifier ({primary_id}) as the previous iteration. This indicates a backend error.", is_warning=True)
                 error_exit(remediation_id, FailureCategory.GENERAL_FAILURE.value)
 
             vuln_title = vulnerability_data['vulnerabilityTitle']
             remediation_id = vulnerability_data['remediationId']
             session_id = None  # External agents don't use Contrast LLM sessions
+            vuln_language = vulnerability_data.get('language')
 
             # No prompts required for external agents
             prompts = PromptConfiguration()
 
         # Populate vulnInfo in telemetry
-        telemetry_handler.update_telemetry("vulnInfo.vulnId", vuln_uuid)
+        telemetry_handler.update_telemetry("vulnInfo.vulnId", primary_id)
         telemetry_handler.update_telemetry("vulnInfo.vulnRule", vulnerability_data['vulnerabilityRuleName'])
+        telemetry_handler.update_telemetry("vulnInfo.northstarMode", mode)
         telemetry_handler.update_telemetry("additionalAttributes.remediationId", remediation_id)
 
-        log(f"\n::group::--- Considering Vulnerability: {vuln_title} (UUID: {vuln_uuid}) ---")
+        finding_type = vulnerability_data.get('findingType', 'UNKNOWN')
+        severity = vulnerability_data.get('vulnerabilitySeverity') or 'UNKNOWN'
+        debug_log(f"Processing {finding_type} finding | id={primary_id} | severity={severity}")
+
+        log(f"\n::group::--- Considering Finding: {vuln_title} (ID: {primary_id}) ---")
 
         # --- Check for Existing PRs ---
-        label_name, _, _ = github_ops.generate_label_details(vuln_uuid)
+        label_name, _, _ = github_ops.generate_label_details(vuln_uuid, mode=mode, issue_id=issue_id)
         pr_status = github_ops.check_pr_status_for_label(label_name)
 
         # Changed this logic to check only for OPEN PRs for dev purposes
         if pr_status == "OPEN":
-            log(f"Skipping vulnerability {vuln_uuid} as an OPEN PR with label '{label_name}' already exists.")
+            log(f"Skipping finding {primary_id} as an OPEN PR with label '{label_name}' already exists.")
             log("\n::endgroup::")
-            if vuln_uuid in skipped_vulns:
-                log(f"Vulnerability {vuln_uuid} was re-suggested after being skipped. "
+            if primary_id in skipped_vulns:
+                log(f"Finding {primary_id} was re-suggested after being skipped. "
                     f"This may indicate GitHub returned incorrect PR data. "
                     f"See https://www.githubstatus.com/ for possible incidents. "
                     f"Breaking loop to avoid infinite processing.")
                 break
-            skipped_vulns.add(vuln_uuid)
+            skipped_vulns.add(primary_id)
             continue
         else:
-            log(f"No existing OPEN or MERGED PR found for vulnerability {vuln_uuid}. Proceeding with fix attempt.")
+            log(f"No existing OPEN or MERGED PR found for finding {primary_id}. Proceeding with fix attempt.")
         log("\n::endgroup::")
 
-        # Update tracking variable now that we know we're actually processing this vuln
-        previous_vuln_uuid = vuln_uuid
+        # Update tracking variable now that we know we're actually processing this finding
+        previous_primary_id = primary_id
         vuln_count[0] += 1
 
         log(f"\n\033[0;33m Selected vuln to fix: {vuln_title} \033[0m")
@@ -340,8 +347,9 @@ def _main_impl(vuln_count):  # noqa: C901
         _op_outcome = "failure"
         _op_fix_start = time.monotonic()
 
+        smartfix_metrics.set_current_rule_name(vulnerability.rule_name)
         with otel_provider.start_span("fix-vulnerability") as op_span:
-            op_span.set_attribute("contrast.finding.fingerprint", vulnerability.uuid)
+            op_span.set_attribute("contrast.finding.fingerprint", primary_id)
             op_span.set_attribute("contrast.finding.source", "runtime")
             op_span.set_attribute("contrast.finding.rule_id", vulnerability.rule_name)
             op_span.set_attribute("contrast.smartfix.coding_agent", config.CODING_AGENT.lower())
@@ -355,6 +363,9 @@ def _main_impl(vuln_count):  # noqa: C901
                     repo_config=repo_config,
                     skip_writing_security_test=config.SKIP_WRITING_SECURITY_TEST,
                     session_id=session_id,
+                    language=vuln_language,
+                    mode=mode,
+                    issue_id=issue_id,
                 )
 
                 # Propagate a build command discovered by a previous agent run so the next
@@ -381,7 +392,14 @@ def _main_impl(vuln_count):  # noqa: C901
                     if result.success:
                         log("\n\n--- External Coding Agent successfully generated fixes ---")
                         processed_one = True
-                        contrast_api.send_telemetry_data()
+                        contrast_api.send_telemetry_data_org(
+                            remediation_id=remediation_id,
+                            telemetry_data=telemetry_handler.get_telemetry_data(),
+                            contrast_host=config.CONTRAST_HOST,
+                            contrast_org_id=config.CONTRAST_ORG_ID,
+                            contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
+                            contrast_api_key=config.CONTRAST_API_KEY
+                        )
                     continue  # Skip the built-in SmartFix code and PR creation
 
                 telemetry_handler.update_telemetry("additionalAttributes.codingAgent", "INTERNAL-SMARTFIX")
@@ -414,12 +432,11 @@ def _main_impl(vuln_count):  # noqa: C901
                     if api_failure_category == FailureCategory.BUILD_VERIFICATION_FAILED.value:
                         api_failure_category = FailureCategory.AGENT_FAILURE.value
 
-                    contrast_api.notify_remediation_failed(
+                    contrast_api.notify_remediation_failed_org(
                         remediation_id=remediation_id,
                         failure_category=api_failure_category,
                         contrast_host=config.CONTRAST_HOST,
                         contrast_org_id=config.CONTRAST_ORG_ID,
-                        contrast_app_id=config.CONTRAST_APP_ID,
                         contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
                         contrast_api_key=config.CONTRAST_API_KEY
                     )
@@ -465,12 +482,11 @@ def _main_impl(vuln_count):  # noqa: C901
                     log("No changes detected from agent execution. Notifying backend and skipping PR creation.")
                     _op_outcome = "no_code_changed"
                     git_ops.cleanup_branch(new_branch_name)
-                    contrast_api.notify_remediation_failed(
+                    contrast_api.notify_remediation_failed_org(
                         remediation_id=remediation_id,
                         failure_category=FailureCategory.NO_CODE_CHANGED.value,
                         contrast_host=config.CONTRAST_HOST,
                         contrast_org_id=config.CONTRAST_ORG_ID,
-                        contrast_app_id=config.CONTRAST_APP_ID,
                         contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
                         contrast_api_key=config.CONTRAST_API_KEY
                     )
@@ -495,7 +511,7 @@ def _main_impl(vuln_count):  # noqa: C901
                 # --- Push and Create PR ---
                 git_ops.push_branch(new_branch_name)  # Push the final commit (original or amended)
 
-                label_name, label_desc, label_color = github_ops.generate_label_details(vuln_uuid)
+                label_name, label_desc, label_color = github_ops.generate_label_details(vuln_uuid, mode=mode, issue_id=issue_id)
                 label_created = github_ops.ensure_label(label_name, label_desc, label_color)
                 if not label_created:
                     log(f"Could not create GitHub label '{label_name}'. PR will be created without a label.", is_warning=True)
@@ -503,30 +519,6 @@ def _main_impl(vuln_count):  # noqa: C901
                 pr_title = github_ops.generate_pr_title(vuln_title)
 
                 updated_pr_body = pr_body_base + qa_section
-
-                # Append credit tracking information to PR body if using Contrast LLM
-                if config.CODING_AGENT == CodingAgents.SMARTFIX.name and config.USE_CONTRAST_LLM:
-                    current_credit_info = contrast_api.get_credit_tracking(
-                        contrast_host=config.CONTRAST_HOST,
-                        contrast_org_id=config.CONTRAST_ORG_ID,
-                        contrast_app_id=config.CONTRAST_APP_ID,
-                        contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
-                        contrast_api_key=config.CONTRAST_API_KEY
-                    )
-                    if current_credit_info:
-                        # Increment credits used to account for this PR about to be created
-                        projected_credit_info = current_credit_info.with_incremented_usage()
-                        updated_pr_body += projected_credit_info.to_pr_body_section()
-
-                        # Show countdown message and warnings
-                        credits_after = projected_credit_info.credits_remaining
-                        log(f"Credit consumed. {credits_after} credits remaining")
-                        if projected_credit_info.should_log_warning():
-                            warning_msg = projected_credit_info.get_credit_warning_message()
-                            if projected_credit_info.is_exhausted:
-                                log(warning_msg, is_error=True)
-                            else:
-                                log(warning_msg, is_warning=True)
 
                 # Create a brief summary for the telemetry aiSummaryReport (limited to 255 chars in DB)
                 # Generate an optimized summary using the dedicated function in telemetry_handler
@@ -564,45 +556,45 @@ def _main_impl(vuln_count):  # noqa: C901
                             log(f"Could not extract PR number from URL: {pr_url} - Error: {str(e)}")
 
                         # Add labels to the PR (non-critical — don't fail the run)
-                        if pr_number and label_name:
+                        if pr_number:
+                            labels_to_add = [f"smartfix-id:{remediation_id}"]
+                            if label_name:
+                                labels_to_add.append(label_name)
                             try:
-                                github_ops.add_labels_to_pr(pr_number, [label_name])
+                                github_ops.add_labels_to_pr(pr_number, labels_to_add)
                             except Exception as label_err:
                                 log(f"Failed to add label to PR #{pr_number}: {label_err}", is_warning=True)
 
+                        # Assign CODEOWNERS reviewers (non-critical — don't fail the run)
+                        if pr_number:
+                            try:
+                                changed_files = github_ops.get_pr_changed_files(pr_number)
+                                reviewers = get_reviewers_for_files(changed_files, config.REPO_ROOT)
+                                if reviewers:
+                                    github_ops.add_reviewers_to_pr(pr_number, reviewers)
+                                else:
+                                    debug_log("No CODEOWNERS reviewers found for changed files")
+                            except Exception as reviewer_err:
+                                log(f"Failed to assign CODEOWNERS reviewers to PR #{pr_number}: {reviewer_err}", is_warning=True)
+
                         # Notify the Remediation backend service about the PR
                         if pr_number is None:
-                            pr_number = 1
-
-                        remediation_notified = contrast_api.notify_remediation_pr_opened(
-                            remediation_id=remediation_id,
-                            pr_number=pr_number,
-                            pr_url=pr_url,
-                            contrast_provided_llm=config.CODING_AGENT == CodingAgents.SMARTFIX.name and config.USE_CONTRAST_LLM,
-                            contrast_host=config.CONTRAST_HOST,
-                            contrast_org_id=config.CONTRAST_ORG_ID,
-                            contrast_app_id=config.CONTRAST_APP_ID,
-                            contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
-                            contrast_api_key=config.CONTRAST_API_KEY
-                        )
-                        if remediation_notified:
-                            log(f"Successfully notified Remediation service about PR for remediation {remediation_id}.")
-
-                            # Log updated credit tracking status after PR notification (only for SMARTFIX agent)
-                            if config.CODING_AGENT == CodingAgents.SMARTFIX.name and config.USE_CONTRAST_LLM:
-                                updated_credit_info = contrast_api.get_credit_tracking(
-                                    contrast_host=config.CONTRAST_HOST,
-                                    contrast_org_id=config.CONTRAST_ORG_ID,
-                                    contrast_app_id=config.CONTRAST_APP_ID,
-                                    contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
-                                    contrast_api_key=config.CONTRAST_API_KEY
-                                )
-                                if updated_credit_info:
-                                    log(updated_credit_info.to_log_message())
-                                else:
-                                    debug_log("Could not retrieve updated credit tracking information")
+                            log(f"Could not determine PR number from URL '{pr_url}' — skipping backend notification.", is_warning=True)
                         else:
-                            log(f"Failed to notify Remediation service about PR for remediation {remediation_id}.", is_warning=True)
+                            remediation_notified = contrast_api.notify_remediation_pr_opened_org(
+                                remediation_id=remediation_id,
+                                pr_number=pr_number,
+                                pr_url=pr_url,
+                                contrast_provided_llm=config.CODING_AGENT == CodingAgents.SMARTFIX.name and config.USE_CONTRAST_LLM,
+                                contrast_host=config.CONTRAST_HOST,
+                                contrast_org_id=config.CONTRAST_ORG_ID,
+                                contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
+                                contrast_api_key=config.CONTRAST_API_KEY
+                            )
+                            if remediation_notified:
+                                log(f"Successfully notified Remediation service about PR for remediation {remediation_id}.")
+                            else:
+                                log(f"Failed to notify Remediation service about PR for remediation {remediation_id}.", is_warning=True)
                     else:
                         # This case should ideally be handled by create_pr exiting or returning empty
                         # and then the logic below for SKIP_PR_ON_FAILURE would trigger.
@@ -616,6 +608,7 @@ def _main_impl(vuln_count):  # noqa: C901
                         outcome=pr_metric_outcome,
                         rule_name=vulnerability.rule_name,
                         coding_agent=config.CODING_AGENT.lower(),
+                        mode=mode,
                     )
 
                     if not pr_creation_success:
@@ -626,6 +619,7 @@ def _main_impl(vuln_count):  # noqa: C901
                     _op_pr_created = True
                     _op_pr_url = pr_url
                     _op_outcome = "success"
+                    prs_created_count[0] += 1
 
                     processed_one = True  # Mark that we successfully processed one
                     log(f"\n--- Successfully processed vulnerability {vuln_uuid}. Continuing to look for next vulnerability... ---")
@@ -634,25 +628,48 @@ def _main_impl(vuln_count):  # noqa: C901
                     log("\n--- PR creation failed ---")
                     error_exit(remediation_id, FailureCategory.GENERATE_PR_FAILURE.value)
 
-                contrast_api.send_telemetry_data()
+                contrast_api.send_telemetry_data_org(
+                    remediation_id=remediation_id,
+                    telemetry_data=telemetry_handler.get_telemetry_data(),
+                    contrast_host=config.CONTRAST_HOST,
+                    contrast_org_id=config.CONTRAST_ORG_ID,
+                    contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
+                    contrast_api_key=config.CONTRAST_API_KEY
+                )
 
+            except TokenBalanceExhaustedError:
+                # No notify_remediation_failed_org on this path: HTTP 402 is a
+                # clean stop, not a failure. The remediation will be picked up
+                # by a later scheduled run when balance is replenished.
+                log(
+                    "SmartFix token balance exhausted (HTTP 402). Stopping this run; "
+                    "subsequent scheduled runs will resume when balance is replenished."
+                )
+                break
             except BaseException:
                 raise
             finally:
                 lang = (telemetry_handler.get_telemetry_data().get("appInfo") or {}).get("programmingLanguage")
                 if lang:
                     op_span.set_attribute("contrast.finding.language", lang)
+                op_span.set_attribute("contrast.finding.severity", vulnerability.severity.value)
                 op_span.set_attribute("contrast.smartfix.fix_applied", _op_fix_applied)
                 op_span.set_attribute("contrast.smartfix.files_modified", _op_files_modified)
                 op_span.set_attribute("contrast.smartfix.pr_created", _op_pr_created)
                 if _op_pr_url:
                     op_span.set_attribute("contrast.smartfix.pr_url", _op_pr_url)
+                _total_in, _total_out = smartfix_metrics.get_vuln_token_totals()
+                op_span.set_attribute("contrast.smartfix.total_input_tokens", _total_in)
+                op_span.set_attribute("contrast.smartfix.total_output_tokens", _total_out)
+                _severity = vulnerability.severity.value if vulnerability.severity else None
                 smartfix_metrics.record_vulnerability_duration(
                     elapsed_s=time.monotonic() - _op_fix_start,
                     outcome=_op_outcome,
                     rule_name=vulnerability.rule_name,
                     language=lang or "unknown",
                     source="runtime",
+                    severity=_severity,
+                    mode=mode,
                 )
 
     # Calculate total runtime

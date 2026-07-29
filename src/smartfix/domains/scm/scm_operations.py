@@ -6,7 +6,8 @@ for implementing SCM platform-specific operations (GitHub, GitLab, BitBucket, et
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple, Union
+from src.smartfix.shared.constants import CLASSIC
 
 
 class ScmOperations(ABC):
@@ -79,12 +80,14 @@ class ScmOperations(ABC):
         pass
 
     @abstractmethod
-    def generate_label_details(self, vuln_uuid: str) -> Tuple[str, str, str]:
+    def generate_label_details(self, vuln_uuid: str, mode: str = CLASSIC, issue_id: Optional[str] = None) -> Tuple[str, str, str]:
         """
         Generates label name, description, and color for a vulnerability.
 
         Args:
             vuln_uuid (str): Vulnerability UUID
+            mode (str): Finding mode ('CLASSIC' or 'NORTHSTAR_ONLY')
+            issue_id (str): NorthStar issue ID (required when mode is NORTHSTAR_ONLY)
 
         Returns:
             Tuple[str, str, str]: Label name, description, and color
@@ -120,12 +123,12 @@ class ScmOperations(ABC):
         pass
 
     @abstractmethod
-    def count_open_prs_with_prefix(self, label_prefix: str, remediation_id: str) -> int:
+    def count_open_prs_with_prefix(self, label_prefix: Union[str, tuple], remediation_id: str) -> int:
         """
         Counts open PRs with labels matching a prefix.
 
         Args:
-            label_prefix (str): Label prefix to match
+            label_prefix: Label prefix to match; accepts a tuple for str.startswith multi-prefix matching
             remediation_id (str): Remediation ID for error context
 
         Returns:
@@ -314,5 +317,32 @@ class ScmOperations(ABC):
 
         Returns:
             Optional[str]: The latest matching branch name or None if no matches found
+        """
+        pass
+
+    @abstractmethod
+    def get_pr_changed_files(self, pr_number: int) -> List[str]:
+        """
+        Returns the list of file paths changed in a pull request.
+
+        Args:
+            pr_number (int): The PR number
+
+        Returns:
+            List[str]: Changed file paths, or empty list on error
+        """
+        pass
+
+    @abstractmethod
+    def add_reviewers_to_pr(self, pr_number: int, reviewers: Set[str]) -> bool:
+        """
+        Requests review from the given handles on a pull request.
+
+        Args:
+            pr_number (int): The PR number
+            reviewers (Set[str]): GitHub/SCM handles to request review from
+
+        Returns:
+            bool: True on success or empty reviewers, False on error
         """
         pass
