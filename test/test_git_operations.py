@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, Mock
 from src.smartfix.domains.scm.git_operations import GitOperations
 
 
@@ -13,7 +13,7 @@ class TestGitOperations(unittest.TestCase):
         # Mock the config to avoid requiring environment variables in tests
         patcher = patch('src.utils.get_config')
         self.mock_config = patcher.start()
-        self.mock_config.return_value = MagicMock(
+        self.mock_config.return_value = Mock(
             BASE_BRANCH="main",
             testing=True
         )
@@ -83,7 +83,7 @@ class TestGitOperations(unittest.TestCase):
     def test_push_branch(self, mock_run_command):
         """Test pushing branch."""
         with patch('src.smartfix.domains.scm.git_operations.get_config') as mock_config:
-            mock_config.return_value = MagicMock(
+            mock_config.return_value = Mock(
                 GITHUB_TOKEN="mock-token",
                 GITHUB_SERVER_URL="https://mockhub.com",
                 GITHUB_REPOSITORY="mock/repo",

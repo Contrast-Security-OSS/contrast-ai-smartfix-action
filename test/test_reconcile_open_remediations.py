@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, Mock
 
+from src.github.github_operations import GitHubOperations
 from src.smartfix.domains.workflow.pr_reconciliation import reconcile_open_remediations
 
 
@@ -11,14 +12,16 @@ class TestReconcileOpenRemediations(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        self.mock_config = MagicMock(
+        self.mock_config = Mock(
             CONTRAST_HOST='test.contrastsecurity.com',
             CONTRAST_ORG_ID='test-org-id',
             CONTRAST_APP_IDS=['test-app-id'],
             CONTRAST_AUTHORIZATION_KEY='test-auth-key',
             CONTRAST_API_KEY='test-api-key',
+            GITHUB_SERVER_URL='https://github.com',
+            GITHUB_REPOSITORY='test-org/test-repo',
         )
-        self.mock_github_ops = MagicMock()
+        self.mock_github_ops = Mock(spec=GitHubOperations)
 
     @patch('src.smartfix.domains.workflow.pr_reconciliation.contrast_api')
     def test_empty_list_makes_no_github_calls(self, mock_contrast_api):
@@ -150,8 +153,8 @@ class TestReconcileOpenRemediations(unittest.TestCase):
         mock_contrast_api.notify_remediation_pr_closed_org.assert_called_once()
 
     @patch('src.smartfix.domains.workflow.pr_reconciliation.contrast_api')
-    def test_get_org_open_remediations_called_with_app_ids(self, mock_contrast_api):
-        """Test that get_org_open_remediations is called with app_ids from config."""
+    def test_get_org_open_remediations_called_with_app_ids_and_repo_url(self, mock_contrast_api):
+        """Test that get_org_open_remediations is called with app_ids and the repo URL."""
         mock_contrast_api.get_org_open_remediations.return_value = []
 
         reconcile_open_remediations(self.mock_config, self.mock_github_ops)
@@ -162,6 +165,7 @@ class TestReconcileOpenRemediations(unittest.TestCase):
             app_ids=['test-app-id'],
             contrast_auth_key='test-auth-key',
             contrast_api_key='test-api-key',
+            github_repo_url='github.com/test-org/test-repo',
         )
 
 

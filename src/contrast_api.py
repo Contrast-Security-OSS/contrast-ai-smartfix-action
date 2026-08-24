@@ -23,26 +23,19 @@ import sys
 from typing import Optional
 from src.config import get_config
 from src.utils import debug_log, log, normalize_host, RED, RESET
-from src.smartfix.domains.workflow.credit_tracking import CreditTrackingResponse
 
 config = get_config()
 
 
-def get_sanitized_409_message(response_text: str, credit_info=None) -> tuple[str, bool]:
+def get_sanitized_409_message(response_text: str) -> tuple[str, bool]:
     """
     Return a user-friendly message for 409 responses and whether it's an error condition.
-
-    Args:
-        response_text: The raw response body from the API
-        credit_info: Optional CreditTrackingResponse to determine trial vs credit exhaustion
 
     Returns:
         Tuple of (sanitized message, is_error_condition)
         is_error_condition=True means action should exit with code 1
         is_error_condition=False means action can exit with code 0 (e.g., PR limit is expected)
     """
-    from datetime import datetime, timezone
-
     try:
         error_data = json.loads(response_text)
         backend_msg = error_data.get('message', '')
@@ -53,17 +46,8 @@ def get_sanitized_409_message(response_text: str, credit_info=None) -> tuple[str
     if "Maximum pull request limit" in backend_msg:
         return ("Maximum pull request limit exceeded", False)
 
-    # Credits exhausted - check if trial expired vs credits used up
+    # Credits exhausted
     if "Credits have been exhausted" in backend_msg:
-        if credit_info and credit_info.end_date and credit_info.end_date.strip():
-            try:
-                end_date = datetime.fromisoformat(credit_info.end_date.replace('Z', '+00:00'))
-                now = datetime.now(timezone.utc)
-                if now > end_date:
-                    return ("Your Contrast-provided LLM trial has expired. Please contact your Contrast representative to renew.", True)
-            except (ValueError, AttributeError):
-                # If date parsing fails, fall through to credits exhausted message
-                debug_log(f"Could not parse end_date: {credit_info.end_date}")
         return ("Your Contrast-provided LLM credits have been exhausted. Please contact your Contrast representative for additional credits.", True)
 
     # No credit tracking entry
@@ -76,7 +60,8 @@ def get_sanitized_409_message(response_text: str, credit_info=None) -> tuple[str
 
 
 def get_org_open_remediations(contrast_host: str, contrast_org_id: str, app_ids: list,
-                              contrast_auth_key: str, contrast_api_key: str) -> list:
+                              contrast_auth_key: str, contrast_api_key: str,
+                              github_repo_url: str) -> list:
     """Returns open remediations across multiple apps from the org-level endpoint.
 
     Best-effort: returns [] on any error. Must not block main flow.
@@ -87,6 +72,9 @@ def get_org_open_remediations(contrast_host: str, contrast_org_id: str, app_ids:
         app_ids: List of application IDs to query
         contrast_auth_key: The Contrast authorization key
         contrast_api_key: The Contrast API key
+        github_repo_url: The GitHub repository URL. Scopes reconciliation to this
+            repository for SAST-only (no app IDs) runs so the caller only receives
+            its own repo's open remediations, avoiding cross-repo PR-number collisions.
 
     Returns:
         list: List of open remediation dicts, or empty list on error
@@ -102,7 +90,7 @@ def get_org_open_remediations(contrast_host: str, contrast_org_id: str, app_ids:
         "User-Agent": config.USER_AGENT
     }
 
-    payload = {"appIds": app_ids}
+    payload = {"appIds": app_ids or None, "repoUrl": github_repo_url}
 
     try:
         debug_log(f"Fetching org-level open remediations from: {api_url}")
@@ -130,7 +118,7 @@ def get_org_open_remediations(contrast_host: str, contrast_org_id: str, app_ids:
 def get_org_remediation_details(contrast_host: str, contrast_org_id: str, app_ids: list,
                                 contrast_auth_key: str, contrast_api_key: str,
                                 github_repo_url: str, max_pull_requests: int = 5,
-                                severities: list = None, credit_info=None) -> Optional[dict]:
+                                severities: list = None) -> Optional[dict]:
     """Gets vulnerability remediation details from the org-level endpoint.
 
     Args:
@@ -142,7 +130,6 @@ def get_org_remediation_details(contrast_host: str, contrast_org_id: str, app_id
         github_repo_url: The GitHub repository URL
         max_pull_requests: Maximum number of pull requests (default: 5)
         severities: List of vulnerability severities to filter by
-        credit_info: Optional CreditTrackingResponse for 409 message handling
 
     Returns:
         dict: Remediation details including applicationId and skippedAppIds, or None
@@ -165,7 +152,7 @@ def get_org_remediation_details(contrast_host: str, contrast_org_id: str, app_id
     }
 
     payload = {
-        "appIds": app_ids,
+        "appIds": app_ids or None,
         "teamserverHost": f"https://{normalize_host(contrast_host)}",
         "repoRootDir": str(config.REPO_ROOT),
         "repoUrl": github_repo_url,
@@ -186,7 +173,7 @@ def get_org_remediation_details(contrast_host: str, contrast_org_id: str, app_id
             log("All requested applications were inaccessible. Retry the request or verify application access.", is_warning=True)
             return None
         elif response.status_code == 409:
-            error_msg, is_error = get_sanitized_409_message(response.text, credit_info)
+            error_msg, is_error = get_sanitized_409_message(response.text)
             log(f"{RED}{error_msg}{RESET}", is_error=is_error)
             if is_error:
                 sys.exit(1)
@@ -222,7 +209,7 @@ def get_org_remediation_details(contrast_host: str, contrast_org_id: str, app_id
 def get_org_prompt_details(contrast_host: str, contrast_org_id: str, app_ids: list,
                            contrast_auth_key: str, contrast_api_key: str,
                            max_open_prs: int, github_repo_url: str,
-                           vulnerability_severities: list, credit_info=None) -> Optional[dict]:
+                           vulnerability_severities: list) -> Optional[dict]:
     """Fetches a vulnerability and LLM-ready prompts from the org-level prompt-details endpoint.
 
     Args:
@@ -234,7 +221,6 @@ def get_org_prompt_details(contrast_host: str, contrast_org_id: str, app_ids: li
         max_open_prs: Maximum number of open PRs allowed
         github_repo_url: The GitHub repository URL
         vulnerability_severities: List of severity levels to filter by
-        credit_info: Optional CreditTrackingResponse for 409 message handling
 
     Returns:
         dict: Prompt details including applicationId and skippedAppIds, or None
@@ -254,7 +240,7 @@ def get_org_prompt_details(contrast_host: str, contrast_org_id: str, app_ids: li
     }
 
     payload = {
-        "appIds": app_ids,
+        "appIds": app_ids or None,
         "teamserverHost": f"https://{normalize_host(contrast_host)}",
         "repoRootDir": str(config.REPO_ROOT),
         "repoUrl": github_repo_url,
@@ -276,7 +262,7 @@ def get_org_prompt_details(contrast_host: str, contrast_org_id: str, app_ids: li
             log("All requested applications were inaccessible. Retry the request or verify application access.", is_warning=True)
             return None
         elif response.status_code == 409:
-            error_msg, is_error = get_sanitized_409_message(response.text, credit_info)
+            error_msg, is_error = get_sanitized_409_message(response.text)
             log(f"{RED}{error_msg}{RESET}", is_error=is_error)
             if is_error:
                 sys.exit(1)
@@ -536,51 +522,5 @@ def send_telemetry_data_org(remediation_id: str, telemetry_data: dict,
         log(f"Unexpected error sending org-level telemetry: {e}", is_error=True)
         return False
 
-
-def get_credit_tracking_org(contrast_host: str, contrast_org_id: str, contrast_auth_key: str, contrast_api_key: str) -> Optional[CreditTrackingResponse]:
-    """Get credit tracking information from the org-level Contrast API endpoint.
-
-    Args:
-        contrast_host: The Contrast Security host URL.
-        contrast_org_id: The organization ID.
-        contrast_auth_key: The Contrast authorization key.
-        contrast_api_key: The Contrast API key.
-
-    Returns:
-        CreditTrackingResponse object if successful, None if failed.
-    """
-    api_url = f"https://{normalize_host(contrast_host)}/api/v4/aiml-remediation/organizations/{contrast_org_id}/credit-tracking"
-
-    headers = {
-        "Authorization": contrast_auth_key,
-        "API-Key": contrast_api_key,
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-        "User-Agent": config.USER_AGENT
-    }
-
-    try:
-        debug_log(f"Fetching org-level credit tracking from: {api_url}")
-        response = requests.get(api_url, headers=headers, timeout=30)
-        response.raise_for_status()
-
-        debug_log(f"Org-level credit tracking API response status code: {response.status_code}")
-        debug_log(f"Raw org-level credit tracking response: {response.text}")
-
-        data = response.json()
-        return CreditTrackingResponse.from_api_response(data)
-
-    except requests.exceptions.HTTPError as e:
-        debug_log(f"HTTP error fetching org-level credit tracking: {e.response.status_code} - {e.response.text}")
-        return None
-    except requests.exceptions.RequestException as e:
-        debug_log(f"Request error fetching org-level credit tracking: {e}")
-        return None
-    except json.JSONDecodeError:
-        debug_log("Error decoding JSON response from org-level credit-tracking API.")
-        return None
-    except Exception as e:
-        debug_log(f"Unexpected error calling org-level credit-tracking API: {e}")
-        return None
 
 # %%

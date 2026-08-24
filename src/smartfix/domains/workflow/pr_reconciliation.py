@@ -17,6 +17,8 @@
 # #L%
 #
 
+from urllib.parse import urlparse
+
 from src import contrast_api
 from src.utils import debug_log, log
 
@@ -27,6 +29,12 @@ def reconcile_open_remediations(config, github_ops):
     Calls the appropriate backend transition for any that have drifted.
     Best-effort: logs warnings on failure, never raises, never exits.
     """
+    # Same repo URL the remediation-details/prompt-details calls send, so the backend scopes
+    # reconciliation to this repository. Without it, SAST-only (no app IDs) runs would receive
+    # the org-wide open-remediation list and could reconcile another repo's same-numbered PR.
+    github_host = urlparse(config.GITHUB_SERVER_URL).netloc
+    github_repo_url = f"{github_host}/{config.GITHUB_REPOSITORY}"
+
     try:
         open_remediations = contrast_api.get_org_open_remediations(
             contrast_host=config.CONTRAST_HOST,
@@ -34,6 +42,7 @@ def reconcile_open_remediations(config, github_ops):
             app_ids=config.CONTRAST_APP_IDS,
             contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
             contrast_api_key=config.CONTRAST_API_KEY,
+            github_repo_url=github_repo_url,
         )
     except Exception as e:
         log(f"Error fetching open remediations: {e}", is_warning=True)

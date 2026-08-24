@@ -100,7 +100,7 @@ class TestConfigIntegration(unittest.TestCase):
         self.assertEqual(config.CODING_AGENT, 'SMARTFIX')
         self.assertTrue(config.USE_CONTRAST_LLM)
         # Default agent model should use Contrast LLM constant
-        self.assertEqual(config.AGENT_MODEL, 'contrast/claude-sonnet-4-5')
+        self.assertEqual(config.AGENT_MODEL, 'us.anthropic.claude-sonnet-4-5-20250929-v1:0')
 
     def test_coding_agent_smartfix_with_byollm(self):
         """Test that SMARTFIX coding agent works with USE_CONTRAST_LLM=False (BYOLLM)."""

@@ -19,8 +19,9 @@
 #
 
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import Mock, patch
 
+from src.smartfix.domains.agents.agent_session import AgentSession
 from src.smartfix.domains.workflow.session_handler import (
     SessionOutcome, handle_session_result, generate_qa_section
 )
@@ -35,12 +36,22 @@ class TestSessionHandler(unittest.TestCase):
     where failed sessions could generate false positive success messages.
     """
 
-    def create_mock_session(self, success=True, failure_category=None, pr_body="Test PR body"):
-        """Helper to create a mock session object."""
-        session = MagicMock()
-        session.success = success
-        session.failure_category = failure_category
-        session.pr_body = pr_body
+    def create_session(self, success=True, failure_category=None, pr_body="Test PR body"):
+        """Helper to create a real AgentSession for tests.
+
+        AgentSession.success is derived from is_complete and failure_category,
+        so success=False requires a failure_category to be meaningful.
+        """
+        if not success and failure_category is None:
+            raise ValueError(
+                "create_session(success=False) requires a failure_category; "
+                "AgentSession.success is derived from failure_category being None"
+            )
+        session = AgentSession()
+        if success:
+            session.complete_session(pr_body=pr_body)
+        else:
+            session.complete_session(failure_category=failure_category, pr_body=pr_body)
         return session
 
     def test_generate_qa_section_success_with_build_command(self):
@@ -68,7 +79,7 @@ class TestSessionHandler(unittest.TestCase):
 
     def test_handle_session_result_success(self):
         """Test session result handling for successful session."""
-        session = self.create_mock_session(success=True, pr_body="Custom PR body")
+        session = self.create_session(success=True, pr_body="Custom PR body")
 
         result = handle_session_result(session)
 
@@ -79,7 +90,7 @@ class TestSessionHandler(unittest.TestCase):
 
     def test_handle_session_result_success_no_pr_body(self):
         """Test session result handling for successful session without PR body."""
-        session = self.create_mock_session(success=True, pr_body=None)
+        session = self.create_session(success=True, pr_body=None)
 
         result = handle_session_result(session)
 
@@ -89,11 +100,9 @@ class TestSessionHandler(unittest.TestCase):
 
     def test_handle_session_result_failure_with_category(self):
         """Test session result handling for failed session with failure category."""
-        mock_failure_category = MagicMock()
-        mock_failure_category.value = "INITIAL_BUILD_FAILURE"
-        session = self.create_mock_session(
+        session = self.create_session(
             success=False,
-            failure_category=mock_failure_category
+            failure_category=FailureCategory.INITIAL_BUILD_FAILURE
         )
 
         result = handle_session_result(session)
@@ -103,8 +112,12 @@ class TestSessionHandler(unittest.TestCase):
         self.assertIsNone(result.ai_fix_summary)
 
     def test_handle_session_result_failure_no_category(self):
-        """Test session result handling for failed session without failure category."""
-        session = self.create_mock_session(success=False, failure_category=None)
+        """Test session result handling for failed session without failure category.
+        Uses a Mock because real AgentSession can't represent success=False
+        with failure_category=None (success is derived from failure_category)."""
+        session = Mock()
+        session.success = False
+        session.failure_category = None
 
         result = handle_session_result(session)
 
@@ -120,9 +133,9 @@ class TestSessionHandler(unittest.TestCase):
         "Success (passed on first attempt)" messages.
         """
         # Bug scenario: session failed
-        failed_session = self.create_mock_session(
+        failed_session = self.create_session(
             success=False,
-            failure_category=MagicMock(value="INITIAL_BUILD_FAILURE")
+            failure_category=FailureCategory.INITIAL_BUILD_FAILURE
         )
 
         result = handle_session_result(failed_session)
@@ -131,7 +144,7 @@ class TestSessionHandler(unittest.TestCase):
         self.assertEqual(result.failure_category, "INITIAL_BUILD_FAILURE")
 
         # Legitimate success scenario should still work
-        success_session = self.create_mock_session(success=True)
+        success_session = self.create_session(success=True)
         result = handle_session_result(success_session)
 
         self.assertTrue(result.should_continue)  # Should continue to PR generation
@@ -146,17 +159,15 @@ class TestSessionHandler(unittest.TestCase):
         """
         Test that session failure returns should_continue=False with a failure category.
         """
-        mock_failure_category = MagicMock()
-        mock_failure_category.value = "QA_BUILD_FAILURE"
-        failed_session = self.create_mock_session(
+        failed_session = self.create_session(
             success=False,
-            failure_category=mock_failure_category
+            failure_category=FailureCategory.BUILD_VERIFICATION_FAILED
         )
 
         result = handle_session_result(failed_session)
 
         self.assertFalse(result.should_continue)
-        self.assertEqual(result.failure_category, "QA_BUILD_FAILURE")
+        self.assertEqual(result.failure_category, "BUILD_VERIFICATION_FAILED")
         self.assertIsNone(result.ai_fix_summary)
 
 

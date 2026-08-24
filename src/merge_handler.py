@@ -17,6 +17,7 @@
 # #L%
 #
 
+import atexit
 import os
 import json
 import sys
@@ -25,8 +26,9 @@ import sys
 from src import contrast_api
 from src.config import get_config  # Using get_config function instead of direct import
 from src.utils import debug_log, extract_remediation_id_from_branch, extract_remediation_id_from_labels, log
-from src.github.github_operations import GitHubOperations
-from src.smartfix.domains.telemetry import telemetry_handler
+from src.github.github_operations import GitHubOperations, extract_vulnerability_info
+from src.smartfix.domains.telemetry import otel_provider, telemetry_handler
+from src.smartfix.domains.telemetry import smartfix_metrics
 
 
 def _load_github_event() -> dict:
@@ -109,26 +111,6 @@ def _extract_remediation_info(pull_request: dict) -> tuple:
     return remediation_id, labels
 
 
-def _extract_vulnerability_info(labels: list) -> str:
-    """Extract vulnerability UUID from PR labels."""
-    vuln_uuid = "unknown"
-
-    for label in labels:
-        label_name = label.get("name", "")
-        if label_name.startswith("contrast-vuln-id:VULN-"):
-            # Extract UUID from label format "contrast-vuln-id:VULN-{vuln_uuid}"
-            label_name_parts = label_name.split("VULN-")
-            vuln_uuid = label_name_parts[1] if len(label_name_parts) > 1 else "unknown"
-            if vuln_uuid and vuln_uuid != "unknown":
-                debug_log(f"Extracted Vulnerability UUID from PR label: {vuln_uuid}")
-                break
-
-    if vuln_uuid == "unknown":
-        debug_log("Could not extract vulnerability UUID from PR labels. Telemetry may be incomplete.")
-
-    return vuln_uuid
-
-
 def _notify_remediation_service(remediation_id: str):
     """Notify the Remediation backend service about the merged PR."""
     log(f"Notifying Remediation service about merged PR for remediation {remediation_id}...")
@@ -147,40 +129,94 @@ def _notify_remediation_service(remediation_id: str):
         log(f"Failed to notify Remediation service about merged PR for remediation {remediation_id}.", is_error=True)
 
 
+def _cleanup_smartfix_labels(pull_request: dict, labels: list) -> None:
+    """Best-effort: remove SmartFix-managed labels from the PR (and linked issue
+    in the external-agent flow). Never raises — failures are logged and the
+    handler completes regardless."""
+    try:
+        pr_number = pull_request.get("number")
+        if not pr_number:
+            debug_log("No PR number in event payload; skipping label cleanup.")
+            return
+
+        github_ops = GitHubOperations()
+        smartfix_labels = github_ops.filter_smartfix_labels(labels)
+        if not smartfix_labels:
+            debug_log("No SmartFix labels on PR; skipping label cleanup.")
+            return
+
+        debug_log(f"Cleaning up SmartFix labels: {smartfix_labels}")
+        github_ops.remove_labels_from_pr(pr_number, smartfix_labels)
+
+        branch_name = pull_request.get("head", {}).get("ref") or ""
+        if branch_name.startswith(("claude/issue-", "copilot/fix")):
+            issue_number = github_ops.extract_issue_number_from_branch(branch_name)
+            if issue_number:
+                github_ops.remove_labels_from_issue(issue_number, smartfix_labels)
+    except Exception as e:
+        log(f"Best-effort SmartFix label cleanup raised: {e}", is_error=True)
+
+
 def handle_merged_pr():
     """Handles the logic when a pull request is merged."""
+    config = get_config()
     telemetry_handler.initialize_telemetry()
+    otel_provider.initialize_otel(config)
+    # atexit guard ensures flush even when sys.exit() is called deep in a
+    # helper.  The explicit finally below handles normal flow; shutdown_otel
+    # is idempotent (guarded by _shutdown_called) so double-calling is safe.
+    atexit.register(otel_provider.shutdown_otel)
 
     log("--- Handling Merged Contrast AI SmartFix Pull Request ---")
 
-    # Load and validate GitHub event data
+    # Validate event and extract all identifiers before opening the span so that
+    # sys.exit() in any helper does not flush a merge span with pr_merged=true
+    # but without remediation_id / fingerprint (which creates uncorrelatable events).
     event_data = _load_github_event()
     pull_request = _validate_pr_event(event_data)
-
-    # Extract remediation and vulnerability information
     remediation_id, labels = _extract_remediation_info(pull_request)
-    vuln_uuid = _extract_vulnerability_info(labels)
+    vuln_uuid = extract_vulnerability_info(labels)
 
-    # Update telemetry with extracted information
-    debug_log(f"Extracted Remediation ID: {remediation_id}")
-    telemetry_handler.update_telemetry("additionalAttributes.remediationId", remediation_id)
-    telemetry_handler.update_telemetry("vulnInfo.vulnId", vuln_uuid)
-    telemetry_handler.update_telemetry("vulnInfo.vulnRule", "unknown")
+    # Derive agent from branch prefix so external-agent merges (Copilot, Claude Code)
+    # are not misattributed as "smartfix" in the datalake.
+    branch_name = pull_request.get("head", {}).get("ref") or ""
+    if branch_name.startswith("claude/issue-"):
+        _merge_agent = "external-claude_code"
+    elif branch_name.startswith("copilot/fix"):
+        _merge_agent = "external-github_copilot"
+    else:
+        _merge_agent = config.CODING_AGENT.lower()
 
-    # Notify the Remediation backend service
-    _notify_remediation_service(remediation_id)
+    try:
+        with otel_provider.start_span("smartfix-merge") as merge_span:
+            merge_span.set_attribute("contrast.smartfix.pr_merged", True)
+            merge_span.set_attribute("contrast.smartfix.remediation_id", remediation_id)
+            merge_span.set_attribute("contrast.finding.fingerprint", vuln_uuid)
 
-    # Complete telemetry and finish
-    telemetry_handler.update_telemetry("additionalAttributes.prStatus", "MERGED")
-    config = get_config()
-    contrast_api.send_telemetry_data_org(
-        remediation_id=remediation_id,
-        telemetry_data=telemetry_handler.get_telemetry_data(),
-        contrast_host=config.CONTRAST_HOST,
-        contrast_org_id=config.CONTRAST_ORG_ID,
-        contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
-        contrast_api_key=config.CONTRAST_API_KEY
-    )
+            smartfix_metrics.record_pr_merged(coding_agent=_merge_agent)
+
+            debug_log(f"Extracted Remediation ID: {remediation_id}")
+            telemetry_handler.update_telemetry("additionalAttributes.remediationId", remediation_id)
+            telemetry_handler.update_telemetry("vulnInfo.vulnId", vuln_uuid)
+            telemetry_handler.update_telemetry("vulnInfo.vulnRule", "unknown")
+
+            # Notify the Remediation backend service
+            _notify_remediation_service(remediation_id)
+
+            # Complete telemetry and finish
+            telemetry_handler.update_telemetry("additionalAttributes.prStatus", "MERGED")
+            contrast_api.send_telemetry_data_org(
+                remediation_id=remediation_id,
+                telemetry_data=telemetry_handler.get_telemetry_data(),
+                contrast_host=config.CONTRAST_HOST,
+                contrast_org_id=config.CONTRAST_ORG_ID,
+                contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
+                contrast_api_key=config.CONTRAST_API_KEY
+            )
+
+            _cleanup_smartfix_labels(pull_request, labels)
+    finally:
+        otel_provider.shutdown_otel()
 
     log("--- Merged Contrast AI SmartFix Pull Request Handling Complete ---")
 

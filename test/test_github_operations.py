@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 
+import subprocess
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, Mock, MagicMock
 import json
-from src.github.github_operations import GitHubOperations
+from src.github.github_operations import GitHubOperations, extract_vulnerability_info
 from src.smartfix.shared.failure_categories import FailureCategory
 
 
@@ -14,7 +15,7 @@ class TestGitHubOperations(unittest.TestCase):
         """Set up test fixtures."""
         # Mock the config to avoid import issues
         with patch('src.github.github_operations.get_config') as mock_config:
-            mock_config.return_value = MagicMock(
+            mock_config.return_value = Mock(
                 GITHUB_TOKEN="test-token",
                 GITHUB_REPOSITORY="test-owner/test-repo",
                 testing=True,
@@ -40,6 +41,22 @@ class TestGitHubOperations(unittest.TestCase):
         self.assertEqual(label_name, expected_name)
         self.assertEqual(description, expected_desc)
         self.assertEqual(color, expected_color)
+
+    def test_generate_label_details_northstar_mode(self):
+        """Test label details generation for NORTHSTAR_ONLY mode uses contrast-issue-id prefix."""
+        label_name, description, color = self.github_ops.generate_label_details(
+            "test-uuid-123", mode="NORTHSTAR_ONLY", issue_id="ISS-2026-42"
+        )
+        self.assertEqual(label_name, "contrast-issue-id:ISS-2026-42")
+        self.assertEqual(description, "Issue identified by Contrast AI SmartFix")
+        self.assertEqual(color, "ff0000")
+
+    def test_generate_label_details_classic_mode_unchanged(self):
+        """Test label details for CLASSIC mode unchanged when mode is explicit."""
+        label_name, description, color = self.github_ops.generate_label_details(
+            "test-uuid-123", mode="CLASSIC"
+        )
+        self.assertEqual(label_name, "contrast-vuln-id:VULN-test-uuid-123")
 
     def test_generate_pr_title(self):
         """Test PR title generation."""
@@ -94,7 +111,7 @@ class TestGitHubOperations(unittest.TestCase):
         # First call returns empty list (no existing labels)
         mock_run_command.return_value = json.dumps([])
         # subprocess.run for label creation succeeds
-        mock_subprocess_run.return_value = MagicMock(returncode=0)
+        mock_subprocess_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
 
         result = self.github_ops.ensure_label("new-label", "New description", "ff0000")
         self.assertTrue(result)
@@ -150,6 +167,20 @@ class TestGitHubOperations(unittest.TestCase):
 
         result = self.github_ops.count_open_prs_with_prefix("smartfix-id:", "test-remediation-id")
         self.assertEqual(result, 3)  # Three PRs have smartfix-id: labels
+
+    @patch('src.github.github_operations.run_command')
+    def test_count_open_prs_with_prefix_tuple(self, mock_run_command):
+        """Test counting open PRs accepts a tuple of prefixes (classic + northstar)."""
+        mock_run_command.return_value = json.dumps([
+            {"labels": [{"name": "contrast-vuln-id:VULN-aaa"}]},
+            {"labels": [{"name": "contrast-issue-id:ISS-2026-1"}]},
+            {"labels": [{"name": "unrelated-label"}]},
+        ])
+
+        result = self.github_ops.count_open_prs_with_prefix(
+            ("contrast-vuln-id:", "contrast-issue-id:"), "test-remediation-id"
+        )
+        self.assertEqual(result, 2)
 
     @patch('src.github.github_operations.error_exit')
     @patch('src.github.github_operations.log')
@@ -408,7 +439,7 @@ class TestGitHubOperations(unittest.TestCase):
             "Created",       # Create label2
             "Success"        # Final add labels command
         ]
-        mock_subprocess_run.return_value = MagicMock(returncode=0)
+        mock_subprocess_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
 
         result = self.github_ops.add_labels_to_pr(123, ["label1", "label2"])
         self.assertTrue(result)
@@ -423,7 +454,7 @@ class TestGitHubOperations(unittest.TestCase):
             "Created",       # Create label1
             Exception("Failed to add labels")  # Final add labels command fails
         ]
-        mock_subprocess_run.return_value = MagicMock(returncode=0)
+        mock_subprocess_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
 
         result = self.github_ops.add_labels_to_pr(123, ["label1"])
         self.assertFalse(result)
@@ -810,8 +841,8 @@ class TestGitHubOperations(unittest.TestCase):
         # Mock temp file
         mock_temp = MagicMock()
         mock_temp.name = "/tmp/test_pr_body.md"
-        mock_temp.__enter__ = MagicMock(return_value=mock_temp)
-        mock_temp.__exit__ = MagicMock(return_value=False)
+        mock_temp.__enter__ = Mock(return_value=mock_temp)
+        mock_temp.__exit__ = Mock(return_value=False)
         mock_tempfile.return_value = mock_temp
 
         # Mock file operations
@@ -842,13 +873,13 @@ class TestGitHubOperations(unittest.TestCase):
         # Mock temp file
         mock_temp = MagicMock()
         mock_temp.name = "/tmp/test_pr_body.md"
-        mock_temp.__enter__ = MagicMock(return_value=mock_temp)
-        mock_temp.__exit__ = MagicMock(return_value=False)
+        mock_temp.__enter__ = Mock(return_value=mock_temp)
+        mock_temp.__exit__ = Mock(return_value=False)
         mock_tempfile.return_value = mock_temp
 
         mock_exists.return_value = True
         mock_getsize.return_value = 1000
-        mock_subprocess_run.return_value = MagicMock(returncode=0, stdout="gh version 2.0.0")
+        mock_subprocess_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="gh version 2.0.0")
         mock_run_command.return_value = "https://github.com/test/repo/pull/456"
 
         # Create body larger than 32000 chars
@@ -885,7 +916,7 @@ class TestGitHubOperations(unittest.TestCase):
 
         # Set up config for CLAUDE_CODE mode
         with patch('src.github.github_operations.get_config') as mock_config:
-            mock_config.return_value = MagicMock(
+            mock_config.return_value = Mock(
                 GITHUB_TOKEN="test-token",
                 GITHUB_REPOSITORY="test-owner/test-repo",
                 testing=True,
@@ -904,7 +935,7 @@ class TestGitHubOperations(unittest.TestCase):
             "Created",       # ensure_label for remediation (create)
             "https://github.com/test/repo/issues/789"  # create issue
         ]
-        mock_subprocess_run.return_value = MagicMock(returncode=0)
+        mock_subprocess_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
 
         result = github_ops.create_issue(
             "Test Issue",
@@ -987,7 +1018,7 @@ class TestGitHubOperations(unittest.TestCase):
 
         # Set up config for CLAUDE_CODE mode
         with patch('src.github.github_operations.get_config') as mock_config:
-            mock_config.return_value = MagicMock(
+            mock_config.return_value = Mock(
                 GITHUB_TOKEN="test-token",
                 GITHUB_REPOSITORY="test-owner/test-repo",
                 testing=True,
@@ -1013,7 +1044,7 @@ class TestGitHubOperations(unittest.TestCase):
             "Success",  # add new label
             "Comment added"  # add comment
         ]
-        mock_subprocess_run.return_value = MagicMock(returncode=0)
+        mock_subprocess_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
 
         # Mock find_open_pr_for_issue to return None (no open PR)
         with patch.object(github_ops, 'find_open_pr_for_issue') as mock_find_pr:
@@ -1034,8 +1065,8 @@ class TestGitHubOperations(unittest.TestCase):
         # Mock temp file
         mock_temp = MagicMock()
         mock_temp.name = "/tmp/test_pr_body.md"
-        mock_temp.__enter__ = MagicMock(return_value=mock_temp)
-        mock_temp.__exit__ = MagicMock(return_value=False)
+        mock_temp.__enter__ = Mock(return_value=mock_temp)
+        mock_temp.__exit__ = Mock(return_value=False)
         mock_tempfile.return_value = mock_temp
 
         # Mock file operations
@@ -1043,7 +1074,7 @@ class TestGitHubOperations(unittest.TestCase):
         mock_getsize.return_value = 1000
 
         # Mock version check, PR creation
-        mock_subprocess_run.return_value = MagicMock(returncode=0, stdout="gh version 2.0.0")
+        mock_subprocess_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="gh version 2.0.0")
         mock_run_command.return_value = "https://github.com/test/repo/pull/123"
 
         # Mock git_ops.get_branch_name
@@ -1070,13 +1101,13 @@ class TestGitHubOperations(unittest.TestCase):
         # Mock temp file
         mock_temp = MagicMock()
         mock_temp.name = "/tmp/test_pr_body.md"
-        mock_temp.__enter__ = MagicMock(return_value=mock_temp)
-        mock_temp.__exit__ = MagicMock(return_value=False)
+        mock_temp.__enter__ = Mock(return_value=mock_temp)
+        mock_temp.__exit__ = Mock(return_value=False)
         mock_tempfile.return_value = mock_temp
 
         mock_exists.return_value = True
         mock_getsize.return_value = 1000
-        mock_subprocess_run.return_value = MagicMock(returncode=0, stdout="gh version 2.0.0")
+        mock_subprocess_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="gh version 2.0.0")
         mock_run_command.return_value = "https://github.com/test/repo/pull/456"
 
         # Mock git_ops.get_branch_name
@@ -1113,14 +1144,14 @@ class TestGitHubOperations(unittest.TestCase):
         # Mock temp file
         mock_temp = MagicMock()
         mock_temp.name = "/tmp/test_pr_body.md"
-        mock_temp.__enter__ = MagicMock(return_value=mock_temp)
-        mock_temp.__exit__ = MagicMock(return_value=False)
+        mock_temp.__enter__ = Mock(return_value=mock_temp)
+        mock_temp.__exit__ = Mock(return_value=False)
         mock_tempfile.return_value = mock_temp
 
         mock_exists.return_value = True
         mock_getsize.return_value = 1000
-        mock_subprocess_run.return_value = MagicMock(
-            returncode=0, stdout="gh version 2.0.0"
+        mock_subprocess_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="gh version 2.0.0"
         )
 
         # Simulate the exact error GitHub returns when setting is disabled
@@ -1177,14 +1208,14 @@ class TestGitHubOperations(unittest.TestCase):
         # Mock temp file
         mock_temp = MagicMock()
         mock_temp.name = "/tmp/test_pr_body.md"
-        mock_temp.__enter__ = MagicMock(return_value=mock_temp)
-        mock_temp.__exit__ = MagicMock(return_value=False)
+        mock_temp.__enter__ = Mock(return_value=mock_temp)
+        mock_temp.__exit__ = Mock(return_value=False)
         mock_tempfile.return_value = mock_temp
 
         mock_exists.return_value = True
         mock_getsize.return_value = 1000
-        mock_subprocess_run.return_value = MagicMock(
-            returncode=0, stdout="gh version 2.0.0"
+        mock_subprocess_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="gh version 2.0.0"
         )
 
         # Simulate a different command error (not permission-related)
@@ -1258,14 +1289,14 @@ class TestGitHubOperations(unittest.TestCase):
         # Mock temp file
         mock_temp = MagicMock()
         mock_temp.name = "/tmp/test_pr_body.md"
-        mock_temp.__enter__ = MagicMock(return_value=mock_temp)
-        mock_temp.__exit__ = MagicMock(return_value=False)
+        mock_temp.__enter__ = Mock(return_value=mock_temp)
+        mock_temp.__exit__ = Mock(return_value=False)
         mock_tempfile.return_value = mock_temp
 
         mock_exists.return_value = True
         mock_getsize.return_value = 1000
-        mock_subprocess_run.return_value = MagicMock(
-            returncode=0, stdout="gh version 2.0.0"
+        mock_subprocess_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="gh version 2.0.0"
         )
 
         # Simulate a command error with no stderr
@@ -1442,12 +1473,119 @@ class TestGitHubOperations(unittest.TestCase):
 
         self.assertIsNone(result)
 
+    @patch('src.github.github_operations.run_command')
+    def test_remove_labels_from_pr_success(self, mock_run_command):
+        """remove_labels_from_pr issues a single gh pr edit --remove-label call against the configured repo."""
+        mock_run_command.return_value = "Success"
+
+        result = self.github_ops.remove_labels_from_pr(
+            123, ["smartfix-id:abc", "contrast-vuln-id:VULN-xyz"]
+        )
+
+        self.assertTrue(result)
+        mock_run_command.assert_called_once_with(
+            [
+                "gh", "pr", "edit",
+                "--repo", "test-owner/test-repo",
+                "123",
+                "--remove-label", "smartfix-id:abc,contrast-vuln-id:VULN-xyz",
+            ],
+            env=unittest.mock.ANY,
+            check=True,
+        )
+
+    @patch('src.github.github_operations.run_command')
+    def test_remove_labels_from_pr_empty_list_noop(self, mock_run_command):
+        """remove_labels_from_pr with no labels returns True without invoking gh."""
+        result = self.github_ops.remove_labels_from_pr(123, [])
+
+        self.assertTrue(result)
+        mock_run_command.assert_not_called()
+
+    @patch('src.github.github_operations.run_command')
+    def test_remove_labels_from_pr_failure(self, mock_run_command):
+        """remove_labels_from_pr returns False when gh fails."""
+        mock_run_command.side_effect = Exception("gh failure")
+
+        result = self.github_ops.remove_labels_from_pr(123, ["smartfix-id:abc"])
+
+        self.assertFalse(result)
+
+    @patch('src.github.github_operations.run_command')
+    def test_remove_labels_from_issue_success(self, mock_run_command):
+        """remove_labels_from_issue issues a single gh issue edit --remove-label call."""
+        mock_run_command.return_value = "Success"
+
+        result = self.github_ops.remove_labels_from_issue(
+            45, ["smartfix-id:abc", "contrast-vuln-id:VULN-xyz"]
+        )
+
+        self.assertTrue(result)
+        mock_run_command.assert_called_once_with(
+            [
+                "gh", "issue", "edit",
+                "--repo", "test-owner/test-repo",
+                "45",
+                "--remove-label", "smartfix-id:abc,contrast-vuln-id:VULN-xyz",
+            ],
+            env=unittest.mock.ANY,
+            check=True,
+        )
+
+    @patch('src.github.github_operations.run_command')
+    def test_remove_labels_from_issue_empty_list_noop(self, mock_run_command):
+        """remove_labels_from_issue with no labels returns True without invoking gh."""
+        result = self.github_ops.remove_labels_from_issue(45, [])
+
+        self.assertTrue(result)
+        mock_run_command.assert_not_called()
+
+    @patch('src.github.github_operations.run_command')
+    def test_remove_labels_from_issue_failure(self, mock_run_command):
+        """remove_labels_from_issue returns False when gh fails."""
+        mock_run_command.side_effect = Exception("gh failure")
+
+        result = self.github_ops.remove_labels_from_issue(45, ["smartfix-id:abc"])
+
+        self.assertFalse(result)
+
+    def test_filter_smartfix_labels_dict_input(self):
+        """filter_smartfix_labels picks SmartFix-prefixed names from event-payload dicts."""
+        labels = [
+            {"name": "smartfix-id:abc"},
+            {"name": "wontfix"},
+            {"name": "contrast-vuln-id:VULN-xyz"},
+            {"name": "bug"},
+        ]
+
+        result = self.github_ops.filter_smartfix_labels(labels)
+
+        self.assertEqual(result, ["smartfix-id:abc", "contrast-vuln-id:VULN-xyz"])
+
+    def test_filter_smartfix_labels_string_input(self):
+        """filter_smartfix_labels also accepts plain name strings."""
+        labels = ["smartfix-id:abc", "wontfix", "contrast-vuln-id:VULN-xyz"]
+
+        result = self.github_ops.filter_smartfix_labels(labels)
+
+        self.assertEqual(result, ["smartfix-id:abc", "contrast-vuln-id:VULN-xyz"])
+
+    def test_filter_smartfix_labels_empty(self):
+        """filter_smartfix_labels returns [] for empty input."""
+        self.assertEqual(self.github_ops.filter_smartfix_labels([]), [])
+
+    def test_filter_smartfix_labels_none_match(self):
+        """filter_smartfix_labels returns [] when nothing matches the SmartFix prefixes."""
+        labels = [{"name": "bug"}, {"name": "wontfix"}, {"name": "smartfix"}]
+
+        self.assertEqual(self.github_ops.filter_smartfix_labels(labels), [])
+
 
 class TestGetPrChangedFiles(unittest.TestCase):
 
     def setUp(self):
         with patch('src.github.github_operations.get_config') as mock_config:
-            mock_config.return_value = MagicMock(
+            mock_config.return_value = Mock(
                 GITHUB_TOKEN="test-token",
                 GITHUB_REPOSITORY="test-owner/test-repo",
                 testing=True,
@@ -1510,7 +1648,7 @@ class TestAddReviewersToPr(unittest.TestCase):
 
     def setUp(self):
         with patch('src.github.github_operations.get_config') as mock_config:
-            mock_config.return_value = MagicMock(
+            mock_config.return_value = Mock(
                 GITHUB_TOKEN="test-token",
                 GITHUB_REPOSITORY="test-owner/test-repo",
                 testing=True,
@@ -1566,6 +1704,68 @@ class TestAddReviewersToPr(unittest.TestCase):
         command = mock_run.call_args[0][0]
         reviewer_arg_index = command.index("--add-reviewer") + 1
         self.assertEqual(command[reviewer_arg_index], "alice,bob,charlie")
+
+
+class TestExtractVulnerabilityInfo(unittest.TestCase):
+    """Test cases for extract_vulnerability_info (AIML-858).
+
+    Consolidated from test_closed_handler.py and test_merge_handler.py, which each
+    tested their own identical private copy of this function before it was moved here.
+    """
+
+    def test_extract_vulnerability_info_with_vuln_uuid(self):
+        """Extracts the UUID from a Classic contrast-vuln-id:VULN-* label."""
+        labels = [
+            {"name": "contrast-vuln-id:VULN-abc-123-def"},
+            {"name": "other-label"}
+        ]
+        result = extract_vulnerability_info(labels)
+        self.assertEqual(result, "abc-123-def")
+
+    def test_extract_vulnerability_info_without_vuln_uuid(self):
+        """Returns 'unknown' when no SmartFix label is present."""
+        labels = [{"name": "other-label"}]
+        result = extract_vulnerability_info(labels)
+        self.assertEqual(result, "unknown")
+
+    def test_extract_vulnerability_info_empty_labels(self):
+        """Returns 'unknown' for an empty labels list."""
+        labels = []
+        result = extract_vulnerability_info(labels)
+        self.assertEqual(result, "unknown")
+
+    def test_extract_vulnerability_info_with_northstar_issue_id(self):
+        """Extracts the issueId from a NorthStar contrast-issue-id:* label."""
+        labels = [
+            {"name": "contrast-issue-id:ISS-2026-42"},
+            {"name": "other-label"}
+        ]
+        result = extract_vulnerability_info(labels)
+        self.assertEqual(result, "ISS-2026-42")
+
+    def test_extract_vulnerability_info_prefers_first_matching_label(self):
+        """Returns the first SmartFix label found, regardless of position."""
+        labels = [
+            {"name": "other-label"},
+            {"name": "contrast-vuln-id:VULN-classic-uuid"},
+        ]
+        result = extract_vulnerability_info(labels)
+        self.assertEqual(result, "classic-uuid")
+
+    def test_extract_vulnerability_info_empty_northstar_issue_id_skipped(self):
+        """Skips a contrast-issue-id: label with an empty value instead of matching it."""
+        labels = [
+            {"name": "contrast-issue-id:"},
+            {"name": "contrast-vuln-id:VULN-fallback-uuid"},
+        ]
+        result = extract_vulnerability_info(labels)
+        self.assertEqual(result, "fallback-uuid")
+
+    def test_extract_vulnerability_info_string_input(self):
+        """Also accepts plain label name strings (e.g. GitLab's label shape)."""
+        labels = ["other-label", "contrast-vuln-id:VULN-classic-uuid"]
+        result = extract_vulnerability_info(labels)
+        self.assertEqual(result, "classic-uuid")
 
 
 if __name__ == '__main__':

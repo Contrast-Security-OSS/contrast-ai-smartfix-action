@@ -1,6 +1,7 @@
 import unittest
 import os
-from unittest.mock import patch, MagicMock
+import requests
+from unittest.mock import patch, Mock
 from packaging.version import Version
 
 # Test setup imports (path is set up by conftest.py)
@@ -19,11 +20,11 @@ class TestVersionCheck(unittest.TestCase):
         self.mock_requests = self.requests_patcher.start()
 
         # Set up mock exceptions
-        self.mock_requests.exceptions = MagicMock()
+        self.mock_requests.exceptions = Mock()
         self.mock_requests.exceptions.RequestException = Exception
 
         # Set up a default mock response
-        self.mock_response = MagicMock()
+        self.mock_response = Mock(spec=requests.Response)
         self.mock_response.json.return_value = [
             {'name': 'v1.0.0'},
             {'name': 'v1.1.0'},

@@ -19,11 +19,12 @@
 #
 
 import unittest
-from unittest.mock import patch, mock_open, MagicMock
+from unittest.mock import patch, mock_open, Mock
 import os
 import json
 
 from src.config import reset_config, get_config  # noqa: E402
+from src.github.github_operations import GitHubOperations  # noqa: E402
 from src import closed_handler  # noqa: E402
 
 
@@ -168,7 +169,7 @@ class TestClosedHandler(unittest.TestCase):
             "head": {"ref": "smartfix/remediation-REM-555"},
             "labels": [{"name": "smartfix-id:REM-555"}]
         }
-        telemetry_mock = MagicMock()
+        telemetry_mock = Mock()
         with patch('src.smartfix.domains.telemetry.telemetry_handler.update_telemetry', telemetry_mock):
             result = closed_handler._extract_remediation_info(pull_request)
         self.assertEqual(result, ("REM-555", [{"name": "smartfix-id:REM-555"}]))
@@ -179,10 +180,13 @@ class TestClosedHandler(unittest.TestCase):
             "head": {"ref": "smartfix/remediation-REM-999"},
             "labels": []
         }
-        telemetry_mock = MagicMock()
+        telemetry_mock = Mock()
         with patch('src.smartfix.domains.telemetry.telemetry_handler.update_telemetry', telemetry_mock):
             result = closed_handler._extract_remediation_info(pull_request)
         self.assertEqual(result[0], "REM-999")
+
+    # Pure-function coverage for extract_vulnerability_info moved to
+    # test_github_operations.py (AIML-858) — it's no longer defined here.
 
     def test_load_github_event_missing_path(self):
         """Test _load_github_event when GITHUB_EVENT_PATH is not set"""
@@ -247,7 +251,7 @@ class TestClosedHandler(unittest.TestCase):
 
     @patch('src.closed_handler.contrast_api.send_telemetry_data_org')
     @patch('src.closed_handler._notify_remediation_service')
-    @patch('src.closed_handler._extract_vulnerability_info')
+    @patch('src.closed_handler.extract_vulnerability_info')
     @patch('src.closed_handler._extract_remediation_info')
     @patch('src.closed_handler._validate_pr_event')
     @patch('src.closed_handler._load_github_event')
@@ -281,10 +285,10 @@ class TestClosedHandler(unittest.TestCase):
     def test_extract_remediation_info_copilot_branch(self):
         """Test _extract_remediation_info with Copilot branch"""
         # Mock objects
-        mock_extract_remediation_id = MagicMock(return_value="REM-456")
-        github_ops_mock = MagicMock()
+        mock_extract_remediation_id = Mock(return_value="REM-456")
+        github_ops_mock = Mock(spec=GitHubOperations)
         github_ops_mock.extract_issue_number_from_branch.return_value = 42
-        telemetry_mock = MagicMock()
+        telemetry_mock = Mock()
         # Test data
         pull_request = {
             "head": {"ref": "copilot/fix-42"},
@@ -306,10 +310,10 @@ class TestClosedHandler(unittest.TestCase):
     def test_extract_remediation_info_claude_branch(self):
         """Test _extract_remediation_info with Claude Code branch"""
         # Mock objects
-        mock_extract_remediation_id = MagicMock(return_value="REM-789")
-        github_ops_mock = MagicMock()
+        mock_extract_remediation_id = Mock(return_value="REM-789")
+        github_ops_mock = Mock(spec=GitHubOperations)
         github_ops_mock.extract_issue_number_from_branch.return_value = 75
-        telemetry_mock = MagicMock()
+        telemetry_mock = Mock()
         # Test data
         pull_request = {
             "head": {"ref": "claude/issue-75-20250908-1723"},
@@ -331,10 +335,10 @@ class TestClosedHandler(unittest.TestCase):
     def test_extract_remediation_info_claude_branch_no_issue_number(self):
         """Test _extract_remediation_info with Claude Code branch without extractable issue number"""
         # Mock objects
-        mock_extract_remediation_id = MagicMock(return_value="REM-789")
-        github_ops_mock = MagicMock()
+        mock_extract_remediation_id = Mock(return_value="REM-789")
+        github_ops_mock = Mock(spec=GitHubOperations)
         github_ops_mock.extract_issue_number_from_branch.return_value = None
-        telemetry_mock = MagicMock()
+        telemetry_mock = Mock()
         # Test data
         pull_request = {
             "head": {"ref": "claude/issue-75-20250908-1723"},
@@ -407,6 +411,136 @@ class TestClosedHandler(unittest.TestCase):
             (v for k, v in telemetry_calls if k == "additionalAttributes.codingAgent"), None
         )
         self.assertEqual(coding_agent_call, "INTERNAL-SMARTFIX")
+
+
+class TestCleanupSmartfixLabels(unittest.TestCase):
+    """Tests for closed_handler._cleanup_smartfix_labels."""
+
+    def setUp(self):
+        self.exit_patcher = patch('sys.exit')
+        self.mock_exit = self.exit_patcher.start()
+        reset_config()
+
+    def tearDown(self):
+        self.exit_patcher.stop()
+        reset_config()
+
+    def _build_mock_ops(self, smartfix_label_names, issue_number=None,
+                        remove_pr_ok=True, remove_issue_ok=True):
+        ops = Mock(spec=GitHubOperations)
+        ops.filter_smartfix_labels.return_value = smartfix_label_names
+        ops.extract_issue_number_from_branch.return_value = issue_number
+        ops.remove_labels_from_pr.return_value = remove_pr_ok
+        ops.remove_labels_from_issue.return_value = remove_issue_ok
+        return ops
+
+    def test_internal_smartfix_branch_removes_pr_labels_only(self):
+        """Internal smartfix branch: remove from PR, never touch any issue."""
+        pull_request = {"number": 99, "head": {"ref": "smartfix/remediation-abc"}}
+        labels = [{"name": "smartfix-id:abc"}, {"name": "wontfix"},
+                  {"name": "contrast-vuln-id:VULN-xyz"}]
+        ops = self._build_mock_ops(["smartfix-id:abc", "contrast-vuln-id:VULN-xyz"])
+
+        with patch('src.closed_handler.GitHubOperations', return_value=ops):
+            closed_handler._cleanup_smartfix_labels(pull_request, labels)
+
+        ops.remove_labels_from_pr.assert_called_once_with(
+            99, ["smartfix-id:abc", "contrast-vuln-id:VULN-xyz"]
+        )
+        ops.remove_labels_from_issue.assert_not_called()
+        ops.extract_issue_number_from_branch.assert_not_called()
+
+    def test_claude_issue_branch_also_removes_issue_labels(self):
+        """External-agent claude/issue- branch: remove from PR and from linked issue."""
+        pull_request = {"number": 99, "head": {"ref": "claude/issue-75-20250908-1723"}}
+        labels = [{"name": "smartfix-id:abc"}, {"name": "contrast-vuln-id:VULN-xyz"}]
+        ops = self._build_mock_ops(
+            ["smartfix-id:abc", "contrast-vuln-id:VULN-xyz"], issue_number=75
+        )
+
+        with patch('src.closed_handler.GitHubOperations', return_value=ops):
+            closed_handler._cleanup_smartfix_labels(pull_request, labels)
+
+        ops.remove_labels_from_pr.assert_called_once_with(
+            99, ["smartfix-id:abc", "contrast-vuln-id:VULN-xyz"]
+        )
+        ops.extract_issue_number_from_branch.assert_called_once_with("claude/issue-75-20250908-1723")
+        ops.remove_labels_from_issue.assert_called_once_with(
+            75, ["smartfix-id:abc", "contrast-vuln-id:VULN-xyz"]
+        )
+
+    def test_copilot_fix_branch_also_removes_issue_labels(self):
+        """External-agent copilot/fix branch: remove from PR and from linked issue."""
+        pull_request = {"number": 99, "head": {"ref": "copilot/fix-42"}}
+        labels = [{"name": "smartfix-id:abc"}]
+        ops = self._build_mock_ops(["smartfix-id:abc"], issue_number=42)
+
+        with patch('src.closed_handler.GitHubOperations', return_value=ops):
+            closed_handler._cleanup_smartfix_labels(pull_request, labels)
+
+        ops.remove_labels_from_pr.assert_called_once_with(99, ["smartfix-id:abc"])
+        ops.remove_labels_from_issue.assert_called_once_with(42, ["smartfix-id:abc"])
+
+    def test_no_smartfix_labels_is_a_noop(self):
+        """No SmartFix labels: do not touch the PR or issue at all."""
+        pull_request = {"number": 99, "head": {"ref": "smartfix/remediation-abc"}}
+        labels = [{"name": "bug"}, {"name": "wontfix"}]
+        ops = self._build_mock_ops([])
+
+        with patch('src.closed_handler.GitHubOperations', return_value=ops):
+            closed_handler._cleanup_smartfix_labels(pull_request, labels)
+
+        ops.remove_labels_from_pr.assert_not_called()
+        ops.remove_labels_from_issue.assert_not_called()
+
+    def test_missing_pr_number_is_a_noop(self):
+        """No PR number: nothing to clean."""
+        pull_request = {"head": {"ref": "smartfix/remediation-abc"}}
+        labels = [{"name": "smartfix-id:abc"}]
+        ops = self._build_mock_ops(["smartfix-id:abc"])
+
+        with patch('src.closed_handler.GitHubOperations', return_value=ops):
+            closed_handler._cleanup_smartfix_labels(pull_request, labels)
+
+        ops.remove_labels_from_pr.assert_not_called()
+        ops.remove_labels_from_issue.assert_not_called()
+        ops.filter_smartfix_labels.assert_not_called()
+
+    def test_remove_failure_does_not_raise(self):
+        """remove_labels_from_pr returning False does not propagate as an exception."""
+        pull_request = {"number": 99, "head": {"ref": "smartfix/remediation-abc"}}
+        labels = [{"name": "smartfix-id:abc"}]
+        ops = self._build_mock_ops(["smartfix-id:abc"], remove_pr_ok=False)
+
+        with patch('src.closed_handler.GitHubOperations', return_value=ops):
+            try:
+                closed_handler._cleanup_smartfix_labels(pull_request, labels)
+            except Exception as e:
+                self.fail(f"_cleanup_smartfix_labels raised: {e}")
+
+    def test_external_agent_with_unparseable_issue_skips_issue_cleanup(self):
+        """External-agent branch but issue number can't be extracted: skip issue removal, not raise."""
+        pull_request = {"number": 99, "head": {"ref": "claude/issue-bogus"}}
+        labels = [{"name": "smartfix-id:abc"}]
+        ops = self._build_mock_ops(["smartfix-id:abc"], issue_number=None)
+
+        with patch('src.closed_handler.GitHubOperations', return_value=ops):
+            closed_handler._cleanup_smartfix_labels(pull_request, labels)
+
+        ops.remove_labels_from_pr.assert_called_once_with(99, ["smartfix-id:abc"])
+        ops.remove_labels_from_issue.assert_not_called()
+
+    def test_unexpected_exception_is_swallowed(self):
+        """An unexpected exception (e.g. GitHubOperations construction failure) is logged, not re-raised."""
+        pull_request = {"number": 99, "head": {"ref": "smartfix/remediation-abc"}}
+        labels = [{"name": "smartfix-id:abc"}]
+
+        with patch('src.closed_handler.GitHubOperations',
+                   side_effect=RuntimeError("config blew up")):
+            try:
+                closed_handler._cleanup_smartfix_labels(pull_request, labels)
+            except Exception as e:
+                self.fail(f"_cleanup_smartfix_labels propagated exception: {e}")
 
 
 if __name__ == '__main__':

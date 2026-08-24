@@ -2,7 +2,7 @@
 
 import unittest
 import json
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, Mock
 
 from src.github.github_operations import GitHubOperations
 
@@ -13,7 +13,7 @@ class TestGetPrActualState(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures."""
         with patch('src.github.github_operations.get_config') as mock_config:
-            mock_config.return_value = MagicMock(
+            mock_config.return_value = Mock(
                 GITHUB_TOKEN="test-token",
                 GITHUB_REPOSITORY="test-owner/test-repo",
                 testing=True,
