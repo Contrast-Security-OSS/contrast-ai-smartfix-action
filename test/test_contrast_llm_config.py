@@ -3,6 +3,7 @@
 import unittest
 import os
 from src.config import get_config, reset_config
+from src.smartfix.domains.providers import CONTRAST_CLAUDE_SONNET_4_5
 
 
 class TestContrastLlmConfig(unittest.TestCase):
@@ -25,6 +26,7 @@ class TestContrastLlmConfig(unittest.TestCase):
             'CONTRAST_APP_ID': 'test-app-id',
             'CONTRAST_AUTHORIZATION_KEY': 'test-auth-key',
             'CONTRAST_API_KEY': 'test-api-key',
+            'GITHUB_SERVER_URL': 'https://github.com',
             # Use non-Bedrock model to avoid AWS validation when USE_CONTRAST_LLM=false
             'AGENT_MODEL': 'anthropic/claude-sonnet-4-5'
         }
@@ -145,6 +147,33 @@ class TestContrastLlmConfig(unittest.TestCase):
         reset_config()
         config = get_config(testing=True)
         self.assertFalse(config.USE_CONTRAST_LLM)
+
+    def test_contrast_llm_defaults_agent_model_to_constant(self):
+        """When USE_CONTRAST_LLM=true and AGENT_MODEL is unset, config defaults to CONTRAST_CLAUDE_SONNET_4_5."""
+        os.environ['USE_CONTRAST_LLM'] = 'true'
+        if 'AGENT_MODEL' in os.environ:
+            del os.environ['AGENT_MODEL']
+        reset_config()
+        config = get_config(testing=True)
+        self.assertEqual(config.AGENT_MODEL, CONTRAST_CLAUDE_SONNET_4_5)
+
+    def test_setup_contrast_provider_uses_v2_endpoint(self):
+        """setup_contrast_provider() points ANTHROPIC_API_BASE at the v2 LLM proxy endpoint."""
+        from src.smartfix.domains.providers import setup_contrast_provider
+
+        # Use the env vars established in setUp (CONTRAST_HOST=test.contrastsecurity.com,
+        # CONTRAST_ORG_ID=test-org-id); reset_config() picks them up.
+        reset_config()
+
+        setup_contrast_provider()
+
+        api_base = os.environ.get('ANTHROPIC_API_BASE')
+        self.assertEqual(
+            api_base,
+            'https://test.contrastsecurity.com/api/llm-proxy/v2/organizations/test-org-id/anthropic'
+        )
+        # Guard against regression to the v1 path shape
+        self.assertNotIn('/api/v4/llm-proxy/', api_base)
 
 
 if __name__ == '__main__':

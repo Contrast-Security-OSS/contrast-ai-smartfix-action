@@ -36,9 +36,44 @@ from pydantic import Field
 from opentelemetry import context as otel_context
 from opentelemetry.trace import StatusCode
 
+from src.smartfix.domains.providers import CONTRAST_CLAUDE_SONNET_4_5
 from src.smartfix.domains.telemetry import otel_provider
+from src.smartfix.domains.telemetry import smartfix_metrics
+from src.smartfix.clients.byo_usage_client import UsageEventCallback
+from src.smartfix.shared.exceptions import TokenBalanceExhaustedError
 from src.config import get_config
 from src.utils import debug_log, log
+
+# GenAI semantic convention metrics (OTel spec: gen-ai-metrics)
+# Lazily initialised so that get_meter() is called after initialize_otel() has installed
+# the real MeterProvider.  Module-level creation runs before initialize_otel(), which means
+# get_meter() would return a no-op meter from the SDK default and all record() calls would
+# be silently discarded.
+_token_usage_histogram = None
+_operation_duration_histogram = None
+
+
+def _get_token_usage_histogram():
+    global _token_usage_histogram
+    if _token_usage_histogram is None:
+        _token_usage_histogram = otel_provider.get_meter("smartfix.litellm").create_histogram(
+            name="gen_ai.client.token.usage",
+            unit="{token}",
+            description="Number of input and output tokens used.",
+        )
+    return _token_usage_histogram
+
+
+def _get_operation_duration_histogram():
+    global _operation_duration_histogram
+    if _operation_duration_histogram is None:
+        _operation_duration_histogram = otel_provider.get_meter("smartfix.litellm").create_histogram(
+            name="gen_ai.client.operation.duration",
+            unit="s",
+            description="GenAI operation duration.",
+        )
+    return _operation_duration_histogram
+
 
 # Suppress LiteLLM's "Give Feedback" and "LiteLLM.Info" messages unless debugging
 litellm.suppress_debug_info = os.environ.get("DEBUG_MODE", "").lower() != "true"
@@ -46,6 +81,8 @@ litellm.suppress_debug_info = os.environ.get("DEBUG_MODE", "").lower() != "true"
 
 def _derive_system(model: str) -> str:
     """Map a LiteLLM model string to the OTel gen_ai.system attribute value."""
+    if model == CONTRAST_CLAUDE_SONNET_4_5:
+        return "contrast"
     m = model.lower()
     if m.startswith("contrast/"):
         return "contrast"
@@ -179,11 +216,17 @@ class SmartFixLiteLlm(LiteLlm):
     cost_accumulator: TokenCostAccumulator = Field(default_factory=TokenCostAccumulator)
     """Accumulator for tracking token usage and costs across multiple LLM calls."""
 
-    def __init__(self, model: str, **kwargs):
+    def __init__(
+        self,
+        model: str,
+        on_usage_event: "UsageEventCallback | None" = None,
+        **kwargs,
+    ):
         super().__init__(model=model, **kwargs)
         debug_log(f"SmartFixLiteLlm initialized with model: {model}")
         # Store system prompt for use with Contrast models
         self._system_prompt = kwargs.get('system')
+        self._on_usage_event = on_usage_event
 
         # Snapshot the current OTel context so chat spans created during LLM calls are
         # always children of the fix-vulnerability span, regardless of whatever ADK-internal
@@ -301,9 +344,10 @@ class SmartFixLiteLlm(LiteLlm):
         model_lower = self.model.lower()
         debug_log(f"_apply_role_conversion_and_caching called with model: {self.model}")
 
-        # Early return for Contrast models - no caching or role conversion needed
-        if ("contrast/" in model_lower and "claude" in model_lower):
-            debug_log(f"Contrast model detected: {self.model} - skipping caching and role conversion")
+        # Early return for Contrast LLM model - server-side caching is automatic, no client-side
+        # cache_control breakpoints or role conversion needed.
+        if self.model == CONTRAST_CLAUDE_SONNET_4_5:
+            debug_log(f"Contrast LLM model detected: {self.model} - skipping caching and role conversion")
             return
 
         # Early return if model doesn't support caching
@@ -434,13 +478,15 @@ class SmartFixLiteLlm(LiteLlm):
         Raises:
             The last exception if all retries are exhausted
         """
+        import time
         last_error = None
         # Avoid eagerly evaluating self.model (which may be a mock attribute in tests)
         model = completion_args["model"] if "model" in completion_args else self.model
+        provider_name = _derive_system(model)
 
         for attempt in range(self._max_retries):
             with otel_provider.start_span(f"chat {model}", context=self._otel_context) as llm_span:
-                llm_span.set_attribute("gen_ai.system", _derive_system(model))
+                llm_span.set_attribute("gen_ai.system", provider_name)
                 llm_span.set_attribute("gen_ai.request.model", model)
                 llm_span.set_attribute("gen_ai.operation.name", "chat")
                 llm_span.set_attribute("contrast.smartfix.retry_attempt", attempt)
@@ -448,8 +494,13 @@ class SmartFixLiteLlm(LiteLlm):
                 if max_tokens is not None:
                     llm_span.set_attribute("gen_ai.request.max_tokens", max_tokens)
 
+                t_start = time.monotonic()
                 try:
+                    # Clear any host left by a prior (possibly non-LLM) httpx call so the
+                    # server.address read below reflects only this call's endpoint, or None.
+                    otel_provider.clear_last_request_host()
                     response = await self.llm_client.acompletion(**completion_args)
+                    elapsed = time.monotonic() - t_start
 
                     input_tokens, output_tokens, cache_read, cache_write = self._log_cost_analysis(response)
 
@@ -462,13 +513,59 @@ class SmartFixLiteLlm(LiteLlm):
                     if cache_write:
                         llm_span.set_attribute("gen_ai.usage.cache_creation.input_tokens", cache_write)
 
+                    # GenAI semantic convention metrics
+                    base_attrs = {
+                        "gen_ai.operation.name": "chat",
+                        "gen_ai.provider.name": provider_name,
+                        "gen_ai.request.model": model,
+                        "gen_ai.response.model": response_model,
+                    }
+                    # server.address feeds the datalake server_address column on the
+                    # gen_ai.* metrics. Sourced from the httpx instrumentation request hook,
+                    # which recorded the actual resolved host of the call we just made (the
+                    # same source as the http.client.* metrics). Omit when unknown.
+                    server_address = otel_provider.get_last_request_host()
+                    if server_address:
+                        base_attrs["server.address"] = server_address
+                    try:
+                        total_input = int(input_tokens or 0) + int(cache_read or 0) + int(cache_write or 0)
+                        _get_token_usage_histogram().record(
+                            total_input, {**base_attrs, "gen_ai.token.type": "input"}
+                        )
+                        _get_token_usage_histogram().record(
+                            int(output_tokens or 0), {**base_attrs, "gen_ai.token.type": "output"}
+                        )
+                        _get_operation_duration_histogram().record(elapsed, base_attrs)
+                        # SmartFix domain metrics
+                        smartfix_metrics.record_llm_duration(elapsed, provider_name, model)
+                        smartfix_metrics.record_llm_call_tokens(
+                            int(input_tokens or 0), int(output_tokens or 0),
+                            int(cache_read or 0), int(cache_write or 0), model
+                        )
+                    except Exception as metric_err:
+                        debug_log(f"Failed to record OTel metrics: {metric_err}")
+
                     return response
 
                 except Exception as e:
+                    elapsed = time.monotonic() - t_start
                     last_error = e
                     llm_span.set_status(StatusCode.ERROR)
                     llm_span.set_attribute("error.type", type(e).__name__)
                     llm_span.record_exception(e)
+                    try:
+                        _get_operation_duration_histogram().record(elapsed, {
+                            "gen_ai.operation.name": "chat",
+                            "gen_ai.provider.name": provider_name,
+                            "gen_ai.request.model": model,
+                            "error.type": type(e).__name__,
+                        })
+                    except Exception:
+                        pass
+
+                    if isinstance(e, litellm.APIError) and getattr(e, 'status_code', None) == 402:
+                        llm_span.set_attribute("contrast.smartfix.token_balance_exhausted", True)
+                        raise TokenBalanceExhaustedError("Token balance exhausted (HTTP 402)") from e
 
                     if not self._is_retryable_exception(e):
                         log(f"LLM call failed with non-retryable error: {type(e).__name__}: {e}", is_error=True)
@@ -478,6 +575,8 @@ class SmartFixLiteLlm(LiteLlm):
                         delay = self._initial_retry_delay * (self._retry_multiplier ** attempt)
                         jitter = delay * random.uniform(0, 0.25)
                         delay += jitter
+
+                        smartfix_metrics.record_llm_retry(model, type(e).__name__)
 
                         debug_log(
                             f"LLM call failed (attempt {attempt + 1}/{self._max_retries}), retrying: "
@@ -516,8 +615,7 @@ class SmartFixLiteLlm(LiteLlm):
         )
 
         # For Contrast models, ensure we have a system message before role conversion
-        model_lower = self.model.lower()
-        if "contrast/" in model_lower and "claude" in model_lower:
+        if self.model == CONTRAST_CLAUDE_SONNET_4_5:
             debug_log("Pre-processing messages for Contrast model")
             messages = self._ensure_system_message_for_contrast(messages)
 
@@ -609,6 +707,20 @@ class SmartFixLiteLlm(LiteLlm):
                 input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
                 new_input_cost, cache_read_cost, cache_write_cost, output_cost
             )
+
+            # Fire per-call usage callback
+            if self._on_usage_event is not None:
+                try:
+                    self._on_usage_event(
+                        model=self.model,
+                        input_tokens=input_tokens,
+                        output_tokens=output_tokens,
+                        cache_read_tokens=cache_read_tokens,
+                        cache_write_tokens=cache_write_tokens,
+                        cost_usd=total_cost,
+                    )
+                except Exception as cb_err:
+                    debug_log(f"Usage event callback error: {cb_err}")
 
             # Show savings only if we have cache read tokens
             if cache_read_tokens > 0:

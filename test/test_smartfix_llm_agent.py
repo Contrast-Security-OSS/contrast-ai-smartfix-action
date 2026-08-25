@@ -27,7 +27,7 @@ the extension logic without complex ADK dependencies.
 
 import unittest
 import json
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 
 # ADK mocks are set up globally in conftest.py before any imports
 # Test setup imports (path is set up by conftest.py)
@@ -41,7 +41,7 @@ class TestSmartFixLlmAgentFunctionality(unittest.TestCase):
     def test_has_extended_model_true(self):
         """Test has_extended_model returns True when SmartFixLiteLlm reference exists."""
         # Test the method logic directly without full object instantiation
-        agent = MagicMock()
+        agent = Mock(spec=SmartFixLlmAgent)
         agent.canonical_model = Mock(spec=SmartFixLiteLlm)
 
         # Apply the real method to our mock
@@ -50,15 +50,15 @@ class TestSmartFixLlmAgentFunctionality(unittest.TestCase):
 
     def test_has_extended_model_false(self):
         """Test has_extended_model returns False when no SmartFixLiteLlm reference exists."""
-        agent = MagicMock()
-        agent.canonical_model = Mock()  # Not a SmartFixLiteLlm
+        agent = Mock(spec=SmartFixLlmAgent)
+        agent.canonical_model = Mock()  # Intentionally no spec: test verifies non-SmartFixLiteLlm is detected
 
         result = SmartFixLlmAgent.has_extended_model(agent)
         self.assertFalse(result)
 
     def test_get_extended_model_with_reference(self):
         """Test get_extended_model returns the canonical model when it's SmartFixLiteLlm."""
-        agent = MagicMock()
+        agent = Mock(spec=SmartFixLlmAgent)
         mock_extended_model = Mock(spec=SmartFixLiteLlm)
         agent.canonical_model = mock_extended_model
 
@@ -69,7 +69,7 @@ class TestSmartFixLlmAgentFunctionality(unittest.TestCase):
 
     def test_reset_accumulated_stats_with_extended_model(self):
         """Test that reset delegates to SmartFixLiteLlm model."""
-        agent = MagicMock()
+        agent = Mock()
         mock_extended_model = Mock(spec=SmartFixLiteLlm)
 
         # The real method calls get_extended_model first
@@ -127,7 +127,7 @@ class TestSmartFixLlmAgentIntegration(unittest.TestCase):
         extended_model = SmartFixLiteLlm(model="test-model-id")
 
         # Create a mock agent
-        agent = MagicMock()
+        agent = Mock()
         agent.name = "test-agent"
         agent.canonical_model = extended_model
         agent.original_extended_model = extended_model

@@ -17,7 +17,7 @@ import json
 import sys
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 from urllib.request import Request, urlopen
 from urllib.error import URLError
 
@@ -260,8 +260,6 @@ def verify_llm_span(span: Span, parent_id: str) -> Checker:
 
 def verify_trace(spans: List[Span]) -> bool:
     """Run all assertions against a parsed trace. Returns True if all checks pass."""
-    by_id = {s.span_id: s for s in spans}
-
     # Find root
     roots = [s for s in spans if not s.parent_span_id]
     if not roots:
@@ -300,7 +298,7 @@ def verify_trace(spans: List[Span]) -> bool:
     for i, op in enumerate(op_spans):
         fp = op.attr("contrast.finding.fingerprint", "?")
         rule = op.attr("contrast.finding.rule_id", "?")
-        print(f"\n  [{i+1}] {fp} / {rule}")
+        print(f"\n  [{i + 1}] {fp} / {rule}")
         c = verify_operation_span(op, root.span_id)
         _print_results(c, indent="    ")
         print(f"    {c.summary()}")
@@ -312,7 +310,7 @@ def verify_trace(spans: List[Span]) -> bool:
         if not llm_spans:
             agent = op.attr("contrast.smartfix.coding_agent", "")
             if agent == "smartfix":
-                print(f"    ❌ Expected chat spans under fix-vulnerability (coding_agent=smartfix) but none found")
+                print("    ❌ Expected chat spans under fix-vulnerability (coding_agent=smartfix) but none found")
                 overall_pass = False
             else:
                 print(f"    ⏭️  No chat spans (coding_agent={agent!r} — external agent, expected)")
@@ -321,7 +319,7 @@ def verify_trace(spans: List[Span]) -> bool:
             for j, llm in enumerate(llm_spans):
                 attempt = llm.attr("contrast.smartfix.retry_attempt", "?")
                 model = llm.attr("gen_ai.request.model", llm.name)
-                print(f"\n      [{j+1}] {llm.name}  attempt={attempt}  model={model}")
+                print(f"\n      [{j + 1}] {llm.name}  attempt={attempt}  model={model}")
                 c = verify_llm_span(llm, op.span_id)
                 _print_results(c, indent="        ")
                 print(f"        {c.summary()}")

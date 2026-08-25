@@ -25,7 +25,7 @@ import sys
 from src import contrast_api
 from src.config import get_config  # Using get_config function instead of direct import
 from src.utils import debug_log, extract_remediation_id_from_branch, extract_remediation_id_from_labels, log
-from src.github.github_operations import GitHubOperations
+from src.github.github_operations import GitHubOperations, extract_vulnerability_info
 from src.smartfix.domains.telemetry import telemetry_handler
 
 
@@ -69,14 +69,15 @@ def _extract_remediation_info(pull_request: dict) -> tuple:
     debug_log(f"Branch name: {branch_name}")
     labels = pull_request.get("labels", [])
 
-    # Extract remediation ID from branch name or PR labels
-    remediation_id = None
+    # Determine coding agent from branch prefix (independent of remediation ID extraction)
+    if branch_name.startswith("claude/issue-"):
+        coding_agent = "EXTERNAL-CLAUDE_CODE"
+    elif branch_name.startswith("copilot/fix"):
+        coding_agent = "EXTERNAL-GITHUB_COPILOT"
+    else:
+        coding_agent = "INTERNAL-SMARTFIX"
 
-    # Check if this is a branch created by external agent (e.g., GitHub Copilot or Claude Code)
-    if branch_name.startswith("copilot/fix") or branch_name.startswith("claude/issue-"):
-        debug_log("Branch appears to be created by external agent. Extracting remediation ID from PR labels.")
-        remediation_id = extract_remediation_id_from_labels(labels)
-        # Extract GitHub issue number from branch name
+    if coding_agent in ("EXTERNAL-CLAUDE_CODE", "EXTERNAL-GITHUB_COPILOT"):
         github_ops = GitHubOperations()
         issue_number = github_ops.extract_issue_number_from_branch(branch_name)
         if issue_number:
@@ -84,44 +85,23 @@ def _extract_remediation_info(pull_request: dict) -> tuple:
             debug_log(f"Extracted external issue number from branch name: {issue_number}")
         else:
             debug_log(f"Could not extract issue number from branch name: {branch_name}")
+    debug_log(f"Determined coding agent to be: {coding_agent}")
+    telemetry_handler.update_telemetry("additionalAttributes.codingAgent", coding_agent)
 
-        # Set the external coding agent in telemetry based on branch prefix
-        coding_agent = "EXTERNAL-CLAUDE-CODE" if branch_name.startswith("claude/") else "EXTERNAL-COPILOT"
-        debug_log(f"Determined external coding agent to be: {coding_agent}")
-        telemetry_handler.update_telemetry("additionalAttributes.codingAgent", coding_agent)
+    # Extract remediation ID: (1) smartfix-id: label, (2) branch name fallback
+    remediation_id = extract_remediation_id_from_labels(labels)
+    if remediation_id:
+        debug_log(f"Extracted remediation ID from smartfix-id label: {remediation_id}")
     else:
-        # Use original method for branches created by SmartFix
         remediation_id = extract_remediation_id_from_branch(branch_name)
-        telemetry_handler.update_telemetry("additionalAttributes.codingAgent", "INTERNAL-SMARTFIX")
+        if remediation_id:
+            debug_log(f"Extracted remediation ID from branch name: {remediation_id}")
 
     if not remediation_id:
-        if branch_name.startswith("copilot/fix") or branch_name.startswith("claude/issue-"):
-            log(f"Error: Could not extract remediation ID from PR labels for external agent branch: {branch_name}", is_error=True)
-        else:
-            log(f"Error: Could not extract remediation ID from branch name: {branch_name}", is_error=True)
+        log(f"Error: Could not extract remediation ID from labels or branch name: {branch_name}", is_error=True)
         sys.exit(1)
 
     return remediation_id, labels
-
-
-def _extract_vulnerability_info(labels: list) -> str:
-    """Extract vulnerability UUID from PR labels."""
-    vuln_uuid = "unknown"
-
-    for label in labels:
-        label_name = label.get("name", "")
-        if label_name.startswith("contrast-vuln-id:VULN-"):
-            # Extract UUID from label format "contrast-vuln-id:VULN-{vuln_uuid}"
-            label_name_parts = label_name.split("VULN-")
-            vuln_uuid = label_name_parts[1] if len(label_name_parts) > 1 else "unknown"
-            if vuln_uuid and vuln_uuid != "unknown":
-                debug_log(f"Extracted Vulnerability UUID from PR label: {vuln_uuid}")
-                break
-
-    if vuln_uuid == "unknown":
-        debug_log("Could not extract vulnerability UUID from PR labels. Telemetry may be incomplete.")
-
-    return vuln_uuid
 
 
 def _notify_remediation_service(remediation_id: str, pr_number: int = None):
@@ -136,12 +116,11 @@ def _notify_remediation_service(remediation_id: str, pr_number: int = None):
         if changed_files_count == 0:
             # PR has no changes - report as failed remediation
             log(f"PR {pr_number} has no changed files. Reporting as failed remediation.")
-            remediation_notified = contrast_api.notify_remediation_failed(
+            remediation_notified = contrast_api.notify_remediation_failed_org(
                 remediation_id=remediation_id,
                 failure_category="GENERATE_PR_FAILURE",
                 contrast_host=config.CONTRAST_HOST,
                 contrast_org_id=config.CONTRAST_ORG_ID,
-                contrast_app_id=config.CONTRAST_APP_ID,
                 contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
                 contrast_api_key=config.CONTRAST_API_KEY
             )
@@ -156,11 +135,10 @@ def _notify_remediation_service(remediation_id: str, pr_number: int = None):
             log(f"Could not determine changed files count for PR {pr_number}. Proceeding with standard closed notification.")
 
     # Standard PR closed notification
-    remediation_notified = contrast_api.notify_remediation_pr_closed(
+    remediation_notified = contrast_api.notify_remediation_pr_closed_org(
         remediation_id=remediation_id,
         contrast_host=config.CONTRAST_HOST,
         contrast_org_id=config.CONTRAST_ORG_ID,
-        contrast_app_id=config.CONTRAST_APP_ID,
         contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
         contrast_api_key=config.CONTRAST_API_KEY
     )
@@ -169,6 +147,34 @@ def _notify_remediation_service(remediation_id: str, pr_number: int = None):
         log(f"Successfully notified Remediation service about closed PR for remediation {remediation_id}.")
     else:
         log(f"Failed to notify Remediation service about closed PR for remediation {remediation_id}.", is_error=True)
+
+
+def _cleanup_smartfix_labels(pull_request: dict, labels: list) -> None:
+    """Best-effort: remove SmartFix-managed labels from the PR (and linked issue
+    in the external-agent flow). Never raises — failures are logged and the
+    handler completes regardless."""
+    try:
+        pr_number = pull_request.get("number")
+        if not pr_number:
+            debug_log("No PR number in event payload; skipping label cleanup.")
+            return
+
+        github_ops = GitHubOperations()
+        smartfix_labels = github_ops.filter_smartfix_labels(labels)
+        if not smartfix_labels:
+            debug_log("No SmartFix labels on PR; skipping label cleanup.")
+            return
+
+        debug_log(f"Cleaning up SmartFix labels: {smartfix_labels}")
+        github_ops.remove_labels_from_pr(pr_number, smartfix_labels)
+
+        branch_name = pull_request.get("head", {}).get("ref") or ""
+        if branch_name.startswith(("claude/issue-", "copilot/fix")):
+            issue_number = github_ops.extract_issue_number_from_branch(branch_name)
+            if issue_number:
+                github_ops.remove_labels_from_issue(issue_number, smartfix_labels)
+    except Exception as e:
+        log(f"Best-effort SmartFix label cleanup raised: {e}", is_error=True)
 
 
 def handle_closed_pr():
@@ -183,7 +189,7 @@ def handle_closed_pr():
 
     # Extract remediation and vulnerability information
     remediation_id, labels = _extract_remediation_info(pull_request)
-    vuln_uuid = _extract_vulnerability_info(labels)
+    vuln_uuid = extract_vulnerability_info(labels)
 
     # Update telemetry with extracted information
     debug_log(f"Extracted Remediation ID: {remediation_id}")
@@ -197,7 +203,17 @@ def handle_closed_pr():
 
     # Complete telemetry and finish
     telemetry_handler.update_telemetry("additionalAttributes.prStatus", "CLOSED")
-    contrast_api.send_telemetry_data()
+    config = get_config()
+    contrast_api.send_telemetry_data_org(
+        remediation_id=remediation_id,
+        telemetry_data=telemetry_handler.get_telemetry_data(),
+        contrast_host=config.CONTRAST_HOST,
+        contrast_org_id=config.CONTRAST_ORG_ID,
+        contrast_auth_key=config.CONTRAST_AUTHORIZATION_KEY,
+        contrast_api_key=config.CONTRAST_API_KEY
+    )
+
+    _cleanup_smartfix_labels(pull_request, labels)
 
     log("--- Closed Contrast AI SmartFix Pull Request Handling Complete ---")
 
